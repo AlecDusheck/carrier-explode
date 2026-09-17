@@ -1,6 +1,6 @@
 <script lang="ts">
-  import { api, type IndexPayload } from "./lib/api.ts";
-  import { router, VIEWS, scan } from "./lib/state.svelte.ts";
+  import { api } from "./lib/api.ts";
+  import { router, VIEWS, scan, resource } from "./lib/state.svelte.ts";
   import Browser from "./lib/Browser.svelte";
   import CbsView from "./lib/CbsView.svelte";
   import PlmnView from "./lib/PlmnView.svelte";
@@ -8,13 +8,11 @@
   import ContextMenu from "./lib/ContextMenu.svelte";
   import ScanPanel from "./lib/ScanPanel.svelte";
 
-  let index = $state<IndexPayload | null>(null);
-  let error = $state<string | null>(null);
   let drawerOpen = $state(false);
 
-  $effect(() => {
-    api.index().then((i) => (index = i)).catch((e) => (error = String(e.message ?? e)));
-  });
+  const manifest = resource(() => api.index());
+  const index = $derived(manifest.value);
+  const error = $derived(manifest.error);
 
   const family = $derived(
     router.view === "countries" ? "Country" : router.view === "watch" ? "Watch" : "iPhone",

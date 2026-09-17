@@ -1,18 +1,14 @@
 <script lang="ts">
-  import { api, type MccMncEntry } from "./api.ts";
-  import { router } from "./state.svelte.ts";
+  import { api } from "./api.ts";
+  import { router, resource } from "./state.svelte.ts";
 
-  let entries = $state<MccMncEntry[] | null>(null);
-  let carrierIds = $state<Array<[string, string]>>([]);
-  let iccids = $state<Array<[string, string]>>([]);
-  let error = $state<string | null>(null);
   let q = $state("");
 
-  $effect(() => {
-    api.mccmnc()
-      .then((d) => { entries = d.entries; carrierIds = d.carrierIds ?? []; iccids = d.iccids ?? []; })
-      .catch((e) => (error = String(e.message ?? e)));
-  });
+  const table = resource(() => api.mccmnc());
+  const entries = $derived(table.value?.entries ?? null);
+  const carrierIds = $derived(table.value?.carrierIds ?? []);
+  const iccids = $derived(table.value?.iccids ?? []);
+  const error = $derived(table.error);
 
   const filtered = $derived.by(() => {
     if (!entries) return [];

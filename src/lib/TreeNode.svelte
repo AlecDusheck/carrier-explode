@@ -32,8 +32,8 @@
   const isMap = (v: unknown): v is Record<string, unknown> =>
     !!v && typeof v === "object" && !Array.isArray(v) && !isBlob(v) && !isDate(v);
 
-  let override = $state<boolean | null>(null);
-  let lastEpoch = $state(-1);
+  // A manual toggle only counts until the next expand-all or collapse-all.
+  let toggled = $state<{ epoch: number; open: boolean } | null>(null);
   let showHex = $state(false);
 
   const asArray = $derived(Array.isArray(value) ? (value as unknown[]) : null);
@@ -47,13 +47,7 @@
       : undefined,
   );
 
-  $effect(() => {
-    if (epoch !== lastEpoch) {
-      lastEpoch = epoch;
-      override = null;
-    }
-  });
-
+  const override = $derived(toggled?.epoch === epoch ? toggled.open : null);
   const open = $derived(override ?? (epoch > 0 ? true : epoch < 0 ? false : depth < 2 || !!filter));
 
   const matches = $derived.by(() => {
@@ -99,9 +93,9 @@
 
 {#if matches}
   <div>
-    <div class="row" use:menuTrigger={buildMenu}>
+    <div class="row" {@attach menuTrigger(buildMenu)}>
       {#if container}
-        <button type="button" class="twist" aria-expanded={open} onclick={() => (override = !open)}
+        <button type="button" class="twist" aria-expanded={open} onclick={() => (toggled = { epoch, open: !open })}
         >{open ? "▾" : "▸"}</button>
       {:else}
         <span class="twist" aria-hidden="true">·</span>

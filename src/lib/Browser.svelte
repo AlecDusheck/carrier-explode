@@ -1,6 +1,6 @@
 <script lang="ts">
-  import { api, refLabel, type BundlePayload, type BundleRef, type IndexPayload } from "./api.ts";
-  import { router, menuTrigger, copyText } from "./state.svelte.ts";
+  import { api, refLabel, type BundleRef, type IndexPayload } from "./api.ts";
+  import { router, menuTrigger, copyText, resource } from "./state.svelte.ts";
   import BundleView from "./BundleView.svelte";
 
   let {
@@ -10,14 +10,6 @@
   }: { index: IndexPayload; family: "iPhone" | "Watch" | "Country"; drawerOpen: boolean } = $props();
 
   let query = $state("");
-  let refs = $state<BundleRef[]>([]);
-  let cc = $state<string | undefined>(undefined);
-  let activeUrl = $state<string | null>(null);
-  let bundle = $state<BundlePayload | null>(null);
-  let error = $state<string | null>(null);
-  let busy = $state(false);
-  let refsToken = 0;
-  let bundleToken = 0;
 
   const isCountry = $derived(family === "Country");
   const selName = $derived(router.name);
@@ -46,49 +38,27 @@
       (c.cc ?? "").includes(q));
   });
 
-  $effect(() => {
+  const listing = resource(() => {
     const name = selName;
-    const mine = ++refsToken;
-    refs = [];
-    cc = undefined;
-    activeUrl = null;
-    bundle = null;
-    error = null;
-    if (!name) return;
-
-    if (isCountry) {
-      api.country(name)
-        .then((d) => {
-          if (mine !== refsToken) return;
-          refs = d.refs;
-          activeUrl = d.refs[0]?.url ?? null;
-        })
-        .catch((e) => { if (mine === refsToken) error = String(e.message ?? e); });
-      return;
-    }
-
-    api.carrier(name)
-      .then((d) => {
-        if (mine !== refsToken) return;
-        refs = d.refs;
-        cc = d.country.cc;
-        // Default to the newest plain iPhone bundle rather than a per-model one.
-        activeUrl = (d.refs.find((r) => !r.productType) ?? d.refs[0])?.url ?? null;
-      })
-      .catch((e) => { if (mine === refsToken) error = String(e.message ?? e); });
+    if (!name) return null;
+    return isCountry
+      ? api.country(name).then((d) => ({ refs: d.refs, cc: undefined as string | undefined }))
+      : api.carrier(name).then((d) => ({ refs: d.refs, cc: d.country.cc }));
   });
+  const refs = $derived(listing.value?.refs ?? []);
+  const cc = $derived(listing.value?.cc);
 
-  $effect(() => {
-    const url = activeUrl;
-    const mine = ++bundleToken;
-    if (!url) { bundle = null; return; }
-    busy = true;
-    error = null;
-    api.bundle(url, isCountry ? undefined : (selName ?? undefined))
-      .then((b) => { if (mine === bundleToken) bundle = b; })
-      .catch((e) => { if (mine === bundleToken) error = String(e.message ?? e); })
-      .finally(() => { if (mine === bundleToken) busy = false; });
-  });
+  // Default to the newest plain iPhone bundle rather than a per-model one.
+  let activeUrl = $derived(
+    ((isCountry ? undefined : refs.find((r) => !r.productType)) ?? refs[0])?.url ?? null,
+  );
+
+  const loaded = resource(() =>
+    activeUrl ? api.bundle(activeUrl, isCountry ? undefined : (selName ?? undefined)) : null,
+  );
+  const bundle = $derived(loaded.value ?? null);
+  const busy = $derived(loaded.busy);
+  const error = $derived(listing.error ?? loaded.error);
 
   /** The manifest publishes the same file under several iOS keys; collapse them. */
   const refOptions = $derived.by(() => {
@@ -131,7 +101,7 @@
       <ul class="list" role="listbox" aria-label={isCountry ? "countries" : "carriers"}>
         {#each filtered as c (c.name)}
           <li role="option" aria-selected={c.name === selName}>
-            <button type="button" onclick={() => pick(c.name)} use:menuTrigger={rowMenu(c.name)}>
+            <button type="button" onclick={() => pick(c.name)} {@attach menuTrigger(rowMenu(c.name))}>
               <span class="name">{c.display}</span>
               <span class="dim">{c.cc ? c.cc.toUpperCase() + " " : ""}{c.versions.length + (c.image ? 1 : 0)}</span>
             </button>
@@ -182,7 +152,9 @@
       {#if busy}<p class="pad dimtext">Fetching and decoding.</p>{/if}
       {#if error}<div class="banner err" style="margin:8px">{error}</div>{/if}
       {#if bundle && !busy}
-        <BundleView {bundle} {cc} kind={isCountry ? "country" : "carrier"} />
+        {#key bundle.url}
+          <BundleView {bundle} {cc} kind={isCountry ? "country" : "carrier"} />
+        {/key}
       {/if}
       {#if !bundle && !busy && !error && refs.length === 0}
         <p class="pad dimtext">No published bundles for this entry.</p>

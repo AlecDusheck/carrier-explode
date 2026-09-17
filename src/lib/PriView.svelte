@@ -74,7 +74,7 @@
     <table class="grid">
       <thead><tr><th>Group</th><th>Bits set</th><th>Raw</th></tr></thead>
       <tbody>
-        {#each pri.featureGroups as g (g.tag)}
+        {#each pri.featureGroups as g, i (i)}
           <tr>
             <td class="k">{g.name}</td>
             <td>

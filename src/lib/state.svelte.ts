@@ -1,5 +1,8 @@
 /** Shared app state: routing, the context menu, and the cross-carrier scan panel. */
 
+import type { Attachment } from "svelte/attachments";
+import { on } from "svelte/events";
+
 export type View = "carriers" | "countries" | "watch" | "cbs" | "plmn" | "compare";
 
 export const VIEWS: Array<[View, string]> = [
@@ -54,7 +57,7 @@ class ContextMenuState {
   x = $state(0);
   y = $state(0);
   title = $state("");
-  items = $state<MenuItem[]>([]);
+  items = $state.raw<MenuItem[]>([]);
   open = $state(false);
 
   show(ev: { clientX: number; clientY: number }, title: string, items: MenuItem[]) {
@@ -90,56 +93,74 @@ class ScanState {
 
 export const scan = new ScanState();
 
-/** Attaches right-click and long-press to an element, both opening the same menu. */
-export function menuTrigger(
-  node: HTMLElement,
-  build: () => { title: string; items: MenuItem[] },
-) {
-  let timer: ReturnType<typeof setTimeout> | null = null;
-  let start: { clientX: number; clientY: number } | null = null;
+/** Right-click and long-press on an element, both opening the same menu. */
+export function menuTrigger(build: () => { title: string; items: MenuItem[] }): Attachment<HTMLElement> {
+  return (node) => {
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    let start: { clientX: number; clientY: number } | null = null;
 
-  const onContext = (e: MouseEvent) => {
-    e.preventDefault();
-    const { title, items } = build();
-    contextMenu.show(e, title, items);
-  };
-  const onTouchStart = (e: TouchEvent) => {
-    const t = e.touches[0];
-    start = { clientX: t.clientX, clientY: t.clientY };
-    timer = setTimeout(() => {
-      const { title, items } = build();
-      contextMenu.show(start!, title, items);
+    const cancel = () => {
+      if (timer) clearTimeout(timer);
       timer = null;
-    }, 450);
-  };
-  const onTouchMove = (e: TouchEvent) => {
-    if (!timer || !start) return;
-    const t = e.touches[0];
-    if (Math.abs(t.clientX - start.clientX) > 10 || Math.abs(t.clientY - start.clientY) > 10) {
-      clearTimeout(timer);
-      timer = null;
-    }
-  };
-  const onTouchEnd = () => {
-    if (timer) clearTimeout(timer);
-    timer = null;
-  };
+    };
 
-  node.addEventListener("contextmenu", onContext);
-  node.addEventListener("touchstart", onTouchStart, { passive: true });
-  node.addEventListener("touchmove", onTouchMove, { passive: true });
-  node.addEventListener("touchend", onTouchEnd);
-  node.addEventListener("touchcancel", onTouchEnd);
+    const off = [
+      on(node, "contextmenu", (e) => {
+        e.preventDefault();
+        const { title, items } = build();
+        contextMenu.show(e, title, items);
+      }),
+      on(node, "touchstart", (e) => {
+        const t = e.touches[0];
+        start = { clientX: t.clientX, clientY: t.clientY };
+        timer = setTimeout(() => {
+          const { title, items } = build();
+          contextMenu.show(start!, title, items);
+          timer = null;
+        }, 450);
+      }, { passive: true }),
+      on(node, "touchmove", (e) => {
+        if (!timer || !start) return;
+        const t = e.touches[0];
+        if (Math.abs(t.clientX - start.clientX) > 10 || Math.abs(t.clientY - start.clientY) > 10) cancel();
+      }, { passive: true }),
+      on(node, "touchend", cancel),
+      on(node, "touchcancel", cancel),
+    ];
+
+    return () => {
+      for (const f of off) f();
+      cancel();
+    };
+  };
+}
+
+/**
+ * The settled result of whichever promise `request` currently returns. A result is
+ * matched to its promise, so a response that lands after the inputs have moved on is
+ * never shown. Must be called while a component is initialising.
+ */
+export function resource<T>(request: () => Promise<T> | null) {
+  const promise = $derived(request());
+  let settled = $state.raw<{ promise: Promise<T>; value?: T; error?: string } | null>(null);
+
+  $effect(() => {
+    const p = promise;
+    if (!p) return;
+    let live = true;
+    p.then(
+      (value) => { if (live) settled = { promise: p, value }; },
+      (e) => { if (live) settled = { promise: p, error: String(e?.message ?? e) }; },
+    );
+    return () => { live = false; };
+  });
+
+  const current = $derived(settled?.promise === promise ? settled : null);
 
   return {
-    destroy() {
-      node.removeEventListener("contextmenu", onContext);
-      node.removeEventListener("touchstart", onTouchStart);
-      node.removeEventListener("touchmove", onTouchMove);
-      node.removeEventListener("touchend", onTouchEnd);
-      node.removeEventListener("touchcancel", onTouchEnd);
-      if (timer) clearTimeout(timer);
-    },
+    get value() { return current?.value; },
+    get error() { return current?.error ?? null; },
+    get busy() { return promise !== null && current === null; },
   };
 }
 

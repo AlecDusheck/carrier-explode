@@ -1,5 +1,6 @@
 <script lang="ts">
-  import { api, humanBytes, refLabel, type BundlePayload, type DecodedFile } from "./api.ts";
+  import { api, humanBytes, refLabel, type BundlePayload } from "./api.ts";
+  import { resource } from "./state.svelte.ts";
   import Tree from "./Tree.svelte";
   import FileBody from "./FileBody.svelte";
 
@@ -17,47 +18,18 @@
   const l10nFiles = $derived(bundle.info.files.filter((f) => !!f.locale));
   const imageFiles = $derived(bundle.info.files.filter((f) => f.kind === "image"));
 
-  let priPath = $state<string | null>(null);
+  // Browser keys this component on bundle.url, so tab and filePath start over per bundle.
+  // The rest are defaults the pickers may override until the list behind them changes.
   let filePath = $state<string | null>(null);
-  let locale = $state<string | null>(null);
-  let stringsPath = $state<string | null>(null);
-
-  $effect(() => {
-    // Reset per bundle.
-    void bundle.url;
-    tab = "summary";
-    filePath = null;
-    priPath = priFiles[0]?.path ?? null;
-    locale = bundle.info.locales.includes("en") ? "en" : (bundle.info.locales[0] ?? null);
-  });
-
+  let priPath = $derived(priFiles[0]?.path ?? null);
+  let locale = $derived(bundle.info.locales.includes("en") ? "en" : (bundle.info.locales[0] ?? null));
   const localeFiles = $derived(l10nFiles.filter((f) => f.locale === locale));
-  $effect(() => {
-    stringsPath = localeFiles[0]?.path ?? null;
-  });
-
-
-  let fileData = $state<(DecodedFile & { dataUri?: string }) | null>(null);
-  let fileError = $state<string | null>(null);
-  let fileBusy = $state(false);
-  let fileToken = 0;
-
-  function load(path: string | null) {
-    const mine = ++fileToken;
-    fileData = null;
-    fileError = null;
-    if (!path) return;
-    fileBusy = true;
-    api.file(bundle.url, path)
-      .then((d) => { if (mine === fileToken) fileData = d; })
-      .catch((e) => { if (mine === fileToken) fileError = String(e.message ?? e); })
-      .finally(() => { if (mine === fileToken) fileBusy = false; });
-  }
+  let stringsPath = $derived(localeFiles[0]?.path ?? null);
 
   const activePath = $derived(
     tab === "pri" ? priPath : tab === "files" ? filePath : tab === "strings" ? stringsPath : null,
   );
-  $effect(() => { load(activePath); });
+  const file = resource(() => (activePath ? api.file(bundle.url, activePath) : null));
 
   const carrierPlist = $derived(bundle.quick["carrier.plist"] as Record<string, unknown> | undefined);
   const infoPlist = $derived(bundle.quick["Info.plist"] as Record<string, unknown> | undefined);
@@ -91,6 +63,15 @@
 
   const ctx = $derived({ file: "carrier.plist", cc, kind });
 </script>
+
+{#snippet fileBody(heading: boolean)}
+  {#if file.busy}<p class="dimtext">Decoding.</p>{/if}
+  {#if file.error}<div class="banner err">{file.error}</div>{/if}
+  {#if file.value}
+    {#if heading}<h3 class="mono" style="margin:8px 0 4px">{file.value.path}</h3>{/if}
+    <FileBody file={file.value} {ctx} bundleUrl={bundle.url} />
+  {/if}
+{/snippet}
 
 <div class="tabs">
   <button aria-current={tab === "summary"} onclick={() => (tab = "summary")}>Summary</button>
@@ -202,9 +183,7 @@
         </select>
       </label>
     </div>
-    {#if fileBusy}<p class="dimtext">Decoding.</p>{/if}
-    {#if fileError}<div class="banner err">{fileError}</div>{/if}
-    {#if fileData}<FileBody file={fileData} {ctx} bundleUrl={bundle.url} />{/if}
+    {@render fileBody(false)}
 
   {:else if tab === "files"}
     <div class="rowflex" style="margin-bottom:6px">
@@ -233,12 +212,7 @@
         </tbody>
       </table>
     {/if}
-    {#if fileBusy}<p class="dimtext">Decoding.</p>{/if}
-    {#if fileError}<div class="banner err">{fileError}</div>{/if}
-    {#if fileData}
-      <h3 class="mono" style="margin:8px 0 4px">{fileData.path}</h3>
-      <FileBody file={fileData} {ctx} bundleUrl={bundle.url} />
-    {/if}
+    {@render fileBody(true)}
 
   {:else if tab === "assets"}
     <p class="lead dimtext" style="margin-top:0">
@@ -276,8 +250,6 @@
         </select>
       </label>
     </div>
-    {#if fileBusy}<p class="dimtext">Decoding.</p>{/if}
-    {#if fileError}<div class="banner err">{fileError}</div>{/if}
-    {#if fileData}<FileBody file={fileData} {ctx} bundleUrl={bundle.url} />{/if}
+    {@render fileBody(false)}
   {/if}
 </div>
