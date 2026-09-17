@@ -1,36 +1,59 @@
-# Pulls the carrier and country bundles out of the latest IPSW and puts them in
-# R2, where the worker reads them. Most countries have no bundle on Apple's CDN;
-# theirs only ship inside the OS image.
+# Keeps R2 stocked with the carrier and country bundles from every iOS release.
+# Most countries have no bundle on Apple's OTA server; theirs only ship inside
+# the OS image.
 #
-# The extraction steps are dwilliamsuk's, from
-# https://github.com/dwilliamsuk/ios-carrier-bundles
+# `plan` runs daily and costs a few seconds: it lists the releases we do not hold
+# yet. `extract` only runs when there is one. The extraction steps are
+# dwilliamsuk's, from https://github.com/dwilliamsuk/ios-carrier-bundles
 #
 # Needs: secrets CLOUDFLARE_API_TOKEN (R2 edit) and CLOUDFLARE_ACCOUNT_ID.
-# Optional: variable DEVICE (default iPhone17,1).
+# Optional: variable DEVICE (default iPhone17,1). Releases that device no longer
+# receives are taken from the newest iPhone instead.
+#
+# GitHub disables scheduled workflows after 60 days without repo activity.
 
 name: System bundles
 on:
   workflow_dispatch:
     inputs:
       version:
-        description: iOS version to extract (default latest)
+        description: Extract exactly this iOS version (for backfilling older ones)
         type: string
-      force:
-        description: Re-extract even if this build is already in R2
-        type: boolean
-        default: false
   schedule:
-    - cron: "0 6 * * 1"
+    - cron: "17 5 * * *"
 
 env:
-  DEVICE: ${{ vars.DEVICE || 'iPhone17,1' }}
   BUCKET: carrier-explode
   CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
   CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
 
 jobs:
+  plan:
+    runs-on: ubuntu-24.04
+    outputs:
+      matrix: ${{ steps.plan.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: plan
+        run: |
+          python3 -m unittest discover -s scripts -p 'test_*.py' -q
+          npx --yes wrangler r2 object get "$BUCKET/system/builds.json" --remote --pipe > /tmp/builds.json 2>/dev/null || echo '[]' > /tmp/builds.json
+          MATRIX=$(python3 scripts/plan_system_bundles.py --builds /tmp/builds.json \
+            --device "${{ vars.DEVICE || 'iPhone17,1' }}" --version "${{ inputs.version }}")
+          echo "to extract: $MATRIX"
+          echo "matrix=$MATRIX" >> "$GITHUB_OUTPUT"
+
   extract:
+    needs: plan
+    if: needs.plan.outputs.matrix != '[]'
     runs-on: ubuntu-24.04-arm
+    strategy:
+      fail-fast: false
+      # Two at a time keeps the R2 API under its rate limit.
+      max-parallel: 2
+      matrix:
+        image: ${{ fromJson(needs.plan.outputs.matrix) }}
+    name: iOS ${{ matrix.image.version }} (${{ matrix.image.build }})
     steps:
       - uses: actions/checkout@v4
 
@@ -41,22 +64,7 @@ jobs:
           curl -sL -o /tmp/ipsw.deb "$URL"
           sudo dpkg -i /tmp/ipsw.deb
 
-      - name: Resolve the IPSW and skip if we already hold it
-        id: check
-        run: |
-          npm install --no-save --silent wrangler
-          W="$GITHUB_WORKSPACE/node_modules/.bin/wrangler"
-          if [ -n "${{ inputs.version }}" ]; then PICK="--version ${{ inputs.version }}"; else PICK="--latest"; fi
-          echo "pick=$PICK" >> "$GITHUB_OUTPUT"
-          BUILD=$(ipsw download ipsw --device "$DEVICE" $PICK --urls --no-color | grep -oE '_[0-9A-Za-z]+_Restore' | head -1 | cut -d_ -f2)
-          echo "build: $BUILD"
-          "$W" r2 object get "$BUCKET/system/builds.json" --remote --pipe > /tmp/builds.json 2>/dev/null || echo '[]' > /tmp/builds.json
-          if [ "${{ inputs.force }}" != "true" ] && jq -e --arg b "$BUILD" 'any(.[]; .build == $b)' /tmp/builds.json > /dev/null; then
-            echo "fresh=true" >> "$GITHUB_OUTPUT"
-          fi
-
       - name: Install apfs-fuse
-        if: steps.check.outputs.fresh != 'true'
         run: |
           sudo apt-get update
           sudo apt-get install -y fuse3 libfuse3-dev bzip2 libbz2-dev libz-dev cmake build-essential libattr1-dev
@@ -66,18 +74,19 @@ jobs:
           sudo make -C /tmp/apfs-fuse/build install
 
       - name: Download the IPSW and extract the bundles
-        if: steps.check.outputs.fresh != 'true'
         run: |
           mkdir -p "$RUNNER_TEMP/ipsw" /tmp/x
-          ipsw download ipsw --device "$DEVICE" ${{ steps.check.outputs.pick }} --no-color --output "$RUNNER_TEMP/ipsw"
+          ipsw download ipsw --device "${{ matrix.image.device }}" --build "${{ matrix.image.build }}" \
+            --no-color --output "$RUNNER_TEMP/ipsw"
           ipsw extract --files --pattern '.*Bundles.*iPhone.*\.bundle.*$' --output /tmp/x "$RUNNER_TEMP"/ipsw/*.ipsw
           ipsw info "$RUNNER_TEMP"/ipsw/*.ipsw --json --no-color > /tmp/meta.json
           sudo chown -R "$USER" /tmp/x
 
       - name: Package
-        if: steps.check.outputs.fresh != 'true'
         run: |
+          npm install --no-save --silent wrangler
           W="$GITHUB_WORKSPACE/node_modules/.bin/wrangler"
+          "$W" r2 object get "$BUCKET/system/builds.json" --remote --pipe > /tmp/builds.json 2>/dev/null || echo '[]' > /tmp/builds.json
           # Blobs are content-addressed; skip the ones an earlier image already uploaded.
           : > /tmp/have.txt
           for b in $(jq -r '.[].build' /tmp/builds.json); do
@@ -91,12 +100,11 @@ jobs:
             --meta /tmp/meta.json --out /tmp/out --builds /tmp/builds.json --have /tmp/have.txt
 
       - name: Upload to R2
-        if: steps.check.outputs.fresh != 'true'
         run: |
           W="$GITHUB_WORKSPACE/node_modules/.bin/wrangler"
           cd /tmp/out
-          # Backfill runs overlap and R2's API answers 429 under load. The upload is
-          # idempotent (content-addressed keys), so retry the whole thing with backoff.
+          # R2's API answers 429 under load. The upload is idempotent
+          # (content-addressed keys), so retry the whole thing with backoff.
           for attempt in 1 2 3 4 5 6 7; do
             "$W" r2 bulk put "$BUCKET" --filename upload.json --remote --force --concurrency 6 && break
             [ "$attempt" = 7 ] && exit 1
@@ -104,7 +112,8 @@ jobs:
             echo "upload failed (attempt $attempt), retrying in ${delay}s"
             sleep "$delay"
           done
-          # Re-read and merge right before writing: backfill runs overlap.
+          # builds.json goes last so the app never lists a half-uploaded image.
+          # Re-read and merge right before writing: matrix jobs overlap.
           "$W" r2 object get "$BUCKET/system/builds.json" --remote --pipe > /tmp/now.json 2>/dev/null || echo '[]' > /tmp/now.json
           jq -s -c 'add | unique_by(.build) | sort_by(.version | split(".") | map(tonumber? // 0)) | reverse' /tmp/now.json builds.json > merged.json
           "$W" r2 object put "$BUCKET/system/builds.json" --file merged.json --remote
