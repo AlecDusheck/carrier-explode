@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { api, type BundlePayload, type BundleRef, type IndexPayload } from "./api.ts";
+  import { api, refLabel, type BundlePayload, type BundleRef, type IndexPayload } from "./api.ts";
   import { router, menuTrigger, copyText } from "./state.svelte.ts";
   import BundleView from "./BundleView.svelte";
 
@@ -23,14 +23,14 @@
   const selName = $derived(router.name);
 
   const countryList = $derived.by(() => {
-    const seen = new Map<string, string[]>();
+    const seen = new Map<string, number>();
+    for (const c of index.image?.countries ?? []) seen.set(c.name, 1);
     for (const c of index.countries) {
-      if (c.family !== "iPhone") continue;
-      seen.set(c.id, [...(seen.get(c.id) ?? []), c.version]);
+      if (c.family === "iPhone") seen.set(c.id, (seen.get(c.id) ?? 0) + 1);
     }
     return [...seen]
       .sort((a, b) => a[0].localeCompare(b[0]))
-      .map(([name, versions]) => ({ name, display: name, versions, cc: undefined as string | undefined }));
+      .map(([name, n]) => ({ name, display: name, versions: Array<string>(n).fill(""), cc: undefined as string | undefined, image: undefined as string | undefined }));
   });
 
   const source = $derived(
@@ -57,12 +57,13 @@
     if (!name) return;
 
     if (isCountry) {
-      const list = index.countries
-        .filter((c) => c.id === name && c.family === "iPhone")
-        .map((c) => ({ os: c.minOS ?? "", build: c.version, url: c.url, productType: "iPhone" }))
-        .sort((a, b) => b.build.localeCompare(a.build, undefined, { numeric: true }));
-      refs = list;
-      activeUrl = list[0]?.url ?? null;
+      api.country(name)
+        .then((d) => {
+          if (mine !== refsToken) return;
+          refs = d.refs;
+          activeUrl = d.refs[0]?.url ?? null;
+        })
+        .catch((e) => { if (mine === refsToken) error = String(e.message ?? e); });
       return;
     }
 
@@ -91,22 +92,16 @@
 
   /** The manifest publishes the same file under several iOS keys; collapse them. */
   const refOptions = $derived.by(() => {
-    const byUrl = new Map<string, { url: string; os: string[]; build: string; productType?: string }>();
+    const byUrl = new Map<string, { url: string; os: string[]; first: BundleRef }>();
     for (const r of refs) {
       const hit = byUrl.get(r.url);
       if (hit) {
         if (!hit.os.includes(r.os)) hit.os.push(r.os);
       } else {
-        byUrl.set(r.url, { url: r.url, os: [r.os], build: r.build, productType: r.productType });
+        byUrl.set(r.url, { url: r.url, os: [r.os], first: r });
       }
     }
-    return [...byUrl.values()].map((o) => ({
-      url: o.url,
-      label:
-        (o.os[0] === "legacy" ? "legacy" : "iOS " + o.os.join(", ")) +
-        " build " + o.build +
-        (o.productType && o.productType !== "iPhone" ? " " + o.productType : ""),
-    }));
+    return [...byUrl.values()].map((o) => ({ url: o.url, label: refLabel({ ...o.first, os: o.os.join(", ") }) }));
   });
 
   function pick(name: string) {
@@ -138,7 +133,7 @@
           <li role="option" aria-selected={c.name === selName}>
             <button type="button" onclick={() => pick(c.name)} use:menuTrigger={rowMenu(c.name)}>
               <span class="name">{c.display}</span>
-              <span class="dim">{c.cc ? c.cc.toUpperCase() + " " : ""}{c.versions.length}</span>
+              <span class="dim">{c.cc ? c.cc.toUpperCase() + " " : ""}{c.versions.length + (c.image ? 1 : 0)}</span>
             </button>
           </li>
         {:else}
@@ -160,13 +155,11 @@
           {isCountry ? "Country bundles" : family === "Watch" ? "Apple Watch carrier bundles" : "Carrier bundles"}
         </h2>
         <p class="lead dimtext">
-          {#if isCountry}
-            Country bundles carry the cell-broadcast schema, the national emergency numbers and the AML
-            emergency-location short code. Pick one from the list.
+          {#if index.image}
+            Bundles from the iOS {index.image.version} image, plus anything newer or older on Apple's asset
+            server. Right-click a setting to compare it across bundles.
           {:else}
-            Pick an operator. Every published iOS version of its bundle is fetched server side, verified
-            against the manifest digest, unpacked and decoded, including the binary .der.pri baseband
-            overrides. Right-click any setting to see what other operators put there.
+            Bundles from Apple's asset server. Right-click a setting to compare it across bundles.
           {/if}
         </p>
         <button class="btn drawer-btn" onclick={() => (drawerOpen = true)}>Open the list</button>

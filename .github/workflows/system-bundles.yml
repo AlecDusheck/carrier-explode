@@ -11,6 +11,11 @@
 name: System bundles
 on:
   workflow_dispatch:
+    inputs:
+      force:
+        description: Re-extract even if this build is already in R2
+        type: boolean
+        default: false
   schedule:
     - cron: "0 6 * * 1"
 
@@ -38,7 +43,7 @@ jobs:
         run: |
           BUILD=$(ipsw download ipsw --device "$DEVICE" --latest --urls --no-color | grep -oE '_[0-9A-Za-z]+_Restore' | head -1 | cut -d_ -f2)
           echo "latest build: $BUILD"
-          if npx --yes wrangler r2 object get "$BUCKET/system/latest.json" --remote --pipe 2>/dev/null | grep -q "\"$BUILD\""; then
+          if [ "${{ inputs.force }}" != "true" ] && npx --yes wrangler r2 object get "$BUCKET/system/latest.json" --remote --pipe 2>/dev/null | grep -q "\"$BUILD\""; then
             echo "fresh=true" >> "$GITHUB_OUTPUT"
           fi
 
@@ -79,6 +84,7 @@ jobs:
           find carriers countries -name '*.ipcc' -print0 |
             xargs -0 -P 8 -I{} "$GITHUB_WORKSPACE/node_modules/.bin/wrangler" r2 object put "$BUCKET/system/$BUILD/{}" --file "{}" --remote
           W="$GITHUB_WORKSPACE/node_modules/.bin/wrangler"
+          "$W" r2 object put "$BUCKET/system/$BUILD/countries.json" --file countries.json --remote
           "$W" r2 object put "$BUCKET/system/$BUILD/index.json" --file index.json --remote
           # Last, so the worker never points at a half-uploaded build.
           jq -c '{build, version}' index.json > latest.json

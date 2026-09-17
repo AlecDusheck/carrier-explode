@@ -20,6 +20,8 @@ export interface BundleRef {
   digest3?: string;
   /** Present for ByProductType entries (iPad, iPod, …). */
   productType?: string;
+  /** "image" when the bundle came out of an iOS image rather than the asset server. */
+  source?: "image" | "cdn";
 }
 
 export interface CarrierSummary {
@@ -33,6 +35,8 @@ export interface CarrierSummary {
   latestBuild?: string;
   productTypes: string[];
   hasLegacy: boolean;
+  /** Build of this bundle inside the iOS image, when it ships there. */
+  image?: string;
 }
 
 export interface CountrySummary {

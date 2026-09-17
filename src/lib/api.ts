@@ -9,7 +9,17 @@ export type {
   BundleInfo, DecodedFile, CbsRow, DiffRow, ScanResult,
 };
 
+export interface ImageInfo {
+  version: string;
+  build: string;
+  device: string;
+  extractedAt: string;
+  countries: Array<{ name: string; build: string }>;
+}
+
 export interface IndexPayload extends ManifestIndex {
+  /** The iOS image the primary bundles came from; null until one is in R2. */
+  image: ImageInfo | null;
   manifestBytes: number;
   manifestUrl: string;
 }
@@ -32,11 +42,10 @@ export interface CarrierPayload {
 }
 
 export interface CbsPayload {
-  family: string;
   generatedAt: string;
+  image: { version: string; build: string } | null;
   messageIds: number[];
   rows: CbsRow[];
-  note: string;
 }
 
 export interface DiffPayload {
@@ -86,11 +95,12 @@ export const api = {
       iccids: Array<[string, string]>;
     }>("/api/mccmnc"),
   carrier: (name: string) => cachedGet<CarrierPayload>("/api/carrier?name=" + enc(name)),
+  country: (name: string) => cachedGet<{ refs: BundleRef[] }>("/api/country?name=" + enc(name)),
   bundle: (url: string, carrier?: string) =>
     cachedGet<BundlePayload>("/api/bundle?url=" + enc(url) + (carrier ? "&carrier=" + enc(carrier) : "")),
   file: (url: string, path: string) =>
     cachedGet<DecodedFile & { dataUri?: string }>("/api/file?url=" + enc(url) + "&path=" + enc(path)),
-  cbs: (family = "iPhone") => cachedGet<CbsPayload>("/api/cbs?family=" + family),
+  cbs: () => cachedGet<CbsPayload>("/api/cbs"),
   countries: () =>
     cachedGet<{ iPhone: CountrySummary[]; Watch: CountrySummary[]; all: CountrySummary[] }>("/api/countries"),
   diff: (a: string, b: string, path: string) =>
@@ -103,6 +113,13 @@ export const api = {
   rawUrl: (url: string, path: string, download = false) =>
     "/api/raw?url=" + enc(url) + "&path=" + enc(path) + (download ? "&dl=1" : ""),
 };
+
+/** Where a bundle came from, as shown in version pickers. */
+export function refLabel(r: BundleRef): string {
+  if (r.source === "image") return `iOS ${r.os} image, build ${r.build}`;
+  const os = r.os === "legacy" ? "legacy" : r.os ? `iOS ${r.os}+` : "";
+  return `asset server, ${os ? os + ", " : ""}build ${r.build}${r.productType && r.productType !== "iPhone" ? ", " + r.productType : ""}`;
+}
 
 export function humanBytes(n: number): string {
   if (n < 1024) return n + " B";

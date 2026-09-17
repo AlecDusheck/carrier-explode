@@ -58,6 +58,8 @@ export interface CbsRow {
   cbMessageLocales: string[];
   /** false = the bundle carries no CellBroadcast dictionary at all. */
   hasCellBroadcast: boolean;
+  /** "image" = from the OS image in R2, "cdn" = Apple's asset server. */
+  source: "image" | "cdn";
   error?: string;
 }
 
@@ -78,7 +80,7 @@ export async function buildCbsRow(c: CountrySummary, fetchUpstream: Fetcher): Pr
     country: c.id, key: c.key, version: c.version, minOS: c.minOS, url: c.url,
     iso: [], countryIds: c.countryIds, languages: [], mappings: [], alertTypes: [],
     alertConfigurations: [], appleSafetyAlertRanges: [], maps4382: false,
-    emergencyNumbers: [], cbMessageLocales: [], hasCellBroadcast: false,
+    emergencyNumbers: [], cbMessageLocales: [], hasCellBroadcast: false, source: "cdn",
   };
   try {
     const bytes = await fetchUpstream(c.url);
@@ -92,7 +94,16 @@ export async function buildCbsRow(c: CountrySummary, fetchUpstream: Fetcher): Pr
     if (!carrierFile) { row.error = "no carrier.plist"; return row; }
     const p = decodeFile(bundle, "carrier.plist").plist as Any | undefined;
     if (!p) { row.error = "carrier.plist did not decode"; return row; }
+    fillRow(row, p);
+  } catch (e) {
+    row.error = (e as Error).message;
+  }
+  return row;
+}
 
+/** Fill a row from an already-decoded country carrier.plist. */
+export function fillRow(row: CbsRow, p: Any): void {
+  {
     row.countryName = str(p.CountryName);
     row.iso = Array.isArray(p.ISOAlpha2CountryCode) ? p.ISOAlpha2CountryCode.filter((x: unknown) => typeof x === "string") : [];
 
@@ -159,10 +170,59 @@ export async function buildCbsRow(c: CountrySummary, fetchUpstream: Fetcher): Pr
         .filter((x): x is string => !!x);
     }
     row.amlDestination = str(p.Location?.EmergencyLocation?.AugmentedEmergencyAction?.AML?.SMS?.Destination);
-  } catch (e) {
-    row.error = (e as Error).message;
   }
-  return row;
+}
+
+export interface ImageCountries {
+  version: string;
+  build: string;
+  /** Bundle name -> bundle build, from the image index. */
+  builds: Record<string, string>;
+  /** Bundle name -> decoded carrier.plist. */
+  plists: Record<string, Any>;
+}
+
+/**
+ * One row per country. The OS image is the base; a CDN bundle replaces the
+ * image's only when its build is newer, which is what the phone itself does.
+ */
+export async function buildMergedCbsMatrix(
+  image: ImageCountries | null,
+  cdn: CountrySummary[],
+  fetchUpstream: Fetcher,
+) {
+  const rows = new Map<string, CbsRow>();
+  if (image) {
+    for (const [name, plist] of Object.entries(image.plists)) {
+      const row: CbsRow = {
+        country: name, key: name, version: image.builds[name] ?? "", url: `r2:system/${image.build}/countries/${name}.ipcc`,
+        iso: [], countryIds: [], languages: [], mappings: [], alertTypes: [], alertConfigurations: [],
+        appleSafetyAlertRanges: [], maps4382: false, emergencyNumbers: [], cbMessageLocales: [],
+        hasCellBroadcast: false, source: "image",
+      };
+      fillRow(row, plist);
+      rows.set(name, row);
+    }
+  }
+  const newer = latestPerCountry(cdn, "iPhone").filter((c) => {
+    const have = rows.get(c.id);
+    return !have || compareVersions(c.version, have.version) > 0;
+  });
+  for (let i = 0; i < newer.length; i += 8) {
+    for (const r of await Promise.all(newer.slice(i, i + 8).map((c) => buildCbsRow(c, fetchUpstream)))) {
+      if (!r.error) rows.set(r.country, r);
+    }
+  }
+  const out = [...rows.values()].sort((a, b) => (a.countryName ?? a.country).localeCompare(b.countryName ?? b.country));
+  const ids = new Set<number>();
+  for (const r of out) for (const m of r.mappings) for (let id = m.from; id <= m.to && id - m.from < 64; id++) ids.add(id);
+  return {
+    family: "iPhone",
+    generatedAt: new Date().toISOString(),
+    image: image ? { version: image.version, build: image.build } : null,
+    messageIds: [...ids].sort((a, b) => a - b),
+    rows: out,
+  };
 }
 
 /** Latest bundle per country for the given family. */
@@ -194,9 +254,5 @@ export async function buildCbsMatrix(
     generatedAt: new Date().toISOString(),
     messageIds: [...ids].sort((a, b) => a - b),
     rows,
-    note:
-      "Only country bundles carry a CellBroadcast schema. Countries with no bundle on the CDN, India " +
-      "included, ship theirs inside the OS at /System/Library/Carrier Bundles/ - you'll need to extract " +
-      "an IPSW to see those.",
   };
 }

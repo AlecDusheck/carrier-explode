@@ -9,7 +9,7 @@
   let detail = $state<string>("");
 
   $effect(() => {
-    api.cbs("iPhone").then((d) => (data = d)).catch((e) => (error = String(e.message ?? e)));
+    api.cbs().then((d) => (data = d)).catch((e) => (error = String(e.message ?? e)));
   });
 
   const rows = $derived(data?.rows ?? []);
@@ -39,8 +39,7 @@
 {:else if !data}
   <div class="scroll pad">
     <p class="dimtext">
-      Downloading and decoding every published country bundle. The first run does the real work; the
-      result is then cached at the edge for a week.
+      Building the table.
     </p>
   </div>
 {:else}
@@ -53,32 +52,31 @@
   </div>
 
   <div class="scroll pad">
-    <div class="banner">{data.note}</div>
+    {#if data.image}
+      <p class="dimtext" style="margin-top:0">
+        From the iOS {data.image.version} image ({data.image.build}). Rows marked asset server have a newer
+        bundle there.
+      </p>
+    {/if}
 
     {#if mode === "operator"}
       <p class="lead">
-        Message identifier 4382 is the 3GPP operator-defined CMAS identifier. A country whose bundle maps
-        it lets an operator put its own content into the emergency-alert surface; a country that does not
-        map it has the handset ignore those broadcasts entirely. Where it is mapped, UserConfigurable
-        decides whether the subscriber can switch it off.
-      </p>
-      <p class="lead">
+        4382 is the operator-defined CMAS message ID. A bundle that maps it lets the operator put its own
+        content in the emergency-alert surface; unmapped IDs are ignored by the phone.
         <b>
           {#if mapping4382.length === 0}
-            None of the {configured.length} published country bundles maps 4382.
+            None of the {configured.length} bundles map it.
           {:else}
-            {mapping4382.length} of {configured.length} published country bundles map 4382:
+            {mapping4382.length} of {configured.length} map it:
             {mapping4382.map((r) => r.countryName ?? r.country).join(", ")}.
           {/if}
         </b>
-        That is only what Apple publishes on the CDN. Countries whose bundle ships inside the iOS system
-        image, India among them, cannot be checked from here.
       </p>
       <table class="grid">
         <thead>
           <tr>
             <th class="sticky-col">Country</th><th>4382</th><th>Alert type</th>
-            <th>User can disable</th><th>Settings section</th><th class="num">Bundle</th>
+            <th>User can disable</th><th>Settings section</th><th class="num">Bundle</th><th>Source</th>
           </tr>
         </thead>
         <tbody>
@@ -97,6 +95,7 @@
               </td>
               <td>{r.switchGroupTitle ?? ""}</td>
               <td class="num mono">{r.version}</td>
+              <td class="dimtext">{r.source === "image" ? "image" : "asset server"}</td>
             </tr>
           {/each}
         </tbody>
@@ -104,11 +103,7 @@
 
       {#if bare.length}
         <fieldset class="hgroup">
-          <legend>Published, but with no CellBroadcast block ({bare.length})</legend>
-          <p class="dimtext" style="margin-top:0">
-            These country bundles exist and carry emergency numbers and IMS settings, but no cell-broadcast
-            schema at all, so the handset falls back to whatever the system image provides.
-          </p>
+          <legend>No CellBroadcast block ({bare.length})</legend>
           <div>
             {#each bare as r (r.key)}
               <button class="chip" onclick={() => router.go("countries", r.country)}>{r.countryName ?? r.country}</button>
@@ -139,11 +134,7 @@
       </fieldset>
 
     {:else if mode === "matrix"}
-      <p class="dimtext">
-        Every 3GPP message identifier any published bundle maps, against every country. Blank means the
-        identifier is unmapped and the handset ignores it. A marked cell is an alert the user cannot
-        switch off.
-      </p>
+      <p class="dimtext">Blank means unmapped, so the phone ignores it. Locked means no off switch.</p>
       <table class="grid">
         <thead>
           <tr>
@@ -190,7 +181,7 @@
           <legend>{detailRow.countryName ?? detailRow.country}</legend>
           <table class="grid">
             <tbody>
-              <tr><td class="k">Bundle</td><td class="mono">{detailRow.key} version {detailRow.version}{detailRow.minOS ? ", min iOS " + detailRow.minOS : ""}</td></tr>
+              <tr><td class="k">Bundle</td><td class="mono">{detailRow.key} build {detailRow.version}, {detailRow.source === "image" && data.image ? "iOS " + data.image.version + " image" : "asset server"}{detailRow.minOS ? ", iOS " + detailRow.minOS + "+" : ""}</td></tr>
               <tr><td class="k">ISO codes</td><td>{#each detailRow.iso as i (i)}<span class="chip">{i}</span>{/each}</td></tr>
               <tr><td class="k">Country IDs routed here</td><td class="mono wrap">{detailRow.countryIds.join(", ")}</td></tr>
               <tr><td class="k">Settings section</td><td>{detailRow.switchGroupTitle ?? ""}</td></tr>

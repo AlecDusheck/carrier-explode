@@ -5,15 +5,22 @@ Easily explore and parse Apple's carrier bundle server.
 While being nosy on some odd behavior for Indian carriers on iOS, I found there wasn't a good way to explore carrier bundles on web. There are many great tools to parse them already, but no one has quite made a live web explorer for carrier bundles. Here it is!
 
 ## What it does
-It all comes from one unauthenticated 6 MB XML plist — Apple's old iTunes
-version manifest, which still lists every carrier bundle they've ever shipped.
-The worker resolves that index, downloads the `.ipcc` files, checks them against
-the manifest digests, unzips them and decodes what's inside. Your browser never
-touches Apple.
+Two sources, merged:
 
-- 750 carriers, every published iOS version of each, plus the Watch bundles.
-- The 29 country bundles, which are the only thing that carries a cell-broadcast
-  schema. There's a cross-country table of the 3GPP message IDs and which alerts
+- **The iOS image.** A scheduled Action pulls the latest IPSW, extracts
+  `/System/Library/Carrier Bundles` and `/System/Library/CountryBundles`, and
+  puts them in R2. This is what a phone actually boots with, and it covers every
+  country (~225) and ~690 carriers.
+- **Apple's asset server.** One unauthenticated 6 MB plist lists every bundle
+  Apple has pushed over the air. It fills in what the image can't: bundles
+  updated since that iOS build, every older version, Watch bundles, and carriers
+  that aren't in the image.
+
+Each bundle shows which one it came from. Where both have it, the newer build
+wins, same as on the phone. Everything is fetched and decoded by the worker.
+
+- Every carrier and country, with version history.
+- A cross-country table of the 3GPP cell broadcast message IDs and which alerts
   you can't turn off.
 - MCC+MNC lookup, with MVNOs split out by ICCID prefix and SIM GID1/GID2.
 - Diff any two bundles on any file they share.
@@ -47,6 +54,10 @@ string or the bytes read as a word or a dotted version. Tags nobody has worked
 out yet are dumped raw instead of hidden.
 
 ## Prior Art
+- [dwilliamsuk/ios-carrier-bundles](https://github.com/dwilliamsuk/ios-carrier-bundles)
+  — the IPSW extraction workflow here is his, lightly adapted to publish to R2
+  instead of committing to a repo. It's the reason this site covers every
+  country and not just the 29 on the asset server.
 - [mast3rz3ro/imobilecfbm](https://github.com/mast3rz3ro/imobilecfbm) — actively
   maintained downloader/repacker/installer with its own bundle database. Best
   reference for the install side.
@@ -79,6 +90,10 @@ pnpm check    # tsc -b and svelte-check
 pnpm deploy   # build + wrangler deploy
 ```
 
+`.github/workflows/system-bundles.yml` refreshes the R2 bucket weekly (or on
+demand, with `force` to redo the current build). It needs `CLOUDFLARE_API_TOKEN`
+and `CLOUDFLARE_ACCOUNT_ID` secrets. Local dev reads the real bucket.
+
 Caching is layered so nothing hits Apple per pageview: the manifest is parsed
 down to its indexes once per warm isolate and held 6h, decoded responses go
 through the Cache API, and `.ipcc` fetches use `cf: { cacheTtl, cacheEverything }`
@@ -87,9 +102,6 @@ URLs are content-addressed, so a decode never goes stale. The Cache API is a
 no-op on `*.workers.dev`, hence the custom domain.
 
 ## Known gaps
-- Most countries have no country bundle on the CDN — India included. Those ship
-  inside the OS at `/System/Library/Carrier Bundles/`, so you'll need to extract
-  an IPSW to see them.
 - Carrier bundles have no cell-broadcast alert schema at all, just throttling
   knobs. Country bundles are the only place it lives.
 - Bitmask fields are decoded to bit positions. What the bits actually do isn't
