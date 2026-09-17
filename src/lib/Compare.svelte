@@ -1,29 +1,26 @@
 <script lang="ts">
   import { api, shortValue, type BundleRef, type DiffPayload, type IndexPayload } from "./api.ts";
+  import { resource } from "./state.svelte.ts";
 
   let { index }: { index: IndexPayload } = $props();
 
   let leftName = $state("");
   let rightName = $state(sessionStorage.getItem("compare.right") ?? "");
-  let leftRefs = $state<BundleRef[]>([]);
-  let rightRefs = $state<BundleRef[]>([]);
-  let a = $state("");
-  let b = $state("");
   let path = $state("carrier.plist");
-  let result = $state<DiffPayload | null>(null);
+  let result = $state.raw<DiffPayload | null>(null);
   let error = $state<string | null>(null);
   let busy = $state(false);
 
   const names = $derived(index.carriers.map((c) => c.name));
 
-  $effect(() => {
-    if (!leftName) { leftRefs = []; a = ""; return; }
-    api.carrier(leftName).then((d) => { leftRefs = d.refs; a = d.refs[0]?.url ?? ""; }).catch(() => (leftRefs = []));
-  });
-  $effect(() => {
-    if (!rightName) { rightRefs = []; b = ""; return; }
-    api.carrier(rightName).then((d) => { rightRefs = d.refs; b = d.refs[0]?.url ?? ""; }).catch(() => (rightRefs = []));
-  });
+  const left = resource(() => (leftName ? api.carrier(leftName) : null));
+  const right = resource(() => (rightName ? api.carrier(rightName) : null));
+  // The manifest publishes one file under several iOS keys; the pickers want one option per URL.
+  const byUrl = (refs: BundleRef[]) => refs.filter((r, i) => refs.findIndex((x) => x.url === r.url) === i);
+  const leftRefs = $derived(byUrl(left.value?.refs ?? []));
+  const rightRefs = $derived(byUrl(right.value?.refs ?? []));
+  let a = $derived(leftRefs[0]?.url ?? "");
+  let b = $derived(rightRefs[0]?.url ?? "");
 
   const shared = $derived.by(() => {
     const r = result;

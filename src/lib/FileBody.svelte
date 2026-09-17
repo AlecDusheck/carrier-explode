@@ -31,7 +31,7 @@
   <span class="chip">{file.kind}</span>
   <span class="dimtext">{humanBytes(file.size)}</span>
   {#if file.devices?.length}
-    {#each file.devices as d (d.code)}
+    {#each file.devices as d, i (i)}
       <span class="chip" title={d.ids ?? ""}>{d.code}{d.name ? " " + d.name : ""}</span>
     {/each}
   {/if}

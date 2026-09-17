@@ -1,30 +1,18 @@
 <script lang="ts">
-  import { api, shortValue, type ScanResult } from "./api.ts";
-  import { scan, router, copyText } from "./state.svelte.ts";
+  import { api, shortValue } from "./api.ts";
+  import { scan, router, copyText, resource } from "./state.svelte.ts";
 
-  let result = $state<ScanResult | null>(null);
-  let error = $state<string | null>(null);
-  let busy = $state(false);
   let mode = $state<"values" | "carriers">("values");
-  let token = 0;
 
   const SCOPES: Array<[string, string]> = [
     ["countries", "Country bundles"],
     ["all", "All carriers"],
   ];
 
-  $effect(() => {
-    if (!scan.open || !scan.path) return;
-    const path = scan.path, file = scan.file, scope = scan.scope, limit = scan.limit;
-    const mine = ++token;
-    busy = true;
-    error = null;
-    result = null;
-    api.keyscan(path, scope, file, limit)
-      .then((r) => { if (mine === token) result = r; })
-      .catch((e) => { if (mine === token) error = String(e.message ?? e); })
-      .finally(() => { if (mine === token) busy = false; });
-  });
+  const request = resource(() =>
+    scan.open && scan.path ? api.keyscan(scan.path, scan.scope, scan.file, scan.limit) : null,
+  );
+  const result = $derived(request.value);
 
   const scopeLabel = $derived(
     scan.scope.startsWith("country:")
@@ -71,10 +59,10 @@
       </div>
 
       <div class="scroll pad">
-        {#if busy}
+        {#if request.busy}
           <p class="dimtext">Downloading and decoding up to {scan.limit} bundles.</p>
-        {:else if error}
-          <div class="banner err">{error}</div>
+        {:else if request.error}
+          <div class="banner err">{request.error}</div>
         {:else if result}
           <div class="rowflex" style="margin-bottom:6px">
             <button class="btn" class:on={mode === "values"} onclick={() => (mode = "values")}>

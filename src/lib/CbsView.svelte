@@ -1,16 +1,13 @@
 <script lang="ts">
-  import { api, type CbsPayload, type CbsRow } from "./api.ts";
+  import { api, type CbsRow } from "./api.ts";
   import { describeMessageId } from "../../shared/knowledge.ts";
-  import { router } from "./state.svelte.ts";
+  import { router, resource } from "./state.svelte.ts";
 
-  let data = $state<CbsPayload | null>(null);
-  let error = $state<string | null>(null);
+  const table = resource(() => api.cbs());
+  const data = $derived(table.value);
+  const error = $derived(table.error);
   let mode = $state<"operator" | "matrix" | "detail">("operator");
   let detail = $state<string>("");
-
-  $effect(() => {
-    api.cbs().then((d) => (data = d)).catch((e) => (error = String(e.message ?? e)));
-  });
 
   const rows = $derived(data?.rows ?? []);
   const configured = $derived(rows.filter((r) => r.mappings.length > 0));
@@ -80,7 +77,7 @@
           </tr>
         </thead>
         <tbody>
-          {#each configured as r (r.key)}
+          {#each configured as r (r.country)}
             <tr style="cursor:pointer" onclick={() => open(r)}>
               <td class="sticky-col k">{r.countryName ?? r.country}</td>
               <td>
@@ -105,7 +102,7 @@
         <fieldset class="hgroup">
           <legend>No CellBroadcast block ({bare.length})</legend>
           <div>
-            {#each bare as r (r.key)}
+            {#each bare as r (r.country)}
               <button class="chip" onclick={() => router.go("countries", r.country)}>{r.countryName ?? r.country}</button>
             {/each}
           </div>
@@ -117,7 +114,7 @@
         <table class="grid">
           <thead><tr><th class="sticky-col">Country</th><th>Non-configurable alert types</th></tr></thead>
           <tbody>
-            {#each configured as r (r.key)}
+            {#each configured as r (r.country)}
               <tr>
                 <td class="sticky-col k">{r.countryName ?? r.country}</td>
                 <td>
@@ -140,7 +137,7 @@
           <tr>
             <th class="sticky-col num">ID</th>
             <th style="min-width:190px">3GPP TS 23.041</th>
-            {#each configured as r (r.key)}
+            {#each configured as r (r.country)}
               <th title={r.countryName ?? r.country} style="writing-mode:vertical-rl; padding:6px 2px">{r.country}</th>
             {/each}
           </tr>
@@ -150,7 +147,7 @@
             <tr>
               <td class="sticky-col k num">{id}</td>
               <td class="dimtext">{describeMessageId(id) ?? ""}</td>
-              {#each configured as r (r.key)}
+              {#each configured as r (r.country)}
                 {@const a = alertFor(r, id)}
                 <td style="white-space:nowrap; font-size:10px">
                   {#if a.type}{shortType(a.type)}{#if a.configurable === false}<span class="chip bad">locked</span>{/if}{/if}
@@ -167,7 +164,7 @@
           Country
           <select class="grow" bind:value={detail}>
             <option value="">pick a country</option>
-            {#each rows as r (r.key)}<option value={r.country}>{r.countryName ?? r.country}{r.mappings.length ? "" : " (no CellBroadcast)"}</option>{/each}
+            {#each rows as r (r.country)}<option value={r.country}>{r.countryName ?? r.country}{r.mappings.length ? "" : " (no CellBroadcast)"}</option>{/each}
           </select>
         </label>
         {#if detailRow}
@@ -182,7 +179,7 @@
           <table class="grid">
             <tbody>
               <tr><td class="k">Bundle</td><td class="mono">{detailRow.key} build {detailRow.version}, {detailRow.source === "image" && data.image ? "iOS " + data.image.version + " image" : "asset server"}{detailRow.minOS ? ", iOS " + detailRow.minOS + "+" : ""}</td></tr>
-              <tr><td class="k">ISO codes</td><td>{#each detailRow.iso as i (i)}<span class="chip">{i}</span>{/each}</td></tr>
+              <tr><td class="k">ISO codes</td><td>{#each detailRow.iso as code, i (i)}<span class="chip">{code}</span>{/each}</td></tr>
               <tr><td class="k">Country IDs routed here</td><td class="mono wrap">{detailRow.countryIds.join(", ")}</td></tr>
               <tr><td class="k">Settings section</td><td>{detailRow.switchGroupTitle ?? ""}</td></tr>
               <tr><td class="k">Broadcast languages</td><td class="mono">{detailRow.languages.join(", ")}</td></tr>
