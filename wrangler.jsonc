@@ -1,0 +1,24 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "carrier-explode",
+  "main": "worker/index.ts",
+  "compatibility_date": "2025-09-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "routes": [
+    {
+      "pattern": "carrier.dusheck.com",
+      "custom_domain": true
+    }
+  ],
+  "assets": {
+    "directory": "./dist/client",
+    "binding": "ASSETS",
+    "not_found_handling": "single-page-application"
+  },
+  "observability": { "enabled": true },
+  "placement": { "mode": "smart" }
+  // Optional durable cache layer. Create with:
+  //   pnpm wrangler kv namespace create CACHE
+  // then uncomment and paste the id:
+  // "kv_namespaces": [{ "binding": "CACHE", "id": "<paste-id-here>" }]
+}
