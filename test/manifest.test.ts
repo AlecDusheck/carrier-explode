@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { zipSync, unzlibSync } from "fflate";
 
-import * as manifestModule from "../worker/lib/manifest.ts";
+import * as manifestModule from "../src/lib/server/manifest.ts";
 import {
   buildIndex,
   buildMccMnc,
@@ -14,14 +14,14 @@ import {
   parseManifest,
   splitName,
   versionKey,
-} from "../worker/lib/manifest.ts";
-import type { CountrySummary, ManifestIndex } from "../worker/lib/manifest.ts";
-import type { PlistValue } from "../worker/lib/plist.ts";
-import { openIpcc, decodeFile, base64Of, contentTypeOf } from "../worker/lib/ipcc.ts";
-import type { OpenedBundle } from "../worker/lib/ipcc.ts";
-import { buildCbsRow, buildCbsMatrix, latestPerCountry } from "../worker/lib/cbs.ts";
-import { diffValues, summariseDiff } from "../worker/lib/diff.ts";
-import { normalizeApplePng, isPng, isCgBI, pngDimensions } from "../worker/lib/png.ts";
+} from "../src/lib/server/manifest.ts";
+import type { CountrySummary, ManifestIndex } from "../src/lib/server/manifest.ts";
+import type { PlistValue } from "../src/lib/server/plist.ts";
+import { openIpcc, decodeFile, base64Of, contentTypeOf } from "../src/lib/server/ipcc.ts";
+import type { OpenedBundle } from "../src/lib/server/ipcc.ts";
+import { buildCbsRow, buildCbsMatrix, latestPerCountry } from "../src/lib/server/cbs.ts";
+import { diffValues, summariseDiff } from "../src/lib/server/diff.ts";
+import { normalizeApplePng, isPng, isCgBI, pngDimensions } from "../src/lib/server/png.ts";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const fixture = (n: string) => new Uint8Array(readFileSync(join(here, "fixtures", n)));

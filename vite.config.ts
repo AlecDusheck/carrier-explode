@@ -1,8 +1,7 @@
-import { defineConfig } from "vite";
-import { svelte } from "@sveltejs/vite-plugin-svelte";
-import { cloudflare } from "@cloudflare/vite-plugin";
+import { sveltekit } from "@sveltejs/kit/vite";
+import { defineConfig } from "vitest/config";
 
 export default defineConfig({
-  plugins: [svelte(), cloudflare()],
-  build: { chunkSizeWarningLimit: 900 },
+  plugins: [sveltekit()],
+  test: { include: ["test/**/*.test.ts"] },
 });

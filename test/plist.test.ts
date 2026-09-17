@@ -11,8 +11,8 @@ import {
   bytesToHex,
   maybeText,
   type PlistValue,
-} from "../worker/lib/plist.ts";
-import { openIpcc } from "../worker/lib/ipcc.ts";
+} from "../src/lib/server/plist.ts";
+import { openIpcc } from "../src/lib/server/ipcc.ts";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const fixture = (n: string) => new Uint8Array(readFileSync(join(here, "fixtures", n)));

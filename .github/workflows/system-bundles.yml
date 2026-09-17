@@ -95,7 +95,15 @@ jobs:
         run: |
           W="$GITHUB_WORKSPACE/node_modules/.bin/wrangler"
           cd /tmp/out
-          "$W" r2 bulk put "$BUCKET" --filename upload.json --remote --force
+          # Backfill runs overlap and R2's API answers 429 under load. The upload is
+          # idempotent (content-addressed keys), so retry the whole thing with backoff.
+          for attempt in 1 2 3 4 5 6 7; do
+            "$W" r2 bulk put "$BUCKET" --filename upload.json --remote --force --concurrency 6 && break
+            [ "$attempt" = 7 ] && exit 1
+            delay=$(( 20 * 2 ** (attempt - 1) + RANDOM % 20 ))
+            echo "upload failed (attempt $attempt), retrying in ${delay}s"
+            sleep "$delay"
+          done
           # Re-read and merge right before writing: backfill runs overlap.
           "$W" r2 object get "$BUCKET/system/builds.json" --remote --pipe > /tmp/now.json 2>/dev/null || echo '[]' > /tmp/now.json
           jq -s -c 'add | unique_by(.build) | sort_by(.version | split(".") | map(tonumber? // 0)) | reverse' /tmp/now.json builds.json > merged.json
