@@ -101,8 +101,9 @@ pnpm deploy
 
 R2 layout: `blobs/<sha1>.ipcc` (content-addressed, so a bundle unchanged across
 iOS releases is stored once), `system/<build>/index.json` and `countries.json`,
-and `system/builds.json`. `.github/workflows/system-bundles.yml` adds the latest
-iOS weekly; run it with a `version` to backfill. It needs `CLOUDFLARE_API_TOKEN`
+and `system/builds.json`. `.github/workflows/system-bundles.yml` checks daily for
+iOS releases it doesn't hold yet and extracts each one; run it with a `version`
+to backfill older ones. It needs `CLOUDFLARE_API_TOKEN`
 and `CLOUDFLARE_ACCOUNT_ID`.
 
 Caching: the manifest is parsed once per warm isolate and held 6h, expensive
