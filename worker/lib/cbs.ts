@@ -1,11 +1,9 @@
 /**
  * Cross-country cell-broadcast comparison.
  *
- * Only country bundles carry a CellBroadcast schema; carrier bundles carry at
- * most throttling knobs. Message identifiers that a country's bundle does not
- * map are ignored by the handset — so *whether* a country maps 4382 (the 3GPP
- * operator-defined CMAS identifier), and whether the user can switch it off, is
- * the most consequential difference between bundles.
+ * Message IDs a country's bundle does not map are ignored by the handset, so
+ * whether a country maps 4382 (the operator-defined CMAS ID) and whether the
+ * user can switch it off is the interesting difference between bundles.
  */
 
 import { openIpcc, decodeFile } from "./ipcc.ts";
@@ -197,8 +195,8 @@ export async function buildCbsMatrix(
     messageIds: [...ids].sort((a, b) => a - b),
     rows,
     note:
-      "Country bundles are the only place a CellBroadcast schema appears; carrier bundles carry no alert configuration. " +
-      "Countries without a published bundle (India among them) ship their configuration inside the iOS system image at " +
-      "/System/Library/Carrier Bundles/ and never appear on the CDN.",
+      "Only country bundles carry a CellBroadcast schema. Countries with no bundle on the CDN, India " +
+      "included, ship theirs inside the OS at /System/Library/Carrier Bundles/ - you'll need to extract " +
+      "an IPSW to see those.",
   };
 }
