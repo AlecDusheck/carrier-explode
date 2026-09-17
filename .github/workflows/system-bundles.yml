@@ -12,6 +12,9 @@ name: System bundles
 on:
   workflow_dispatch:
     inputs:
+      version:
+        description: iOS version to extract (default latest)
+        type: string
       force:
         description: Re-extract even if this build is already in R2
         type: boolean
@@ -38,12 +41,17 @@ jobs:
           curl -sL -o /tmp/ipsw.deb "$URL"
           sudo dpkg -i /tmp/ipsw.deb
 
-      - name: Skip if this build is already in R2
+      - name: Resolve the IPSW and skip if we already hold it
         id: check
         run: |
-          BUILD=$(ipsw download ipsw --device "$DEVICE" --latest --urls --no-color | grep -oE '_[0-9A-Za-z]+_Restore' | head -1 | cut -d_ -f2)
-          echo "latest build: $BUILD"
-          if [ "${{ inputs.force }}" != "true" ] && npx --yes wrangler r2 object get "$BUCKET/system/latest.json" --remote --pipe 2>/dev/null | grep -q "\"$BUILD\""; then
+          npm install --no-save --silent wrangler
+          W="$GITHUB_WORKSPACE/node_modules/.bin/wrangler"
+          if [ -n "${{ inputs.version }}" ]; then PICK="--version ${{ inputs.version }}"; else PICK="--latest"; fi
+          echo "pick=$PICK" >> "$GITHUB_OUTPUT"
+          BUILD=$(ipsw download ipsw --device "$DEVICE" $PICK --urls --no-color | grep -oE '_[0-9A-Za-z]+_Restore' | head -1 | cut -d_ -f2)
+          echo "build: $BUILD"
+          "$W" r2 object get "$BUCKET/system/builds.json" --remote --pipe > /tmp/builds.json 2>/dev/null || echo '[]' > /tmp/builds.json
+          if [ "${{ inputs.force }}" != "true" ] && jq -e --arg b "$BUILD" 'any(.[]; .build == $b)' /tmp/builds.json > /dev/null; then
             echo "fresh=true" >> "$GITHUB_OUTPUT"
           fi
 
@@ -61,7 +69,7 @@ jobs:
         if: steps.check.outputs.fresh != 'true'
         run: |
           mkdir -p "$RUNNER_TEMP/ipsw" /tmp/x
-          ipsw download ipsw --device "$DEVICE" --latest --no-color --output "$RUNNER_TEMP/ipsw"
+          ipsw download ipsw --device "$DEVICE" ${{ steps.check.outputs.pick }} --no-color --output "$RUNNER_TEMP/ipsw"
           ipsw extract --files --pattern '.*Bundles.*iPhone.*\.bundle.*$' --output /tmp/x "$RUNNER_TEMP"/ipsw/*.ipsw
           ipsw info "$RUNNER_TEMP"/ipsw/*.ipsw --json --no-color > /tmp/meta.json
           sudo chown -R "$USER" /tmp/x
@@ -69,19 +77,26 @@ jobs:
       - name: Package
         if: steps.check.outputs.fresh != 'true'
         run: |
+          W="$GITHUB_WORKSPACE/node_modules/.bin/wrangler"
+          # Blobs are content-addressed; skip the ones an earlier image already uploaded.
+          : > /tmp/have.txt
+          for b in $(jq -r '.[].build' /tmp/builds.json); do
+            "$W" r2 object get "$BUCKET/system/$b/index.json" --remote --pipe 2>/dev/null |
+              jq -r '(.carriers, .countries)[].sha1' >> /tmp/have.txt || true
+          done
           ROOT=$(echo /tmp/x/*/root/System/Library)
           python3 scripts/package_system_bundles.py \
             --carriers "$ROOT/Carrier Bundles/iPhone" \
             --countries "$ROOT/CountryBundles/iPhone" \
-            --meta /tmp/meta.json --out /tmp/out
+            --meta /tmp/meta.json --out /tmp/out --builds /tmp/builds.json --have /tmp/have.txt
 
       - name: Upload to R2
         if: steps.check.outputs.fresh != 'true'
         run: |
-          npm install --no-save --silent wrangler
           W="$GITHUB_WORKSPACE/node_modules/.bin/wrangler"
           cd /tmp/out
           "$W" r2 bulk put "$BUCKET" --filename upload.json --remote --force
-          # Last, so the worker never points at a half-uploaded build.
-          jq -c '{build, version}' index.json > latest.json
-          "$W" r2 object put "$BUCKET/system/latest.json" --file latest.json --remote
+          # Re-read and merge right before writing: backfill runs overlap.
+          "$W" r2 object get "$BUCKET/system/builds.json" --remote --pipe > /tmp/now.json 2>/dev/null || echo '[]' > /tmp/now.json
+          jq -s -c 'add | unique_by(.build) | sort_by(.version | split(".") | map(tonumber? // 0)) | reverse' /tmp/now.json builds.json > merged.json
+          "$W" r2 object put "$BUCKET/system/builds.json" --file merged.json --remote
