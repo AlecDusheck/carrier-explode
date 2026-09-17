@@ -23,6 +23,8 @@ wins, same as on the phone. Everything is fetched and decoded by the worker.
 - A cross-country table of the 3GPP cell broadcast message IDs and which alerts
   you can't turn off.
 - MCC+MNC lookup, with MVNOs split out by ICCID prefix and SIM GID1/GID2.
+- One timeline per bundle across iOS images and OTA builds, with a per-version
+  changes view, and a page per iOS release listing what it added or changed.
 - Diff any two bundles on any file they share.
 - Right-click a setting to see what everyone else puts in that key.
 
@@ -78,28 +80,35 @@ out yet are dumped raw instead of hidden.
   for what those message IDs actually do on the network.
 
 ## Development
-Svelte 5 + Vite on the front, a Cloudflare Worker on the back, `fflate` for ZIP
-and zlib. Nothing else at runtime — the plist, DER and PNG decoders are all in
-`worker/lib`.
+SvelteKit on Cloudflare Workers, Svelte 5 with async `await` and remote
+functions (both still experimental in Kit). `fflate` and `valibot` are the only
+runtime dependencies; the plist, DER and PNG decoders are in `src/lib/server`.
 
 ```sh
 pnpm install
-pnpm dev      # vite + worker on :5173
-pnpm test     # ~460 cases against real bundle fixtures
-pnpm check    # tsc -b and svelte-check
-pnpm deploy   # build + wrangler deploy
+pnpm dev      # reads the real R2 bucket
+pnpm test     # ~470 cases against real bundle fixtures
+pnpm check
+pnpm deploy
 ```
 
-`.github/workflows/system-bundles.yml` refreshes the R2 bucket weekly (or on
-demand, with `force` to redo the current build). It needs `CLOUDFLARE_API_TOKEN`
-and `CLOUDFLARE_ACCOUNT_ID` secrets. Local dev reads the real bucket.
+- `src/lib/server/data.ts` is the only module that touches R2 or Apple.
+  `timeline.ts` merges image and OTA bundles into one history per bundle.
+- `src/lib/api/*.remote.ts` exposes that as `query` functions; components
+  `await` them inside `<svelte:boundary>` panes.
+- Every carrier, version, tab and file is a URL:
+  `/carriers/ATT_US/ios-27.0/files/carrier.plist`, `/releases/24A437`.
 
-Caching is layered so nothing hits Apple per pageview: the manifest is parsed
-down to its indexes once per warm isolate and held 6h, decoded responses go
-through the Cache API, and `.ipcc` fetches use `cf: { cacheTtl, cacheEverything }`
-so each file is pulled once and then served from the edge for 30 days. Bundle
-URLs are content-addressed, so a decode never goes stale. The Cache API is a
-no-op on `*.workers.dev`, hence the custom domain.
+R2 layout: `blobs/<sha1>.ipcc` (content-addressed, so a bundle unchanged across
+iOS releases is stored once), `system/<build>/index.json` and `countries.json`,
+and `system/builds.json`. `.github/workflows/system-bundles.yml` adds the latest
+iOS weekly; run it with a `version` to backfill. It needs `CLOUDFLARE_API_TOKEN`
+and `CLOUDFLARE_ACCOUNT_ID`.
+
+Caching: the manifest is parsed once per warm isolate and held 6h, expensive
+tables go through the Cache API, and `.ipcc` fetches use `cf.cacheTtl` so each
+file is pulled from Apple once. The Cache API is a no-op on `*.workers.dev`,
+hence the custom domain.
 
 ## Known gaps
 - Carrier bundles have no cell-broadcast alert schema at all, just throttling
