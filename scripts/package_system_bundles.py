@@ -88,6 +88,12 @@ def main() -> None:
     }
     (a.out / "countries.json").write_text(json.dumps(carrier_plists(a.countries), separators=(",", ":")))
     (a.out / "index.json").write_text(json.dumps(index, separators=(",", ":")))
+
+    # For `wrangler r2 bulk put`. latest.json is left out: it goes up last, on its own.
+    prefix = f"system/{index['build']}"
+    files = sorted(p for p in a.out.rglob("*") if p.is_file() and p.name != "upload.json")
+    (a.out / "upload.json").write_text(json.dumps(
+        [{"key": f"{prefix}/{p.relative_to(a.out).as_posix()}", "file": str(p.resolve())} for p in files]))
     print(f"iOS {index['version']} ({index['build']}): "
           f"{len(index['carriers'])} carrier, {len(index['countries'])} country bundles")
 
