@@ -1,6 +1,6 @@
 /** Shared app state: routing, the context menu, and the cross-carrier scan panel. */
 
-export type View = "carriers" | "countries" | "watch" | "cbs" | "plmn" | "compare" | "about";
+export type View = "carriers" | "countries" | "watch" | "cbs" | "plmn" | "compare";
 
 export const VIEWS: Array<[View, string]> = [
   ["carriers", "Carriers"],
@@ -9,7 +9,6 @@ export const VIEWS: Array<[View, string]> = [
   ["cbs", "Cell Broadcast"],
   ["plmn", "PLMN Lookup"],
   ["compare", "Compare"],
-  ["about", "About"],
 ];
 
 function parseHash(): { view: View; name: string | null } {
