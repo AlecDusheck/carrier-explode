@@ -80,14 +80,22 @@ function fetcher(env: Env) {
   };
 }
 
+let imageCache: { value: ImageIndex; expires: number } | null = null;
+
+/** A miss is never cached: the bucket may simply not have been reachable yet. */
 async function systemIndex(env: Env): Promise<ImageIndex | null> {
-  return memo("system-index", 10 * 60 * 1000, async () => {
+  if (imageCache && imageCache.expires > Date.now()) return imageCache.value;
+  try {
     const latest = await env.SYSTEM.get("system/latest.json");
     if (!latest) return null;
     const { build } = await latest.json<{ build: string }>();
     const idx = await env.SYSTEM.get(`system/${build}/index.json`);
-    return idx ? idx.json<ImageIndex>() : null;
-  });
+    if (!idx) return null;
+    imageCache = { value: await idx.json<ImageIndex>(), expires: Date.now() + 10 * 60 * 1000 };
+    return imageCache.value;
+  } catch {
+    return null;
+  }
 }
 
 /** Download + unzip an .ipcc, memoised per source. */
@@ -140,8 +148,9 @@ export default {
     try {
       switch (path) {
         case "/api/index": {
-          return cachedJson(`index:${API_VERSION}`, 6 * 3600, ctx, async () => {
-            const [st, image] = await Promise.all([manifestState(), systemIndex(env)]);
+          const image = await systemIndex(env);
+          return cachedJson(`index:${API_VERSION}:${image?.build ?? "none"}`, 6 * 3600, ctx, async () => {
+            const st = await manifestState();
             return {
               ...st.index,
               carriers: mergeCarriers(image, st.index.carriers),
