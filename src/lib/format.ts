@@ -39,8 +39,6 @@ export const fileHref = (kind: Kind, name: string, slug: string, path: string) =
 export const rawHref = (kind: Kind, name: string, slug: string, path: string, download = false) =>
   link(`/raw/${kind}/${seg(name)}/${seg(slug)}/${segs(path)}`) + (download ? "?dl" : "");
 
-export const downloadHref = (kind: Kind, name: string, slug: string) =>
-  link(`/download/${kind}/${seg(name)}/${seg(slug)}`);
 
 /** Query args must be built the same way everywhere so layout and page share one cached query. */
 export const bundleArgs = (p: { kind: Kind; name: string; version?: string }) =>

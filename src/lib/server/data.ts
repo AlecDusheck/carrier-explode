@@ -22,6 +22,7 @@ import { buildMergedCbsMatrix } from "./cbs";
 import { diffValues, summariseDiff } from "./diff";
 import { guessCarrierQuery } from "./guess";
 import { keyScan, type ScanTarget } from "./keyscan";
+import { carriersOf, homeCountry, isoIndex, type CountryPlists } from "./related";
 import { buildTimeline, type ImageBuild, type ImageIndex, type TimelineEntry } from "./timeline";
 
 export type { ImageBuild, TimelineEntry };
@@ -56,6 +57,14 @@ async function imageIndexes(): Promise<ImageIndex[]> {
   const all = await Promise.all((await builds()).map((b) => imageIndex(b.build)));
   return all.filter((x): x is ImageIndex => !!x);
 }
+
+/** Every country carrier.plist from the newest image, decoded. */
+const countryPlists = async () => {
+  const newest = (await builds())[0];
+  if (!newest) return {} as CountryPlists;
+  return (await memo(`countries:${newest.build}`, 24 * 3600_000, () =>
+    r2json<CountryPlists>(`system/${newest.build}/countries.json`))) ?? {};
+};
 
 /* ---------------------------------------------------------------- manifest */
 
@@ -170,7 +179,13 @@ export async function getBundle(kind: Kind, name: string, slug?: string) {
     }
   }
   const { cc } = kind === "countries" ? { cc: undefined } : splitName(name);
+  const plists = await countryPlists();
+  const related = kind === "countries"
+    ? { country: null, carriers: carriersOf(name, plists, (await getIndex()).carriers) }
+    : { country: homeCountry(quick["carrier.plist"] as Record<string, unknown> | undefined, cc,
+        new Set(Object.keys(plists)), isoIndex(plists)), carriers: [] };
   return {
+    related,
     kind, name, cc, countryName: countryName(cc),
     entry: publicEntry(entry),
     previous: previous && publicEntry(previous),
@@ -203,10 +218,9 @@ export async function getFile(kind: Kind, name: string, slug: string, path: stri
   }
 }
 
-export async function getRaw(kind: Kind, name: string, slug: string, path?: string) {
+export async function getRaw(kind: Kind, name: string, slug: string, path: string) {
   const { entry } = await resolve(kind, name, slug);
   const b = await open(entry.src);
-  if (!path) return { bytes: b.bytes, opened: b.opened };
   const bytes = b.opened.entries[b.opened.prefix + path];
   if (!bytes) error(404, `no such file: ${path}`);
   return { bytes, opened: b.opened };
