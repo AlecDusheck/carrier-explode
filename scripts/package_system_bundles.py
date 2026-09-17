@@ -26,6 +26,30 @@ def zip_bundle(bundle: Path, dest: Path) -> None:
                 z.writestr(zi, f.read_bytes())
 
 
+def json_safe(v):
+    """Same tagging the worker's plist decoder uses for binary and dates."""
+    if isinstance(v, bytes):
+        return {"__data": v.hex(), "__len": len(v)}
+    if isinstance(v, datetime):
+        return {"__date": v.isoformat()}
+    if isinstance(v, dict):
+        return {k: json_safe(x) for k, x in v.items()}
+    if isinstance(v, list):
+        return [json_safe(x) for x in v]
+    return v
+
+
+def carrier_plists(src: Path) -> dict:
+    """Every bundle's carrier.plist in one object, so a cross-country table is one read."""
+    out = {}
+    for b in sorted(p for p in src.iterdir() if p.is_dir() and p.suffix == ".bundle"):
+        try:
+            out[b.stem] = json_safe(plistlib.loads((b / "carrier.plist").read_bytes()))
+        except Exception:
+            pass
+    return out
+
+
 def package(src: Path, kind: str, out: Path) -> list[dict]:
     dest_dir = out / kind
     dest_dir.mkdir(parents=True, exist_ok=True)
@@ -62,6 +86,7 @@ def main() -> None:
         "carriers": package(a.carriers, "carriers", a.out),
         "countries": package(a.countries, "countries", a.out),
     }
+    (a.out / "countries.json").write_text(json.dumps(carrier_plists(a.countries), separators=(",", ":")))
     (a.out / "index.json").write_text(json.dumps(index, separators=(",", ":")))
     print(f"iOS {index['version']} ({index['build']}): "
           f"{len(index['carriers'])} carrier, {len(index['countries'])} country bundles")

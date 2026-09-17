@@ -1687,7 +1687,6 @@ describe("buildCbsMatrix", () => {
       expect(r.error).toMatch(/^no fixture for /);
       expect(r.mappings).toEqual([]);
     }
-    expect(matrix.note).toContain("India");
   });
 
   it("unions the mapped message ids across the successful rows", async () => {

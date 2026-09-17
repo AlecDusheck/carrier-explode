@@ -111,7 +111,10 @@ export function scanTargets(
       (r) => r.os !== "legacy" && (!r.productType || r.productType === "iPhone"),
     );
     if (!list.length) continue;
-    const newest = list.reduce((a, b) => (compareVersions(b.os, a.os) > 0 ? b : a));
+    // Merged lists are already ordered the way a phone would choose.
+    const newest = list.some((r) => r.source === "image")
+      ? list[0]
+      : list.reduce((a, b) => (compareVersions(b.os, a.os) > 0 ? b : a));
     picked.push({ name: c.name, display: c.display, cc: c.cc, ref: newest });
   }
   // Prefer the most actively maintained bundles when the scope has to be cut.

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { api, humanBytes, type BundlePayload, type DecodedFile } from "./api.ts";
+  import { api, humanBytes, refLabel, type BundlePayload, type DecodedFile } from "./api.ts";
   import Tree from "./Tree.svelte";
   import FileBody from "./FileBody.svelte";
 
@@ -123,10 +123,9 @@
               <td class="mono">{Object.entries(versionPlist).map(([k, v]) => k + "=" + String(v)).join("  ")}</td>
             </tr>
           {/if}
-          <tr>
-            <td class="k">iOS key</td>
-            <td class="mono">{bundle.ref?.os ?? ""}{bundle.ref?.productType ? ", " + bundle.ref.productType : ""}</td>
-          </tr>
+          {#if bundle.ref}
+            <tr><td class="k">From</td><td>{refLabel(bundle.ref)}</td></tr>
+          {/if}
           <tr>
             <td class="k">Size</td>
             <td>{humanBytes(bundle.downloadSize)} packed, {humanBytes(bundle.info.totalSize)} unpacked, {bundle.info.files.length} files</td>
@@ -137,7 +136,7 @@
               {bundle.sha1}
               {#if bundle.digestMatch}
                 <span class="chip {bundle.digestMatch.sha1 ? 'good' : 'bad'}">
-                  {bundle.digestMatch.sha1 ? "matches manifest Digest" : "does not match manifest Digest"}
+                  {bundle.digestMatch.sha1 ? "verified" : "does not match the published digest"}
                 </span>
               {/if}
             </td>
@@ -148,12 +147,14 @@
               {bundle.sha384}
               {#if bundle.digestMatch?.sha384 !== undefined}
                 <span class="chip {bundle.digestMatch.sha384 ? 'good' : 'bad'}">
-                  {bundle.digestMatch.sha384 ? "matches Digest3" : "does not match Digest3"}
+                  {bundle.digestMatch.sha384 ? "verified" : "does not match the published digest"}
                 </span>
               {/if}
             </td>
           </tr>
-          <tr><td class="k">Source</td><td class="mono wrap"><a href={bundle.url} rel="noreferrer">{bundle.url}</a></td></tr>
+          {#if !bundle.url.startsWith("r2:")}
+            <tr><td class="k">URL</td><td class="mono wrap"><a href={bundle.url} rel="noreferrer">{bundle.url}</a></td></tr>
+          {/if}
           {#if bundle.info.deviceStems.length}
             <tr><td class="k">Override sets</td><td>{bundle.info.deviceStems.length}</td></tr>
           {/if}

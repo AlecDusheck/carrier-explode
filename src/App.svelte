@@ -58,8 +58,9 @@
     <div class="statusbar">
       <span class="cell grow">
         {#if index}
-          {index.counts.carriers} carrier bundles, {index.counts.countryBundles} country bundles,
-          {index.counts.MobileDeviceCarriersByMccMnc} PLMN entries
+          {index.carriers.length} carriers,
+          {new Set([...(index.image?.countries ?? []).map((c) => c.name), ...index.countries.map((c) => c.id)]).size} countries
+          {#if index.image}&middot; iOS {index.image.version} image ({index.image.build}){/if}
         {/if}
       </span>
       <span class="cell">{router.name ?? "no selection"}</span>

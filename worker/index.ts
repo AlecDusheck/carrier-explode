@@ -8,18 +8,19 @@
 
 import {
   MANIFEST_URL, parseManifest, buildIndex, buildMccMnc, carrierRefs,
-  countryName, splitName,
+  compareVersions, countryName, splitName,
   type ManifestIndex, type BundleRef, type MccMncEntry,
 } from "./lib/manifest.ts";
 import { openIpcc, decodeFile, contentTypeOf, type BundleInfo } from "./lib/ipcc.ts";
 import { normalizeApplePng } from "./lib/png.ts";
-import { buildCbsMatrix, latestPerCountry } from "./lib/cbs.ts";
+import { buildMergedCbsMatrix, latestPerCountry, type ImageCountries } from "./lib/cbs.ts";
+import { imageRef, mergeCarriers, mergeRefs, type ImageIndex } from "./lib/system.ts";
 import { diffValues, summariseDiff } from "./lib/diff.ts";
 import { keyScan, scanTargets } from "./lib/keyscan.ts";
 import { memo, dropMemo, cachedJson, fetchUpstream, assertAppleUrl, HttpError, sha1Hex, sha384Hex } from "./lib/cache.ts";
 
 /** Bumped whenever a response shape changes, so stale cached JSON is not served. */
-const API_VERSION = "v4";
+const API_VERSION = "v5";
 
 const MANIFEST_TTL_MS = 6 * 60 * 60 * 1000;
 const DAY = 86400;
@@ -79,22 +80,13 @@ function fetcher(env: Env) {
   };
 }
 
-interface SystemIndex {
-  version: string;
-  build: string;
-  families: Record<string, {
-    bundles: Array<{ name: string; file: string; size: number; sha1: string; build: string }>;
-    links: Record<string, string>;
-  }>;
-}
-
-async function systemIndex(env: Env): Promise<SystemIndex | null> {
+async function systemIndex(env: Env): Promise<ImageIndex | null> {
   return memo("system-index", 10 * 60 * 1000, async () => {
     const latest = await env.SYSTEM.get("system/latest.json");
     if (!latest) return null;
     const { build } = await latest.json<{ build: string }>();
     const idx = await env.SYSTEM.get(`system/${build}/index.json`);
-    return idx ? idx.json<SystemIndex>() : null;
+    return idx ? idx.json<ImageIndex>() : null;
   });
 }
 
@@ -149,13 +141,18 @@ export default {
       switch (path) {
         case "/api/index": {
           return cachedJson(`index:${API_VERSION}`, 6 * 3600, ctx, async () => {
-            const st = await manifestState();
-            return { ...st.index, manifestBytes: st.manifestBytes, manifestUrl: MANIFEST_URL };
+            const [st, image] = await Promise.all([manifestState(), systemIndex(env)]);
+            return {
+              ...st.index,
+              carriers: mergeCarriers(image, st.index.carriers),
+              image: image && {
+                version: image.version, build: image.build, device: image.device,
+                extractedAt: image.extractedAt, countries: image.countries,
+              },
+              manifestBytes: st.manifestBytes,
+              manifestUrl: MANIFEST_URL,
+            };
           });
-        }
-
-        case "/api/system": {
-          return json((await systemIndex(env)) ?? { version: null, build: null, families: {} }, 600);
         }
 
         case "/api/mccmnc": {
@@ -165,17 +162,32 @@ export default {
         case "/api/carrier": {
           const name = url.searchParams.get("name");
           if (!name) throw new HttpError(400, "name required");
-          const st = await manifestState();
+          const [st, image] = await Promise.all([manifestState(), systemIndex(env)]);
+          const inImage = image?.carriers.find((b) => b.name === name);
           const summary =
             st.index.carriers.find((c) => c.name === name) ??
             st.index.watchCarriers.find((c) => c.name === name);
-          const refs = st.refs[name];
-          if (!summary && !refs?.length) throw new HttpError(404, `unknown carrier: ${name}`);
+          const refs = mergeRefs(inImage ? imageRef(image!, "carriers", inImage) : null, st.refs[name] ?? []);
+          if (!summary && !refs.length) throw new HttpError(404, `unknown carrier: ${name}`);
           const { cc } = splitName(name);
           return json(
-            { summary, refs: refs ?? [], country: { cc, name: countryName(cc) } },
+            { summary, refs, country: { cc, name: countryName(cc) } },
             6 * 3600,
           );
+        }
+
+        case "/api/country": {
+          const name = url.searchParams.get("name");
+          if (!name) throw new HttpError(400, "name required");
+          const [st, image] = await Promise.all([manifestState(), systemIndex(env)]);
+          const inImage = image?.countries.find((b) => b.name === name);
+          const cdn: BundleRef[] = st.index.countries
+            .filter((c) => c.id === name && c.family === "iPhone")
+            .map((c) => ({ os: c.minOS ?? "", build: c.version, url: c.url, source: "cdn" as const }))
+            .sort((a, b) => compareVersions(b.build, a.build));
+          const refs = mergeRefs(inImage ? imageRef(image!, "countries", inImage) : null, cdn);
+          if (!refs.length) throw new HttpError(404, `unknown country: ${name}`);
+          return json({ refs }, 3600);
         }
 
         case "/api/bundle": {
@@ -186,6 +198,12 @@ export default {
             const st = await manifestState();
             let ref: (BundleRef & { carrier?: string }) | undefined;
             if (carrier) ref = st.refs[carrier]?.find((r) => r.url === src);
+            const image = src.startsWith("r2:") ? await systemIndex(env) : null;
+            if (image) {
+              const [kind, file] = src.split("/").slice(-2) as ["carriers" | "countries", string];
+              const b = image[kind]?.find((x) => x.name === file.replace(/\.ipcc$/, ""));
+              if (b) ref = imageRef(image, kind, b);
+            }
             if (!ref) {
               for (const c of st.index.countries) {
                 if (c.url === src) { ref = { os: c.minOS ?? "", build: c.version, url: c.url, productType: c.family }; break; }
@@ -206,10 +224,21 @@ export default {
         }
 
         case "/api/cbs": {
-          const family = url.searchParams.get("family") === "Watch" ? "Watch" : "iPhone";
-          return cachedJson(`cbs:${API_VERSION}:${family}`, 7 * DAY, ctx, async () => {
+          const image = await systemIndex(env);
+          return cachedJson(`cbs:${API_VERSION}:${image?.build ?? "cdn"}`, DAY, ctx, async () => {
             const st = await manifestState();
-            return buildCbsMatrix(st.index.countries, fetchUpstream, family);
+            let countries: ImageCountries | null = null;
+            if (image) {
+              const obj = await env.SYSTEM.get(`system/${image.build}/countries.json`);
+              if (obj) {
+                countries = {
+                  version: image.version, build: image.build,
+                  builds: Object.fromEntries(image.countries.map((b) => [b.name, b.build])),
+                  plists: await obj.json(),
+                };
+              }
+            }
+            return buildMergedCbsMatrix(countries, st.index.countries, fetcher(env));
           });
         }
 
@@ -255,8 +284,19 @@ export default {
           const file = url.searchParams.get("file") ?? "carrier.plist";
           const limit = Number(url.searchParams.get("limit") ?? 40) || 40;
           return cachedJson(`keyscan:${API_VERSION}:${scope}|${file}|${keyPath}|${limit}`, 7 * DAY, ctx, async () => {
-            const st = await manifestState();
-            const targets = scanTargets(scope, st.index.carriers, st.refs, st.index.countries);
+            const [st, image] = await Promise.all([manifestState(), systemIndex(env)]);
+            // Scan what a phone would load: the image's bundle unless the asset server has a newer one.
+            const refs = { ...st.refs };
+            for (const b of image?.carriers ?? []) refs[b.name] = mergeRefs(imageRef(image!, "carriers", b), refs[b.name] ?? []);
+            let targets = scanTargets(scope, mergeCarriers(image, st.index.carriers), refs, st.index.countries);
+            if (scope === "countries" && image) {
+              const cdn = new Map(targets.map((t) => [t.name, t]));
+              targets = image.countries.map((b) => {
+                const c = cdn.get(b.name);
+                return c && compareVersions(c.ref.build, b.build) > 0
+                  ? c : { name: b.name, display: b.name, ref: imageRef(image, "countries", b) };
+              });
+            }
             return keyScan(targets, file, keyPath, fetchUpstream, scope, limit);
           });
         }
