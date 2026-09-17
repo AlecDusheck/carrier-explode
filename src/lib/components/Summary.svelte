@@ -1,6 +1,6 @@
 <script lang="ts">
   import { getBundle } from "$lib/api/bundles.remote";
-  import { bundleHref, downloadHref, entryLabel, humanBytes } from "$lib/format";
+  import { bundleHref, entryLabel, humanBytes } from "$lib/format";
   import Tree from "./Tree.svelte";
 
   let { bundle }: { bundle: Awaited<ReturnType<typeof getBundle>> } = $props();
@@ -92,10 +92,21 @@
       {/if}
     </tbody>
   </table>
-  <div class="rowflex" style="margin-top:8px">
-    <a class="btn" href={downloadHref(bundle.kind, bundle.name, bundle.entry.slug)} data-sveltekit-reload>Download .ipcc</a>
-  </div>
+  {#if bundle.entry.url}
+    <div class="rowflex" style="margin-top:8px">
+      <a class="btn" href={bundle.entry.url} rel="noreferrer" download>Download .ipcc</a>
+    </div>
+  {/if}
 </fieldset>
+
+{#if bundle.related.carriers.length}
+  <fieldset class="hgroup" id="carriers">
+    <legend>Carriers ({bundle.related.carriers.length})</legend>
+    {#each bundle.related.carriers as name (name)}
+      <a class="chip" href={bundleHref("carriers", name)}>{name}</a>
+    {/each}
+  </fieldset>
+{/if}
 
 {#if !carrierPlist}
   <div class="banner">No carrier.plist.</div>

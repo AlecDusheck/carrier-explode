@@ -151,3 +151,35 @@ describe("guessCarrierQuery", () => {
     });
   }
 });
+
+describe("carrier and country links", () => {
+  const plists = {
+    UnitedStates: { ISOAlpha2CountryCode: ["us", "pr"] },
+    Australia: { ISOAlpha2CountryCode: ["au", "cx"] },
+    ChristmasIsland: { ISOAlpha2CountryCode: ["cx"] },
+    Broken: {},
+  };
+
+  it("prefers the carrier's own HomeBundleIdentifier", async () => {
+    const { homeCountry, isoIndex } = await import("../src/lib/server/related.ts");
+    const names = new Set(Object.keys(plists));
+    expect(homeCountry({ HomeBundleIdentifier: "com.apple.Australia" }, "us", names, isoIndex(plists))).toBe("Australia");
+  });
+
+  it("falls back to the ISO code when the key is missing or names no bundle we hold", async () => {
+    const { homeCountry, isoIndex } = await import("../src/lib/server/related.ts");
+    const names = new Set(Object.keys(plists)), idx = isoIndex(plists);
+    expect(homeCountry({}, "pr", names, idx)).toBe("UnitedStates");
+    expect(homeCountry({ HomeBundleIdentifier: "com.apple.Atlantis" }, "au", names, idx)).toBe("Australia");
+    expect(homeCountry(undefined, "zz", names, idx)).toBeNull();
+    expect(homeCountry(undefined, undefined, names, idx)).toBeNull();
+  });
+
+  it("lists a country's carriers by the ISO codes its bundle covers", async () => {
+    const { carriersOf } = await import("../src/lib/server/related.ts");
+    const carriers = [{ name: "ATT_US", cc: "us" }, { name: "Claro_pr", cc: "pr" }, { name: "Telstra_au", cc: "au" }, { name: "OtherKnown" }];
+    expect(carriersOf("UnitedStates", plists, carriers)).toEqual(["ATT_US", "Claro_pr"]);
+    expect(carriersOf("Broken", plists, carriers)).toEqual([]);
+    expect(carriersOf("Nowhere", plists, carriers)).toEqual([]);
+  });
+});
