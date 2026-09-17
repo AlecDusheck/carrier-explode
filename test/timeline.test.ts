@@ -4,8 +4,8 @@ import type { BundleRef, CountrySummary } from "../src/lib/server/manifest.ts";
 
 const image = (version: string, build: string, carriers: Record<string, [string, string]>, countries: Record<string, [string, string]> = {}): ImageIndex => ({
   version, build, device: "iPhone", extractedAt: "",
-  carriers: Object.fromEntries(Object.entries(carriers).map(([k, [sha1, b]]) => [k, { sha1, size: 1, build: b }])),
-  countries: Object.fromEntries(Object.entries(countries).map(([k, [sha1, b]]) => [k, { sha1, size: 1, build: b }])),
+  carriers: Object.fromEntries(Object.entries(carriers).map(([k, [id, b]]) => [k, { id, size: 1, build: b }])),
+  countries: Object.fromEntries(Object.entries(countries).map(([k, [id, b]]) => [k, { id, size: 1, build: b }])),
 });
 const ota = (os: string, build: string, extra: Partial<BundleRef> = {}): BundleRef =>
   ({ os, build, url: `https://updates.cdn-apple.com/${build}${extra.productType ?? ""}.ipcc`, ...extra });
@@ -76,6 +76,14 @@ describe("buildTimeline", () => {
     expect(t.map((e) => [e.slug, e.ios])).toEqual([["ota-73.0", ["27.1"]], ["ios-27.0", ["27.0"]], ["ios-26.4", ["26.4"]]]);
   });
 
+  it("does not compare content ids across hashing schemes", () => {
+    const a = { ...image("27.0", "24A437", { X: ["same", "70.1"] }), scheme: 2 };
+    const b = { ...image("26.4", "23E1", { X: ["same", "70.1"] }), scheme: 1 };
+    const t = buildTimeline("carriers", "X", [a, b], [], []);
+    // Same id, different scheme: two entries, and "changed" falls back to the build number.
+    expect(t.map((e) => [e.slug, e.changed])).toEqual([["ios-27.0", false], ["ios-26.4", true]]);
+  });
+
   it("returns nothing for an unknown name", () => {
     expect(buildTimeline("carriers", "Nope", images, [], [])).toEqual([]);
   });
@@ -96,6 +104,27 @@ describe("buildTimeline: changed flags and slug uniqueness", () => {
     const images = [image("27.0", "24A500", { X: ["bbb", "70.2"] }), image("27.0", "24A437", { X: ["aaa", "70.1"] })];
     const refs = [ota("17.5", "58.1"), ota("17.6", "58.1", { url: "https://updates.cdn-apple.com/other.ipcc" })];
     const slugs = buildTimeline("carriers", "X", images, refs, []).map((e) => e.slug);
-    expect(slugs).toEqual(["ios-27.0", "ios-27.0-2", "ota-58.1", "ota-58.1-2"]);
+    expect(slugs).toEqual(["ios-27.0", "ios-27.0-24A437", "ota-58.1", "ota-58.1-2"]);
+  });
+});
+
+describe("contentId", () => {
+  it("matches the id the Python packager computes for the same bundle", async () => {
+    const { readFileSync } = await import("node:fs");
+    const { openIpcc, contentId } = await import("../src/lib/server/ipcc.ts");
+    const b = openIpcc(new Uint8Array(readFileSync(new URL("./fixtures/UnitedStates.ipcc", import.meta.url))));
+    expect(await contentId(b)).toBe("f419f87a49c354ed92466f53157e4bd7b5fb2f44cbdf566baa48e281ada95e8e");
+  });
+
+  it("ignores how the archive was built", async () => {
+    const { zipSync, unzipSync } = await import("fflate");
+    const { readFileSync } = await import("node:fs");
+    const { openIpcc, contentId } = await import("../src/lib/server/ipcc.ts");
+    const raw = new Uint8Array(readFileSync(new URL("./fixtures/Germany.ipcc", import.meta.url)));
+    const files = unzipSync(raw);
+    // Reverse the entry order and store instead of deflate.
+    const repacked = zipSync(Object.fromEntries(Object.entries(files).reverse()), { level: 0 });
+    expect(await contentId(openIpcc(repacked))).toBe(await contentId(openIpcc(raw)));
+    expect(repacked).not.toEqual(raw);
   });
 });

@@ -17,7 +17,7 @@ import {
   MANIFEST_URL, buildIndex, buildMccMnc, carrierRefs, countryName, parseManifest, splitName,
   type BundleRef,
 } from "./manifest";
-import { decodeFile, openIpcc, type OpenedBundle } from "./ipcc";
+import { contentId, decodeFile, openIpcc, type OpenedBundle } from "./ipcc";
 import { buildMergedCbsMatrix } from "./cbs";
 import { diffValues, summariseDiff } from "./diff";
 import { keyScan, type ScanTarget } from "./keyscan";
@@ -154,7 +154,8 @@ function open(src: string) {
     } else {
       bytes = await fetchApple(src);
     }
-    return { opened: openIpcc(bytes), bytes, size: bytes.length, sha1: await sha1Hex(bytes), sha384: await sha384Hex(bytes) };
+    const opened = openIpcc(bytes);
+    return { opened, bytes, size: bytes.length, id: await contentId(opened), sha1: await sha1Hex(bytes), sha384: await sha384Hex(bytes) };
   });
 }
 
@@ -175,9 +176,11 @@ export async function getBundle(kind: Kind, name: string, slug?: string) {
     timeline: timeline.map(publicEntry),
     info: b.opened.info,
     downloadSize: b.size,
+    contentId: b.id,
     sha1: b.sha1,
     sha384: b.sha384,
-    verified: entry.sha1 ? entry.sha1 === b.sha1 : entry.sha384 ? entry.sha384 === b.sha384 : null,
+    // Image bundles are checked against their content id; OTA ones against the digest Apple publishes.
+    verified: entry.id ? entry.id === b.id : entry.sha1 ? entry.sha1 === b.sha1 : entry.sha384 ? entry.sha384 === b.sha384 : null,
     quick,
   };
 }
@@ -262,13 +265,14 @@ export async function getRelease(build: string) {
   if (i < 0) error(404, `no image ${build}`);
   const [now, before] = await Promise.all([imageIndex(build), all[i + 1] ? imageIndex(all[i + 1].build) : null]);
   if (!now) error(404, `no image ${build}`);
+  const comparable = !!before && (now.scheme ?? 1) === (before.scheme ?? 1);
   const compare = (kind: "carriers" | "countries") => {
     const n = now[kind], p = before?.[kind] ?? {};
     return {
       total: Object.keys(n).length,
       added: Object.keys(n).filter((k) => !(k in p)).sort(),
       removed: Object.keys(p).filter((k) => !(k in n)).sort(),
-      changed: Object.keys(n).filter((k) => k in p && p[k].sha1 !== n[k].sha1).sort()
+      changed: Object.keys(n).filter((k) => k in p && (comparable ? p[k].id !== n[k].id : p[k].build !== n[k].build)).sort()
         .map((k) => ({ name: k, from: p[k].build, to: n[k].build })),
     };
   };

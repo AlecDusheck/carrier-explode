@@ -7,7 +7,8 @@
 # dwilliamsuk's, from https://github.com/dwilliamsuk/ios-carrier-bundles
 #
 # Needs: secrets CLOUDFLARE_API_TOKEN (R2 edit) and CLOUDFLARE_ACCOUNT_ID.
-# Optional: variable DEVICE (default iPhone17,1). Releases that device no longer
+# Optional: variable MIN_VERSION, the oldest release to keep (default: the oldest
+# image already held), and variable DEVICE (default iPhone17,1). Releases that device no longer
 # receives are taken from the newest iPhone instead.
 #
 # GitHub disables scheduled workflows after 60 days without repo activity.
@@ -17,8 +18,15 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: Extract exactly this iOS version (for backfilling older ones)
+        description: Extract exactly this iOS version, held or not
         type: string
+      since:
+        description: Extract every release from this version up that is not held
+        type: string
+      max:
+        description: Most images to extract in this run
+        type: string
+        default: "3"
   schedule:
     - cron: "17 5 * * *"
 
@@ -39,7 +47,8 @@ jobs:
           python3 -m unittest discover -s scripts -p 'test_*.py' -q
           npx --yes wrangler r2 object get "$BUCKET/system/builds.json" --remote --pipe > /tmp/builds.json 2>/dev/null || echo '[]' > /tmp/builds.json
           MATRIX=$(python3 scripts/plan_system_bundles.py --builds /tmp/builds.json \
-            --device "${{ vars.DEVICE || 'iPhone17,1' }}" --version "${{ inputs.version }}")
+            --device "${{ vars.DEVICE || 'iPhone17,1' }}" --version "${{ inputs.version }}" \
+            --since "${{ inputs.since || vars.MIN_VERSION }}" --max "${{ inputs.max || '3' }}")
           echo "to extract: $MATRIX"
           echo "matrix=$MATRIX" >> "$GITHUB_OUTPUT"
 
@@ -91,7 +100,7 @@ jobs:
           : > /tmp/have.txt
           for b in $(jq -r '.[].build' /tmp/builds.json); do
             "$W" r2 object get "$BUCKET/system/$b/index.json" --remote --pipe 2>/dev/null |
-              jq -r '(.carriers, .countries)[].sha1' >> /tmp/have.txt || true
+              jq -r '(.carriers, .countries)[].id' >> /tmp/have.txt || true
           done
           ROOT=$(echo /tmp/x/*/root/System/Library)
           python3 scripts/package_system_bundles.py \

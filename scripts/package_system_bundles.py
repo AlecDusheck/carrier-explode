@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 """
 Turn the bundle directories pulled out of an IPSW into what the app reads from
-R2. Bundles are content-addressed, so one that did not change between iOS
-releases is stored once and "what changed" is a comparison of two indexes:
+R2. Bundles are keyed by a hash of their contents, so one that did not change
+between iOS releases is stored once and "what changed" is a comparison of two
+indexes:
 
-    blobs/<sha1>.ipcc               same shape as Apple's OTA .ipcc files
-    system/<build>/index.json       name -> {sha1, size, build} per kind
+    blobs/<id>.ipcc                 same shape as Apple's OTA .ipcc files
+    system/<build>/index.json       name -> {id, size, build} per kind
     system/<build>/countries.json   every country carrier.plist, decoded
     system/builds.json              every image held, newest first
 
@@ -22,14 +23,34 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 
+# Bump when content_id() changes. The app never compares ids across schemes,
+# so a change here shows up as "unknown", not as every bundle having changed.
+SCHEME = 1
+
+
+def bundle_files(bundle: Path) -> list[Path]:
+    return sorted((f for f in bundle.rglob("*") if f.is_file() and not f.is_symlink() and f.name != ".DS_Store"),
+                  key=lambda f: f.relative_to(bundle).as_posix().encode())
+
+
+def content_id(bundle: Path) -> str:
+    """
+    Identity is the files, not the archive: sha256 over "path NUL sha256(bytes) LF"
+    for every file in byte order of path. Zip compression, timestamps and entry
+    order cannot affect it. src/lib/server/ipcc.ts computes the same value.
+    """
+    h = hashlib.sha256()
+    for f in bundle_files(bundle):
+        h.update(f.relative_to(bundle).as_posix().encode() + b"\0" + hashlib.sha256(f.read_bytes()).hexdigest().encode() + b"\n")
+    return h.hexdigest()
+
+
 def zip_bundle(bundle: Path, dest: Path) -> None:
-    # Fixed timestamps: an unchanged bundle hashes the same on every run.
     with zipfile.ZipFile(dest, "w", zipfile.ZIP_DEFLATED) as z:
-        for f in sorted(bundle.rglob("*")):
-            if f.is_file() and not f.is_symlink():
-                zi = zipfile.ZipInfo(f"Payload/{bundle.name}/{f.relative_to(bundle).as_posix()}", (1980, 1, 1, 0, 0, 0))
-                zi.compress_type = zipfile.ZIP_DEFLATED
-                z.writestr(zi, f.read_bytes())
+        for f in bundle_files(bundle):
+            zi = zipfile.ZipInfo(f"Payload/{bundle.name}/{f.relative_to(bundle).as_posix()}", (1980, 1, 1, 0, 0, 0))
+            zi.compress_type = zipfile.ZIP_DEFLATED
+            z.writestr(zi, f.read_bytes())
 
 
 def json_safe(v):
@@ -60,17 +81,16 @@ def package(src: Path, blobs: Path) -> dict:
     blobs.mkdir(parents=True, exist_ok=True)
     out = {}
     for b in sorted(p for p in src.iterdir() if p.is_dir() and p.suffix == ".bundle"):
-        tmp = blobs / "_tmp.ipcc"
-        zip_bundle(b, tmp)
-        data = tmp.read_bytes()
-        sha1 = hashlib.sha1(data).hexdigest()
-        tmp.replace(blobs / f"{sha1}.ipcc")
+        cid = content_id(b)
+        dest = blobs / f"{cid}.ipcc"
+        if not dest.exists():
+            zip_bundle(b, dest)
         build = ""
         try:
             build = str(plistlib.loads((b / "Info.plist").read_bytes()).get("CFBundleVersion", ""))
         except Exception:
             pass
-        out[b.stem] = {"sha1": sha1, "size": len(data), "build": build}
+        out[b.stem] = {"id": cid, "size": dest.stat().st_size, "build": build}
     return out
 
 
@@ -85,12 +105,13 @@ def main() -> None:
     ap.add_argument("--meta", type=Path, required=True, help="output of `ipsw info --json`")
     ap.add_argument("--out", type=Path, required=True)
     ap.add_argument("--builds", type=Path, help="current system/builds.json, if any")
-    ap.add_argument("--have", type=Path, help="sha1s already in the bucket, one per line")
+    ap.add_argument("--have", type=Path, help="content ids already in the bucket, one per line")
     a = ap.parse_args()
 
     meta = json.loads(a.meta.read_text())
     device = (meta.get("devices") or [{}])[0]
     index = {
+        "scheme": SCHEME,
         "version": meta["version"],
         "build": meta["build"],
         "device": device.get("name", ""),
@@ -106,7 +127,7 @@ def main() -> None:
 
     builds = json.loads(a.builds.read_text()) if a.builds and a.builds.exists() and a.builds.stat().st_size else []
     builds = [b for b in builds if b["build"] != index["build"]]
-    builds.append({k: index[k] for k in ("build", "version", "device", "extractedAt")})
+    builds.append({k: index[k] for k in ("build", "version", "device", "product", "extractedAt", "scheme")})
     builds.sort(key=lambda b: (version_key(b["version"]), b["build"]), reverse=True)
     (a.out / "builds.json").write_text(json.dumps(builds, separators=(",", ":")))
 

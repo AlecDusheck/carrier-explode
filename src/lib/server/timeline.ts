@@ -5,8 +5,9 @@
 
 import { compareVersions, type BundleRef, type CountrySummary } from "./manifest";
 
-export interface ImageBuild { build: string; version: string; device: string; extractedAt: string }
-export interface ImageBundle { sha1: string; size: number; build: string }
+export interface ImageBuild { build: string; version: string; device: string; product?: string; extractedAt: string; scheme?: number }
+/** `id` is the content hash the blob is stored under; only comparable within one `scheme`. */
+export interface ImageBundle { id: string; size: number; build: string }
 export interface ImageIndex extends ImageBuild {
   carriers: Record<string, ImageBundle>;
   countries: Record<string, ImageBundle>;
@@ -22,8 +23,13 @@ export interface TimelineEntry {
   productType?: string;
   /** False when the content is identical to the entry below it. */
   changed: boolean;
-  /** Where the bytes live: blob:<sha1> or an Apple URL. Never sent to the browser as a link target for blobs. */
+  /** Where the bytes live: blob:<content id> or an Apple URL. Never sent to the browser as a link target for blobs. */
   src: string;
+  /** Image entries: content id, its scheme, and the newest image build carrying it. */
+  id?: string;
+  scheme?: number;
+  image?: string;
+  /** OTA entries: the digests Apple publishes for the file. */
   sha1?: string;
   sha384?: string;
 }
@@ -44,11 +50,12 @@ export function buildTimeline(
       const b = img[kind][name];
       if (!b) continue;
       const last = out[out.length - 1];
-      if (last?.sha1 === b.sha1) last.ios.push(img.version);
+      // Ids are only comparable within one hashing scheme.
+      if (last?.id === b.id && last.scheme === (img.scheme ?? 1)) last.ios.push(img.version);
       else {
         out.push({
           slug: `ios-${img.version}`, source: "image", ios: [img.version], build: b.build,
-          changed: true, src: `blob:${b.sha1}`, sha1: b.sha1,
+          changed: true, src: `blob:${b.id}`, id: b.id, scheme: img.scheme ?? 1, image: img.build,
         });
       }
     }
@@ -90,7 +97,8 @@ export function buildTimeline(
   // own build number can. An entry is unchanged when the one below it is the same build.
   out.forEach((e, i) => {
     const below = out.slice(i + 1).find((x) => x.productType === e.productType);
-    e.changed = !below || (e.sha1 && below.sha1 && e.source === below.source ? e.sha1 !== below.sha1 : e.build !== below.build);
+    const sameScheme = e.id && below?.id && e.scheme === below.scheme;
+    e.changed = !below || (sameScheme ? e.id !== below.id : e.build !== below.build);
   });
 
   // Two images of one iOS version, or two OTA files with one build number, must not share a URL.
@@ -98,7 +106,8 @@ export function buildTimeline(
   for (const e of out) {
     const n = (seen.get(e.slug) ?? 0) + 1;
     seen.set(e.slug, n);
-    if (n > 1) e.slug += `-${n}`;
+    // Images arrive newest first, so the current build of a version keeps the clean slug.
+    if (n > 1) e.slug += e.image ? `-${e.image}` : `-${n}`;
   }
   return out;
 }
