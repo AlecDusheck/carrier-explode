@@ -1,16 +1,36 @@
+<script module lang="ts">
+  // The guess is for the first look at the list only; never again in the same session.
+  let guessSpent = false;
+</script>
+
 <script lang="ts">
+  import { browser } from "$app/environment";
   import { goto } from "$app/navigation";
   import { page, navigating } from "$app/state";
   import type { Attachment } from "svelte/attachments";
-  import { getIndex } from "$lib/api/bundles.remote";
+  import { getIndex, guessCarrier } from "$lib/api/bundles.remote";
   import { bundleHref, link } from "$lib/format";
   import { menuTrigger, copyText } from "$lib/ui-state.svelte";
   import Pane from "$lib/components/Pane.svelte";
 
   let { params, children } = $props();
 
-  let query = $state("");
+  type Row = { name: string; display: string; cc?: string };
+  const matches = (c: Row, q: string) => c.name.toLowerCase().includes(q) || c.display.toLowerCase().includes(q) || c.cc === q;
+
+  async function firstQuery() {
+    const wanted = params.kind === "carriers" && !params.name && !guessSpent;
+    if (browser) guessSpent = true;
+    if (!wanted) return "";
+    const guess = await guessCarrier();
+    if (!guess) return "";
+    const { carriers } = await getIndex();
+    return carriers.some((c) => matches(c, guess)) ? guess : "";
+  }
+
+  let query = $state(await firstQuery());
   let drawerOpen = $state(false);
+  const label = $derived(params.kind[0].toUpperCase() + params.kind.slice(1));
 
   // The row lights up on click, before the bundle behind it has loaded.
   const selected = $derived(navigating.to ? navigating.to.params?.name : page.params.name);
@@ -31,7 +51,8 @@
   }
 </script>
 
-<div class="split">
+<!-- With nothing selected, a phone shows the list as the page instead of hiding it in the drawer. -->
+<div class="split" class:browsing={!params.name}>
   <div class="pane-left" class:open={drawerOpen}>
     <div style="padding:6px; display:flex; gap:6px">
       <input class="grow" type="search" name="find" placeholder="find" aria-label="find in {params.kind}" bind:value={query} />
@@ -40,9 +61,7 @@
     <Pane>
       {@const all = (await getIndex())[params.kind]}
       {@const q = query.trim().toLowerCase()}
-      {@const shown = q
-        ? all.filter((c) => c.name.toLowerCase().includes(q) || c.display.toLowerCase().includes(q) || c.cc === q)
-        : all}
+      {@const shown = q ? all.filter((c) => matches(c, q)) : all}
       <div class="scroll" style="margin:0 6px 6px">
         <ul class="list" aria-label={params.kind}>
           {#each shown as c (c.name)}
@@ -74,7 +93,10 @@
 
   <div class="pane-right">
     <div class="toolbar drawer-bar">
-      <button class="btn drawer-btn" onclick={() => (drawerOpen = true)}>List</button>
+      <button class="btn drawer-btn drawer-open" onclick={() => (drawerOpen = true)}>
+        {label}
+        <Pane quiet>({(await getIndex())[params.kind].length})</Pane>
+      </button>
     </div>
     {@render children()}
   </div>

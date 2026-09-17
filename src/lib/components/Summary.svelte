@@ -32,8 +32,14 @@
     return out;
   });
 
+  const fromImage = $derived(bundle.entry.source === "image");
   const ctx = $derived({ file: "carrier.plist", cc: bundle.cc });
 </script>
+
+{#snippet verdict()}
+  {#if bundle.verified === true}<span class="chip good">verified</span>
+  {:else if bundle.verified === false}<span class="chip bad">digest mismatch</span>{/if}
+{/snippet}
 
 <fieldset class="hgroup">
   <legend>Package</legend>
@@ -61,11 +67,17 @@
         <td>{humanBytes(bundle.downloadSize)} packed, {humanBytes(bundle.info.totalSize)} unpacked, {bundle.info.files.length} files</td>
       </tr>
       <tr>
+        <td class="k">Content ID</td>
+        <td class="mono wrap">
+          {bundle.contentId}
+          {#if fromImage}{@render verdict()}{/if}
+        </td>
+      </tr>
+      <tr>
         <td class="k">SHA-1</td>
         <td class="mono wrap">
           {bundle.sha1}
-          {#if bundle.verified === true}<span class="chip good">verified</span>
-          {:else if bundle.verified === false}<span class="chip bad">digest mismatch</span>{/if}
+          {#if !fromImage}{@render verdict()}{/if}
         </td>
       </tr>
       <tr><td class="k">SHA-384</td><td class="mono wrap">{bundle.sha384}</td></tr>
