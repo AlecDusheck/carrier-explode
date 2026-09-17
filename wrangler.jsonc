@@ -6,7 +6,7 @@
   "compatibility_flags": ["nodejs_compat"],
   "routes": [
     {
-      "pattern": "carrier.dusheck.com",
+      "pattern": "carrierexplode.com",
       "custom_domain": true
     }
   ],
