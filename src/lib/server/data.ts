@@ -20,6 +20,7 @@ import {
 import { contentId, decodeFile, openIpcc, type OpenedBundle } from "./ipcc";
 import { buildMergedCbsMatrix } from "./cbs";
 import { diffValues, summariseDiff } from "./diff";
+import { guessCarrierQuery } from "./guess";
 import { keyScan, type ScanTarget } from "./keyscan";
 import { buildTimeline, type ImageBuild, type ImageIndex, type TimelineEntry } from "./timeline";
 
@@ -314,4 +315,11 @@ export async function scanKey(path: string, file: string, scope: string, limit: 
     return { ...result, candidates: names.length, truncated: names.length > limit,
       hits: result.hits.map(({ url: _url, ...h }) => h) };
   });
+}
+
+/** On a phone, a carrier search guessed from the network the request came in on. */
+export async function guessCarrier(): Promise<string | null> {
+  const { request, platform } = getRequestEvent();
+  if (!/Mobi|Android|iPhone/i.test(request.headers.get("user-agent") ?? "")) return null;
+  return guessCarrierQuery(platform?.cf?.asOrganization, (await getIndex()).carriers);
 }

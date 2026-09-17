@@ -7,6 +7,7 @@ const id = v.object({ kind, name: v.string(), slug: v.optional(v.string()) });
 const pinned = v.object({ kind, name: v.string(), slug: v.string() });
 
 export const getIndex = query(() => data.getIndex());
+export const guessCarrier = query(() => data.guessCarrier());
 export const getBundle = query(id, (a) => data.getBundle(a.kind, a.name, a.slug));
 export const getFile = query(v.object({ ...pinned.entries, path: v.string() }), (a) =>
   data.getFile(a.kind, a.name, a.slug, a.path));

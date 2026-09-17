@@ -128,3 +128,26 @@ describe("contentId", () => {
     expect(repacked).not.toEqual(raw);
   });
 });
+
+describe("guessCarrierQuery", () => {
+  const list = ["Verizon_LTE_US", "Verizon_Visible_LTE_US", "TMobile_US", "ATT_US", "ATT_FirstNet_US", "Vodafone_de", "EE_uk", "Orange_fr", "BhartiAirtel_in"]
+    .map((name) => ({ name, display: name.replace(/_[A-Za-z]{2}$/, "").replace(/_/g, " ") }));
+  const cases: Array<[string | undefined, string | null]> = [
+    ["Verizon Business", "verizon"],
+    ["T-Mobile USA, Inc.", "tmobile"],
+    ["AT&T Mobility LLC", "att"],
+    ["Vodafone GmbH", "vodafone"],
+    ["Orange S.A.", "orange"],
+    ["Bharti Airtel Ltd.", "bhartiairtel"],
+    ["EE Limited", null],
+    ["Comcast Cable Communications", null],
+    ["", null],
+    [undefined, null],
+  ];
+  for (const [org, want] of cases) {
+    it(`${JSON.stringify(org)} -> ${JSON.stringify(want)}`, async () => {
+      const { guessCarrierQuery } = await import("../src/lib/server/guess.ts");
+      expect(guessCarrierQuery(org, list)).toBe(want);
+    });
+  }
+});

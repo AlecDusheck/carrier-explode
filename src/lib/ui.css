@@ -307,6 +307,11 @@ button.drawer-btn { display: none; }
 
 @media (max-width: 760px) {
   button.drawer-btn { display: inline-flex; }
+  .menubar { flex-wrap: wrap; overflow-x: visible; }
+  .menubar a { padding: 6px 9px; }
+  .drawer-bar { padding: 0; align-items: stretch; }
+  button.drawer-open { flex: 1; min-height: 40px; padding: 3px 12px; font-size: 13px; font-weight: bold; }
+  button.drawer-open:active { padding: 4px 11px 2px 13px; }
   .pane-left {
     position: fixed; inset: 0 auto 0 0; z-index: 30; width: min(86vw, 330px);
     background: var(--face); transform: translateX(-102%);
@@ -314,13 +319,19 @@ button.drawer-btn { display: none; }
     box-shadow: 4px 0 12px rgba(0, 0, 0, 0.35); padding-bottom: env(safe-area-inset-bottom);
   }
   .pane-left.open { transform: none; }
+  .split.browsing .pane-left {
+    position: static; transform: none; width: 100%; box-shadow: none; border-right: 0; z-index: auto;
+  }
+  .split.browsing .pane-right, .split.browsing .backdrop, .split.browsing .pane-left .drawer-btn { display: none; }
   .backdrop.open { display: block; position: fixed; inset: 0; background: rgba(0, 0, 0, 0.42); z-index: 29; }
   .window { padding: 0; }
   .frame { border-width: 0; }
   table.grid { font-size: 11px; }
   .titlebar .sub { display: none; }
   button.btn, a.btn { min-height: 32px; }
-  input[type="text"], input[type="search"], select { min-height: 32px; }
+  /* iOS Safari zooms the page when a focused field is under 16px. */
+  input, select, textarea,
+  input[type="text"], input[type="search"] { font-size: 16px; min-height: 32px; }
   .list li > a { padding: 8px; }
   .statusbar { flex-wrap: wrap; }
   .ctxmenu button { padding: 8px 10px; }
