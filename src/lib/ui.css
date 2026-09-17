@@ -76,6 +76,7 @@ body {
   padding: 1px 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 .statusbar .cell.grow { flex: 1; min-width: 0; }
+.statusbar a.cell { color: inherit; }
 
 /* ---------------------------------------------------------------- controls */
 
