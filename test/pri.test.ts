@@ -24,10 +24,10 @@ import {
   UNIDENTIFIED_TAGS,
   type PriDecoded,
   type PriLeaf,
-} from "../worker/lib/pri.ts";
-import { describeDevices, DEVICE_CODENAMES } from "../worker/lib/devices.ts";
-import { openIpcc, decodeFile, type OpenedBundle } from "../worker/lib/ipcc.ts";
-import { parsePlist } from "../worker/lib/plist.ts";
+} from "../src/lib/server/pri.ts";
+import { describeDevices, DEVICE_CODENAMES } from "../src/lib/server/devices.ts";
+import { openIpcc, decodeFile, type OpenedBundle } from "../src/lib/server/ipcc.ts";
+import { parsePlist } from "../src/lib/server/plist.ts";
 
 /* ------------------------------------------------------------------ helpers */
 

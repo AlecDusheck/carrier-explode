@@ -1,7 +1,7 @@
 {
   "$schema": "./node_modules/wrangler/config-schema.json",
   "name": "carrier-explode",
-  "main": "worker/index.ts",
+  "main": ".svelte-kit/cloudflare/_worker.js",
   "compatibility_date": "2025-09-01",
   "compatibility_flags": ["nodejs_compat"],
   "routes": [
@@ -10,11 +10,7 @@
       "custom_domain": true
     }
   ],
-  "assets": {
-    "directory": "./dist/client",
-    "binding": "ASSETS",
-    "not_found_handling": "single-page-application"
-  },
+  "assets": { "binding": "ASSETS", "directory": ".svelte-kit/cloudflare" },
   // Bundles pulled out of an IPSW by scripts/extract_system_bundles.py
   "r2_buckets": [{ "binding": "SYSTEM", "bucket_name": "carrier-explode", "remote": true }],
   "observability": { "enabled": true },
