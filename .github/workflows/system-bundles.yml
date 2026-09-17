@@ -78,14 +78,10 @@ jobs:
       - name: Upload to R2
         if: steps.check.outputs.fresh != 'true'
         run: |
-          BUILD=$(jq -r .build /tmp/out/index.json)
           npm install --no-save --silent wrangler
-          cd /tmp/out
-          find carriers countries -name '*.ipcc' -print0 |
-            xargs -0 -P 8 -I{} "$GITHUB_WORKSPACE/node_modules/.bin/wrangler" r2 object put "$BUCKET/system/$BUILD/{}" --file "{}" --remote
           W="$GITHUB_WORKSPACE/node_modules/.bin/wrangler"
-          "$W" r2 object put "$BUCKET/system/$BUILD/countries.json" --file countries.json --remote
-          "$W" r2 object put "$BUCKET/system/$BUILD/index.json" --file index.json --remote
+          cd /tmp/out
+          "$W" r2 bulk put "$BUCKET" --filename upload.json --remote
           # Last, so the worker never points at a half-uploaded build.
           jq -c '{build, version}' index.json > latest.json
           "$W" r2 object put "$BUCKET/system/latest.json" --file latest.json --remote
