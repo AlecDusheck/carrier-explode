@@ -49,15 +49,6 @@ export interface DiffPayload {
   bFiles: string[];
 }
 
-export interface StatsPayload {
-  counts: Record<string, number>;
-  versionRefs: number;
-  newestOSVersion: string;
-  manifestBytes: number;
-  countriesCovered: number;
-  byCountry: Array<{ cc: string; name?: string; n: number }>;
-}
-
 const store = new Map<string, unknown>();
 const inflight = new Map<string, Promise<unknown>>();
 
@@ -88,7 +79,6 @@ const enc = encodeURIComponent;
 
 export const api = {
   index: () => cachedGet<IndexPayload>("/api/index"),
-  stats: () => cachedGet<StatsPayload>("/api/stats"),
   mccmnc: () =>
     cachedGet<{
       entries: MccMncEntry[];

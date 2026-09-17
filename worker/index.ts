@@ -8,7 +8,7 @@
 
 import {
   MANIFEST_URL, parseManifest, buildIndex, buildMccMnc, carrierRefs,
-  compareVersions, countryName, splitName,
+  countryName, splitName,
   type ManifestIndex, type BundleRef, type MccMncEntry,
 } from "./lib/manifest.ts";
 import { openIpcc, decodeFile, contentTypeOf, type BundleInfo } from "./lib/ipcc.ts";
@@ -259,45 +259,6 @@ export default {
               "content-disposition": `attachment; filename="${name}"`,
               "cache-control": `public, max-age=${30 * DAY}, immutable`,
             },
-          });
-        }
-
-        case "/api/search": {
-          const q = (url.searchParams.get("q") ?? "").trim().toLowerCase();
-          if (q.length < 2) return json({ q, carriers: [], plmns: [] }, 60);
-          const st = await manifestState();
-          const carriers = st.index.carriers
-            .filter((c) => c.name.toLowerCase().includes(q) || c.display.toLowerCase().includes(q))
-            .slice(0, 60);
-          const plmns = /^\d{3,6}$/.test(q)
-            ? st.mccmnc.entries.filter((e) => e.plmn.startsWith(q)).slice(0, 60)
-            : st.mccmnc.entries.filter((e) => (e.bundle ?? "").toLowerCase().includes(q)).slice(0, 60);
-          return json({ q, carriers, plmns }, 3600);
-        }
-
-        case "/api/stats": {
-          return cachedJson(`stats:${API_VERSION}`, 6 * 3600, ctx, async () => {
-            const st = await manifestState();
-            const byCountry: Record<string, number> = {};
-            let versionRefs = 0;
-            let newest = "";
-            for (const c of st.index.carriers) {
-              const cc = c.cc ?? "??";
-              byCountry[cc] = (byCountry[cc] ?? 0) + 1;
-              versionRefs += c.versions.length;
-              const last = c.versions[c.versions.length - 1];
-              if (last && (!newest || compareVersions(last, newest) > 0)) newest = last;
-            }
-            return {
-              counts: st.index.counts,
-              versionRefs,
-              newestOSVersion: newest,
-              manifestBytes: st.manifestBytes,
-              countriesCovered: Object.keys(byCountry).length,
-              byCountry: Object.entries(byCountry)
-                .sort((a, b) => b[1] - a[1])
-                .map(([cc, n]) => ({ cc, name: countryName(cc), n })),
-            };
           });
         }
 

@@ -5,7 +5,6 @@
   import CbsView from "./lib/CbsView.svelte";
   import PlmnView from "./lib/PlmnView.svelte";
   import Compare from "./lib/Compare.svelte";
-  import About from "./lib/About.svelte";
   import ContextMenu from "./lib/ContextMenu.svelte";
   import ScanPanel from "./lib/ScanPanel.svelte";
 
@@ -53,8 +52,6 @@
         <div class="view"><PlmnView /></div>
       {:else if router.view === "compare"}
         <div class="view"><Compare {index} /></div>
-      {:else if router.view === "about"}
-        <div class="view"><About {index} /></div>
       {/if}
     </div>
 
@@ -66,6 +63,7 @@
         {/if}
       </span>
       <span class="cell">{router.name ?? "no selection"}</span>
+      {#if index}<span class="cell" title="manifest fetched">{index.fetchedAt.slice(0, 16).replace("T", " ")}Z</span>{/if}
     </div>
   </div>
 </div>
