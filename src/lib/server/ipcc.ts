@@ -263,6 +263,32 @@ export function decodeFile(b: OpenedBundle, relPath: string): DecodedFile {
   return out;
 }
 
+/**
+ * A bundle's identity: sha256 over "path NUL sha256(bytes) LF" for every file, in
+ * byte order of path. scripts/package_system_bundles.py computes the same value
+ * and uses it as the R2 key, so this doubles as the integrity check.
+ */
+export async function contentId(b: OpenedBundle): Promise<string> {
+  const enc = new TextEncoder();
+  const hex = async (bytes: Uint8Array) =>
+    [...new Uint8Array(await crypto.subtle.digest("SHA-256", bytes as unknown as ArrayBuffer))]
+      .map((x) => x.toString(16).padStart(2, "0")).join("");
+  const byBytes = (x: Uint8Array, y: Uint8Array) => {
+    for (let i = 0; i < Math.min(x.length, y.length); i++) if (x[i] !== y[i]) return x[i] - y[i];
+    return x.length - y.length;
+  };
+  const files = b.info.files
+    .filter((f) => !f.path.endsWith(".DS_Store"))
+    .map((f) => ({ path: enc.encode(f.path), bytes: b.entries[b.prefix + f.path] }))
+    .sort((x, y) => byBytes(x.path, y.path));
+  const lines: Uint8Array[] = [];
+  for (const f of files) lines.push(f.path, enc.encode("\0" + (await hex(f.bytes)) + "\n"));
+  const all = new Uint8Array(lines.reduce((n, l) => n + l.length, 0));
+  let at = 0;
+  for (const l of lines) { all.set(l, at); at += l.length; }
+  return hex(all);
+}
+
 export function base64Of(bytes: Uint8Array): string {
   let s = "";
   const chunk = 0x8000;
