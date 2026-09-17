@@ -67,11 +67,42 @@ function errorResponse(e: unknown): Response {
   });
 }
 
-/** Download + unzip an .ipcc, memoised per URL. */
-async function openBundle(url: string) {
-  const u = assertAppleUrl(url).toString();
+/** Bundles come from Apple's CDN, or from R2 as r2:<key> when they were pulled out of an OS image. */
+function fetcher(env: Env) {
+  return async (src: string): Promise<Uint8Array> => {
+    if (!src.startsWith("r2:")) return fetchUpstream(src);
+    const key = src.slice(3);
+    if (!key.startsWith("system/") || key.includes("..")) throw new HttpError(400, "bad r2 key");
+    const obj = await env.SYSTEM.get(key);
+    if (!obj) throw new HttpError(404, `not in bucket: ${key}`);
+    return new Uint8Array(await obj.arrayBuffer());
+  };
+}
+
+interface SystemIndex {
+  version: string;
+  build: string;
+  families: Record<string, {
+    bundles: Array<{ name: string; file: string; size: number; sha1: string; build: string }>;
+    links: Record<string, string>;
+  }>;
+}
+
+async function systemIndex(env: Env): Promise<SystemIndex | null> {
+  return memo("system-index", 10 * 60 * 1000, async () => {
+    const latest = await env.SYSTEM.get("system/latest.json");
+    if (!latest) return null;
+    const { build } = await latest.json<{ build: string }>();
+    const idx = await env.SYSTEM.get(`system/${build}/index.json`);
+    return idx ? idx.json<SystemIndex>() : null;
+  });
+}
+
+/** Download + unzip an .ipcc, memoised per source. */
+async function openBundle(url: string, env: Env) {
+  const u = url.startsWith("r2:") ? url : assertAppleUrl(url).toString();
   return memo(`ipcc:${u}`, 30 * 60 * 1000, async () => {
-    const bytes = await fetchUpstream(u);
+    const bytes = await fetcher(env)(u);
     const opened = openIpcc(bytes);
     return { opened, size: bytes.length, sha1: await sha1Hex(bytes), sha384: await sha384Hex(bytes) };
   });
@@ -88,8 +119,8 @@ interface BundlePayload {
   ref?: BundleRef & { carrier?: string };
 }
 
-async function bundlePayload(url: string, ref?: BundleRef & { carrier?: string }): Promise<BundlePayload> {
-  const { opened, size, sha1, sha384 } = await openBundle(url);
+async function bundlePayload(url: string, env: Env, ref?: BundleRef & { carrier?: string }): Promise<BundlePayload> {
+  const { opened, size, sha1, sha384 } = await openBundle(url, env);
   const quick: Record<string, unknown> = {};
   for (const name of ["carrier.plist", "Info.plist", "version.plist"]) {
     if (opened.info.files.some((f) => f.path === name)) {
@@ -121,6 +152,10 @@ export default {
             const st = await manifestState();
             return { ...st.index, manifestBytes: st.manifestBytes, manifestUrl: MANIFEST_URL };
           });
+        }
+
+        case "/api/system": {
+          return json((await systemIndex(env)) ?? { version: null, build: null, families: {} }, 600);
         }
 
         case "/api/mccmnc": {
@@ -156,7 +191,7 @@ export default {
                 if (c.url === src) { ref = { os: c.minOS ?? "", build: c.version, url: c.url, productType: c.family }; break; }
               }
             }
-            return bundlePayload(src, ref ? { ...ref, carrier } : undefined);
+            return bundlePayload(src, env, ref ? { ...ref, carrier } : undefined);
           });
         }
 
@@ -165,7 +200,7 @@ export default {
           const file = url.searchParams.get("path");
           if (!src || !file) throw new HttpError(400, "url and path required");
           return cachedJson(`file:${API_VERSION}:${src}#${file}`, 30 * DAY, ctx, async () => {
-            const { opened } = await openBundle(src);
+            const { opened } = await openBundle(src, env);
             return decodeFile(opened, file);
           });
         }
@@ -195,7 +230,7 @@ export default {
           const file = url.searchParams.get("path") ?? "carrier.plist";
           if (!a || !b) throw new HttpError(400, "a and b required");
           return cachedJson(`diff:${API_VERSION}:${a}|${b}|${file}`, 30 * DAY, ctx, async () => {
-            const [A, B] = await Promise.all([openBundle(a), openBundle(b)]);
+            const [A, B] = await Promise.all([openBundle(a, env), openBundle(b, env)]);
             const pick = (o: Awaited<ReturnType<typeof openBundle>>) => {
               try {
                 const d = decodeFile(o.opened, file);
@@ -230,7 +265,7 @@ export default {
           const src = url.searchParams.get("url");
           const file = url.searchParams.get("path");
           if (!src || !file) throw new HttpError(400, "url and path required");
-          const { opened } = await openBundle(src);
+          const { opened } = await openBundle(src, env);
           const stored = opened.entries[opened.prefix + file] ?? opened.entries[file];
           if (!stored) throw new HttpError(404, `no such file in bundle: ${file}`);
           // Carrier logos ship in Apple's CgBI PNG variant, which no browser renders.
@@ -250,9 +285,8 @@ export default {
         case "/api/download": {
           const src = url.searchParams.get("url");
           if (!src) throw new HttpError(400, "url required");
-          const u = assertAppleUrl(src);
-          const bytes = await fetchUpstream(u.toString());
-          const name = u.pathname.split("/").pop() || "bundle.ipcc";
+          const bytes = await fetcher(env)(src);
+          const name = src.split("/").pop() || "bundle.ipcc";
           return new Response(bytes as unknown as BodyInit, {
             headers: {
               "content-type": "application/octet-stream",

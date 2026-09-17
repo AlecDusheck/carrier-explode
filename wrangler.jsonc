@@ -15,6 +15,8 @@
     "binding": "ASSETS",
     "not_found_handling": "single-page-application"
   },
+  // Bundles pulled out of an IPSW by scripts/extract_system_bundles.py
+  "r2_buckets": [{ "binding": "SYSTEM", "bucket_name": "carrier-explode" }],
   "observability": { "enabled": true },
   "placement": { "mode": "smart" }
   // Optional durable cache layer. Create with:

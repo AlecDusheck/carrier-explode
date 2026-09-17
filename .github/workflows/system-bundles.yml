@@ -1,0 +1,85 @@
+# Pulls the carrier and country bundles out of the latest IPSW and puts them in
+# R2, where the worker reads them. Most countries have no bundle on Apple's CDN;
+# theirs only ship inside the OS image.
+#
+# The extraction steps are dwilliamsuk's, from
+# https://github.com/dwilliamsuk/ios-carrier-bundles
+#
+# Needs: secrets CLOUDFLARE_API_TOKEN (R2 edit) and CLOUDFLARE_ACCOUNT_ID.
+# Optional: variable DEVICE (default iPhone17,1).
+
+name: System bundles
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 6 * * 1"
+
+env:
+  DEVICE: ${{ vars.DEVICE || 'iPhone17,1' }}
+  BUCKET: carrier-explode
+  CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+  CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+
+jobs:
+  extract:
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install blacktop/ipsw
+        run: |
+          URL=$(curl -s https://api.github.com/repos/blacktop/ipsw/releases/latest |
+            jq -r '.assets[].browser_download_url | select(contains("arm64.deb")) | select(contains("ipsw_"))')
+          curl -sL -o /tmp/ipsw.deb "$URL"
+          sudo dpkg -i /tmp/ipsw.deb
+
+      - name: Skip if this build is already in R2
+        id: check
+        run: |
+          BUILD=$(ipsw download ipsw --device "$DEVICE" --latest --urls --no-color | grep -oE '_[0-9A-Za-z]+_Restore' | head -1 | cut -d_ -f2)
+          echo "latest build: $BUILD"
+          if npx --yes wrangler r2 object get "$BUCKET/system/latest.json" --remote --pipe 2>/dev/null | grep -q "\"$BUILD\""; then
+            echo "fresh=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Install apfs-fuse
+        if: steps.check.outputs.fresh != 'true'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y fuse3 libfuse3-dev bzip2 libbz2-dev libz-dev cmake build-essential libattr1-dev
+          sudo modprobe fuse
+          git clone --recursive https://github.com/sgan81/apfs-fuse.git /tmp/apfs-fuse
+          cmake -S /tmp/apfs-fuse -B /tmp/apfs-fuse/build
+          sudo make -C /tmp/apfs-fuse/build install
+
+      - name: Download the IPSW and extract the bundles
+        if: steps.check.outputs.fresh != 'true'
+        run: |
+          mkdir -p "$RUNNER_TEMP/ipsw" /tmp/x
+          ipsw download ipsw --device "$DEVICE" --latest --no-color --output "$RUNNER_TEMP/ipsw"
+          ipsw extract --files --pattern '.*Bundles.*iPhone.*\.bundle.*$' --output /tmp/x "$RUNNER_TEMP"/ipsw/*.ipsw
+          ipsw info "$RUNNER_TEMP"/ipsw/*.ipsw --json --no-color > /tmp/meta.json
+          sudo chown -R "$USER" /tmp/x
+
+      - name: Package
+        if: steps.check.outputs.fresh != 'true'
+        run: |
+          ROOT=$(echo /tmp/x/*/root/System/Library)
+          python3 scripts/package_system_bundles.py \
+            --carriers "$ROOT/Carrier Bundles/iPhone" \
+            --countries "$ROOT/CountryBundles/iPhone" \
+            --meta /tmp/meta.json --out /tmp/out
+
+      - name: Upload to R2
+        if: steps.check.outputs.fresh != 'true'
+        run: |
+          BUILD=$(jq -r .build /tmp/out/index.json)
+          npm install --no-save --silent wrangler
+          cd /tmp/out
+          find carriers countries -name '*.ipcc' -print0 |
+            xargs -0 -P 8 -I{} "$GITHUB_WORKSPACE/node_modules/.bin/wrangler" r2 object put "$BUCKET/system/$BUILD/{}" --file "{}" --remote
+          W="$GITHUB_WORKSPACE/node_modules/.bin/wrangler"
+          "$W" r2 object put "$BUCKET/system/$BUILD/index.json" --file index.json --remote
+          # Last, so the worker never points at a half-uploaded build.
+          jq -c '{build, version}' index.json > latest.json
+          "$W" r2 object put "$BUCKET/system/latest.json" --file latest.json --remote
