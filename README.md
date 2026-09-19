@@ -132,6 +132,17 @@ ingest workflow ever needs to cut that short. One cost to know about: with
 caching on, requests that are normally free — static assets included — bill at
 the standard Workers request rate.
 
+Rate limits: `src/hooks.server.ts` puts every request into one of four per-IP
+budgets, sized to the work it can start rather than to the request. `scanKey`
+gets 10/min — one scan opens up to 120 bundles and its cache key is built from
+client-supplied strings, so misses are free to manufacture — `getDiff` 20/min,
+anything that can unzip an `.ipcc` (`/raw`, the bundle queries, a page pinned to
+a version) 60/min, and everything else 120/min. Counters are per Cloudflare
+location and eventually consistent, so these are ceilings on one source
+hammering, not accounting; a cached response never reaches the worker, so only
+misses count. A missing binding or a request with no `cf-connecting-ip` fails
+open, which is what `vite dev` does.
+
 ## Known gaps
 - Carrier bundles have no cell-broadcast alert schema at all, just throttling
   knobs. Country bundles are the only place it lives.

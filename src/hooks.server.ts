@@ -13,6 +13,70 @@
 
 import type { Handle, RequestEvent } from "@sveltejs/kit";
 
+/**
+ * Per-IP budgets, sized to the work a request can start rather than to the
+ * request itself. Counters live in the Cloudflare location that served the
+ * request and are eventually consistent, so these are ceilings on hammering
+ * from one source, not an accounting system. A cache hit never reaches the
+ * worker, so only the misses — the expensive ones — are counted.
+ */
+const BUDGET = {
+  // One scan opens up to 120 bundles, and its cache key is built from
+  // client-supplied strings, so a miss costs nothing to manufacture. The dialog
+  // fires once when it opens and once per scope or limit change; ten a minute
+  // is a fidgety human and a tenth of what a script would want.
+  scan: "RL_SCAN",
+  // Two opens per call and nothing cached at the data layer, but one call per
+  // file the visitor picks.
+  diff: "RL_DIFF",
+  // Everything that can pull and unzip an .ipcc: /raw, the bundle queries, and
+  // a page pinned to a version. The assets gallery fires one /raw per image, so
+  // this has to hold a page view plus its burst.
+  bundle: "RL_BUNDLE",
+  // Pages and the memoised tables. Cheap, but /carriers is no-store and so runs
+  // the worker every time.
+  base: "RL_BASE",
+} as const;
+
+/** Split out from the hook so it can be tested without a worker. */
+export function rateClass(
+  event: Pick<RequestEvent, "request" | "route" | "params" | "isRemoteRequest">,
+): keyof typeof BUDGET {
+  if (event.isRemoteRequest) {
+    // For a remote call `event.url` is the page it came from, so the function
+    // name has to come off the request: /_app/remote/<hash>/<name>.
+    const name = new URL(event.request.url).pathname.split("/remote/")[1]?.split("/")[1];
+    if (name === "scanKey") return "scan";
+    if (name === "getDiff") return "diff";
+    return name === "getBundle" || name === "getFile" || name === "getChanges" ? "bundle" : "base";
+  }
+  // /compare renders a diff, and every other bundle page is pinned to a version.
+  if (event.route.id?.startsWith("/raw/") || event.route.id === "/compare") return "bundle";
+  return event.params.version ? "bundle" : "base";
+}
+
+/** A 429, or null to let the request through. Missing binding or IP fails open. */
+async function overBudget(event: RequestEvent): Promise<Response | null> {
+  const ip = event.request.headers.get("cf-connecting-ip");
+  const limiter = ip ? event.platform?.env[BUDGET[rateClass(event)]] : undefined;
+  if (!limiter || (await limiter.limit({ key: ip! })).success) return null;
+
+  const message = "Too many requests from your address. Give it a minute.";
+  // The remote client parses this shape off a failed response and throws it
+  // into the pane's boundary; anything else there surfaces as a parse error.
+  const body = event.isRemoteRequest
+    ? JSON.stringify({ type: "error", status: 429, error: { message } })
+    : message + "\n";
+  return new Response(body, {
+    status: 429,
+    headers: {
+      "content-type": event.isRemoteRequest ? "application/json" : "text/plain; charset=utf-8",
+      "retry-after": "60",
+      "cache-control": "private, no-store",
+    },
+  });
+}
+
 // s-maxage is what the shared cache holds; max-age=0 keeps browsers asking, so a
 // new bundle or a purge reaches people as soon as the shared copy turns over.
 const PINNED = "public, max-age=0, s-maxage=86400, stale-while-revalidate=2592000";
@@ -38,6 +102,9 @@ export function cacheControl(
 }
 
 export const handle: Handle = async ({ event, resolve }) => {
+  const limited = await overBudget(event);
+  if (limited) return limited;
+
   const response = await resolve(event);
   // /raw sets its own, and remote calls are no-store already.
   if (!response.headers.has("cache-control")) {

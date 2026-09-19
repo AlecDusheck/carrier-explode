@@ -5,7 +5,14 @@ declare global {
       perVisitor?: boolean;
     }
     interface Platform {
-      env: { SYSTEM: R2Bucket };
+      env: {
+        SYSTEM: R2Bucket;
+        /** Rate limiters, one budget each. Absent under `vite dev`, where the hook fails open. */
+        RL_SCAN?: RateLimit;
+        RL_DIFF?: RateLimit;
+        RL_BUNDLE?: RateLimit;
+        RL_BASE?: RateLimit;
+      };
       ctx: ExecutionContext;
       cf?: IncomingRequestCfProperties;
       caches: CacheStorage & { default: Cache };
