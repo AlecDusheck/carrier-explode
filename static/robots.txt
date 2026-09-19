@@ -1,0 +1,7 @@
+# Bundle pages are the content; /raw serves bundle members and /compare is a
+# tool whose query strings are endless, so neither is worth a crawl budget.
+User-agent: *
+Disallow: /raw/
+Disallow: /compare
+
+Sitemap: https://carrierexplode.com/sitemap.xml

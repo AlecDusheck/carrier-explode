@@ -23,8 +23,6 @@
   }
 </script>
 
-<svelte:head><title>Compare · carrier-explode</title></svelte:head>
-
 {#snippet picker(title: string, key: "a" | "b", chosen: ReturnType<typeof side>)}
   <fieldset class="hgroup">
     <legend>{title}</legend>

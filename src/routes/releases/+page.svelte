@@ -4,8 +4,6 @@
   import Pane from "$lib/components/Pane.svelte";
 </script>
 
-<svelte:head><title>Releases · carrier-explode</title></svelte:head>
-
 <div class="view">
   <div class="scroll pad">
     <Pane>

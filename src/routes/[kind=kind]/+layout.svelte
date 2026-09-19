@@ -1,6 +1,6 @@
 <script module lang="ts">
-  // The guess is for the first look at the list only; never again in the same session.
-  let guessSpent = false;
+  // The guess is for the first look at a list only; never again in the same session.
+  const guessSpent = new Set<string>();
 </script>
 
 <script lang="ts">
@@ -8,7 +8,7 @@
   import { goto } from "$app/navigation";
   import { page, navigating } from "$app/state";
   import type { Attachment } from "svelte/attachments";
-  import { getIndex, guessCarrier } from "$lib/api/bundles.remote";
+  import { getIndex, guessCarrier, guessCountry } from "$lib/api/bundles.remote";
   import { bundleHref, link } from "$lib/format";
   import { menuTrigger, copyText } from "$lib/ui-state.svelte";
   import Pane from "$lib/components/Pane.svelte";
@@ -18,17 +18,23 @@
   type Row = { name: string; display: string; cc?: string };
   const matches = (c: Row, q: string) => c.name.toLowerCase().includes(q) || c.display.toLowerCase().includes(q) || c.cc === q;
 
+  // Carriers come from the network the request arrived on, countries from where
+  // it arrived from. Watch bundles have neither.
   async function firstQuery() {
-    const wanted = params.kind === "carriers" && !params.name && !guessSpent;
-    if (browser) guessSpent = true;
+    const wanted = !params.name && !guessSpent.has(params.kind) && params.kind !== "watch";
+    if (browser) guessSpent.add(params.kind);
     if (!wanted) return "";
-    const guess = await guessCarrier();
+    const guess = params.kind === "countries" ? await guessCountry() : await guessCarrier();
     if (!guess) return "";
-    const { carriers } = await getIndex();
-    return carriers.some((c) => matches(c, guess)) ? guess : "";
+    const list = (await getIndex())[params.kind];
+    // The box keeps the bundle's own spelling ("UnitedStates"); the filter lowercases.
+    return list.some((c) => matches(c, guess.toLowerCase())) ? guess : "";
   }
 
-  let query = $state(await firstQuery());
+  const guessed = await firstQuery();
+  let query = $state(guessed);
+  // Says why the box is not empty, and gets out of the way on the first edit.
+  const fromIp = $derived(!!guessed && query === guessed);
   let drawerOpen = $state(false);
   const label = $derived(params.kind[0].toUpperCase() + params.kind.slice(1));
 
@@ -56,6 +62,7 @@
   <div class="pane-left" class:open={drawerOpen}>
     <div style="padding:6px; display:flex; gap:6px">
       <input class="grow" type="search" name="find" placeholder="find" aria-label="find in {params.kind}" bind:value={query} />
+      {#if fromIp}<span class="chip" style="align-self:center" title="Guessed from your IP address">from IP</span>{/if}
       <button class="btn drawer-btn" onclick={() => (drawerOpen = false)}>Close</button>
     </div>
     <Pane>

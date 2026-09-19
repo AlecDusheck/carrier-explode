@@ -9,8 +9,6 @@
   const range = (r: { from: number; to: number }) => (r.from === r.to ? String(r.from) : r.from + "-" + r.to);
 </script>
 
-<svelte:head><title>{params.country} · Cell Broadcast · carrier-explode</title></svelte:head>
-
 <div class="view">
   <div class="scroll pad">
     <Pane>

@@ -18,8 +18,6 @@
     f ? pairs.filter(([k, v]) => k.toLowerCase().includes(f) || v.toLowerCase().includes(f)) : pairs;
 </script>
 
-<svelte:head><title>PLMN · carrier-explode</title></svelte:head>
-
 {#snippet pairTable(title: string, head: string, pairs: Array<[string, string]>)}
   <fieldset class="hgroup">
     <legend>{title} ({pairs.length})</legend>

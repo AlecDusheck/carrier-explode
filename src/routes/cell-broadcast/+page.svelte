@@ -18,8 +18,6 @@
   }
 </script>
 
-<svelte:head><title>Cell Broadcast · carrier-explode</title></svelte:head>
-
 <div class="view">
   <div class="toolbar">
     <a class="btn" href={link("/cell-broadcast")} aria-current={view === "operator" ? "page" : undefined}>Operator-defined 4382</a>
