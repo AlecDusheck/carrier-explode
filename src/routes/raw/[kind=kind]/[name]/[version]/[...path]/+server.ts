@@ -11,7 +11,6 @@ export async function GET({ params, url }) {
     headers: {
       "content-type": contentTypeOf(params.path),
       "content-disposition": `${url.searchParams.has("dl") ? "attachment" : "inline"}; filename="${file}"`,
-      "cache-control": "public, max-age=2592000, immutable",
       "x-content-type-options": "nosniff",
     },
   });

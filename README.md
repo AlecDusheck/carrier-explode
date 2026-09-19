@@ -89,8 +89,10 @@ pnpm install
 pnpm dev      # reads the real R2 bucket
 pnpm test     # ~470 cases against real bundle fixtures
 pnpm check
-pnpm deploy
 ```
+
+Cloudflare builds and deploys every push to `main`, so a merge is a deploy;
+`pnpm deploy` is only for pushing a build straight from a checkout.
 
 - `src/lib/server/data.ts` is the only module that touches R2 or Apple.
   `timeline.ts` merges image and OTA bundles into one history per bundle.
@@ -115,13 +117,27 @@ Whole pages are cached too, by Workers Cache (`"cache"` in `wrangler.jsonc`),
 which answers a hit before this worker runs at all — no CPU, no R2, no trip to
 Apple — and collapses a burst on a cold URL into one render. It is the worker's
 own cache, not the zone's: cache rules, page rules and Cache Everything do not
-reach a response a worker returns, and the `Cache-Control` header is the whole
-configuration surface. So `src/hooks.server.ts` puts one on every response: a day
-for a page pinned to a version, ten minutes for one that tracks the newest
-bundle, a minute for a 404, and `no-store` for errors, POSTs and remote calls —
-without a header they would instead get RFC 9111 heuristic freshness, which is
-how an error page ends up stuck in a cache. `max-age=0` throughout, so browsers
-keep asking and a turned-over copy reaches them at once. Both lists opt out:
+reach a response a worker returns.
+
+There is a second cache in front of it, and it is the reason the headers look
+the way they do. The Cloudflare adapter wraps the worker in its own Cache API
+layer that stores any response whose `Cache-Control` lacks `private`,
+`no-cache` or `no-store`. That layer is keyed by URL alone: it outlives
+deploys, `ctx.cache.purge()` does not touch it, and a page it holds keeps
+referencing script bundles that no longer exist. So `src/hooks.server.ts`
+addresses the edge through `cloudflare-cdn-cache-control` — highest precedence,
+consumed by Cloudflare, stripped before the client — and leaves `Cache-Control`
+saying `no-cache`, which browsers read as revalidate-before-use and that second
+cache reads as "not mine". A bundle member is the one exception: browsers hold
+it a day under `private, max-age`, which keeps it out of shared caches all the
+same. The edge TTL is `max-age`, never `s-maxage`, because `s-maxage` disables
+`stale-while-revalidate` and every expiry would then block on a fresh render.
+
+A day for a page pinned to a version, six hours for one that tracks the newest
+bundle, a minute for a 404, a month for a bundle member, and nothing at all for
+errors, POSTs and the remote calls that read the visitor. `getIndex` and
+`getStats` are the exception among remote calls: the same bytes for everyone, so
+they are shared rather than `no-store`. Both list pages opt out entirely —
 `/carriers` prefills its search box from the visitor's network and `/countries`
 from where they are, so `guessCarrier()` and `guessCountry()` set
 `locals.perVisitor` and neither page is ever shared.
@@ -130,14 +146,15 @@ Six hours is not arbitrary: the manifest behind those pages is memoised for six,
 so a shorter page TTL buys freshness the data does not have. What cuts it short
 is a purge — every cacheable response carries a `Cache-Tag` (`latest` or
 `pinned`, plus `b-<bundle>`), and `POST /internal/purge` drops them for a shared
-secret. `system-bundles.yml` calls it once every image in a run is in the bucket.
-Set the secret in two places: `pnpm wrangler secret put PURGE_TOKEN`, and the
-same value as a `PURGE_TOKEN` repository secret. Without the purge, pages simply age out.
+secret. `system-bundles.yml` calls it once every image in a run is in the bucket,
+and `builds()` is memoised for only a minute so a warm worker cannot re-render
+the same stale page straight after. Set the secret in two places: `pnpm wrangler
+secret put PURGE_TOKEN`, and the same value as a `PURGE_TOKEN` repository secret.
+Without the purge, pages simply age out.
 
-The cache is keyed by path, query and worker version, so a deploy starts cold
-and code changes need no purge. One cost to know about: with caching on,
-requests that are normally free — static assets included — bill at the standard
-Workers request rate.
+Workers Cache is keyed by worker version, so each deploy starts from an empty
+one. One cost to know about: with caching on, requests that are normally free —
+static assets included — bill at the standard Workers request rate.
 
 Page weight: the carrier list is ~780 links, and rendering it server-side costs
 twice — once as markup, once as the query result serialised for hydration. It is

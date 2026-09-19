@@ -44,7 +44,9 @@ async function r2json<T>(key: string): Promise<T | null> {
 
 /** Newest first. */
 export const builds = () =>
-  memo("builds", 5 * 60_000, async () => {
+  // Short on purpose: the ingest purges the cache the moment it uploads, and a
+  // longer memo would let a warm worker re-render the same stale page.
+  memo("builds", 60_000, async () => {
     const list = await r2json<ImageBuild[]>("system/builds.json");
     return list?.length ? list : null;
   }).then((b) => b ?? []);
