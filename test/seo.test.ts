@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { seo } from "../src/lib/seo.ts";
+import { errorMessage } from "../src/lib/format.ts";
 
 const CASES: Array<[string, Parameters<typeof seo>[1]]> = [
   ["/", {}],
@@ -41,5 +42,20 @@ describe("seo", () => {
   it("carries the words people search for", () => {
     expect(seo("/[kind=kind]", { kind: "carriers" }).description).toMatch(/\.ipcc|APN|VoLTE/);
     expect(seo("/plmn", {}).title).toContain("MCC/MNC");
+  });
+});
+
+describe("errorMessage", () => {
+  it("prefers what the error says", () => {
+    expect(errorMessage({ body: { message: "no such file" }, status: 404 })).toBe("no such file");
+    expect(errorMessage(new Error("boom"))).toBe("boom");
+  });
+
+  it("never renders a bare object as [object Object]", () => {
+    expect(errorMessage({ status: 500, body: {} })).toBe('HTTP 500 · {"status":500,"body":{}}');
+    expect(errorMessage({})).toBe("Unexpected error: {}");
+    const loop: Record<string, unknown> = {};
+    loop.self = loop;
+    expect(errorMessage(loop)).toBe("Unexpected error: [object Object]");
   });
 });
