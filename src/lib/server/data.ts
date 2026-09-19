@@ -331,6 +331,23 @@ export async function scanKey(path: string, file: string, scope: string, limit: 
   });
 }
 
+/** A country search guessed from where the request came from. */
+export async function guessCountry(): Promise<string | null> {
+  const { platform, locals } = getRequestEvent();
+  // Same bargain as the carrier guess: this is the visitor's own location.
+  locals.perVisitor = true;
+  const cc = platform?.cf?.country?.toLowerCase();
+  if (!cc) return null;
+  const { countries } = await getIndex();
+  const hit = isoIndex(await countryPlists()).get(cc);
+  if (hit && countries.some((c) => c.name === hit)) return hit;
+  // Territories and, without countries.json, everything else: Apple's bundle
+  // names are the English name with the spaces taken out.
+  const flat = (s: string) => s.replace(/[^a-z0-9]/gi, "").toLowerCase();
+  const name = countryName(cc);
+  return (name && countries.find((c) => flat(c.name) === flat(name))?.name) || null;
+}
+
 /** On a phone, a carrier search guessed from the network the request came in on. */
 export async function guessCarrier(): Promise<string | null> {
   const { request, platform, locals } = getRequestEvent();

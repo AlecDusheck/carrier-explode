@@ -8,8 +8,6 @@
   const KINDS = [["carriers", "Carriers"], ["countries", "Countries"]] as const;
 </script>
 
-<svelte:head><title>{params.build} · Releases · carrier-explode</title></svelte:head>
-
 <div class="view">
   <div class="scroll pad">
     <Pane>

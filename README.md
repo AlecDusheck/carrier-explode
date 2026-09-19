@@ -121,9 +121,10 @@ for a page pinned to a version, ten minutes for one that tracks the newest
 bundle, a minute for a 404, and `no-store` for errors, POSTs and remote calls —
 without a header they would instead get RFC 9111 heuristic freshness, which is
 how an error page ends up stuck in a cache. `max-age=0` throughout, so browsers
-keep asking and a turned-over copy reaches them at once. `/carriers` opts out:
-the search box there is prefilled from the visitor's own network and user agent,
-so `guessCarrier()` sets `locals.perVisitor` and that page is never shared.
+keep asking and a turned-over copy reaches them at once. Both lists opt out:
+`/carriers` prefills its search box from the visitor's network and `/countries`
+from where they are, so `guessCarrier()` and `guessCountry()` set
+`locals.perVisitor` and neither page is ever shared.
 
 The cache is keyed by path, query and worker version, so a deploy starts cold
 and code changes need no purge. New bundles land without a deploy, which is what
@@ -131,6 +132,12 @@ the TTLs above are sized for; `ctx.cache.purge({ pathPrefixes })` is there if th
 ingest workflow ever needs to cut that short. One cost to know about: with
 caching on, requests that are normally free — static assets included — bill at
 the standard Workers request rate.
+
+Search and preview: `src/lib/seo.ts` builds every page's title and description
+from the route alone — no data fetch, so the head is right even when a pane
+fails — and `src/routes/+layout.svelte` is the only place that renders them.
+`/sitemap.xml` lists the bundle pages; `robots.txt` keeps crawlers out of `/raw`
+and `/compare`, whose query strings are endless.
 
 Rate limits: `src/hooks.server.ts` puts every request into one of four per-IP
 budgets, sized to the work it can start rather than to the request. `scanKey`

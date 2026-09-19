@@ -3,6 +3,7 @@
   import { page, navigating } from "$app/state";
   import { getIndex } from "$lib/api/bundles.remote";
   import { link } from "$lib/format";
+  import { SITE, seo } from "$lib/seo";
   import { scan } from "$lib/ui-state.svelte";
   import ContextMenu from "$lib/components/ContextMenu.svelte";
   import ScanDialog from "$lib/components/ScanDialog.svelte";
@@ -21,10 +22,21 @@
   ];
 
   const here = $derived(page.url.pathname);
+  const meta = $derived(seo(page.route.id, page.params));
+  // One address per page: the compare tool is the only page with meaningful
+  // search params, and its results are not what should be indexed.
+  const canonical = $derived(page.url.origin + page.url.pathname);
   const busy = $derived($effect.pending() > 0 || !!navigating.to);
 </script>
 
-<svelte:head><title>{page.params.name ? page.params.name + " · " : ""}carrier-explode</title></svelte:head>
+<svelte:head>
+  <title>{meta.title} · {SITE}</title>
+  <meta name="description" content={meta.description} />
+  <link rel="canonical" href={canonical} />
+  <meta property="og:title" content="{meta.title} · {SITE}" />
+  <meta property="og:description" content={meta.description} />
+  <meta property="og:url" content={canonical} />
+</svelte:head>
 
 <div class="window">
   <div class="frame">
