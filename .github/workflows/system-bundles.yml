@@ -7,6 +7,8 @@
 # dwilliamsuk's, from https://github.com/dwilliamsuk/ios-carrier-bundles
 #
 # Needs: secrets CLOUDFLARE_API_TOKEN (R2 edit) and CLOUDFLARE_ACCOUNT_ID.
+# Optional: secret PURGE_TOKEN, the same value as the worker's, so new images
+# show up at once instead of when cached pages age out (six hours).
 # Optional: variable MIN_VERSION, the oldest release to keep (default: the oldest
 # image already held), and variable DEVICE (default iPhone17,1). Releases that device no longer
 # receives are taken from the newest iPhone instead.
@@ -126,3 +128,19 @@ jobs:
           "$W" r2 object get "$BUCKET/system/builds.json" --remote --pipe > /tmp/now.json 2>/dev/null || echo '[]' > /tmp/now.json
           jq -s -c 'add | unique_by(.build) | sort_by(.version | split(".") | map(tonumber? // 0)) | reverse' /tmp/now.json builds.json > merged.json
           "$W" r2 object put "$BUCKET/system/builds.json" --file merged.json --remote
+
+  # Once, after every image is in: pages that track the newest bundle are cached
+  # for six hours, and this is what makes a new image visible now. Runs even if
+  # one image failed, since the others still landed.
+  purge:
+    needs: extract
+    if: ${{ !cancelled() && needs.extract.result != 'skipped' }}
+    runs-on: ubuntu-24.04
+    steps:
+      - env:
+          TOKEN: ${{ secrets.PURGE_TOKEN }}
+        run: |
+          [ -n "$TOKEN" ] || { echo "PURGE_TOKEN not set, skipping"; exit 0; }
+          curl -fsS -X POST https://carrierexplode.com/internal/purge \
+            -H "authorization: Bearer $TOKEN" -H "content-type: application/json" \
+            -d '{"tags":["latest"]}'
