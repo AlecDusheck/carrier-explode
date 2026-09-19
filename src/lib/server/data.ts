@@ -342,8 +342,10 @@ export async function guessCountry(): Promise<string | null> {
   const hit = isoIndex(await countryPlists()).get(cc);
   if (hit && countries.some((c) => c.name === hit)) return hit;
   // Territories and, without countries.json, everything else: Apple's bundle
-  // names are the English name with the spaces taken out.
-  const flat = (s: string) => s.replace(/[^a-z0-9]/gi, "").toLowerCase();
+  // names are the English name with the spaces taken out. Accents are folded
+  // rather than dropped, or Réunion would not reach Reunion.
+  const flat = (s: string) =>
+    s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]/gi, "").toLowerCase();
   const name = countryName(cc);
   return (name && countries.find((c) => flat(c.name) === flat(name))?.name) || null;
 }
