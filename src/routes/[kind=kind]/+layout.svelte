@@ -31,10 +31,27 @@
     return list.some((c) => matches(c, guess.toLowerCase())) ? guess : "";
   }
 
-  const guessed = await firstQuery();
-  let query = $state(guessed);
+  const first = await firstQuery();
+  let guessed = $state(first);
+  let query = $state(first);
   // Says why the box is not empty, and gets out of the way on the first edit.
   const fromIp = $derived(!!guessed && query === guessed);
+
+  // This layout survives the move between two lists, so nothing re-runs on its
+  // own. A carrier search means nothing in the country list: drop it and guess
+  // again for the list now on screen.
+  let shown = "";
+  $effect(() => {
+    const kind = params.kind;
+    if (!shown) return void (shown = kind); // the guess above already covered this one
+    if (kind === shown) return;
+    shown = kind;
+    query = "";
+    guessed = "";
+    firstQuery().then((next) => {
+      if (next && shown === kind) (guessed = next), (query = next);
+    });
+  });
   let drawerOpen = $state(false);
   const label = $derived(params.kind[0].toUpperCase() + params.kind.slice(1));
 
