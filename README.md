@@ -130,23 +130,9 @@ Six hours is not arbitrary: the manifest behind those pages is memoised for six,
 so a shorter page TTL buys freshness the data does not have. What cuts it short
 is a purge — every cacheable response carries a `Cache-Tag` (`latest` or
 `pinned`, plus `b-<bundle>`), and `POST /internal/purge` drops them for a shared
-secret. Set it in two places: `pnpm wrangler secret put PURGE_TOKEN`, and the
-same value as a `PURGE_TOKEN` repository secret. Then add this to the end of
-`system-bundles.yml`, after `builds.json` goes up, so a new image shows up
-without waiting out the six hours:
-
-```yaml
-      - name: Drop cached pages that track the newest bundle
-        env:
-          TOKEN: ${{ secrets.PURGE_TOKEN }}
-        run: |
-          [ -n "$TOKEN" ] || { echo "PURGE_TOKEN not set, skipping"; exit 0; }
-          curl -fsS -X POST https://carrierexplode.com/internal/purge \
-            -H "authorization: Bearer $TOKEN" -H "content-type: application/json" \
-            -d '{"tags":["latest"]}'
-```
-
-Without the purge, pages simply age out.
+secret. `system-bundles.yml` calls it once every image in a run is in the bucket.
+Set the secret in two places: `pnpm wrangler secret put PURGE_TOKEN`, and the
+same value as a `PURGE_TOKEN` repository secret. Without the purge, pages simply age out.
 
 The cache is keyed by path, query and worker version, so a deploy starts cold
 and code changes need no purge. One cost to know about: with caching on,
