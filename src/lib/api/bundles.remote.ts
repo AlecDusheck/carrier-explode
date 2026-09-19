@@ -7,6 +7,7 @@ const id = v.object({ kind, name: v.string(), slug: v.optional(v.string()) });
 const pinned = v.object({ kind, name: v.string(), slug: v.string() });
 
 export const getIndex = query(() => data.getIndex());
+export const getStats = query(() => data.getStats());
 export const guessCarrier = query(() => data.guessCarrier());
 export const guessCountry = query(() => data.guessCountry());
 export const getBundle = query(id, (a) => data.getBundle(a.kind, a.name, a.slug));

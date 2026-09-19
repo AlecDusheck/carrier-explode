@@ -80,7 +80,10 @@ async function overBudget(event: RequestEvent): Promise<Response | null> {
 // s-maxage is what the shared cache holds; max-age=0 keeps browsers asking, so a
 // new bundle or a purge reaches people as soon as the shared copy turns over.
 const PINNED = "public, max-age=0, s-maxage=86400, stale-while-revalidate=2592000";
-const LATEST = "public, max-age=0, s-maxage=600, stale-while-revalidate=86400";
+// Six hours matches the manifest memo in lib/server/data.ts: a shorter page TTL
+// buys freshness the data behind it does not have, and a longer one outlives it.
+// An ingest purges "latest" when it lands, which is what actually cuts it short.
+const LATEST = "public, max-age=0, s-maxage=21600, stale-while-revalidate=86400";
 const MISSING = "public, max-age=0, s-maxage=60";
 const PRIVATE = "private, no-store";
 
@@ -108,7 +111,15 @@ export const handle: Handle = async ({ event, resolve }) => {
   const response = await resolve(event);
   // /raw sets its own, and remote calls are no-store already.
   if (!response.headers.has("cache-control")) {
-    response.headers.set("cache-control", cacheControl(event, response.status));
+    const policy = cacheControl(event, response.status);
+    response.headers.set("cache-control", policy);
+    // What a purge can name later. A page pinned to a version holds a fixed
+    // bundle; everything else tracks the newest one and goes stale on ingest.
+    if (policy.startsWith("public")) {
+      const tags = [event.params.version ? "pinned" : "latest"];
+      if (event.params.name) tags.push(`b-${event.params.name}`);
+      response.headers.set("cache-tag", tags.join(","));
+    }
   }
   return response;
 };

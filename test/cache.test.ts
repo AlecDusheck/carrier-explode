@@ -12,11 +12,12 @@ const event = (opts: { method?: string; remote?: boolean; version?: string; perV
 describe("cacheControl", () => {
   it("holds a pinned version far longer than a page that tracks newest", () => {
     expect(cacheControl(event({ version: "ios-27.0" }), 200)).toContain("s-maxage=86400");
-    expect(cacheControl(event(), 200)).toContain("s-maxage=600");
+    // Six hours: the manifest behind it is memoised for six, and an ingest purges.
+    expect(cacheControl(event(), 200)).toContain("s-maxage=21600");
   });
 
   it("caches the redirect off /", () => {
-    expect(cacheControl(event(), 307)).toContain("s-maxage=600");
+    expect(cacheControl(event(), 307)).toContain("s-maxage=21600");
   });
 
   it("keeps a 404 briefly and never keeps an error", () => {

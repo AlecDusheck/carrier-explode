@@ -8,7 +8,7 @@
   import { goto } from "$app/navigation";
   import { page, navigating } from "$app/state";
   import type { Attachment } from "svelte/attachments";
-  import { getIndex, guessCarrier, guessCountry } from "$lib/api/bundles.remote";
+  import { getIndex, getStats, guessCarrier, guessCountry } from "$lib/api/bundles.remote";
   import { bundleHref, link } from "$lib/format";
   import { menuTrigger, copyText } from "$lib/ui-state.svelte";
   import Pane from "$lib/components/Pane.svelte";
@@ -40,19 +40,32 @@
   // This layout survives the move between two lists, so nothing re-runs on its
   // own. A carrier search means nothing in the country list: drop it and guess
   // again for the list now on screen.
-  let shown = "";
+  let listed = "";
   $effect(() => {
     const kind = params.kind;
-    if (!shown) return void (shown = kind); // the guess above already covered this one
-    if (kind === shown) return;
-    shown = kind;
+    if (!listed) return void (listed = kind); // the guess above already covered this one
+    if (kind === listed) return;
+    listed = kind;
     query = "";
     guessed = "";
     firstQuery().then((next) => {
-      if (next && shown === kind) (guessed = next), (query = next);
+      if (next && listed === kind) (guessed = next), (query = next);
     });
   });
   let drawerOpen = $state(false);
+
+  // With nothing selected the list is the page. With a bundle open it is
+  // navigation — and on a phone it sits in a closed drawer — so 782 links are
+  // neither rendered nor serialised into the page until something wants them.
+  let wanted = $state(false);
+  $effect(() => {
+    const wide = window.matchMedia("(min-width: 761px)");
+    const check = () => (wanted ||= drawerOpen || wide.matches);
+    check();
+    wide.addEventListener("change", check);
+    return () => wide.removeEventListener("change", check);
+  });
+  const showList = $derived(!params.name || wanted);
   const label = $derived(params.kind[0].toUpperCase() + params.kind.slice(1));
 
   // The row lights up on click, before the bundle behind it has loaded.
@@ -82,6 +95,7 @@
       {#if fromIp}<span class="chip" style="align-self:center" title="Guessed from your IP address">from IP</span>{/if}
       <button class="btn drawer-btn" onclick={() => (drawerOpen = false)}>Close</button>
     </div>
+    {#if showList}
     <Pane>
       {@const all = (await getIndex())[params.kind]}
       {@const q = query.trim().toLowerCase()}
@@ -111,6 +125,7 @@
         <span class="cell grow">{shown.length} of {all.length}</span>
       </div>
     </Pane>
+    {/if}
   </div>
 
   <div class="backdrop" class:open={drawerOpen} onclick={() => (drawerOpen = false)} role="presentation"></div>
@@ -119,7 +134,7 @@
     <div class="toolbar drawer-bar">
       <button class="btn drawer-btn drawer-open" onclick={() => (drawerOpen = true)}>
         {label}
-        <Pane quiet>({(await getIndex())[params.kind].length})</Pane>
+        <Pane quiet>({(await getStats())[params.kind]})</Pane>
       </button>
     </div>
     {@render children()}

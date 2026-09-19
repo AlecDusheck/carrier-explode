@@ -3,5 +3,6 @@
 User-agent: *
 Disallow: /raw/
 Disallow: /compare
+Disallow: /internal/
 
 Sitemap: https://carrierexplode.com/sitemap.xml
