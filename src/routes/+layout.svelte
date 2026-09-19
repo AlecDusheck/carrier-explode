@@ -1,7 +1,7 @@
 <script lang="ts">
   import "$lib/ui.css";
   import { page, navigating } from "$app/state";
-  import { getIndex } from "$lib/api/bundles.remote";
+  import { getStats } from "$lib/api/bundles.remote";
   import { link } from "$lib/format";
   import { SITE, seo } from "$lib/seo";
   import { scan } from "$lib/ui-state.svelte";
@@ -58,9 +58,9 @@
     <div class="statusbar">
       <span class="cell grow">
         <Pane quiet>
-          {@const idx = await getIndex()}
-          {idx.carriers.length} carriers, {idx.countries.length} countries
-          {#if idx.builds[0]}&middot; iOS {idx.builds[0].version} ({idx.builds[0].build}){/if}
+          {@const stats = await getStats()}
+          {stats.carriers} carriers, {stats.countries} countries
+          {#if stats.build}&middot; iOS {stats.version} ({stats.build}){/if}
         </Pane>
       </span>
       {#if page.params.name}<span class="cell">{page.params.name}</span>{/if}

@@ -7,6 +7,8 @@ declare global {
     interface Platform {
       env: {
         SYSTEM: R2Bucket;
+        /** Shared secret for /internal/purge; set with `wrangler secret put PURGE_TOKEN`. */
+        PURGE_TOKEN?: string;
         /** Rate limiters, one budget each. Absent under `vite dev`, where the hook fails open. */
         RL_SCAN?: RateLimit;
         RL_DIFF?: RateLimit;

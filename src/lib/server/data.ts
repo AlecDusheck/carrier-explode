@@ -131,6 +131,20 @@ export async function getIndex() {
   };
 }
 
+/** Just the numbers the chrome shows. Awaiting getIndex() anywhere puts the
+ *  whole list in the page for hydration; this is a few bytes instead. */
+export async function getStats() {
+  const idx = await getIndex();
+  const newest = idx.builds[0];
+  return {
+    carriers: idx.carriers.length,
+    countries: idx.countries.length,
+    watch: idx.watch.length,
+    build: newest?.build,
+    version: newest?.version,
+  };
+}
+
 /* ---------------------------------------------------------------- timeline */
 
 export async function getTimeline(kind: Kind, name: string): Promise<TimelineEntry[]> {

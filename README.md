@@ -126,12 +126,39 @@ keep asking and a turned-over copy reaches them at once. Both lists opt out:
 from where they are, so `guessCarrier()` and `guessCountry()` set
 `locals.perVisitor` and neither page is ever shared.
 
+Six hours is not arbitrary: the manifest behind those pages is memoised for six,
+so a shorter page TTL buys freshness the data does not have. What cuts it short
+is a purge — every cacheable response carries a `Cache-Tag` (`latest` or
+`pinned`, plus `b-<bundle>`), and `POST /internal/purge` drops them for a shared
+secret. Set it in two places: `pnpm wrangler secret put PURGE_TOKEN`, and the
+same value as a `PURGE_TOKEN` repository secret. Then add this to the end of
+`system-bundles.yml`, after `builds.json` goes up, so a new image shows up
+without waiting out the six hours:
+
+```yaml
+      - name: Drop cached pages that track the newest bundle
+        env:
+          TOKEN: ${{ secrets.PURGE_TOKEN }}
+        run: |
+          [ -n "$TOKEN" ] || { echo "PURGE_TOKEN not set, skipping"; exit 0; }
+          curl -fsS -X POST https://carrierexplode.com/internal/purge \
+            -H "authorization: Bearer $TOKEN" -H "content-type: application/json" \
+            -d '{"tags":["latest"]}'
+```
+
+Without the purge, pages simply age out.
+
 The cache is keyed by path, query and worker version, so a deploy starts cold
-and code changes need no purge. New bundles land without a deploy, which is what
-the TTLs above are sized for; `ctx.cache.purge({ pathPrefixes })` is there if the
-ingest workflow ever needs to cut that short. One cost to know about: with
-caching on, requests that are normally free — static assets included — bill at
-the standard Workers request rate.
+and code changes need no purge. One cost to know about: with caching on,
+requests that are normally free — static assets included — bill at the standard
+Workers request rate.
+
+Page weight: the carrier list is ~780 links, and rendering it server-side costs
+twice — once as markup, once as the query result serialised for hydration. It is
+the page on `/carriers` and `/countries`, so it stays there; on a bundle page it
+is navigation, hidden in a closed drawer on a phone, so it is left out of the
+render and fetched when something wants it. Crawlers still find every bundle
+through `sitemap.xml` and the two list pages.
 
 Search and preview: `src/lib/seo.ts` builds every page's title and description
 from the route alone — no data fetch, so the head is right even when a pane
