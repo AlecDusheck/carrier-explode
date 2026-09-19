@@ -333,7 +333,11 @@ export async function scanKey(path: string, file: string, scope: string, limit: 
 
 /** On a phone, a carrier search guessed from the network the request came in on. */
 export async function guessCarrier(): Promise<string | null> {
-  const { request, platform } = getRequestEvent();
+  const { request, platform, locals } = getRequestEvent();
+  // The answer is the visitor's own network and device, so whatever rendered it
+  // is theirs alone. A remote function cannot set a header, but it shares locals
+  // with the page event, and hooks.server.ts reads this before it decides.
+  locals.perVisitor = true;
   if (!/Mobi|Android|iPhone/i.test(request.headers.get("user-agent") ?? "")) return null;
   return guessCarrierQuery(platform?.cf?.asOrganization, (await getIndex()).carriers);
 }

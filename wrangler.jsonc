@@ -13,6 +13,11 @@
   "assets": { "binding": "ASSETS", "directory": ".svelte-kit/cloudflare" },
   // Bundles pulled out of an IPSW by scripts/extract_system_bundles.py
   "r2_buckets": [{ "binding": "SYSTEM", "bucket_name": "carrier-explode", "remote": true }],
+  // Cloudflare checks this worker's own cache before running it, and honours the
+  // Cache-Control that src/hooks.server.ts puts on every response. Zone cache
+  // settings — Cache Everything, cache rules, page rules — never apply to what a
+  // worker returns, only to the subrequests it makes.
+  "cache": { "enabled": true },
   "observability": { "enabled": true },
   "placement": { "mode": "smart" }
   // Optional durable cache layer. Create with:

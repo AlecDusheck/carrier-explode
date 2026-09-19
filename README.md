@@ -111,6 +111,27 @@ tables go through the Cache API, and `.ipcc` fetches use `cf.cacheTtl` so each
 file is pulled from Apple once. The Cache API is a no-op on `*.workers.dev`,
 hence the custom domain.
 
+Whole pages are cached too, by Workers Cache (`"cache"` in `wrangler.jsonc`),
+which answers a hit before this worker runs at all — no CPU, no R2, no trip to
+Apple — and collapses a burst on a cold URL into one render. It is the worker's
+own cache, not the zone's: cache rules, page rules and Cache Everything do not
+reach a response a worker returns, and the `Cache-Control` header is the whole
+configuration surface. So `src/hooks.server.ts` puts one on every response: a day
+for a page pinned to a version, ten minutes for one that tracks the newest
+bundle, a minute for a 404, and `no-store` for errors, POSTs and remote calls —
+without a header they would instead get RFC 9111 heuristic freshness, which is
+how an error page ends up stuck in a cache. `max-age=0` throughout, so browsers
+keep asking and a turned-over copy reaches them at once. `/carriers` opts out:
+the search box there is prefilled from the visitor's own network and user agent,
+so `guessCarrier()` sets `locals.perVisitor` and that page is never shared.
+
+The cache is keyed by path, query and worker version, so a deploy starts cold
+and code changes need no purge. New bundles land without a deploy, which is what
+the TTLs above are sized for; `ctx.cache.purge({ pathPrefixes })` is there if the
+ingest workflow ever needs to cut that short. One cost to know about: with
+caching on, requests that are normally free — static assets included — bill at
+the standard Workers request rate.
+
 ## Known gaps
 - Carrier bundles have no cell-broadcast alert schema at all, just throttling
   knobs. Country bundles are the only place it lives.
