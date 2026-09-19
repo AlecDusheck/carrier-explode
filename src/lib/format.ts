@@ -45,8 +45,18 @@ export const bundleArgs = (p: { kind: Kind; name: string; version?: string }) =>
   p.version ? { kind: p.kind, name: p.name, slug: p.version } : { kind: p.kind, name: p.name };
 
 export function errorMessage(e: unknown): string {
-  const x = e as { body?: { message?: string }; message?: string } | null;
-  return x?.body?.message ?? x?.message ?? String(e);
+  const x = e as { status?: number; body?: { message?: string }; message?: string } | null;
+  const said = x?.body?.message ?? x?.message;
+  if (said) return said;
+  // Anything that arrives in another shape still has to say something: String()
+  // on a bare object renders "[object Object]", which tells nobody anything.
+  let shape: string;
+  try {
+    shape = typeof e === "object" && e !== null ? JSON.stringify(e) : String(e);
+  } catch {
+    shape = String(e);
+  }
+  return x?.status ? `HTTP ${x.status} · ${shape}` : `Unexpected error: ${shape}`;
 }
 
 export function hexDump(hex: string, withOffsets = false): string {

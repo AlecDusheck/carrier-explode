@@ -4,6 +4,10 @@
 
   let { error, reset, quiet }: { error: unknown; reset: () => void; quiet: boolean } = $props();
 
+  // Observability keeps worker logs, so put the thing itself where it can be
+  // read: the banner only ever shows a line of it.
+  console.error("[pane]", page.url.pathname, error);
+
   // A failed boundary stays failed. Moving to another URL should try again with the new inputs.
   const failedAt = page.url.href;
   $effect(() => {
