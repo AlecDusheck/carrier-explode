@@ -18,6 +18,14 @@
   // settings — Cache Everything, cache rules, page rules — never apply to what a
   // worker returns, only to the subrequests it makes.
   "cache": { "enabled": true },
+  // Per-IP budgets enforced in src/hooks.server.ts. Limits are per Cloudflare
+  // location, and a period may only be 10 or 60 seconds.
+  "ratelimits": [
+    { "name": "RL_SCAN", "namespace_id": "7010", "simple": { "limit": 10, "period": 60 } },
+    { "name": "RL_DIFF", "namespace_id": "7020", "simple": { "limit": 20, "period": 60 } },
+    { "name": "RL_BUNDLE", "namespace_id": "7030", "simple": { "limit": 60, "period": 60 } },
+    { "name": "RL_BASE", "namespace_id": "7040", "simple": { "limit": 120, "period": 60 } }
+  ],
   "observability": { "enabled": true },
   "placement": { "mode": "smart" }
   // Optional durable cache layer. Create with:
