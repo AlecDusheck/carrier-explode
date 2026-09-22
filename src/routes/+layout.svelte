@@ -61,6 +61,7 @@
           {@const stats = await getStats()}
           {stats.carriers} carriers, {stats.countries} countries
           {#if stats.build}&middot; iOS {stats.version} ({stats.build}){/if}
+          {#if stats.beta}&middot; beta iOS {stats.beta.version} ({stats.beta.build}){/if}
         </Pane>
       </span>
       {#if page.params.name}<span class="cell">{page.params.name}</span>{/if}

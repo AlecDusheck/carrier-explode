@@ -23,7 +23,8 @@ import { diffValues, summariseDiff } from "./diff";
 import { guessCarrierQuery } from "./guess";
 import { keyScan, type ScanTarget } from "./keyscan";
 import { carriersOf, homeCountry, isoIndex, type CountryPlists } from "./related";
-import { buildTimeline, type ImageBuild, type ImageIndex, type TimelineEntry } from "./timeline";
+import { buildTimeline, headIndex, type ImageBuild, type ImageIndex, type TimelineEntry } from "./timeline";
+import { imageSlug, isPrerelease } from "$lib/names";
 
 export type { ImageBuild, TimelineEntry };
 
@@ -51,6 +52,13 @@ export const builds = () =>
     return list?.length ? list : null;
   }).then((b) => b ?? []);
 
+/**
+ * The newest image that is not a beta: what "current" means for the lists, the
+ * status bar and the cross-country tables. Betas sit in builds() and in each
+ * bundle's timeline, but a beta is not what most phones are running.
+ */
+export const release = (all: ImageBuild[]) => all.find((b) => !isPrerelease(b.version)) ?? all[0];
+
 /** An image's index never changes once written. */
 const imageIndex = (build: string) =>
   memo(`image:${build}`, 24 * 3600_000, () => r2json<ImageIndex>(`system/${build}/index.json`));
@@ -60,9 +68,9 @@ async function imageIndexes(): Promise<ImageIndex[]> {
   return all.filter((x): x is ImageIndex => !!x);
 }
 
-/** Every country carrier.plist from the newest image, decoded. */
+/** Every country carrier.plist from the current release, decoded. */
 const countryPlists = async () => {
-  const newest = (await builds())[0];
+  const newest = release(await builds());
   if (!newest) return {} as CountryPlists;
   return (await memo(`countries:${newest.build}`, 24 * 3600_000, () =>
     r2json<CountryPlists>(`system/${newest.build}/countries.json`))) ?? {};
@@ -88,15 +96,15 @@ export interface ListEntry {
   name: string;
   display: string;
   cc?: string;
-  /** Bundle build inside the newest image, when it ships there. */
+  /** Bundle build inside the current release image, when it ships there. */
   image?: string;
   /** Distinct OTA builds published. */
   ota: number;
 }
 
 export async function getIndex() {
-  const [m, images] = await Promise.all([manifest(), imageIndexes()]);
-  const newest = images[0];
+  const [m, images, all] = await Promise.all([manifest(), imageIndexes(), builds()]);
+  const newest = images.find((i) => i.build === release(all)?.build);
 
   const carriers = new Map<string, ListEntry>();
   for (const c of m.index.carriers) {
@@ -128,7 +136,7 @@ export async function getIndex() {
     carriers: [...carriers.values()].sort(byName),
     countries: [...countries.values()].sort(byName),
     watch: m.index.watchCarriers.map((c) => ({ name: c.name, display: c.display, cc: c.cc, ota: c.versions.length })),
-    builds: await builds(),
+    builds: all,
     manifestFetchedAt: m.fetchedAt,
   };
 }
@@ -137,13 +145,15 @@ export async function getIndex() {
  *  whole list in the page for hydration; this is a few bytes instead. */
 export async function getStats() {
   const idx = await getIndex();
-  const newest = idx.builds[0];
+  const newest = release(idx.builds);
+  const beta = idx.builds[0] && isPrerelease(idx.builds[0].version) ? idx.builds[0] : undefined;
   return {
     carriers: idx.carriers.length,
     countries: idx.countries.length,
     watch: idx.watch.length,
     build: newest?.build,
     version: newest?.version,
+    beta: beta && { build: beta.build, version: beta.version },
   };
 }
 
@@ -159,8 +169,8 @@ export async function getTimeline(kind: Kind, name: string): Promise<TimelineEnt
 async function resolve(kind: Kind, name: string, slug?: string) {
   const timeline = await getTimeline(kind, name);
   const i = slug
-    ? timeline.findIndex((e) => e.slug === slug || (e.source === "image" && e.ios.some((v) => `ios-${v}` === slug)))
-    : 0;
+    ? timeline.findIndex((e) => e.slug === slug || (e.source === "image" && e.ios.some((v) => imageSlug(v) === slug)))
+    : headIndex(timeline);
   if (i < 0) error(404, `${name} has no version ${slug}`);
   // "Previous" skips per-model variants unless we are on one.
   const entry = timeline[i];
@@ -314,7 +324,7 @@ export async function getRelease(build: string) {
 
 export async function getCbs() {
   const [m, all] = await Promise.all([manifest(), builds()]);
-  const newest = all[0];
+  const newest = release(all);
   return cached(`cbs:v2:${newest?.build ?? "ota"}:${m.fetchedAt.slice(0, 10)}`, 86400, async () => {
     const idx = newest && (await imageIndex(newest.build));
     const plists = newest && (await r2json<Record<string, Record<string, unknown>>>(`system/${newest.build}/countries.json`));
@@ -335,10 +345,11 @@ export async function scanKey(path: string, file: string, scope: string, limit: 
   const names = idx[kind].filter((e) => !cc || e.cc === cc);
   // Bundles that ship in the current image first: those are the live ones.
   names.sort((a, b) => Number(!!b.image) - Number(!!a.image) || a.name.localeCompare(b.name));
-  return cached(`scan:v2:${scope}|${file}|${path}|${limit}|${idx.builds[0]?.build}`, 7 * 86400, async () => {
+  return cached(`scan:v2:${scope}|${file}|${path}|${limit}|${release(idx.builds)?.build}`, 7 * 86400, async () => {
     const targets: ScanTarget[] = [];
     for (const e of names.slice(0, limit)) {
-      const head = (await getTimeline(kind, e.name)).find((t) => !t.productType);
+      const t = await getTimeline(kind, e.name);
+      const head = t[headIndex(t)];
       if (head) targets.push({ name: e.name, display: e.display, cc: e.cc, ref: { os: head.ios.at(-1) ?? "", build: head.build, url: head.src } });
     }
     const result = await keyScan(targets, file, path, async (src) => (await open(src)).bytes, scope, limit);

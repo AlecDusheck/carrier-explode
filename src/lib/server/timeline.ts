@@ -3,7 +3,8 @@
  * number, which is how the phone decides which copy wins.
  */
 
-import { compareVersions, type BundleRef, type CountrySummary } from "./manifest";
+import { compareVersions, imageSlug, isPrerelease } from "$lib/names";
+import type { BundleRef, CountrySummary } from "./manifest";
 
 export interface ImageBuild { build: string; version: string; device: string; product?: string; extractedAt: string; scheme?: number }
 /** `id` is the content hash the blob is stored under; only comparable within one `scheme`. */
@@ -14,7 +15,7 @@ export interface ImageIndex extends ImageBuild {
 }
 
 export interface TimelineEntry {
-  /** URL segment: ios-27.0, ota-58.1, ota-58.1-iPad, ota-legacy. */
+  /** URL segment: ios-27.0, ios-27.2-beta-3, ota-58.1, ota-58.1-iPad, ota-legacy. */
   slug: string;
   source: "image" | "ota";
   /** iOS versions: the images that carry this exact bundle, or the OTA minimum-OS keys. */
@@ -23,6 +24,8 @@ export interface TimelineEntry {
   productType?: string;
   /** False when the content is identical to the entry below it. */
   changed: boolean;
+  /** Only ever shipped in beta images: newest, but not what a phone on a release runs. */
+  beta?: boolean;
   /** Where the bytes live: blob:<content id> or an Apple URL. Never sent to the browser as a link target for blobs. */
   src: string;
   /** Image entries: content id, its scheme, and the newest image build carrying it. */
@@ -54,7 +57,7 @@ export function buildTimeline(
       if (last?.id === b.id && last.scheme === (img.scheme ?? 1)) last.ios.push(img.version);
       else {
         out.push({
-          slug: `ios-${img.version}`, source: "image", ios: [img.version], build: b.build,
+          slug: imageSlug(img.version), source: "image", ios: [img.version], build: b.build,
           changed: true, src: `blob:${b.id}`, id: b.id, scheme: img.scheme ?? 1, image: img.build,
         });
       }
@@ -91,7 +94,10 @@ export function buildTimeline(
     Number(!!a.productType) - Number(!!b.productType) ||
     compareVersions(b.build || "0", a.build || "0") ||
     Number(b.source === "image") - Number(a.source === "image"));
-  for (const e of out) e.ios.sort(compareVersions);
+  for (const e of out) {
+    e.ios.sort(compareVersions);
+    if (e.source === "image" && e.ios.every(isPrerelease)) e.beta = true;
+  }
 
   // Image blobs are re-zipped, so bytes cannot be compared across sources; the bundle's
   // own build number can. An entry is unchanged when the one below it is the same build.
@@ -110,4 +116,14 @@ export function buildTimeline(
     if (n > 1) e.slug += e.image ? `-${e.image}` : `-${n}`;
   }
   return out;
+}
+
+/**
+ * The version a page shows when none is named: the newest plain bundle that a
+ * release carries. Beta-only builds and per-model variants are one click away
+ * in the timeline, but they are not what most phones run.
+ */
+export function headIndex(timeline: TimelineEntry[]): number {
+  const i = timeline.findIndex((e) => !e.productType && !e.beta);
+  return i >= 0 ? i : Math.max(0, timeline.findIndex((e) => !e.productType));
 }

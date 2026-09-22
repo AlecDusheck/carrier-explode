@@ -4,6 +4,9 @@
  */
 
 import { parsePlist, type PlistValue, bytesToHex } from "./plist";
+import { compareVersions, countryName, splitName, versionKey } from "$lib/names";
+
+export { compareVersions, countryName, splitName, versionKey };
 
 export const MANIFEST_URL =
   "https://itunes.apple.com/WebObjects/MZStore.woa/wa/com.apple.jingle.appserver.client.MZITunesClientCheck/version";
@@ -65,57 +68,6 @@ export interface ManifestIndex {
 type Dict = Record<string, PlistValue>;
 const isDict = (v: PlistValue | undefined): v is Dict =>
   !!v && typeof v === "object" && !Array.isArray(v) && !(v instanceof Uint8Array) && !(v instanceof Date);
-
-export function versionKey(v: string): number[] {
-  const parts = v.split(".").map((p) => parseInt(p, 10));
-  return parts.map((p) => (Number.isNaN(p) ? -1 : p));
-}
-
-export function compareVersions(a: string, b: string): number {
-  const A = versionKey(a), B = versionKey(b);
-  for (let i = 0; i < Math.max(A.length, B.length); i++) {
-    const d = (A[i] ?? 0) - (B[i] ?? 0);
-    if (d) return d;
-  }
-  return 0;
-}
-
-const ISO_NAMES: Record<string, string> = {
-  ad:"Andorra",ae:"United Arab Emirates",af:"Afghanistan",ag:"Antigua & Barbuda",al:"Albania",am:"Armenia",ao:"Angola",ar:"Argentina",at:"Austria",au:"Australia",aw:"Aruba",az:"Azerbaijan",
-  ba:"Bosnia & Herzegovina",bb:"Barbados",bd:"Bangladesh",be:"Belgium",bf:"Burkina Faso",bg:"Bulgaria",bh:"Bahrain",bi:"Burundi",bj:"Benin",bm:"Bermuda",bn:"Brunei",bo:"Bolivia",br:"Brazil",bs:"Bahamas",bt:"Bhutan",bw:"Botswana",by:"Belarus",bz:"Belize",
-  ca:"Canada",cd:"DR Congo",cf:"Central African Rep.",cg:"Congo",ch:"Switzerland",ci:"Côte d'Ivoire",cl:"Chile",cm:"Cameroon",cn:"China",co:"Colombia",cr:"Costa Rica",cu:"Cuba",cv:"Cabo Verde",cw:"Curaçao",cy:"Cyprus",cz:"Czechia",
-  de:"Germany",dk:"Denmark",dm:"Dominica",do:"Dominican Rep.",dz:"Algeria",
-  ec:"Ecuador",ee:"Estonia",eg:"Egypt",er:"Eritrea",es:"Spain",et:"Ethiopia",
-  fi:"Finland",fj:"Fiji",fo:"Faroe Islands",fr:"France",
-  ga:"Gabon",gb:"United Kingdom",gd:"Grenada",ge:"Georgia",gf:"French Guiana",gh:"Ghana",gi:"Gibraltar",gl:"Greenland",gm:"Gambia",gn:"Guinea",gp:"Guadeloupe",gq:"Equatorial Guinea",gr:"Greece",gt:"Guatemala",gu:"Guam",gw:"Guinea-Bissau",gy:"Guyana",
-  hk:"Hong Kong",hn:"Honduras",hr:"Croatia",ht:"Haiti",hu:"Hungary",
-  id:"Indonesia",ie:"Ireland",il:"Israel",im:"Isle of Man",in:"India",iq:"Iraq",ir:"Iran",is:"Iceland",it:"Italy",
-  je:"Jersey",jm:"Jamaica",jo:"Jordan",jp:"Japan",
-  ke:"Kenya",kg:"Kyrgyzstan",kh:"Cambodia",km:"Comoros",kn:"St Kitts & Nevis",kr:"South Korea",kw:"Kuwait",ky:"Cayman Islands",kz:"Kazakhstan",
-  la:"Laos",lb:"Lebanon",lc:"St Lucia",li:"Liechtenstein",lk:"Sri Lanka",lr:"Liberia",ls:"Lesotho",lt:"Lithuania",lu:"Luxembourg",lv:"Latvia",ly:"Libya",
-  ma:"Morocco",mc:"Monaco",md:"Moldova",me:"Montenegro",mg:"Madagascar",mk:"North Macedonia",ml:"Mali",mm:"Myanmar",mn:"Mongolia",mo:"Macao",mq:"Martinique",mr:"Mauritania",ms:"Montserrat",mt:"Malta",mu:"Mauritius",mv:"Maldives",mw:"Malawi",mx:"Mexico",my:"Malaysia",mz:"Mozambique",
-  na:"Namibia",nc:"New Caledonia",ne:"Niger",ng:"Nigeria",ni:"Nicaragua",nl:"Netherlands",no:"Norway",np:"Nepal",nz:"New Zealand",
-  om:"Oman",pa:"Panama",pe:"Peru",pf:"French Polynesia",pg:"Papua New Guinea",ph:"Philippines",pk:"Pakistan",pl:"Poland",pm:"St Pierre & Miquelon",pr:"Puerto Rico",ps:"Palestine",pt:"Portugal",pw:"Palau",py:"Paraguay",
-  qa:"Qatar",re:"Réunion",ro:"Romania",rs:"Serbia",ru:"Russia",rw:"Rwanda",
-  sa:"Saudi Arabia",sb:"Solomon Islands",sc:"Seychelles",sd:"Sudan",se:"Sweden",sg:"Singapore",si:"Slovenia",sk:"Slovakia",sl:"Sierra Leone",sm:"San Marino",sn:"Senegal",so:"Somalia",sr:"Suriname",ss:"South Sudan",sv:"El Salvador",sx:"Sint Maarten",sy:"Syria",sz:"Eswatini",
-  tc:"Turks & Caicos",td:"Chad",tg:"Togo",th:"Thailand",tj:"Tajikistan",tl:"Timor-Leste",tm:"Turkmenistan",tn:"Tunisia",to:"Tonga",tr:"Türkiye",tt:"Trinidad & Tobago",tw:"Taiwan",tz:"Tanzania",
-  ua:"Ukraine",ug:"Uganda",us:"United States",uy:"Uruguay",uz:"Uzbekistan",
-  va:"Vatican City",vc:"St Vincent",ve:"Venezuela",vg:"British Virgin Is.",vi:"US Virgin Is.",vn:"Vietnam",vu:"Vanuatu",ws:"Samoa",ye:"Yemen",za:"South Africa",zm:"Zambia",zw:"Zimbabwe",
-};
-
-export function countryName(cc?: string): string | undefined {
-  // Own properties only: "constructor" is not a country.
-  return cc && Object.hasOwn(ISO_NAMES, cc) ? ISO_NAMES[cc] : undefined;
-}
-
-/** `Verizon_Charter_LTE_US` -> { cc: "us", display: "Verizon Charter LTE" } */
-export function splitName(name: string): { cc?: string; display: string } {
-  const m = /^(.*)_([A-Za-z]{2})$/.exec(name);
-  if (m && Object.hasOwn(ISO_NAMES, m[2].toLowerCase())) {
-    return { cc: m[2].toLowerCase(), display: m[1].replace(/_/g, " ") };
-  }
-  return { display: name.replace(/_/g, " ") };
-}
 
 function refFromEntry(os: string, e: Dict, productType?: string): BundleRef | null {
   const url = e.BundleURL;

@@ -6,23 +6,29 @@ Prints a JSON list of {version, build, device} for every release that is newer
 than the floor (--since, else the oldest image held) and not held yet. Asking only for "latest"
 would skip a release whenever two ship between runs.
 
+Betas come after the releases: every beta newer than the newest public release
+that is not held yet, as {version: "27.2 beta 2", build, device, url, beta: true}.
+ipsw.me does not list betas, so they come from AppleDB, which carries Apple's own
+IPSW links for them. A beta for a release that has already shipped is not
+fetched: the point is to see bundle changes before they reach phones.
+
     plan_system_bundles.py --builds builds.json [--device iPhone17,1] [--version 26.4] [--max 3]
 """
 
 import argparse
 import json
+import re
+import sys
 import urllib.request
 from pathlib import Path
+
+from versions import version_key
 
 
 def api(path: str):
     req = urllib.request.Request("https://api.ipsw.me/v4" + path, headers={"User-Agent": "carrier-explode"})
     with urllib.request.urlopen(req) as r:
         return json.load(r)
-
-
-def vkey(v: str) -> list[int]:
-    return [int(x) if x.isdigit() else 0 for x in v.split(".")]
 
 
 def newest_iphone() -> str:
@@ -43,7 +49,7 @@ def plan(held: list[dict], preferred: list[dict], fallback: list[dict],
     """
     builds = {b.get("build") for b in held}
     held_from = {b["version"]: b.get("product") for b in held}
-    floor = vkey(since) if since else min((vkey(b["version"]) for b in held), default=None)
+    floor = version_key(since) if since else min((version_key(b["version"]) for b in held), default=None)
 
     chosen: dict[str, dict] = {}
     for fw in [*fallback, *preferred]:  # preferred last, so it wins
@@ -52,18 +58,68 @@ def plan(held: list[dict], preferred: list[dict], fallback: list[dict],
             if v != only:
                 continue
         else:
-            if fw["buildid"] in builds or (floor is not None and vkey(v) < floor):
+            if fw["buildid"] in builds or (floor is not None and version_key(v) < floor):
                 continue
             if v in held_from and held_from[v] not in (None, device):
                 continue
         chosen[v] = {"version": v, "build": fw["buildid"], "device": device}
 
-    out = sorted(chosen.values(), key=lambda x: vkey(x["version"]))
+    out = sorted(chosen.values(), key=lambda x: version_key(x["version"]))
     # No floor at all: take just the newest rather than all of history.
     if floor is None and not only:
         return out[-1:]
     # Oldest first, so history fills in order across runs.
     return out[:cap]
+
+
+# 24B5089g: build 24, train B, and a lowercase suffix because it is a beta.
+BETA_BUILD = re.compile(r"^(\d+)([A-Z])\d+[a-z]$")
+RELEASE_BUILD = re.compile(r"^(\d+)([A-Z])\d+$")
+
+
+def train(build: str) -> tuple[int, str] | None:
+    m = BETA_BUILD.match(build) or RELEASE_BUILD.match(build)
+    return (int(m.group(1)), m.group(2)) if m else None
+
+
+def beta_candidates(keys: list[str], held: list[dict], releases: list[dict]) -> list[str]:
+    """
+    Beta builds in AppleDB's index worth a closer look: not held, and on a later
+    train than the newest public release (24B5089g is past 24A437, so it is a
+    beta of what comes next). Cheap, so each run fetches only a handful.
+    """
+    have = {b.get("build") for b in held}
+    newest = max((train(f["buildid"]) for f in releases if train(f["buildid"])), default=None)
+    out = []
+    for k in keys:
+        os_, _, build = k.partition(";")
+        if os_ != "iOS" or not BETA_BUILD.match(build) or build in have:
+            continue
+        if newest is None or train(build) > newest:
+            out.append(build)
+    return out
+
+
+def plan_betas(entries: list[dict], device: str, cap: int) -> list[dict]:
+    """`entries` are AppleDB firmware records. Prefer `device`, else the newest iPhone the beta has."""
+    out = []
+    for e in entries:
+        if not e.get("beta"):
+            continue
+        ipsws = {d: v["ipsw"] for d, v in (e.get("devices") or {}).items()
+                 if d.startswith("iPhone") and isinstance(v, dict) and v.get("ipsw")}
+        if not ipsws:
+            continue
+        pick = device if device in ipsws else max(ipsws, key=lambda i: [int(x) for x in i.removeprefix("iPhone").split(",")])
+        out.append({"version": e["version"], "build": e["build"], "device": pick, "url": ipsws[pick], "beta": True})
+    out.sort(key=lambda x: version_key(x["version"]))
+    return out[:cap]
+
+
+def appledb(path: str):
+    req = urllib.request.Request("https://api.appledb.dev/ios/" + path, headers={"User-Agent": "carrier-explode"})
+    with urllib.request.urlopen(req, timeout=30) as r:
+        return json.load(r)
 
 
 def main() -> None:
@@ -73,12 +129,24 @@ def main() -> None:
     ap.add_argument("--version", default="", help="extract exactly this version, held or not")
     ap.add_argument("--since", default="", help="extract everything from this version up (default: oldest held)")
     ap.add_argument("--max", type=int, default=3)
+    ap.add_argument("--no-betas", dest="betas", action="store_false", help="releases only")
     a = ap.parse_args()
 
     held = json.loads(a.builds.read_text() or "[]") if a.builds.exists() else []
     fws = lambda ident: [{**f, "identifier": ident} for f in api(f"/device/{ident}?type=ipsw")["firmwares"]]
     probe = newest_iphone()
-    print(json.dumps(plan(held, fws(a.device), fws(probe) if probe != a.device else [], a.version or None, a.since or None, a.max)))
+    preferred, fallback = fws(a.device), (fws(probe) if probe != a.device else [])
+    out = plan(held, preferred, fallback, a.version or None, a.since or None, a.max)
+
+    # A beta is extracted only on the daily run or when asked for by build, and
+    # AppleDB being down never costs a release.
+    if not a.version and not a.since and a.betas and len(out) < a.max:
+        try:
+            builds = beta_candidates(appledb("index.json"), held, [*preferred, *fallback])
+            out += plan_betas([appledb(f"iOS;{b}.json") for b in builds], a.device, a.max - len(out))
+        except Exception as e:  # noqa: BLE001
+            print(f"betas skipped: {e}", file=sys.stderr)
+    print(json.dumps(out))
 
 
 if __name__ == "__main__":

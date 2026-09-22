@@ -11,7 +11,7 @@ indexes:
     system/builds.json              every image held, newest first
 
     package_system_bundles.py --carriers DIR --countries DIR --meta ipsw_metadata.json \
-        --out DIR [--builds existing-builds.json] [--have sha1-list.txt]
+        --out DIR [--builds existing-builds.json] [--have sha1-list.txt] [--version "27.2 beta 2"]
 """
 
 import argparse
@@ -21,6 +21,8 @@ import plistlib
 import zipfile
 from datetime import datetime, timezone
 from pathlib import Path
+
+from versions import merge
 
 
 # Bump when content_id() changes. The app never compares ids across schemes,
@@ -94,10 +96,6 @@ def package(src: Path, blobs: Path) -> dict:
     return out
 
 
-def version_key(v: str) -> list[int]:
-    return [int(x) if x.isdigit() else 0 for x in v.split(".")]
-
-
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--carriers", type=Path, required=True)
@@ -106,13 +104,15 @@ def main() -> None:
     ap.add_argument("--out", type=Path, required=True)
     ap.add_argument("--builds", type=Path, help="current system/builds.json, if any")
     ap.add_argument("--have", type=Path, help="content ids already in the bucket, one per line")
+    ap.add_argument("--version", help="version to record instead of the image's own; a beta image "
+                    "says 27.2, and only the planner knows it is 27.2 beta 2")
     a = ap.parse_args()
 
     meta = json.loads(a.meta.read_text())
     device = (meta.get("devices") or [{}])[0]
     index = {
         "scheme": SCHEME,
-        "version": meta["version"],
+        "version": a.version or meta["version"],
         "build": meta["build"],
         "device": device.get("name", ""),
         "product": device.get("product", ""),
@@ -126,9 +126,7 @@ def main() -> None:
     (sysdir / "countries.json").write_text(json.dumps(carrier_plists(a.countries), separators=(",", ":")))
 
     builds = json.loads(a.builds.read_text()) if a.builds and a.builds.exists() and a.builds.stat().st_size else []
-    builds = [b for b in builds if b["build"] != index["build"]]
-    builds.append({k: index[k] for k in ("build", "version", "device", "product", "extractedAt", "scheme")})
-    builds.sort(key=lambda b: (version_key(b["version"]), b["build"]), reverse=True)
+    builds = merge([builds, [{k: index[k] for k in ("build", "version", "device", "product", "extractedAt", "scheme")}]])
     (a.out / "builds.json").write_text(json.dumps(builds, separators=(",", ":")))
 
     # For `wrangler r2 bulk put`. builds.json goes up last, on its own, so the

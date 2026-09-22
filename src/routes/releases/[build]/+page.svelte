@@ -1,6 +1,7 @@
 <script lang="ts">
   import { getRelease } from "$lib/api/bundles.remote";
   import { bundleHref, link } from "$lib/format";
+  import { imageSlug } from "$lib/names";
   import Pane from "$lib/components/Pane.svelte";
 
   let { params } = $props();
@@ -12,7 +13,7 @@
   <div class="scroll pad">
     <Pane>
       {@const r = await getRelease(params.build)}
-      {@const slug = "ios-" + r.image.version}
+      {@const slug = imageSlug(r.image.version)}
       <div class="rowflex">
         <a class="btn" href={link("/releases")}>Releases</a>
         <b>iOS {r.image.version}</b>
