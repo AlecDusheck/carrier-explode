@@ -138,9 +138,10 @@ def main() -> None:
     preferred, fallback = fws(a.device), (fws(probe) if probe != a.device else [])
     out = plan(held, preferred, fallback, a.version or None, a.since or None, a.max)
 
-    # A beta is extracted only on the daily run or when asked for by build, and
+    # Not when one version was asked for. --since is only a floor for releases
+    # (MIN_VERSION fills it on every run), and betas are above it anyway.
     # AppleDB being down never costs a release.
-    if not a.version and not a.since and a.betas and len(out) < a.max:
+    if not a.version and a.betas and len(out) < a.max:
         try:
             builds = beta_candidates(appledb("index.json"), held, [*preferred, *fallback])
             out += plan_betas([appledb(f"iOS;{b}.json") for b in builds], a.device, a.max - len(out))
