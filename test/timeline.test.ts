@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { buildTimeline, type ImageIndex } from "../src/lib/server/timeline.ts";
+import { buildTimeline, headIndex, type ImageIndex } from "../src/lib/server/timeline.ts";
 import type { BundleRef, CountrySummary } from "../src/lib/server/manifest.ts";
 
 const image = (version: string, build: string, carriers: Record<string, [string, string]>, countries: Record<string, [string, string]> = {}): ImageIndex => ({
@@ -181,5 +181,30 @@ describe("carrier and country links", () => {
     expect(carriersOf("UnitedStates", plists, carriers)).toEqual(["ATT_US", "Claro_pr"]);
     expect(carriersOf("Broken", plists, carriers)).toEqual([]);
     expect(carriersOf("Nowhere", plists, carriers)).toEqual([]);
+  });
+});
+
+describe("betas in the timeline", () => {
+  const images = [
+    image("27.2 beta 2", "24B5089g", { ATT_US: ["ccc", "72.0"], New_US: ["nnn", "1.0"] }),
+    image("27.0", "24A437", { ATT_US: ["aaa", "70.1"] }),
+  ];
+
+  it("gives a beta its own slug and marks it, and the default skips it", () => {
+    const t = buildTimeline("carriers", "ATT_US", images, [], []);
+    expect(t.map((e) => [e.slug, !!e.beta])).toEqual([["ios-27.2-beta-2", true], ["ios-27.0", false]]);
+    expect(headIndex(t)).toBe(1);
+  });
+
+  it("falls back to the beta when that is all there is", () => {
+    const t = buildTimeline("carriers", "New_US", images, [], []);
+    expect(headIndex(t)).toBe(0);
+  });
+
+  it("is not a beta once a release carries the same bytes", () => {
+    const t = buildTimeline("carriers", "ATT_US", [image("27.2", "24B80", { ATT_US: ["ccc", "72.0"] }), ...images], [], []);
+    expect(t[0]).toMatchObject({ slug: "ios-27.2", ios: ["27.2 beta 2", "27.2"] });
+    expect(t[0].beta).toBeUndefined();
+    expect(headIndex(t)).toBe(0);
   });
 });

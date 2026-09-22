@@ -1,5 +1,6 @@
 import unittest
-from plan_system_bundles import plan
+from plan_system_bundles import beta_candidates, plan, plan_betas
+from versions import merge, version_key
 
 fw = lambda v, b, d="iPhone17,1": {"version": v, "buildid": b, "identifier": d}
 P = [fw("27.0", "24A437"), fw("26.6.2", "23G90"), fw("26.6.1", "23G83"), fw("26.4", "23E246"), fw("26.0", "23A341")]
@@ -53,6 +54,52 @@ class Plan(unittest.TestCase):
     def test_orders_versions_numerically(self):
         got = plan([{"version": "9.3", "build": "z", "product": "iPhone17,1"}], [fw("10.0", "a"), fw("9.3.5", "b")], [], None, None, 9)
         self.assertEqual([x["version"] for x in got], ["9.3.5", "10.0"])
+
+
+def beta(version, build, devices=("iPhone17,1",)):
+    return {"version": version, "build": build, "beta": True,
+            "devices": {d: {"ipsw": f"https://updates.cdn-apple.com/{d}_{build}.ipsw"} for d in devices}}
+
+
+class Betas(unittest.TestCase):
+    KEYS = ["iOS;24A5430a", "iOS;24A437", "iOS;24B5084k", "iOS;24B5089g", "iOS;24B5084k-sim",
+            "iOS;24B5084k-27B5019j-SDK", "watchOS;24B5089g", "iOS;25A5001a"]
+
+    def test_only_betas_past_the_newest_public_release(self):
+        self.assertEqual(beta_candidates(self.KEYS, [], P), ["24B5084k", "24B5089g", "25A5001a"])
+
+    def test_skips_betas_already_held(self):
+        held = [{"version": "27.2 beta 1", "build": "24B5084k"}]
+        self.assertEqual(beta_candidates(self.KEYS, held, P), ["24B5089g", "25A5001a"])
+
+    def test_a_beta_whose_release_shipped_is_left_alone(self):
+        self.assertEqual(beta_candidates(["iOS;24B5089g"], [], [fw("27.2", "24B80"), *P]), [])
+
+    def test_plans_betas_oldest_first_with_apples_link(self):
+        got = plan_betas([beta("27.2 beta 2", "24B5089g"), beta("27.2 beta 1", "24B5084k")], "iPhone17,1", 9)
+        self.assertEqual([x["version"] for x in got], ["27.2 beta 1", "27.2 beta 2"])
+        self.assertEqual(got[0], {"version": "27.2 beta 1", "build": "24B5084k", "device": "iPhone17,1",
+                                  "url": "https://updates.cdn-apple.com/iPhone17,1_24B5084k.ipsw", "beta": True})
+
+    def test_falls_back_to_the_newest_iphone_the_beta_has(self):
+        got = plan_betas([beta("28.0 beta 1", "25A5001a", ("iPhone18,1", "iPhone19,2", "iPad16,1"))], "iPhone17,1", 9)
+        self.assertEqual(got[0]["device"], "iPhone19,2")
+
+    def test_ignores_records_that_are_not_betas(self):
+        self.assertEqual(plan_betas([{**beta("27.2", "24B80"), "beta": False}], "iPhone17,1", 9), [])
+
+
+class Versions(unittest.TestCase):
+    def test_beta_sorts_between_releases(self):
+        v = ["27.2", "27.2 beta 10", "27.1", "27.2 beta 2", "27.2 RC", "27.2.1"]
+        self.assertEqual(sorted(v, key=version_key), ["27.1", "27.2 beta 2", "27.2 beta 10", "27.2 RC", "27.2", "27.2.1"])
+
+    def test_merge_is_newest_first_and_later_lists_win(self):
+        now = [{"build": "24A437", "version": "27.0", "n": 1}, {"build": "24B5089g", "version": "27.2 beta 2"}]
+        mine = [{"build": "24A437", "version": "27.0", "n": 2}]
+        got = merge([now, mine])
+        self.assertEqual([b["build"] for b in got], ["24B5089g", "24A437"])
+        self.assertEqual(got[1]["n"], 2)
 
 
 if __name__ == "__main__":

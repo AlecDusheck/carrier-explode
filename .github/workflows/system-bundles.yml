@@ -13,6 +13,11 @@
 # image already held), and variable DEVICE (default iPhone17,1). Releases that device no longer
 # receives are taken from the newest iPhone instead.
 #
+# Betas: the daily run also takes every iOS beta newer than the newest public
+# release, from AppleDB (ipsw.me does not list betas). Their IPSWs are Apple's
+# own public links, and they are recorded as "27.2 beta 2" so they sort below
+# the release and never take its URL. Set variable BETAS to "false" to stop.
+#
 # GitHub disables scheduled workflows after 60 days without repo activity.
 
 name: System bundles
@@ -50,7 +55,8 @@ jobs:
           npx --yes wrangler r2 object get "$BUCKET/system/builds.json" --remote --pipe > /tmp/builds.json 2>/dev/null || echo '[]' > /tmp/builds.json
           MATRIX=$(python3 scripts/plan_system_bundles.py --builds /tmp/builds.json \
             --device "${{ vars.DEVICE || 'iPhone17,1' }}" --version "${{ inputs.version }}" \
-            --since "${{ inputs.since || vars.MIN_VERSION }}" --max "${{ inputs.max || '3' }}")
+            --since "${{ inputs.since || vars.MIN_VERSION }}" --max "${{ inputs.max || '3' }}" \
+            ${{ vars.BETAS == 'false' && '--no-betas' || '' }})
           echo "to extract: $MATRIX"
           echo "matrix=$MATRIX" >> "$GITHUB_OUTPUT"
 
@@ -85,15 +91,25 @@ jobs:
           sudo make -C /tmp/apfs-fuse/build install
 
       - name: Download the IPSW and extract the bundles
+        env:
+          URL: ${{ matrix.image.url }}
         run: |
           mkdir -p "$RUNNER_TEMP/ipsw" /tmp/x
-          ipsw download ipsw --device "${{ matrix.image.device }}" --build "${{ matrix.image.build }}" \
-            --no-color --output "$RUNNER_TEMP/ipsw"
+          if [ -n "$URL" ]; then
+            # Betas: ipsw.me does not know them, so the planner hands over Apple's link.
+            curl -fL --retry 5 --retry-all-errors -o "$RUNNER_TEMP/ipsw/image.ipsw" "$URL"
+          else
+            ipsw download ipsw --device "${{ matrix.image.device }}" --build "${{ matrix.image.build }}" \
+              --no-color --output "$RUNNER_TEMP/ipsw"
+          fi
           ipsw extract --files --pattern '.*Bundles.*iPhone.*\.bundle.*$' --output /tmp/x "$RUNNER_TEMP"/ipsw/*.ipsw
           ipsw info "$RUNNER_TEMP"/ipsw/*.ipsw --json --no-color > /tmp/meta.json
           sudo chown -R "$USER" /tmp/x
 
       - name: Package
+        env:
+          # The image itself says 27.2; the planner knows it is 27.2 beta 2.
+          LABEL: ${{ matrix.image.beta && matrix.image.version || '' }}
         run: |
           npm install --no-save --silent wrangler
           W="$GITHUB_WORKSPACE/node_modules/.bin/wrangler"
@@ -108,7 +124,8 @@ jobs:
           python3 scripts/package_system_bundles.py \
             --carriers "$ROOT/Carrier Bundles/iPhone" \
             --countries "$ROOT/CountryBundles/iPhone" \
-            --meta /tmp/meta.json --out /tmp/out --builds /tmp/builds.json --have /tmp/have.txt
+            --meta /tmp/meta.json --out /tmp/out --builds /tmp/builds.json --have /tmp/have.txt \
+            ${LABEL:+--version "$LABEL"}
 
       - name: Upload to R2
         run: |
@@ -126,7 +143,7 @@ jobs:
           # builds.json goes last so the app never lists a half-uploaded image.
           # Re-read and merge right before writing: matrix jobs overlap.
           "$W" r2 object get "$BUCKET/system/builds.json" --remote --pipe > /tmp/now.json 2>/dev/null || echo '[]' > /tmp/now.json
-          jq -s -c 'add | unique_by(.build) | sort_by(.version | split(".") | map(tonumber? // 0)) | reverse' /tmp/now.json builds.json > merged.json
+          python3 "$GITHUB_WORKSPACE/scripts/versions.py" merge /tmp/now.json builds.json > merged.json
           "$W" r2 object put "$BUCKET/system/builds.json" --file merged.json --remote
 
   # Once, after every image is in: pages that track the newest bundle are cached

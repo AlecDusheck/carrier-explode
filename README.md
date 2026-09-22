@@ -7,7 +7,7 @@ While being nosy on some odd behavior for Indian carriers on iOS, I found there 
 ## What it does
 Two sources, merged:
 
-- **The iOS image.** A scheduled Action pulls the latest IPSW, extracts
+- **The iOS image.** A scheduled Action pulls each new IPSW, betas included, and extracts
   `/System/Library/Carrier Bundles` and `/System/Library/CountryBundles`, and
   puts them in R2. This is what a phone actually boots with, and it covers every
   country (~225) and ~690 carriers.
@@ -166,8 +166,21 @@ through `sitemap.xml` and the two list pages.
 Search and preview: `src/lib/seo.ts` builds every page's title and description
 from the route alone — no data fetch, so the head is right even when a pane
 fails — and `src/routes/+layout.svelte` is the only place that renders them.
-`/sitemap.xml` lists the bundle pages; `robots.txt` keeps crawlers out of `/raw`
-and `/compare`, whose query strings are endless.
+They are written for what people search: the bundle's own name (`ATT_US`,
+`ATT_US.ipcc`), the brand it stands for (`src/lib/names.ts` turns `ATT` into
+AT&T and `RelianceJio` into Jio), the country, and the settings people hunt
+for — APN, VoLTE, 5G, Wi-Fi Calling, RCS. `/sitemap.xml` lists the bundle and
+release pages; `robots.txt` keeps crawlers out of `/raw` and `/compare`, whose
+query strings are endless.
+
+Betas: the daily run also extracts every iOS beta newer than the newest public
+release. ipsw.me does not list betas, so the planner finds them in AppleDB,
+which carries Apple's own IPSW links. A beta is recorded as `27.2 beta 2`, gets
+its own URL (`/carriers/ATT_US/ios-27.2-beta-2`), and sorts below its release.
+It shows in every bundle's timeline and on `/releases`, but "current" — a bundle
+page with no version, the lists, the status bar, the cell broadcast table — is
+the newest release, since that is what phones run. Set the repository variable
+`BETAS` to `false` to stop taking them.
 
 Rate limits: `src/hooks.server.ts` puts every request into one of four per-IP
 budgets, sized to the work it can start rather than to the request. `scanKey`

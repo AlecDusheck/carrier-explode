@@ -16,6 +16,11 @@ const CASES: Array<[string, Parameters<typeof seo>[1]]> = [
   ["/compare", {}],
   ["/releases", {}],
   ["/releases/[build]", { build: "24A437" }],
+  ["/[kind=kind]/[name]", { kind: "watch", name: "Verizon_LTE_US" }],
+  ["/[kind=kind]/[name]", { kind: "carriers", name: "Verizon_Core_Visible_LTE_US" }],
+  ["/[kind=kind]/[name]", { kind: "countries", name: "SaintHelenaAscensionAndTristanDaCunha" }],
+  ["/[kind=kind]/[name]/[version]/baseband", { kind: "carriers", name: "KDDI_BIGLOBE_LTE_only_jp", version: "ios-27.2-beta-10" }],
+  ["/[kind=kind]/[name]/[version]/files/[...path]", { kind: "carriers", name: "ATT_US", version: "ios-27.0", path: "" }],
 ];
 
 describe("seo", () => {
@@ -30,18 +35,35 @@ describe("seo", () => {
     }
   });
 
-  it("titles the thing the page is about, most specific first", () => {
+  it("titles a bundle with its file name and the brand people search for", () => {
     const p = { kind: "carriers", name: "ATT_US", version: "ios-27.0" };
-    expect(seo("/[kind=kind]/[name]", { kind: "carriers", name: "ATT_US" }).title).toBe("ATT_US — iOS carrier bundle");
-    expect(seo("/[kind=kind]/[name]/[version]", p).title).toBe("ATT_US ios-27.0 — iOS carrier bundle");
+    expect(seo("/[kind=kind]/[name]", { kind: "carriers", name: "ATT_US" }).title).toBe("ATT_US — AT&T United States carrier bundle");
+    expect(seo("/[kind=kind]/[name]/[version]", p).title).toBe("ATT_US iOS 27.0 — AT&T carrier bundle");
     expect(seo("/[kind=kind]/[name]/[version]/files/[...path]", { ...p, path: "carrier.plist" }).title)
-      .toBe("carrier.plist — ATT_US ios-27.0");
-    expect(seo("/[kind=kind]/[name]", { kind: "countries", name: "India" }).title).toBe("India — iOS country bundle");
+      .toBe("carrier.plist — ATT_US iOS 27.0");
+    expect(seo("/[kind=kind]/[name]", { kind: "countries", name: "UnitedStates" }).title).toBe("UnitedStates — United States country bundle");
   });
 
-  it("carries the words people search for", () => {
+  it("carries both spellings of the name and the settings people search for", () => {
+    const d = seo("/[kind=kind]/[name]", { kind: "carriers", name: "RelianceJio_in" }).description;
+    for (const term of ["Jio", "India", "RelianceJio_in.bundle", "RelianceJio_in.ipcc", "APN", "VoLTE", "5G", "Wi-Fi Calling"]) {
+      expect(d).toContain(term);
+    }
     expect(seo("/[kind=kind]", { kind: "carriers" }).description).toMatch(/\.ipcc|APN|VoLTE/);
     expect(seo("/plmn", {}).title).toContain("MCC/MNC");
+  });
+
+  it("keeps the brand when a long bundle name crowds the title", () => {
+    expect(seo("/[kind=kind]/[name]", { kind: "carriers", name: "TMobile_MetroPCS_US" }).title)
+      .toBe("TMobile_MetroPCS_US — Metro by T-Mobile");
+  });
+
+  it("names each tab and each kind of version", () => {
+    const p = { kind: "carriers", name: "ATT_US", version: "ios-27.2-beta-2" };
+    expect(seo("/[kind=kind]/[name]/[version]", p).description).toContain("iOS 27.2 beta 2");
+    expect(seo("/[kind=kind]/[name]/[version]/baseband", p).title).toContain("baseband");
+    expect(seo("/[kind=kind]/[name]/[version]/changes", { ...p, version: "ota-58.1-iPad" }).description).toContain("build 58.1 (iPad)");
+    expect(seo("/releases/[build]", { build: "24B5089g" }).title).toBe("iOS 27 beta (24B5089g) carrier bundle changes");
   });
 });
 
