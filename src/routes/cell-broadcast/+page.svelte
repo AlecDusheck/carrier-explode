@@ -6,22 +6,39 @@
   import { link } from "$lib/format";
   import Pane from "$lib/components/Pane.svelte";
 
-  const view = $derived(page.url.searchParams.get("view") === "matrix" ? "matrix" : "operator");
+  const VIEWS = [["", "By country"], ["4382", "Operator-defined 4382"], ["matrix", "ID matrix"]] as const;
+  type View = (typeof VIEWS)[number][0];
+  const view = $derived.by((): View => {
+    const v = page.url.searchParams.get("view");
+    return v === "matrix" || v === "4382" ? v : "";
+  });
 
   const detail = (r: CbsRow) => link("/cell-broadcast/" + encodeURIComponent(r.country));
   const shortType = (t?: string) => (t ? t.replace(/Alert$/, "").replace(/([a-z])([A-Z])/g, "$1 $2") : "");
+  const viewHref = (v: View) => link("/cell-broadcast") + (v ? "?view=" + v : "");
 
   function alertFor(row: CbsRow, id: number) {
     const m = row.mappings.find((x) => id >= x.from && id <= x.to);
     if (!m?.alertType) return null;
     return { type: m.alertType, locked: row.alertTypes.find((a) => a.name === m.alertType)?.userConfigurable === false };
   }
+
+  /** The types a user sees in Settings; ones with no switch (WHAM geofence triggers) stay on the country page. */
+  const switches = (r: CbsRow) => {
+    const named = r.alertTypes.filter((a) => a.switchName);
+    return named.length ? named : r.alertTypes;
+  };
+
+  /** Where a bundle came from, said once for the common case. */
+  const from = (r: CbsRow, image?: { version: string } | null) =>
+    r.source === "image" && image ? `iOS ${image.version} image` : `OTA build ${r.version}`;
 </script>
 
 <div class="view">
   <div class="toolbar">
-    <a class="btn" href={link("/cell-broadcast")} aria-current={view === "operator" ? "page" : undefined}>Operator-defined 4382</a>
-    <a class="btn" href={link("/cell-broadcast") + "?view=matrix"} aria-current={view === "matrix" ? "page" : undefined}>ID matrix</a>
+    {#each VIEWS as [v, label] (v)}
+      <a class="btn" href={viewHref(v)} aria-current={view === v ? "page" : undefined}>{label}</a>
+    {/each}
   </div>
 
   <div class="scroll pad">
@@ -29,64 +46,64 @@
       {@const data = await getCbs()}
       {@const configured = data.rows.filter((r) => r.mappings.length > 0)}
       {@const bare = data.rows.filter((r) => r.mappings.length === 0 && !r.error)}
+      {@const usual = configured.length ? from(configured[0], data.image) : ""}
 
-      {#if view === "operator"}
-        {@const mapped = configured.filter((r) => r.maps4382)}
+      {#if view === ""}
         <p class="lead" style="margin-top:0">
-          4382 is the operator-defined CMAS message ID; {mapped.length} of {configured.length} bundles map it.
+          The alert switches each country's bundle gives an iPhone. <span class="chip bad">no off switch</span> marks alerts the
+          user cannot turn off; <span class="dimtext">off by default</span> marks ones that start disabled.
+          {#if usual}<span class="dimtext">From the {usual} unless noted.</span>{/if}
         </p>
         <table class="grid">
-          <thead>
-            <tr>
-              <th class="sticky-col">Country</th><th>4382</th><th>Alert type</th>
-              <th>User can disable</th><th>Settings section</th><th class="num">Build</th><th>Source</th>
-            </tr>
-          </thead>
+          <thead><tr><th class="sticky-col">Country</th><th>Alerts</th><th>Settings section</th></tr></thead>
           <tbody>
             {#each configured as r (r.country)}
               <tr>
-                <td class="sticky-col k"><a href={detail(r)}>{r.countryName ?? r.country}</a></td>
-                <td>
-                  {#if r.maps4382}<span class="chip warn">mapped</span>{:else}<span class="chip good">not mapped</span>{/if}
+                <td class="sticky-col k">
+                  <a href={detail(r)}>{r.countryName ?? r.country}</a>
+                  {#if from(r, data.image) !== usual}<div class="dimtext">{from(r, data.image)}</div>{/if}
                 </td>
-                <td>{shortType(r.alertType4382)}</td>
                 <td>
-                  {#if !r.maps4382}<span class="dimtext">n/a</span>
-                  {:else if r.configurable4382 === false}<span class="chip bad">no off switch</span>
-                  {:else if r.configurable4382 === true}<span class="chip good">yes</span>
-                  {:else}<span class="dimtext">unstated</span>{/if}
+                  {#each switches(r) as a (a.name)}
+                    <span class="alert" title={a.name}>
+                      {a.switchName || shortType(a.name)}{#if a.userConfigurable === false}{" "}<span class="chip bad">no off switch</span>{/if}{#if a.enabledByDefault === false}{" "}<span class="dimtext">off by default</span>{/if}
+                    </span>
+                  {/each}
                 </td>
                 <td>{r.switchGroupTitle ?? ""}</td>
-                <td class="num mono">{r.version}</td>
-                <td class="dimtext">{r.source === "image" && data.image ? "iOS " + data.image.version + " image" : "OTA"}</td>
               </tr>
             {/each}
           </tbody>
         </table>
 
         {#if bare.length}
-          <fieldset class="hgroup">
-            <legend>No CellBroadcast block ({bare.length})</legend>
+          <details class="more">
+            <summary>{bare.length} country bundles with no alert configuration</summary>
             {#each bare as r (r.country)}<a class="chip" href={detail(r)}>{r.countryName ?? r.country}</a>{/each}
-          </fieldset>
+          </details>
         {/if}
-
-        <fieldset class="hgroup">
-          <legend>Alert types with no off switch</legend>
-          <table class="grid">
-            <tbody>
-              {#each configured as r (r.country)}
-                {@const locked = r.alertTypes.filter((a) => a.userConfigurable === false)}
-                {#if locked.length}
-                  <tr>
-                    <td class="k"><a href={detail(r)}>{r.countryName ?? r.country}</a></td>
-                    <td>{#each locked as a (a.name)}<span class="chip bad">{a.name}</span>{/each}</td>
-                  </tr>
-                {/if}
-              {/each}
-            </tbody>
-          </table>
-        </fieldset>
+      {:else if view === "4382"}
+        {@const mapped = configured.filter((r) => r.maps4382)}
+        <p class="lead" style="margin-top:0">
+          4382 is the operator-defined CMAS message ID. {mapped.length} of {configured.length} countries with alerts map it;
+          the rest ignore it.
+        </p>
+        <table class="grid">
+          <thead><tr><th class="sticky-col">Country</th><th>Shown as</th><th>User can disable</th></tr></thead>
+          <tbody>
+            {#each mapped as r (r.country)}
+              <tr>
+                <td class="sticky-col k"><a href={detail(r)}>{r.countryName ?? r.country}</a></td>
+                <td>{shortType(r.alertType4382)}</td>
+                <td>
+                  {#if r.configurable4382 === false}<span class="chip bad">no off switch</span>
+                  {:else if r.configurable4382 === true}yes
+                  {:else}<span class="dimtext">unstated</span>{/if}
+                </td>
+              </tr>
+            {/each}
+          </tbody>
+        </table>
       {:else}
         <p class="dimtext" style="margin-top:0">Blank: unmapped, ignored by the phone. Locked: no off switch.</p>
         <table class="grid">
@@ -120,3 +137,9 @@
     </Pane>
   </div>
 </div>
+
+<style>
+  .alert { display: inline-block; margin: 0 10px 2px 0; }
+  .more { margin-top: 10px; }
+  .more > summary { cursor: pointer; padding: 4px 0; }
+</style>

@@ -8,18 +8,19 @@
   <div class="scroll pad">
     <Pane>
       {@const builds = (await getIndex()).builds}
+      <!-- Every image so far comes from one device model; the column returns once that stops being true. -->
+      {@const devices = new Set(builds.map((b) => b.device)).size > 1}
       <table class="grid">
-        <thead><tr><th>iOS</th><th>Build</th><th>Device</th><th>Extracted</th></tr></thead>
+        <thead><tr><th>iOS</th><th>Build</th>{#if devices}<th>Device</th>{/if}</tr></thead>
         <tbody>
           {#each builds as b (b.build)}
             <tr>
               <td class="k"><a href={link("/releases/" + b.build)}>iOS {b.version}</a></td>
               <td class="mono">{b.build}</td>
-              <td class="mono">{b.device}</td>
-              <td class="mono">{b.extractedAt.slice(0, 10)}</td>
+              {#if devices}<td class="mono">{b.device}</td>{/if}
             </tr>
           {:else}
-            <tr><td colspan="4" class="dimtext">No images held.</td></tr>
+            <tr><td colspan="3" class="dimtext">No images held.</td></tr>
           {/each}
         </tbody>
       </table>

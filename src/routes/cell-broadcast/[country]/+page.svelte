@@ -1,12 +1,43 @@
 <script lang="ts">
   import { getCbs } from "$lib/api/tables.remote";
   import { describeMessageId } from "$lib/decode";
+  import type { CbsRow } from "$lib/server/cbs";
   import { bundleHref, link } from "$lib/format";
   import Pane from "$lib/components/Pane.svelte";
 
   let { params } = $props();
 
   const range = (r: { from: number; to: number }) => (r.from === r.to ? String(r.from) : r.from + "-" + r.to);
+  const yes = (v?: boolean) => (v === undefined ? "" : v ? "yes" : "no");
+
+  /** The ranges routed to one alert type. */
+  const idsFor = (row: CbsRow, type: string) => row.mappings.filter((m) => m.alertType === type).map(range).join(", ");
+
+  function sound(row: CbsRow, configuration?: string) {
+    const cfg = row.alertConfigurations.find((c) => c.name === configuration);
+    return cfg ? (cfg.sound ?? "") + " / " + (cfg.vibration ?? "") : (configuration ?? "");
+  }
+
+  /** Bundle-level settings; empty ones are left out. */
+  function settings(row: CbsRow): Array<[string, string]> {
+    const dup = [
+      row.duplicateWindowMinutes !== undefined ? row.duplicateWindowMinutes + " min window" : "",
+      row.interSimDuplicateDetection !== undefined ? "inter-SIM " + yes(row.interSimDuplicateDetection) : "",
+      row.intraSimDuplicateDetection !== undefined ? "intra-SIM " + yes(row.intraSimDuplicateDetection) : "",
+    ].filter(Boolean).join(", ");
+    const rows: Array<[string, string]> = [
+      ["Device geofencing", row.geofencing === undefined ? "" : row.geofencing ? "enabled" : "disabled"],
+      ["Duplicate suppression", dup],
+      ["Emergency numbers", row.emergencyNumbers.join(", ")],
+      ["AML SMS destination", row.amlDestination ?? ""],
+      ["Alert languages", row.languages.join(", ")],
+      ["CBMessage localisations", row.cbMessageLocales.join(" ")],
+      ["Alert sound / vibration", [...new Set(row.mappings.map((m) => sound(row, m.configuration)).filter(Boolean))].join(", ")],
+      ["ISO codes", row.iso.join(", ")],
+      ["Country IDs", row.countryIds.join(", ")],
+    ];
+    return rows.filter(([, v]) => v);
+  }
 </script>
 
 <div class="view">
@@ -17,6 +48,12 @@
       <div class="rowflex">
         <a class="btn" href={link("/cell-broadcast")}>Cell Broadcast</a>
         <b>{row?.countryName ?? params.country}</b>
+        {#if row}
+          <span class="dimtext">
+            {row.source === "image" && data.image ? `iOS ${data.image.version} image` : `OTA${row.minOS ? ` · iOS ${row.minOS}+` : ""}`}
+            · build {row.version}
+          </span>
+        {/if}
         <span class="grow"></span>
         {#if row}<a class="btn" href={bundleHref("countries", row.country)}>Open bundle</a>{/if}
       </div>
@@ -25,100 +62,90 @@
         <div class="banner err">No country bundle named {params.country}.</div>
       {:else}
         {#if row.error}<div class="banner err">{row.error}</div>{/if}
-        <fieldset class="hgroup">
-          <legend>Bundle</legend>
-          <table class="grid">
-            <tbody>
-              <tr>
-                <td class="k">From</td>
-                <td>
-                  {row.source === "image" && data.image ? `iOS ${data.image.version} image` : `OTA${row.minOS ? ` · iOS ${row.minOS}+` : ""}`}
-                  &middot; build {row.version}
-                </td>
-              </tr>
-              <tr><td class="k">ISO codes</td><td class="mono">{row.iso.join(", ")}</td></tr>
-              <tr><td class="k">Country IDs</td><td class="mono wrap">{row.countryIds.join(", ")}</td></tr>
-              <tr><td class="k">Settings section</td><td>{row.switchGroupTitle ?? ""}</td></tr>
-              <tr><td class="k">Languages</td><td class="mono">{row.languages.join(", ")}</td></tr>
-              <tr>
-                <td class="k">Device geofencing</td>
-                <td>
-                  {#if row.geofencing === undefined}<span class="dimtext">unset</span>
-                  {:else if row.geofencing}<span class="chip good">enabled</span>
-                  {:else}<span class="chip">disabled</span>{/if}
-                </td>
-              </tr>
-              <tr>
-                <td class="k">Duplicate suppression</td>
-                <td>
-                  {[
-                    row.duplicateWindowMinutes !== undefined ? row.duplicateWindowMinutes + " min window" : "",
-                    row.interSimDuplicateDetection !== undefined ? "inter-SIM " + row.interSimDuplicateDetection : "",
-                    row.intraSimDuplicateDetection !== undefined ? "intra-SIM " + row.intraSimDuplicateDetection : "",
-                  ].filter(Boolean).join(", ")}
-                </td>
-              </tr>
-              <tr><td class="k">Emergency numbers</td><td class="mono">{row.emergencyNumbers.join(", ")}</td></tr>
-              <tr><td class="k">AML SMS destination</td><td class="mono">{row.amlDestination ?? ""}</td></tr>
-              <tr><td class="k">CBMessage localisations</td><td class="mono wrap">{row.cbMessageLocales.join(" ")}</td></tr>
-            </tbody>
-          </table>
-        </fieldset>
 
         {#if row.mappings.length}
+          {@const types = row.alertTypes}
+          {@const muted = types.some((a) => a.soundAlertDeviceInMute !== undefined)}
+          {@const dnd = types.some((a) => a.soundIsMutableInDND !== undefined)}
           <fieldset class="hgroup">
-            <legend>Message ID mappings</legend>
-            <table class="grid">
-              <thead><tr><th>Range</th><th>Alert type</th><th>Sound / vibration</th><th>3GPP TS 23.041</th></tr></thead>
-              <tbody>
-                {#each row.mappings as m, i (i)}
-                  {@const cfg = row.alertConfigurations.find((c) => c.name === m.configuration)}
-                  <tr>
-                    <td class="mono num">{range(m)}</td>
-                    <td class="k">{m.alertType ?? ""}</td>
-                    <td class="mono">{cfg ? (cfg.sound ?? "") + " / " + (cfg.vibration ?? "") : (m.configuration ?? "")}</td>
-                    <td class="dimtext">{describeMessageId(m.from) ?? ""}</td>
-                  </tr>
-                {/each}
-              </tbody>
-            </table>
-            {#if row.appleSafetyAlertRanges.length}
-              <p class="dimtext" style="margin-bottom:0">
-                Apple safety alerts: <span class="mono">{row.appleSafetyAlertRanges.map(range).join(", ")}</span>
-              </p>
+            <legend>Alerts</legend>
+            {#if row.switchGroupTitle}
+              <p class="dimtext" style="margin:0 0 6px">Listed in Settings under <b>{row.switchGroupTitle}</b>.</p>
             {/if}
-          </fieldset>
-
-          <fieldset class="hgroup">
-            <legend>Alert types</legend>
-            <div style="overflow-x:auto">
+            <div class="hscroll">
               <table class="grid">
                 <thead>
                   <tr>
-                    <th>Type</th><th>Switch name</th><th>Notification title</th>
-                    <th>Default on</th><th>User configurable</th><th>Sounds when muted</th><th>Mutable in DND</th>
+                    <th>Switch</th><th>User can turn off</th><th>On by default</th><th>Message IDs</th>
+                    {#if muted}<th>Sounds when muted</th>{/if}
+                    {#if dnd}<th>Muted by Do Not Disturb</th>{/if}
+                    <th>Notification title</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {#each row.alertTypes as a (a.name)}
+                  {#each types as a (a.name)}
                     <tr>
-                      <td class="k">{a.name}</td>
-                      <td>{a.switchName ?? ""}</td>
+                      <td class="k" title={a.name}>{a.switchName || a.name}</td>
+                      <td>{#if a.userConfigurable === false}<span class="chip bad">no off switch</span>{:else}{yes(a.userConfigurable)}{/if}</td>
+                      <td>{yes(a.enabledByDefault)}</td>
+                      <td class="mono">{idsFor(row, a.name)}</td>
+                      {#if muted}<td>{yes(a.soundAlertDeviceInMute)}</td>{/if}
+                      {#if dnd}<td>{yes(a.soundIsMutableInDND)}</td>{/if}
                       <td>{a.notificationTitle ?? ""}</td>
-                      <td>{#if a.enabledByDefault !== undefined}<span class="chip {a.enabledByDefault ? 'good' : ''}">{a.enabledByDefault}</span>{/if}</td>
-                      <td>{#if a.userConfigurable !== undefined}<span class="chip {a.userConfigurable ? 'good' : 'bad'}">{a.userConfigurable}</span>{/if}</td>
-                      <td>{a.soundAlertDeviceInMute ?? ""}</td>
-                      <td>{a.soundIsMutableInDND ?? ""}</td>
                     </tr>
                   {/each}
                 </tbody>
               </table>
             </div>
           </fieldset>
+
+          <fieldset class="hgroup">
+            <legend>Message IDs</legend>
+            <div class="hscroll">
+              <table class="grid">
+                <thead>
+                  <tr>
+                    <th>Range</th><th>Alert type</th><th>3GPP TS 23.041</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {#each row.mappings as m, i (i)}
+                    <tr>
+                      <td class="mono num">{range(m)}</td>
+                      <td class="k">{m.alertType ?? ""}</td>
+                      <td class="dimtext">{describeMessageId(m.from) ?? ""}</td>
+                    </tr>
+                  {/each}
+                </tbody>
+              </table>
+            </div>
+            {#if row.appleSafetyAlertRanges.length}
+              <p class="dimtext" style="margin-bottom:0">
+                Apple safety alerts: <span class="mono">{row.appleSafetyAlertRanges.map(range).join(", ")}</span>
+              </p>
+            {/if}
+          </fieldset>
         {:else}
-          <p class="dimtext">No CellBroadcast block.</p>
+          <p class="dimtext">This bundle configures no cell broadcast alerts.</p>
+        {/if}
+
+        {@const rest = settings(row)}
+        {#if rest.length}
+          <details class="more">
+            <summary>Bundle settings</summary>
+            <table class="grid">
+              <tbody>
+                {#each rest as [k, v] (k)}<tr><td class="k">{k}</td><td class="mono wrap">{v}</td></tr>{/each}
+              </tbody>
+            </table>
+          </details>
         {/if}
       {/if}
     </Pane>
   </div>
 </div>
+
+<style>
+  .more { margin-top: 10px; }
+  .more > summary { cursor: pointer; padding: 4px 0; }
+</style>

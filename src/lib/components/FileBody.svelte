@@ -31,18 +31,18 @@
 {/snippet}
 
 <div class="rowflex" style="margin-bottom:6px">
-  <span class="dimtext">{humanBytes(file.size)}</span>
   {#if devices && file.devices?.length}
     <span class="dimtext">
       {#each file.devices as d, i (i)}{i ? ", " : ""}<span title={d.ids ?? d.code}>{d.name ?? d.code}</span>{/each}
     </span>
   {/if}
   <span class="grow"></span>
-  <a class="btn" href="{raw}?dl" data-sveltekit-reload>Save</a>
+  <a class="btn" href="{raw}?dl" data-sveltekit-reload title={humanBytes(file.size)}>Save</a>
   <a class="btn" href={raw} target="_blank" rel="noreferrer">Raw</a>
 </div>
 
-{#if file.note}<div class="banner">{file.note}</div>{/if}
+<!-- A signed profile's note repeats the Signature box below it. -->
+{#if file.note && !file.signature}<div class="banner">{file.note}</div>{/if}
 
 {#if file.signature}<SignatureView sig={file.signature} />{/if}
 

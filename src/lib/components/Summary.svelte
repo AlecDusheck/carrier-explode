@@ -36,11 +36,6 @@
   const ctx = $derived({ file: "carrier.plist", cc: bundle.cc });
 </script>
 
-{#snippet verdict()}
-  {#if bundle.verified === true}<span class="chip good">verified</span>
-  {:else if bundle.verified === false}<span class="chip bad">digest mismatch</span>{/if}
-{/snippet}
-
 <fieldset class="hgroup">
   <legend>Package</legend>
   <table class="grid">
@@ -52,51 +47,45 @@
       {#if !bundle.entry.build && infoPlist?.CFBundleVersion !== undefined}
         <tr><td class="k">Build</td><td class="mono">{String(infoPlist.CFBundleVersion)}</td></tr>
       {/if}
-      {#if versionPlist}
-        <tr>
-          <td class="k">version.plist</td>
-          <td class="mono wrap">{Object.entries(versionPlist).map(([k, v]) => k + "=" + String(v)).join("  ")}</td>
-        </tr>
-      {/if}
       <tr>
         <td class="k">From</td>
         <td>
           {entryLabel(bundle.entry)}
+          {#if bundle.verified === true}<span class="chip good" title="{fromImage ? 'Content ID' : 'SHA-1'} matches the published digest">verified</span>
+          {:else if bundle.verified === false}<span class="chip bad">digest mismatch</span>{/if}
           {#if bundle.previous}
             &middot; <a href={bundleHref(bundle.kind, bundle.name, bundle.entry.slug, "changes")}>Changes since build {bundle.previous.build}</a>
           {/if}
         </td>
       </tr>
-      <tr>
-        <td class="k">Size</td>
-        <td>{humanBytes(bundle.downloadSize)} packed, {humanBytes(bundle.info.totalSize)} unpacked, {bundle.info.files.length} files</td>
-      </tr>
-      <tr>
-        <td class="k">Content ID</td>
-        <td class="mono wrap">
-          {bundle.contentId}
-          {#if fromImage}{@render verdict()}{/if}
-        </td>
-      </tr>
-      <tr>
-        <td class="k">SHA-1</td>
-        <td class="mono wrap">
-          {bundle.sha1}
-          {#if !fromImage}{@render verdict()}{/if}
-        </td>
-      </tr>
-      <tr><td class="k">SHA-384</td><td class="mono wrap">{bundle.sha384}</td></tr>
-      {#if bundle.entry.url}
-        <tr><td class="k">URL</td><td class="mono wrap"><a href={bundle.entry.url} rel="noreferrer">{bundle.entry.url}</a></td></tr>
-      {/if}
-      {#if bundle.info.deviceStems.length}
-        <tr><td class="k">Override sets</td><td>{bundle.info.deviceStems.length}</td></tr>
-      {/if}
-      {#if bundle.info.locales.length}
-        <tr><td class="k">Localisations</td><td class="mono wrap">{bundle.info.locales.join(" ")}</td></tr>
-      {/if}
     </tbody>
   </table>
+  <details class="more">
+    <summary>Digests, size and source</summary>
+    <table class="grid">
+      <tbody>
+        <tr>
+          <td class="k">Size</td>
+          <td>{humanBytes(bundle.downloadSize)} packed, {humanBytes(bundle.info.totalSize)} unpacked, {bundle.info.files.length} files</td>
+        </tr>
+        <tr><td class="k">Content ID</td><td class="mono wrap">{bundle.contentId}</td></tr>
+        <tr><td class="k">SHA-1</td><td class="mono wrap">{bundle.sha1}</td></tr>
+        <tr><td class="k">SHA-384</td><td class="mono wrap">{bundle.sha384}</td></tr>
+        {#if bundle.entry.url}
+          <tr><td class="k">URL</td><td class="mono wrap"><a href={bundle.entry.url} rel="noreferrer">{bundle.entry.url}</a></td></tr>
+        {/if}
+        {#if versionPlist}
+          <tr>
+            <td class="k">version.plist</td>
+            <td class="mono wrap">{Object.entries(versionPlist).map(([k, v]) => k + "=" + String(v)).join("  ")}</td>
+          </tr>
+        {/if}
+        {#if bundle.info.locales.length}
+          <tr><td class="k">Localisations</td><td class="mono wrap">{bundle.info.locales.join(" ")}</td></tr>
+        {/if}
+      </tbody>
+    </table>
+  </details>
   {#if bundle.entry.url}
     <div class="rowflex" style="margin-top:8px">
       <a class="btn" href={bundle.entry.url} rel="noreferrer" download>Download .ipcc</a>
@@ -123,3 +112,8 @@
     <Tree value={picked} {ctx} />
   </fieldset>
 {/each}
+
+<style>
+  .more { margin-top: 6px; }
+  .more > summary { cursor: pointer; padding: 2px 0; }
+</style>

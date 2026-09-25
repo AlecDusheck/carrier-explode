@@ -6,7 +6,6 @@
   let { pri }: { pri: PriDecoded } = $props();
 
   let filter = $state("");
-  let showSchema = $state(false);
 
   const has = (f: string, ...xs: Array<string | undefined>) => xs.some((x) => x?.toLowerCase().includes(f));
 
@@ -16,24 +15,26 @@
     return pri.efs.filter((e) => has(f, e.path, e.value.text, e.name, e.meaning, e.label));
   });
 
-  const header = $derived(Object.entries(pri.header) as Array<[string, string]>);
+  // Empty header fields ("Carrier ID" on most files) say nothing.
+  const header = $derived((Object.entries(pri.header) as Array<[string, string]>).filter(([, v]) => v !== ""));
   const unknown = $derived(pri.unknown.filter((u) => u.nv === undefined));
   const unnamed = (item: number, name?: string) => !name || name === "NV " + item;
 </script>
 
 {#if pri.error}<div class="banner err">{pri.error}</div>{/if}
 
-<fieldset class="hgroup">
-  <legend>Header</legend>
-  <table class="grid">
-    <tbody>
-      {#each header as [k, v] (k)}
-        <tr><td class="k">{k}</td><td class="mono">{v === "" ? "empty" : v}</td></tr>
-      {/each}
-      <tr><td class="k">Container</td><td>DER, {pri.leafCount} leaf fields</td></tr>
-    </tbody>
-  </table>
-</fieldset>
+{#if header.length}
+  <fieldset class="hgroup">
+    <legend>Header</legend>
+    <table class="grid">
+      <tbody>
+        {#each header as [k, v] (k)}
+          <tr><td class="k">{k}</td><td class="mono">{v}</td></tr>
+        {/each}
+      </tbody>
+    </table>
+  </fieldset>
+{/if}
 
 {#if pri.named.length}
   <fieldset class="hgroup">
@@ -122,7 +123,6 @@
               {#each g.flags.filter((x) => x.set && x.name) as x (x.index)}
                 <div>{x.index}: {x.name}<Confidence c={x.confidence} /></div>
               {/each}
-              <div class="mono dimtext path">{g.hex}</div>
             </td>
           </tr>
         {/each}
@@ -132,8 +132,8 @@
 {/if}
 
 {#if pri.nvListed.length}
-  <fieldset class="hgroup">
-    <legend>Legacy NV item list ({pri.nvListed.length})</legend>
+  <details class="more">
+    <summary>Legacy NV item list ({pri.nvListed.length})</summary>
     <p class="dimtext" style="margin:0 0 6px">Items this file declares; green ones carry a value above.</p>
     <div>
       {#each pri.nvListed as n, i (i)}
@@ -141,28 +141,25 @@
           ><span class="mono">{n.item}</span>{#if !unnamed(n.item, n.name)}{" "}{n.name}{/if}</span>
       {/each}
     </div>
-  </fieldset>
+  </details>
 {:else if pri.nvItems.length}
-  <fieldset class="hgroup">
-    <legend>Legacy NV item list ({pri.nvItems.length})</legend>
+  <details class="more">
+    <summary>Legacy NV item list ({pri.nvItems.length})</summary>
     <p class="mono" style="margin:0; word-break:break-word; font-size:11px">{pri.nvItems.join(", ")}</p>
-  </fieldset>
+  </details>
 {/if}
 
 {#if pri.schema.count}
-  <fieldset class="hgroup">
-    <legend>NV path schema index ({pri.schema.count}, {pri.schema.source})</legend>
+  <details class="more">
+    <summary>NV path schema index ({pri.schema.count} paths, {pri.schema.source})</summary>
     <p class="dimtext" style="margin:0 0 6px">Paths the format knows about; no values.</p>
-    <button class="btn" onclick={() => (showSchema = !showSchema)}>
-      {showSchema ? "Hide" : "Show"} {pri.schema.count} paths
-    </button>
-    {#if showSchema}<pre class="code">{pri.schema.paths.join("\n")}</pre>{/if}
-  </fieldset>
+    <pre class="code">{pri.schema.paths.join("\n")}</pre>
+  </details>
 {/if}
 
 {#if unknown.length}
-  <fieldset class="hgroup">
-    <legend>Unidentified fields ({unknown.length})</legend>
+  <details class="more">
+    <summary>Unidentified fields ({unknown.length})</summary>
     <table class="grid">
       <thead><tr><th>Tag</th><th class="num">n</th><th class="num">len</th><th>Value</th><th>Note</th></tr></thead>
       <tbody>
@@ -179,10 +176,12 @@
         {/each}
       </tbody>
     </table>
-  </fieldset>
+  </details>
 {/if}
 
 <style>
+  .more { margin: 8px 0 0; }
+  .more > summary { cursor: pointer; padding: 3px 0; }
   .path { font-size: 10.5px; word-break: break-all; }
   .flags { display: flex; flex-wrap: wrap; gap: 2px; margin-bottom: 3px; }
   .flag {

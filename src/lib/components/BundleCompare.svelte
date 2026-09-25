@@ -36,7 +36,10 @@
   );
   // Few files open by default; a text filter opens whatever it matched.
   const auto = $derived(!!q || diff.files.length <= 6);
-  const isOpen = (path: string) => auto !== flipped.has(path);
+  // Version stamps and signature digests change with every build; they start closed.
+  const routine = (path: string) => /^(Info|version)\.plist$|^signatures\//.test(path);
+  const initially = (path: string) => auto && (!!q || !routine(path));
+  const isOpen = (path: string) => initially(path) !== flipped.has(path);
 
   function toggle(path: string) {
     if (flipped.has(path)) flipped.delete(path);
@@ -45,7 +48,7 @@
 
   function setAll(open: boolean) {
     flipped.clear();
-    if (open !== auto) for (const x of visible) flipped.add(x.f.path);
+    for (const x of visible) if (initially(x.f.path) !== open) flipped.add(x.f.path);
   }
 
   function toggleKind(k: DiffKind) {
@@ -79,7 +82,6 @@
 {/snippet}
 
 {#if diff.files.length}
-  {#if diff.counts.same}<p class="dimtext" style="margin:6px 0">{diff.counts.same} {diff.counts.same === 1 ? "file" : "files"} identical</p>{/if}
   <div class="rowflex">
     {#each KINDS as k (k)}
       <button class="btn" class:on={kinds.has(k)} aria-pressed={kinds.has(k)} onclick={() => toggleKind(k)}>

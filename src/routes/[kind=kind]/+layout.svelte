@@ -113,7 +113,7 @@
                 {@attach c.name === selected && reveal}
               >
                 <span class="name">{c.display}</span>
-                <span class="dim">{c.cc ? c.cc.toUpperCase() + " " : ""}{c.ota + ("image" in c && c.image ? 1 : 0)}</span>
+                {#if c.cc}<span class="dim">{c.cc.toUpperCase()}</span>{/if}
               </a>
             </li>
           {:else}

@@ -360,7 +360,8 @@ export async function getBaseband(build: string) {
     version: all.find((b) => b.build === build)?.version,
     package: s.package,
     members: s.members,
-    containers: s.containers.map((c) => ({
+    // The header metadata is build-system placeholders apart from the version the page already names.
+    containers: s.containers.map(({ meta: _meta, ...c }) => ({
       ...c,
       fileTypes: c.fileTypes.map((t) => ({ ...t, confidence: BBCFG_FILE_TYPES[t.type]?.confidence, note: BBCFG_FILE_TYPES[t.type]?.note })),
     })),

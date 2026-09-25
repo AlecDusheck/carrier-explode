@@ -4,13 +4,16 @@
 
   let { v, label }: { v: PriValue; label?: string } = $props();
   let open = $state(false);
+
+  const wide = (x: PriValue) => x.len >= 4 && Number(x.exact ?? x.int) > 0xffff;
 </script>
 
 {#if v.kind === "xml"}
   <button class="chip warn" onclick={() => (open = !open)}>{open ? "hide" : "show"} XML, {v.len} bytes</button>
   {#if open}<pre class="code">{v.xml}</pre>{/if}
 {:else if v.kind === "int"}
-  <span class="mono">{v.exact ?? v.int}{#if label}{" "}<span class="label">= {label}</span>{/if}{" "}<span class="dimtext">0x{v.hex} {v.len}B LE</span></span>
+  <!-- The stored bytes stay a hover away; hex is shown only where it reads better than decimal (bitmaps). -->
+  <span class="mono" title="0x{v.hex}, {v.len} bytes little-endian">{v.exact ?? v.int}{#if label}{" "}<span class="label">= {label}</span>{/if}{#if wide(v)}{" "}<span class="dimtext">0x{v.hex}</span>{/if}</span>
 {:else if v.kind === "string"}
   <span class="mono">"{v.text}"</span>{#if label}{" "}<span class="label">= {label}</span>{/if}
 {:else if v.kind === "empty"}

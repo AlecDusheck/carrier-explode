@@ -29,7 +29,17 @@
       {#each KINDS as [kind, title] (kind)}
         {@const d = r[kind]}
         <fieldset class="hgroup">
-          <legend>{title}: {d.total} total, {d.changed.length} changed, {d.added.length} added, {d.removed.length} removed</legend>
+          <legend>{title}: {d.changed.length} changed, {d.added.length} added, {d.removed.length} removed</legend>
+          {#if d.added.length}
+            <p class="names"><b>Added</b>
+              {#each d.added as name (name)}<a class="chip good" href={bundleHref(kind, name, slug)}>{name}</a>{/each}
+            </p>
+          {/if}
+          {#if d.removed.length}
+            <p class="names"><b>Removed</b>
+              {#each d.removed as name (name)}<a class="chip bad" href={bundleHref(kind, name)}>{name}</a>{/each}
+            </p>
+          {/if}
           {#if d.changed.length}
             <table class="grid">
               <thead><tr><th>Changed</th><th class="num">From</th><th class="num">To</th><th></th></tr></thead>
@@ -45,16 +55,6 @@
               </tbody>
             </table>
           {/if}
-          {#if d.added.length}
-            <p class="names"><b>Added</b>
-              {#each d.added as name (name)}<a class="chip good" href={bundleHref(kind, name, slug)}>{name}</a>{/each}
-            </p>
-          {/if}
-          {#if d.removed.length}
-            <p class="names"><b>Removed</b>
-              {#each d.removed as name (name)}<a class="chip bad" href={bundleHref(kind, name)}>{name}</a>{/each}
-            </p>
-          {/if}
         </fieldset>
       {/each}
     </Pane>
@@ -62,6 +62,6 @@
 </div>
 
 <style>
-  .names { margin: 6px 0 0; }
+  .names { margin: 0 0 6px; }
   .names b { margin-right: 6px; }
 </style>

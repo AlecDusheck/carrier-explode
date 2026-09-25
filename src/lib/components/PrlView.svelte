@@ -61,15 +61,16 @@
     <tbody>
       <tr><td class="k">Format</td><td>{prl.format === "extended" ? "Extended PRL" : "IS-683-A PRL"}, SSPR_P_REV {prl.sspPRev}</td></tr>
       <tr><td class="k">PRL ID</td><td class="mono">{prl.id}</td></tr>
-      <tr><td class="k">Size</td><td>{prl.size} bytes (PR_LIST_SIZE)</td></tr>
       <tr><td class="k">Preferred only</td><td>{prl.prefOnly ? "yes: only systems listed as preferred may be used" : "no: unlisted systems may be used"}</td></tr>
       <tr><td class="k">Default roaming indicator</td><td>{prl.defRoamInd} = {prl.defRoamIndName}</td></tr>
-      <tr><td class="k">Records</td><td>{prl.numAcqRecs} acquisition, {prl.numSysRecs} system in {prl.regions} GEO region{prl.regions === 1 ? "" : "s"}{prl.numCommonSubnetRecs ? ", " + prl.numCommonSubnetRecs + " common subnet" : ""}</td></tr>
+      <tr><td class="k">GEO regions</td><td>{prl.regions}</td></tr>
       <tr>
         <td class="k">CRC</td>
         <td>
           <span class="chip {prl.crc.ok ? 'good' : 'bad'}">{prl.crc.ok ? "ok" : "mismatch"}</span>
-          <span class="mono dimtext">stored 0x{prl.crc.stored.toString(16).padStart(4, "0")}{prl.crc.ok ? "" : ", computed 0x" + prl.crc.computed.toString(16).padStart(4, "0")}</span>
+          {#if !prl.crc.ok}
+            <span class="mono dimtext">stored 0x{prl.crc.stored.toString(16).padStart(4, "0")}, computed 0x{prl.crc.computed.toString(16).padStart(4, "0")}</span>
+          {/if}
         </td>
       </tr>
     </tbody>
