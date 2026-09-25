@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { Variant } from "$lib/decode/bbfw";
+  import { variantKey, type Variant } from "$lib/decode";
 
   let { variants = [], configs = [] }: { variants?: Variant[]; configs?: string[] } = $props();
 
@@ -10,7 +10,7 @@
 </script>
 
 {#each platforms as p (p.platform)}
-  <span class="chip" title="platform/sku/hw rev: {p.vs.map((v) => `${v.platform}/${v.sku}/${v.hwRev}`).join(', ')}">
+  <span class="chip" title="platform/sku/hw rev: {p.vs.map(variantKey).join(', ')}">
     P{p.platform}{p.vs.length > 1 ? ` ×${p.vs.length}` : ""}
   </span>
 {/each}

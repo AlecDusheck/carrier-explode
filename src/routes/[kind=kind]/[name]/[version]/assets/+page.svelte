@@ -18,7 +18,7 @@
           <figcaption class="mono">{f.path}<br /><span class="dimtext">{humanBytes(f.size)}</span></figcaption>
         </figure>
       {:else}
-        <p class="dimtext" style="margin:0">No images.</p>
+        <p class="dimtext flush">No images.</p>
       {/each}
     </div>
   </Pane>

@@ -1,15 +1,23 @@
+<script lang="ts" module>
+  /** Tables and lists longer than this start closed. */
+  const BIG = 30;
+  /** Lists up to this long, of plain values, read as one line. */
+  const INLINE = 16;
+</script>
+
 <script lang="ts">
   import Self from "./IntelNode.svelte";
   import IntelValueView from "./IntelValue.svelte";
   import Confidence from "./Confidence.svelte";
   import { isIntelNode, type IntelList, type IntelNode, type IntelTable } from "$lib/decode";
+  import type { Folding, FoldToggle } from "$lib/ui-state.svelte";
 
   let {
     node,
     depth = 0,
     notes = false,
     raw = false,
-    epoch = 0,
+    fold,
     filtering = false,
     nested = false,
   }: {
@@ -17,25 +25,23 @@
     depth?: number;
     notes?: boolean;
     raw?: boolean;
-    epoch?: number;
+    fold: Folding;
     filtering?: boolean;
     /** Inside a table cell: no twist, lists and PLMN tables inline. */
     nested?: boolean;
   } = $props();
 
-  // A manual toggle only counts until the next expand-all or collapse-all.
-  let toggled = $state<{ epoch: number; open: boolean } | null>(null);
+  let toggled = $state<FoldToggle | null>(null);
   let showNote = $state(false);
 
-  const big = $derived(node.kind === "table" ? node.rows.length > 30 : node.kind === "list" ? node.items.length > 30 : false);
+  const big = $derived(node.kind === "table" ? node.rows.length > BIG : node.kind === "list" ? node.items.length > BIG : false);
   const auto = $derived(filtering || (node.kind === "group" ? depth < 2 : depth < 4 && !big));
-  const override = $derived(toggled?.epoch === epoch ? toggled.open : null);
-  const open = $derived(override ?? (epoch > 0 ? true : epoch < 0 ? false : auto));
+  const open = $derived(fold.openFor(auto, toggled));
   const note = $derived(node.kind === "group" ? node.note : undefined);
   const noteOn = $derived(notes || showNote);
 
   // A list of short values reads as one line; a decoded bitmap reads as its bands.
-  const inlineList = $derived(node.kind === "list" && (nested || !!node.decoded || (node.items.length <= 16 && node.items.every((x) => !x.value.decoded || x.value.decoded.kind === "band"))));
+  const inlineList = $derived(node.kind === "list" && (nested || !!node.value || (node.items.length <= INLINE && node.items.every((x) => !x.value.decoded || x.value.decoded.kind === "band"))));
   // PLMN tables whose only columns are mcc / mnc are a list of PLMNs.
   const plmnOnly = (t: IntelTable) => t.rows.every((r) => r.plmn) && t.columns.every((c) => c === "mcc" || c === "mnc");
   const cols = (t: IntelTable) => (raw || !t.rows.some((r) => r.plmn || r.mcc) ? t.columns : t.columns.filter((c) => c !== "mcc" && c !== "mnc"));
@@ -46,7 +52,7 @@
 </script>
 
 {#snippet twist()}
-  <button type="button" class="twist" aria-expanded={open} onclick={() => (toggled = { epoch, open: !open })}>{open ? "▾" : "▸"}</button>
+  <button type="button" class="twist" aria-expanded={open} onclick={() => (toggled = fold.toggle(!open))}>{open ? "▾" : "▸"}</button>
 {/snippet}
 
 {#snippet unused(l: IntelList)}
@@ -72,7 +78,7 @@
                 {#if !cell}
                   <span class="dimtext">·</span>
                 {:else if isIntelNode(cell)}
-                  <Self node={cell} depth={depth + 1} {notes} {raw} {epoch} {filtering} nested />
+                  <Self node={cell} depth={depth + 1} {notes} {raw} {fold} {filtering} nested />
                 {:else}
                   <IntelValueView v={cell} {raw} bare />
                 {/if}
@@ -97,7 +103,6 @@
       {#if node.kind === "leaf" || inlineList}<span class="twist" aria-hidden="true">·</span>{:else}{@render twist()}{/if}
       <span>
         {#if note}
-          <!-- The name is the control: tap or click for its note. -->
           <button type="button" class="key doc" class:on={noteOn} aria-expanded={noteOn} onclick={() => (showNote = !showNote)}>{node.name}</button>
         {:else}
           <span class="key">{node.name}</span>
@@ -106,9 +111,9 @@
           <span class="type sep">=</span><IntelValueView v={node.value} {raw} />
         {:else if node.kind === "list" && inlineList}
           <span class="type">[{node.items.length}]</span><span class="type sep">=</span>
-          {#if node.decoded}
-            <IntelValueView v={{ raw: node.items.map((x) => x.value.raw).join(", "), text: "", decoded: node.decoded }} {raw} />
-            {#if !raw}<span class="type"> ({node.items.map((x) => x.value.raw).join(", ")})</span>{/if}
+          {#if node.value}
+            <IntelValueView v={node.value} {raw} />
+            {#if !raw}<span class="type"> ({node.value.raw})</span>{/if}
           {:else}
             {#each shown(node) as x, i (i)}{#if i}<span class="type comma">,</span>{/if}<IntelValueView v={x.value} {raw} bare />{/each}{@render unused(node)}
           {/if}
@@ -127,7 +132,7 @@
     {#if open && node.kind === "group"}
       <div class="children">
         {#each node.children as c (c.path)}
-          <Self node={c} depth={depth + 1} {notes} {raw} {epoch} {filtering} />
+          <Self node={c} depth={depth + 1} {notes} {raw} {fold} {filtering} />
         {/each}
       </div>
     {:else if open && node.kind === "table"}
@@ -144,18 +149,9 @@
 {/if}
 
 <style>
-  .sep { margin: 0 0.5ch; }
   .comma { margin-right: 0.5ch; }
   .idx { white-space: nowrap; flex: none; }
-  .doc {
-    font: inherit; font-weight: bold; color: #1b3d6b; background: none; border: 0; padding: 0;
-    text-decoration: underline dotted #8a93a6; text-underline-offset: 3px; cursor: help;
-  }
-  .doc.on { text-decoration-style: solid; }
   .itable { width: auto; min-width: 50%; margin: 2px 0 4px; }
   .itable td { font-family: var(--mono); }
   .itable th { position: static; }
-  @media (max-width: 760px) {
-    .doc { padding: 6px 0; margin: -6px 0; }
-  }
 </style>

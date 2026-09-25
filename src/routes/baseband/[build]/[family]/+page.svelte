@@ -1,675 +1,95 @@
 <script lang="ts">
   import { goto } from "$app/navigation";
-  import { page } from "$app/state";
-  import { SvelteSet } from "svelte/reactivity";
-  import {
-    getBaseband, getBasebandBuilds, getBasebandCombos, getBasebandDiff, getBasebandFile, getModemPackage, getModems,
-  } from "$lib/api/tables.remote";
-  import type { Variant } from "$lib/decode/bbfw";
-  import type { ArfcnRange, MccScanEntry } from "$lib/decode/mdb";
-  import { modemLabel, modemVendor } from "$lib/decode/modem";
-  import { SSGCCS_ACTIONS, SSGCCS_STATES } from "$lib/decode/ssgccs";
-  import { bundleHref, fileHref, humanBytes, link, withParams } from "$lib/format";
-  import { imageSlug } from "$lib/names";
-  import { phoneList } from "$lib/phones";
+  import { getBaseband, getBasebandBuilds, getModems } from "$lib/api/tables.remote";
+  import { modemCapabilities } from "$lib/decode";
+  import { link } from "$lib/format";
   import Pane from "$lib/components/Pane.svelte";
-  import Variants from "$lib/components/Variants.svelte";
-  import Confidence from "$lib/components/Confidence.svelte";
-  import ComboTable from "$lib/components/ComboTable.svelte";
-  import PolicyTree from "$lib/components/PolicyTree.svelte";
-  import BasebandDiff from "$lib/components/BasebandDiff.svelte";
+  import ModemNav from "$lib/components/baseband/ModemNav.svelte";
+  import FbsSection from "$lib/components/baseband/FbsSection.svelte";
+  import CarrierCombos from "$lib/components/baseband/CarrierCombos.svelte";
+  import PolicyFiles from "$lib/components/baseband/PolicyFiles.svelte";
+  import PowerTable from "$lib/components/baseband/PowerTable.svelte";
+  import NetworkDbs from "$lib/components/baseband/NetworkDbs.svelte";
+  import PackageConfigs from "$lib/components/baseband/PackageConfigs.svelte";
+  import BasebandDiffSection from "$lib/components/baseband/BasebandDiffSection.svelte";
+  import ModemFirmware from "$lib/components/baseband/ModemFirmware.svelte";
+  import type { Baseband } from "$lib/components/baseband/types";
 
   let { params } = $props();
 
   const SECTIONS = [
-    ["fbs", "Fake base stations"], ["carriers", "Carriers"], ["policy", "Policy files"], ["power", "Power"],
-    ["networks", "Network databases"], ["configs", "Configs"], ["diff", "Diff"],
-  ];
+    { id: "fbs", label: "Fake base stations", shown: (bb: Baseband) => !!bb.ssgccs?.length },
+    { id: "carriers", label: "Carriers" },
+    { id: "policy", label: "Policy files" },
+    { id: "power", label: "Power", shown: (bb: Baseband) => bb.amprNs.length > 0 },
+    { id: "networks", label: "Network databases", shown: (bb: Baseband) => !!bb.mdb },
+    { id: "configs", label: "Configs" },
+    { id: "diff", label: "Diff" },
+  ] as const;
 
-  const fileAt = $derived(page.url.searchParams.get("file"));
-  const family = $derived(params.family);
-  const vendor = $derived(modemVendor(params.family));
-  const vs = $derived(page.url.searchParams.get("vs"));
-  const combos = new SvelteSet<string>();
-  let raw = $state(false);
-  let powerSet = $state(0);
-  let powerQuery = $state("");
-
-  const nav = (changes: Record<string, string | null>, hash = "") =>
-    goto(withParams(page.url, changes) + hash, { replaceState: true, keepFocus: true, noScroll: true });
-  const toggle = (k: string) => (combos.has(k) ? combos.delete(k) : combos.add(k));
-  const bands = (xs: number[], p: string) => xs.map((b) => p + b).join(" ");
-
-  /** Platforms whose numbers for a carrier match share one row. */
-  function mergeSets<S extends { sha1: string; variants: Variant[] }, C extends { tag: string; plmns: string[] }>(xs: Array<{ set: S; c: C }>) {
-    const out: Array<{ sha1: string; variants: Variant[]; c: C; key: string }> = [];
-    for (const { set, c } of xs) {
-      const { tag: _t, plmns: _p, ...stats } = c;
-      const key = JSON.stringify(stats);
-      const hit = out.find((o) => o.key === key);
-      if (hit) hit.variants = [...hit.variants, ...set.variants].sort((a, b) => a.platform - b.platform || a.sku - b.sku);
-      else out.push({ sha1: set.sha1, variants: [...set.variants], c, key });
-    }
-    return out;
-  }
-  /** Rows that differ only by the database's second key share one row. */
-  function mergeScan(xs: MccScanEntry[]) {
-    const out: Array<MccScanEntry & { keys: number[] }> = [];
-    for (const e of xs) {
-      const hit = out.find((o) => o.mcc === e.mcc && JSON.stringify(o.ranges) === JSON.stringify(e.ranges));
-      if (hit) hit.keys.push(e.key);
-      else out.push({ ...e, keys: [e.key] });
-    }
-    return out;
-  }
-  const mhz = (r: ArfcnRange) => `${r.loMHz}–${r.hiMHz}`;
-  const dbName = (p: string) => p.split("/").pop();
-  // Some defaults are whole tables; the name says what they are, the first bytes are enough.
-  const short = (hex: string) => (hex.length > 64 ? hex.slice(0, 64) + "…" : hex);
+  const caps = $derived(modemCapabilities(params.family));
+  // Packages with plaintext defaults get the full view; one request serves its section links and its sections.
+  const baseband = $derived(caps?.plaintextDefaults ? getBaseband({ build: params.build, family: params.family }) : null);
+  const sectionsOf = (bb: Baseband) => SECTIONS.filter((s) => !("shown" in s) || s.shown(bb));
 </script>
 
-{#snippet elsewhere(what: string)}
-  {@const all = (await getBasebandBuilds()).filter((b) => b.families.includes(family) && b.build !== params.build)}
-  {#if all.length}
-    <div class="rowflex elsewhere">
-      <span class="dimtext">{what}</span>
-      {#each all as b (b.build)}<a class="chip" href={link(`/baseband/${b.build}/${family}`)}>iOS {b.version}</a>{/each}
-    </div>
-  {/if}
-{/snippet}
-
 <div class="view">
-  <div class="toolbar">
-    <Pane quiet>
-      {@const all = await getBasebandBuilds()}
+  <Pane>
+    {@const [builds, mods] = await Promise.all([getBasebandBuilds(), getModems(params.build)])}
+    {@const others = builds.filter((b) => b.families.includes(params.family) && b.build !== params.build)}
+    {@const modem = mods.modems.find((x) => x.family === params.family)}
+    <div class="toolbar">
       <label class="lbl">
         Image
         <select
           name="build"
           value={params.build}
           onchange={(e) => {
-            const b = all.find((x) => x.build === e.currentTarget.value);
-            goto(link(`/baseband/${b?.build}` + (b?.families.includes(family) ? `/${family}` : "")));
+            const b = builds.find((x) => x.build === e.currentTarget.value);
+            if (b) goto(link(`/baseband/${b.build}` + (b.families.includes(params.family) ? `/${params.family}` : "")));
           }}
         >
-          {#if !all.some((b) => b.build === params.build)}<option value={params.build}>{params.build}</option>{/if}
-          {#each all as b (b.build)}
+          {#if !builds.some((b) => b.build === params.build)}<option value={params.build}>{params.build}</option>{/if}
+          {#each builds as b (b.build)}
             <option value={b.build} disabled={!b.families.length && b.build !== params.build}>iOS {b.version} ({b.build}){b.families.length ? "" : " - not extracted"}</option>
           {/each}
         </select>
       </label>
-    </Pane>
-    <span class="grow"></span>
-    {#if vendor === "qualcomm"}
-      <Pane quiet>
-        {@const bb = await getBaseband({ build: params.build, family })}
-        {@const has = { power: !!bb.amprNs.length, fbs: !!bb.ssgccs?.length, networks: !!bb.mdb } as Record<string, boolean>}
-        {#each SECTIONS.filter(([id]) => has[id] ?? true) as [id, label] (id)}<a class="btn" href="#{id}">{label}</a>{/each}
-      </Pane>
-    {/if}
-  </div>
-
-  <div class="scroll pad">
-    <Pane>
-      {@const mods = await getModems(params.build)}
-      {@const m = mods.modems.find((x) => x.family === family)}
-      <nav class="modems" aria-label="Modem packages in iOS {mods.version}">
-        {#each mods.modems as x (x.family)}
-          <a class="btn" href={link(`/baseband/${params.build}/${x.family}`)} aria-current={x.family === family ? "page" : undefined}>
-            <b>{modemLabel(x.family)}</b>
-            <span class="phones">{phoneList(x.devices)}</span>
-          </a>
-        {/each}
-      </nav>
-      <div class="which">
-        <h2>{modemLabel(family)} <span class="dimtext">for {m ? phoneList(m.devices) : "no phone in this image"}</span></h2>
-        <p class="dimtext note">
-          <a href={link("/releases/" + params.build)}>iOS {mods.version} ({params.build})</a> ships {mods.modems.length} modem packages, one per modem;
-          this page is the one in <span class="mono">{m?.package.name ?? family}</span>. The phones above each run their own.
-        </p>
-      </div>
-    </Pane>
-
-    {#if vendor === "qualcomm"}
-    <Pane>
-      {@const bb = await getBaseband({ build: params.build, family })}
-      {@const tags = [...new Set(bb.bandCombos.flatMap((s) => s.carriers.map((c) => c.tag)))]}
-      {@const readable = bb.files.filter((f) => f.readable)}
-      {@const others = (await getBasebandBuilds()).filter((b) => b.families.includes(bb.family) && b.build !== params.build)}
-
-      {#if bb.package.version}<div class="rowflex"><span class="dimtext">Package version</span> <b class="mono">{bb.package.version}</b></div>{/if}
-      <p class="lead dimtext order">
-        Load order: the modem's built-in config, then the per-platform defaults in bbcfg.mbn, then the carrier bundle's .der.pri, which overwrites the same EFS paths.
-      </p>
-
-      {#if bb.ssgccs?.length}
-        <fieldset class="hgroup" id="fbs">
-          <legend>Fake base station detection</legend>
-          {#each bb.ssgccs as g, gi (gi)}
-            {@const cfg = g.config}
-            {@const all = cfg.activePlmns?.includes("ALL")}
-            {@const custom = cfg.lines.find((l) => l.key === "CUSTOM")}
-            {@const rats = cfg.lines.filter((l) => l.key !== "CUSTOM" && l.key !== "ACTIVE_PLMN_LIST")}
-            {#if bb.ssgccs.length > 1}<div class="rowflex"><span class="dimtext">Serves</span> <Variants variants={g.variants} configs={g.configs} /></div>{/if}
-            <p class="prose">
-              The modem scores every cell it sees for signs of a fake base station (an IMSI catcher: a transmitter posing as the carrier
-              to identify or track phones). As a cell's score rises it moves through {SSGCCS_STATES.join(" → ")}, and past a threshold the
-              modem acts against it, for example by barring or deprioritising that cell.
-              {#if all}<b>This package turns it on for all networks.</b>{:else if cfg.activePlmns?.length}It is on for {cfg.activePlmns.join(", ")}.{:else}The files do not say which networks it runs on.{/if}
-            </p>
-            {#if custom}
-              <h4>{custom.title}</h4>
-              <div class="hscroll">
-                <table class="grid fit">
-                  <tbody>
-                    {#each custom.fields as f, i (i)}
-                      <tr><td class="k">{f.name}</td><td class="num mono">{f.value}</td><td><Confidence c={f.confidence} /></td></tr>
-                    {/each}
-                  </tbody>
-                </table>
-              </div>
-            {/if}
-            {#each rats as l (l.key)}
-              <h4>{l.title} <span class="dimtext mono">{l.key}</span></h4>
-              <div class="hscroll">
-                <table class="grid fit">
-                  <tbody>
-                    {#each l.fields as f, i (i)}
-                      <tr>
-                        <td class="k">{f.name}</td>
-                        <td class="mono">{f.value}{#if f.name === "Action" && SSGCCS_ACTIONS[f.value]}<span class="dimtext sp">({SSGCCS_ACTIONS[f.value]})</span>{/if}</td>
-                        <td><Confidence c={f.confidence} /></td>
-                      </tr>
-                    {/each}
-                  </tbody>
-                </table>
-              </div>
-            {/each}
-            <details class="more">
-              <summary>Raw text</summary>
-              {#each g.files as f (f.path)}
-                <div class="mono dimtext">{f.path}</div>
-                <pre class="code">{f.text}</pre>
-              {/each}
-            </details>
-          {/each}
-          <p class="dimtext note">Field names come from the modem image's key strings and log text; the parser itself is compressed.</p>
-        </fieldset>
+      <span class="grow"></span>
+      {#if baseband}
+        <Pane quiet>
+          {#each sectionsOf(await baseband) as s (s.id)}<a class="btn" href="#{s.id}">{s.label}</a>{/each}
+        </Pane>
       {/if}
+    </div>
 
-      <fieldset class="hgroup" id="carriers">
-        <legend>Carriers with band combos ({tags.length})</legend>
-        <p class="dimtext note">From band_combos_per_plmn.xml. Bundles are the ones the OTA manifest routes those PLMNs to.</p>
-        <div class="rowflex taglinks">{#each tags as t (t)}<a class="chip" href="#{t}">{t}</a>{/each}</div>
-        {#each tags as tag (tag)}
-          {@const m = bb.carrierMap?.[tag]}
-          {@const sets = mergeSets(bb.bandCombos.flatMap((s) => s.carriers.filter((c) => c.tag === tag).map((c) => ({ set: s, c }))))}
-          <section class="carrier" id={tag}>
-            <h3>{tag}</h3>
-            <div class="rowflex">
-              <span class="dimtext">PLMN</span>
-              {#each m?.plmns ?? sets[0]?.c.plmns ?? [] as p (p)}<span class="chip mono">{p}</span>{/each}
-            </div>
-            {#if m}
-              <div class="rowflex">
-                <span class="dimtext">Bundles</span>
-                {#each m.bundles as n (n)}<a class="chip" href={bundleHref("carriers", n)}>{n}</a>{:else}<span class="dimtext">none mapped</span>{/each}
-              </div>
-              {#if m.mvnoBundles.length}
-                <details>
-                  <summary class="dimtext">{m.mvnoBundles.length} MVNO bundles on these PLMNs</summary>
-                  {#each m.mvnoBundles as n (n)}<a class="chip" href={bundleHref("carriers", n)}>{n}</a>{/each}
-                </details>
-              {/if}
-            {/if}
-            <div class="hscroll">
-              <table class="grid">
-                <thead>
-                  <tr>
-                    <th>Platforms</th><th class="num">Combos</th><th class="num">EN-DC</th><th class="num">NR</th><th class="num">LTE</th>
-                    <th class="num">NR-DC</th><th class="num">Max CC</th><th>NR bands</th><th>LTE anchors</th><th></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {#each sets as set (set.sha1)}
-                    {@const c = set.c}
-                    <tr>
-                      <td class="plat"><Variants variants={set.variants} /></td>
-                      <td class="num">{c.combos}</td>
-                      <td class="num">{c.endc}</td>
-                      <td class="num">{c.nr}</td>
-                      <td class="num">{c.lte}</td>
-                      <td class="num">{c.nrdc}</td>
-                      <td class="num">{c.maxComponents}</td>
-                      <td class="mono bands">{bands(c.nrBands.filter((b) => b < 257), "n")}{#if c.fr2Bands.length}<br /><span class="dimtext">FR2</span> {bands(c.fr2Bands, "n")}{/if}</td>
-                      <td class="mono bands">{bands(c.lteAnchors, "B")}</td>
-                      <td>
-                        <button class="btn" class:on={combos.has(tag + set.sha1)} aria-expanded={combos.has(tag + set.sha1)} onclick={() => toggle(tag + set.sha1)}>Combos</button>
-                      </td>
-                    </tr>
-                  {/each}
-                </tbody>
-              </table>
-            </div>
-            {#each sets as set (set.sha1)}
-              {#if combos.has(tag + set.sha1)}
-                <Pane>
-                  <ComboTable combos={await getBasebandCombos({ id: bb.id, sha1: set.sha1, tag })} />
-                </Pane>
-              {/if}
-            {/each}
-          </section>
-        {:else}
-          <p class="dimtext">No band_combos_per_plmn.xml in this package.</p>
-        {/each}
-      </fieldset>
+    <div class="scroll pad">
+      <ModemNav {mods} {modem} family={params.family} />
 
-      <fieldset class="hgroup" id="policy">
-        <legend>Policy files ({readable.length})</legend>
-        <p class="dimtext note">Plaintext EFS files the package writes. Where a path appears more than once, each copy serves the platforms or configs shown.</p>
-        <div class="hscroll">
-          <table class="grid">
-            <thead><tr><th>Path</th><th>From</th><th>Serves</th></tr></thead>
-            <tbody>
-              {#each readable as f (f.i)}
-                <tr class:sel={fileAt === String(f.i)}>
-                  <td class="wrap">
-                    <a class="mono" href="{withParams(page.url, { file: String(f.i) })}#file" data-sveltekit-noscroll data-sveltekit-replacestate>{f.path}</a>
-                    {#if f.refs?.policy}<span class="tag">{f.refs.policy}</span>{/if}
-                  </td>
-                  <td class="mono">{f.member}</td>
-                  <td><Variants variants={f.variants} configs={f.configs} /></td>
-                </tr>
-              {/each}
-            </tbody>
-          </table>
-        </div>
-
-        {#if fileAt !== null}
-          <div id="file" class="viewer">
-            <Pane>
-              {@const f = await getBasebandFile({ id: bb.id, i: Number(fileAt) })}
-              <div class="rowflex">
-                <b class="mono wrap">{f.path}</b>
-                <span class="dimtext">{f.format}, {f.member}, {humanBytes(f.length)}</span>
-                <span class="grow"></span>
-                {#if f.format === "xml"}
-                  <button class="btn" class:on={!raw} onclick={() => (raw = false)}>Rules</button>
-                  <button class="btn" class:on={raw} onclick={() => (raw = true)}>Raw</button>
-                {/if}
-                <button class="btn" onclick={() => nav({ file: null })}>Close</button>
-              </div>
-              {#if f.refs?.carriers?.length || f.refs?.plmns?.length || f.refs?.mccs?.length}
-                <div class="rowflex refs">
-                  {#each f.refs.carriers ?? [] as c, i (i)}<span class="chip">{c}</span>{/each}
-                  {#if f.refs.plmns?.length}<span class="dimtext">{f.refs.plmns.length} PLMNs</span>{/if}
-                  {#if f.refs.mccs?.length}<span class="dimtext">MCC {f.refs.mccs.join(" ")}</span>{/if}
-                </div>
-              {/if}
-              {#if f.format === "xml" && !raw && f.text}
-                <PolicyTree xml={f.text} />
-              {:else if f.text !== undefined}
-                <pre class="code">{f.text}</pre>
-              {:else}
-                <p class="dimtext">Binary content.</p>
-              {/if}
-            </Pane>
-          </div>
-        {/if}
-      </fieldset>
-
-      {#if bb.amprNs.length}
-        {@const a = bb.amprNs[Math.min(powerSet, bb.amprNs.length - 1)]}
-        {@const pq = powerQuery.trim().toLowerCase()}
-        {@const country = (mcc: string) => bb.mccs[mcc]}
-        {@const groups = a.groups.filter((g) => !pq || g.mccs.some((m) => m.includes(pq) || (country(m)?.name ?? "").toLowerCase().includes(pq)))}
-        <fieldset class="hgroup" id="power">
-          <legend>Power: A-MPR network signalling</legend>
-          <p class="dimtext note">pt.mbn NV 64628: the NS value signalled per LTE band, without and with carrier aggregation, by MCC.</p>
-          <div class="rowflex" style="margin-bottom:6px">
-            {#if bb.amprNs.length > 1}
-              <label class="lbl">
-                Table
-                <select name="ampr" bind:value={powerSet}>
-                  {#each bb.amprNs as x, i (x.sha1)}
-                    <option value={i}>{i + 1}: {x.variants.length} variants, platforms {[...new Set(x.variants.map((v) => v.platform))].join(", ")}</option>
-                  {/each}
-                </select>
-              </label>
-            {/if}
-            <input class="grow" style="min-width:10em" type="search" name="ampr-filter" placeholder="MCC or country" aria-label="filter by MCC or country" bind:value={powerQuery} />
-          </div>
-          <div class="hscroll">
-            <table class="grid">
-              <thead><tr><th>Countries</th><th class="num">Band</th><th class="num">NS</th><th class="num">NS with CA</th></tr></thead>
-              <tbody>
-                {#each groups as g, gi (gi)}
-                  {#each g.bands as b, bi (bi)}
-                    <tr>
-                      {#if bi === 0}
-                        {@const named = g.mccs.map((m) => ({ m, c: country(m) }))}
-                        <td rowspan={g.bands.length} class="countries">
-                          {#if named.length > 8}
-                            <details>
-                              <summary>{named.length} MCCs: {[...new Set(named.map((x) => x.c?.name ?? x.m))].slice(0, 4).join(", ")}, …</summary>
-                              {#each named as x (x.m)}<span class="chip" title={x.c?.name}>{x.m} {x.c?.cc.toUpperCase() ?? ""}</span>{/each}
-                            </details>
-                          {:else}
-                            {#each named as x (x.m)}<span class="chip" title={x.c?.name}>{x.m} {x.c?.name ?? ""}</span>{/each}
-                          {/if}
-                        </td>
-                      {/if}
-                      <td class="num mono">B{b.band}</td>
-                      <td class="num">{b.nsNoCa ?? ""}</td>
-                      <td class="num">{b.nsWithCa ?? ""}</td>
-                    </tr>
-                  {/each}
-                {:else}
-                  <tr><td colspan="4" class="dimtext">No group matches.</td></tr>
-                {/each}
-              </tbody>
-            </table>
-          </div>
-          <div class="rowflex" style="margin-top:4px"><span class="dimtext">Serves</span> <Variants variants={a.variants} /></div>
-      </fieldset>
+      {#if baseband}
+        <Pane>
+          {@const bb = await baseband}
+          {#if bb.package.version}<div class="rowflex"><span class="dimtext">Package version</span> <b class="mono">{bb.package.version}</b></div>{/if}
+          <p class="lead dimtext order">
+            Load order: the modem's built-in config, then the per-platform defaults in bbcfg.mbn, then the carrier bundle's .der.pri, which overwrites the same EFS paths.
+          </p>
+          {#if bb.ssgccs?.length}<FbsSection groups={bb.ssgccs} />{/if}
+          <CarrierCombos id={bb.id} bandCombos={bb.bandCombos} carrierMap={bb.carrierMap} />
+          <PolicyFiles id={bb.id} files={bb.files} />
+          {#if bb.amprNs.length}<PowerTable tables={bb.amprNs} mccs={bb.mccs} />{/if}
+          {#if bb.mdb}<NetworkDbs mdb={bb.mdb} mccs={bb.mccs} />{/if}
+          <PackageConfigs {bb} />
+          <BasebandDiffSection build={params.build} family={bb.family} {others} />
+        </Pane>
+      {:else if modem}
+        <Pane>
+          <ModemFirmware {modem} {caps} version={mods.version} {others} />
+        </Pane>
       {/if}
-
-      {#if bb.mdb}
-        {@const scans = bb.mdb.databases.filter((d) => d.scan)}
-        {@const feats = bb.mdb.databases.filter((d) => d.features)}
-        <fieldset class="hgroup" id="networks">
-          <legend>Network databases</legend>
-          <p class="dimtext note">EFS databases (/mdb) and small settings in the modem's built-in configs.</p>
-          {#each scans as d (d.sha1)}
-            <h4>Where 5G looks, by country <span class="dimtext mono">{dbName(d.path)}</span></h4>
-            <p class="dimtext note">NR frequency ranges the modem scans or allows per country (NR-ARFCN, converted to MHz). The band is named only where a single band holds every range.</p>
-            <div class="hscroll">
-              <table class="grid">
-                <thead><tr><th>Country</th><th>Band</th><th>Range (MHz)</th><th>NR-ARFCN</th><th class="num">Key</th></tr></thead>
-                <tbody>
-                  {#each mergeScan(d.scan ?? []) as e, ei (ei)}
-                    {#each e.ranges as r, ri (ri)}
-                      <tr>
-                        {#if ri === 0}
-                          <td rowspan={e.ranges.length}>{#if e.mcc}{e.mcc} {bb.mccs[e.mcc]?.name ?? ""}{:else}Any country{/if}</td>
-                          <td rowspan={e.ranges.length} class="mono">{e.band ? "n" + e.band : ""}</td>
-                        {/if}
-                        <td class="mono">{mhz(r)}{#if r.uplink}<span class="dimtext sp">uplink</span>{/if}</td>
-                        <td class="mono dimtext">{r.lo}–{r.hi}</td>
-                        {#if ri === 0}<td rowspan={e.ranges.length} class="num mono dimtext">{e.keys.join(", ")}</td>{/if}
-                      </tr>
-                    {/each}
-                  {/each}
-                </tbody>
-              </table>
-            </div>
-            <div class="rowflex dimtext"><span>Key: meaning unknown, not a band number.</span><Confidence c="unknown" /> <span>Serves</span> <Variants variants={d.variants} configs={d.configs} /></div>
-          {/each}
-          {#if feats.length}
-            <h4>Features per network <Confidence c="unknown" /></h4>
-            <p class="dimtext note">plmn2features records: feature id = value pairs per network. The firmware does not name the ids (they are not band numbers).</p>
-            <div class="hscroll">
-              <table class="grid">
-                <thead><tr><th>Networks</th><th>Database</th><th>Features</th></tr></thead>
-                <tbody>
-                  {#each feats as d (d.sha1)}
-                    {#each d.features ?? [] as x, xi (xi)}
-                      {@const bundles = [...new Set(x.plmns.flatMap((p) => bb.mdb?.plmnBundles?.[p] ?? []))]}
-                      <tr>
-                        <td class="countries">
-                          {#each x.plmns as p (p)}<span class="chip mono">{p}</span>{/each}
-                          {#if bundles.length}<div>{#each bundles as n (n)}<a class="chip" href={bundleHref("carriers", n)}>{n}</a>{/each}</div>{/if}
-                        </td>
-                        <td class="mono">{dbName(d.path)}</td>
-                        <td class="mono wrap">
-                          {#if x.features}{#each x.features as [id, v], i (i)}<span class="pair">{id}={v}</span> {/each}
-                          {:else}<span class="dimtext">raw</span> {x.hex}{/if}
-                        </td>
-                      </tr>
-                    {/each}
-                  {/each}
-                </tbody>
-              </table>
-            </div>
-          {/if}
-          {#if bb.mdb.settings.length}
-            <h4>Modem settings</h4>
-            <div class="hscroll">
-              <table class="grid">
-                <thead><tr><th>Setting</th><th>Value</th><th>Serves</th></tr></thead>
-                <tbody>
-                  {#each bb.mdb.settings as x (x.sha1 + x.path)}
-                    <tr>
-                      <td class="wrap">{x.name} <Confidence c={x.confidence} /><div class="mono dimtext">{x.path}</div></td>
-                      <td class="wrap">{x.value} <span class="mono dimtext">0x{short(x.hex)}</span></td>
-                      <td><Variants variants={x.variants} configs={x.configs?.filter((c) => c !== x.path)} /></td>
-                    </tr>
-                  {/each}
-                </tbody>
-              </table>
-            </div>
-          {/if}
-          {#each bb.mdb.databases.filter((d) => d.error) as d (d.sha1)}
-            <div class="banner err">{d.path}: {d.error}</div>
-          {/each}
-        </fieldset>
-      {/if}
-
-      <fieldset class="hgroup" id="configs">
-        <legend>Modem configs and containers</legend>
-        {#if bb.modemConfigs}
-          <h4>Built into the modem image (qdsp6sw.mbn)</h4>
-          <div class="hscroll">
-            <table class="grid">
-              <thead><tr><th>Label</th><th>Type</th><th>Version</th><th>Capability</th><th>Files</th></tr></thead>
-              <tbody>
-                {#each bb.modemConfigs as m (m.offset)}
-                  <tr>
-                    <td class="mono wrap">{m.label || "(unlabelled)"}</td>
-                    <td>{m.cfgType}</td>
-                    <td class="mono">{m.version}</td>
-                    <td class="mono">{m.trailer?.capability ?? ""}</td>
-                    <td>
-                      <details>
-                        <summary>{m.files.length}</summary>
-                        {#each m.files as p, i (i)}<div class="mono wrap">{p}</div>{/each}
-                      </details>
-                    </td>
-                  </tr>
-                {/each}
-              </tbody>
-            </table>
-          </div>
-        {/if}
-
-        {#each bb.containers as c (c.member)}
-          {#if c.errors?.length}<div class="banner err">{c.member}: {c.errors.length} blobs did not decode.</div>{/if}
-          <details class="more">
-            <summary>What {c.member} holds ({c.fileTypes.length} blob types)</summary>
-            <div class="hscroll">
-              <table class="grid">
-                <thead><tr><th class="num">Type</th><th>Name</th><th class="num">Blobs</th><th class="num">Records</th><th>Holds</th></tr></thead>
-                <tbody>
-                  {#each c.fileTypes as t (t.type)}
-                    <tr>
-                      <td class="num">{t.type}</td>
-                      <td class="mono">{t.name}<Confidence c={t.confidence} /></td>
-                      <td class="num">{t.blobs}</td>
-                      <td class="num">{t.records}</td>
-                      <td class="dimtext">{t.note ?? ""}</td>
-                    </tr>
-                  {/each}
-                </tbody>
-              </table>
-            </div>
-          </details>
-        {/each}
-
-        {#if bb.images.length}
-          <details class="more">
-            <summary>MCFG images in the containers ({bb.images.length})</summary>
-            <div class="hscroll">
-              <table class="grid">
-                <thead><tr><th>Blob</th><th>Type</th><th>Serves</th><th>Cfg</th><th>Version</th><th>Label</th><th class="num">Files</th></tr></thead>
-                <tbody>
-                  {#each bb.images as im (im.member + im.blob)}
-                    <tr>
-                      <td class="mono">{im.member} #{im.blob}</td>
-                      <td class="mono">{im.fileTypeName}</td>
-                      <td><Variants variants={im.variants} /></td>
-                      <td>{im.cfgType}</td>
-                      <td class="mono">{im.trailer?.version ?? im.version}</td>
-                      <td class="mono wrap">{im.trailer?.label ?? ""}</td>
-                      <td class="num">{im.files.length}</td>
-                    </tr>
-                  {/each}
-                </tbody>
-              </table>
-            </div>
-          </details>
-        {/if}
-
-        {#if bb.nv.length}
-          <details class="more">
-            <summary>NV/EFS defaults ({bb.nv.length} sets)</summary>
-            {#each bb.nv as n (n.member + n.blob)}
-              <details class="more">
-                <summary class="mono">{n.fileTypeName} · {n.records.length} items <Variants variants={n.variants} /></summary>
-                <div class="hscroll">
-                  <table class="grid">
-                    <thead><tr><th>Item</th><th>What it is</th><th>Value</th></tr></thead>
-                    <tbody>
-                      {#each n.records as r, i (i)}
-                        <tr>
-                          <td class="mono wrap">{r.efs ?? "NV " + r.nv}</td>
-                          <td class="wrap">{#if r.name}{r.name} <Confidence c={r.confidence} />{#if r.meaning}<div class="dimtext">{r.meaning}</div>{/if}{/if}</td>
-                          <td class="mono wrap">{#if r.label}{r.label} <span class="dimtext">0x{short(r.hex)}</span>{:else}0x{short(r.hex)}{/if}</td>
-                        </tr>
-                      {/each}
-                    </tbody>
-                  </table>
-                </div>
-              </details>
-            {/each}
-          </details>
-        {/if}
-
-        <details class="more">
-          <summary>Package details and members ({bb.members.length})</summary>
-          <div class="hscroll">
-            <table class="grid">
-              <tbody>
-                {#if bb.package.chipId}<tr><td class="k">Chip ID</td><td class="mono">{bb.package.chipId}</td></tr>{/if}
-                {#if bb.package.sblVersion}<tr><td class="k">SBL</td><td class="mono">{bb.package.sblVersion}</td></tr>{/if}
-                {#if bb.package.restoreSblVersion}<tr><td class="k">Restore SBL</td><td class="mono">{bb.package.restoreSblVersion}</td></tr>{/if}
-                {#each bb.members as m (m.name)}<tr><td class="mono">{m.name}</td><td class="num">{humanBytes(m.size)}</td></tr>{/each}
-              </tbody>
-            </table>
-          </div>
-        </details>
-      </fieldset>
-
-      <fieldset class="hgroup" id="diff">
-        <legend>Diff: {bb.family} in another image</legend>
-        {#if others.length}
-          <label class="lbl">
-            Before
-            <select name="vs" value={vs ?? ""} onchange={(e) => nav({ vs: e.currentTarget.value || null }, "#diff")}>
-              <option value="">Pick an image</option>
-              {#each others as b (b.build)}<option value={b.build}>iOS {b.version} ({b.build})</option>{/each}
-            </select>
-          </label>
-          {#if vs}
-            <Pane>
-              {@const d = await getBasebandDiff({ a: vs, b: params.build, family: bb.family })}
-              <p class="dimtext note">
-                iOS {d.a.version} ({d.a.build}) to iOS {d.b.version} ({d.b.build}):
-                {d.counts.changed} changed, {d.counts.added} added, {d.counts.removed} removed.
-              </p>
-              <BasebandDiff parts={d.parts} />
-            </Pane>
-          {/if}
-        {:else}
-          <p class="dimtext">No other image has a {bb.family} package yet.</p>
-        {/if}
-      </fieldset>
-    </Pane>
-    {:else}
-    <Pane>
-      {@const mods = await getModems(params.build)}
-      {@const m = mods.modems.find((x) => x.family === family)}
-      {#if m}
-        {@const s = await getModemPackage(m.package.id)}
-        {@const v = s.package.version}
-        <fieldset class="hgroup">
-          <legend>Firmware</legend>
-          <div class="hscroll">
-            <table class="grid fit">
-              <tbody>
-                {#if v}<tr><td class="k">Version</td><td class="mono">{v}</td></tr>{/if}
-                {#if s.kind === "ftab"}
-                  {#if s.package.date}<tr><td class="k">Built</td><td class="mono">{s.package.date}</td></tr>{/if}
-                  {#if s.package.chip}<tr><td class="k">Chip</td><td class="mono">{s.package.chip}{#if s.package.chipRevision}<span class="dimtext sp">revision {s.package.chipRevision}</span>{/if}</td></tr>{/if}
-                  {#if s.package.build}<tr><td class="k">Build</td><td class="mono wrap">{s.package.build}</td></tr>{/if}
-                  <tr><td class="k">Entries</td><td>{s.entries.length} in the ftab container</td></tr>
-                {:else if s.package.chipId}
-                  <tr><td class="k">Chip ID</td><td class="mono">{s.package.chipId}</td></tr>
-                {/if}
-                <tr><td class="k">Package</td><td class="mono wrap">{m.package.name} <span class="dimtext size">{humanBytes(m.package.size)}</span></td></tr>
-              </tbody>
-            </table>
-          </div>
-          {#if vendor === "apple"}
-            <p class="prose">
-              {family} phones carry no carrier config in the modem package. Their carrier settings arrive entirely through the
-              carrier bundles' Intel-dialect <span class="mono">.der.pri</span> and <span class="mono">.der.gri</span> files; the regional
-              band tables are in Default.bundle's
-              <a class="mono" href={fileHref("carriers", "Default", imageSlug(mods.version), "global_setting_G.der.gri")}>global_setting_G.der.gri</a>.
-            </p>
-          {:else}
-            <p class="prose">The {family} package has no plaintext config; its carrier settings come from the bundles' <span class="mono">.der.pri</span> files.</p>
-          {/if}
-          {@render elsewhere(`${family} in`)}
-        </fieldset>
-      {/if}
-    </Pane>
-    {/if}
-  </div>
+    </div>
+  </Pane>
 </div>
 
 <style>
-  .modems { display: flex; flex-wrap: wrap; gap: 4px; }
-  .modems .btn { flex-direction: column; align-items: flex-start; gap: 0; max-width: 100%; text-align: left; }
-  .modems .phones { font-size: 10.5px; color: var(--text-dim); }
-  .size { white-space: nowrap; }
-  .elsewhere { margin-top: 6px; }
-  .which h2 { font-size: 14px; margin: 10px 0 2px; }
-  .which h2 .dimtext { font-weight: normal; font-size: 12px; }
   .order { margin: 6px 0 0; }
-  table.fit { width: auto; }
-  .pair { white-space: nowrap; }
-  .sp { margin-left: 0.6ch; }
-  .prose { margin: 0 0 6px; max-width: 70ch; line-height: 1.45; }
-  .note { margin: 0 0 6px; }
-  .carrier { border-top: 1px solid var(--shadow); padding: 6px 0; scroll-margin-top: 8px; }
-  .carrier h3 { margin: 0 0 4px; font-size: 13px; }
-  .carrier .rowflex { margin-bottom: 4px; }
-  .carrier details { margin-bottom: 4px; }
-  h4 { margin: 8px 0 4px; }
-  .viewer { margin-top: 8px; scroll-margin-top: 8px; }
-  .refs { margin: 4px 0; }
-  tr.sel td { background: #e3ebf5; }
-  td.countries { max-width: 360px; }
-  .more { margin-top: 8px; }
-  .more > summary { cursor: pointer; padding: 4px 0; }
-  fieldset[id] { scroll-margin-top: 8px; }
-  td.bands { min-width: 14em; }
-  td.plat { white-space: nowrap; }
-  @media (max-width: 760px) {
-    .modems .phones { display: none; }
-    .modems .btn { min-height: 40px; justify-content: center; }
-    .elsewhere .chip { padding: 6px 8px; }
-    .taglinks .chip { padding: 5px 8px; }
-    td.countries { min-width: 12em; }
-  }
 </style>

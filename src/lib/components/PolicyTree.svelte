@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { parsePolicyXml, walkPolicy, type PolicyNode } from "$lib/decode/policy";
+  import { parsePolicyXml, walkPolicy, type PolicyNode } from "$lib/decode";
   import PolicyItem, { type NoteFirsts } from "./PolicyItem.svelte";
 
   let { xml }: { xml: string } = $props();
@@ -18,12 +18,12 @@
   });
 </script>
 
-<div class="rowflex" style="margin-bottom:4px">
+<div class="filters">
   <label class="lbl"><input type="checkbox" bind:checked={comments} /> Comments</label>
   <button class="btn" class:on={notes} aria-pressed={notes} onclick={() => (notes = !notes)}>{notes ? "Hide notes" : "Show notes"}</button>
   <span class="dimtext legend">
     <span class="k cond">condition</span> <span class="k act">action</span> <span class="k def">definition</span>
-    · <span class="u">underlined</span> names explain themselves
+    · <span class="underline-doc">underlined</span> names explain themselves
   </span>
 </div>
 <div class="tree box">
@@ -38,8 +38,7 @@
     border: 2px solid; border-color: var(--shadow) var(--light) var(--light) var(--shadow);
   }
   .k { font-family: var(--mono); font-weight: bold; }
-  .cond { color: #1f3f8a; }
-  .act { color: #14632a; }
-  .def { color: #6a2f8a; }
-  .u { text-decoration: underline dotted #8a93a6; text-underline-offset: 3px; }
+  .cond { color: var(--policy-condition); }
+  .act { color: var(--policy-action); }
+  .def { color: var(--policy-define); }
 </style>

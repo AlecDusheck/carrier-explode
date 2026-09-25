@@ -1,8 +1,8 @@
 <script lang="ts">
-  import type { DecodedFile } from "$lib/decode";
+  import type { CmsSignature } from "$lib/decode";
   import CertView from "./CertView.svelte";
 
-  let { sig }: { sig: NonNullable<DecodedFile["signature"]> } = $props();
+  let { sig }: { sig: CmsSignature } = $props();
 
   let showCerts = $state(false);
   const signerCert = (i?: number) => (i !== undefined ? sig.certificates[i] : undefined);
@@ -10,7 +10,7 @@
 
 <fieldset class="hgroup">
   <legend>Signature</legend>
-  <p style="margin:0 0 6px">
+  <p class="note">
     <span class="chip warn">not verified</span>
     <span class="dimtext">CMS SignedData envelope, read but not checked against any trust store. The profile below is its content.</span>
   </p>

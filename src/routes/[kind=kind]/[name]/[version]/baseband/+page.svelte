@@ -3,38 +3,23 @@
   import { page } from "$app/state";
   import { getBundle, getFile } from "$lib/api/bundles.remote";
   import { getBundleModems } from "$lib/api/tables.remote";
-  import { modemLabel } from "$lib/decode/modem";
+  import { modemCapabilities, modemLabel } from "$lib/decode";
   import { bundleArgs, link, rawHref, withParams } from "$lib/format";
-  import { modemFor, overridesFor, phoneList, sharedPri, sortPhones } from "$lib/phones";
+  import { modemFor, overridesFor, phoneList, sharedPri } from "$lib/phones";
   import Pane from "$lib/components/Pane.svelte";
   import FileBody from "$lib/components/FileBody.svelte";
   import ModemDefaults from "$lib/components/ModemDefaults.svelte";
+  import PhonePicker from "$lib/components/PhonePicker.svelte";
 
   let { params } = $props();
 
-  // ?phone= is what a page shows and shares; the remembered phone only fills in a URL without one.
-  const KEY = "baseband-phone";
   const args = $derived(bundleArgs(params));
   const wanted = $derived(page.url.searchParams.get("phone"));
   const shown = $derived(page.url.searchParams.get("file"));
-  const nav = (changes: Record<string, string | null>) =>
-    goto(withParams(page.url, changes), { replaceState: true, keepFocus: true, noScroll: true });
 
-  function pick(phone: string) {
-    try { localStorage.setItem(KEY, phone); } catch { /* remembering is a convenience */ }
-    nav({ phone, pri: null, efs: null, base: null });
-  }
-
-  $effect(() => {
-    if (wanted) return;
-    let saved: string | null = null;
-    try { saved = localStorage.getItem(KEY); } catch { /* no storage, no memory */ }
-    if (!saved) return;
-    const phone = saved;
-    getBundleModems(args).then((m) => {
-      if (m && modemFor(m.modems, phone) && !page.url.searchParams.get("phone")) nav({ phone });
-    });
-  });
+  // A phone picked by hand drops the package file compared for the one before.
+  const pick = (phone: string, restored: boolean) =>
+    goto(withParams(page.url, restored ? { phone } : { phone, pri: null, efs: null, base: null }), { replaceState: true, keepFocus: true, noScroll: true });
 </script>
 
 <div class="scroll pad">
@@ -49,19 +34,9 @@
       {@const files = phone ? overridesFor(bundle.info.files, phone) : []}
       {@const home = modemFor(mm.modems, mm.extractedFrom?.id)}
       {@const pkg = m && link(`/baseband/${mm.build}/${m.family}`)}
+      {@const caps = m && modemCapabilities(m.family)}
 
-      <div class="rowflex picker">
-        <label class="lbl grow">
-          Phone
-          <select class="grow" name="phone" value={phone} onchange={(e) => pick(e.currentTarget.value)}>
-            {#each mm.modems as x (x.family)}
-              <optgroup label={modemLabel(x.family)}>
-                {#each sortPhones(x.devices) as d (d.id)}<option value={d.id}>{d.name ?? d.id}</option>{/each}
-              </optgroup>
-            {/each}
-          </select>
-        </label>
-      </div>
+      <PhonePicker modems={mm.modems} {phone} named={!!wanted} onpick={pick} />
       <p class="dimtext note">
         {#if mm.source === "image"}
           This copy came out of the iOS {mm.version} ({mm.build}) image{mm.extractedFrom ? ` for ${mm.extractedFrom.name}` : ""}; phones are that build's.
@@ -75,11 +50,11 @@
       {#each files as f (f.path)}
         <fieldset class="hgroup">
           <legend class="mono wrap">{f.path}</legend>
-          {#if m?.vendor === "apple"}
+          {#if m && caps?.carrierConfigIn === "bundle"}
             <p class="dimtext note">On {modemLabel(m.family)} phones this file is the whole modem carrier config: the modem package carries none.</p>
           {/if}
           {#if f.devices && f.devices.length > 1}
-            <p class="dimtext note">Also read by {phoneList(f.devices.filter((d) => d.ids && d.ids !== phone).map((d) => ({ id: d.ids!, name: d.name })))}.</p>
+            <p class="dimtext note">Also read by {phoneList(f.devices.flatMap((d) => (d.ids && d.ids !== phone ? [{ id: d.ids, name: d.name }] : [])))}.</p>
           {/if}
           <FileBody
             file={await getFile({ ...args, slug: params.version, path: f.path })}
@@ -101,9 +76,9 @@
         {/if}
       {/each}
 
-      {#if params.kind === "carriers" && phone && m?.vendor === "qualcomm"}
+      {#if params.kind === "carriers" && phone && caps?.plaintextDefaults}
         <ModemDefaults kind={params.kind} name={params.name} slug={params.version} device={phone} phone={name} />
-      {:else if m?.vendor === "intel"}
+      {:else if m && caps?.carrierConfigIn === "package" && !caps.plaintextDefaults}
         <p class="dimtext note">The {m.family} package holds no plaintext config to compare against.</p>
       {/if}
     {:else}
@@ -133,9 +108,6 @@
 </div>
 
 <style>
-  .note { margin: 0 0 6px; }
-  .picker { margin-bottom: 4px; }
-  .picker select { min-width: 0; }
   h3.phone { margin: 8px 0 4px; font-size: 14px; }
   h3.phone a { font-size: 12px; font-weight: normal; margin-left: 4px; }
   a.chip[aria-current] { background: var(--sel); color: var(--sel-text); }

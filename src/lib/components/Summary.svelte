@@ -1,13 +1,15 @@
 <script lang="ts">
-  import { getBundle } from "$lib/api/bundles.remote";
+  import type { getBundle } from "$lib/api/bundles.remote";
+  import { isJsonDict } from "$lib/decode";
   import { bundleHref, entryLabel, humanBytes } from "$lib/format";
   import Tree from "./Tree.svelte";
 
   let { bundle }: { bundle: Awaited<ReturnType<typeof getBundle>> } = $props();
 
-  const carrierPlist = $derived(bundle.quick["carrier.plist"] as Record<string, unknown> | undefined);
-  const infoPlist = $derived(bundle.quick["Info.plist"] as Record<string, unknown> | undefined);
-  const versionPlist = $derived(bundle.quick["version.plist"] as Record<string, unknown> | undefined);
+  const dict = (v: unknown) => (isJsonDict(v) ? v : undefined);
+  const carrierPlist = $derived(dict(bundle.quick["carrier.plist"]));
+  const infoPlist = $derived(dict(bundle.quick["Info.plist"]));
+  const versionPlist = $derived(dict(bundle.quick["version.plist"]));
 
   const HIGHLIGHTS: Array<[string, string[]]> = [
     ["Identity", ["CarrierName", "HomeBundleIdentifier", "CountryName", "ISOAlpha2CountryCode", "SupportedSIMs", "SupportedPLMNs", "SupportedCarrierIds", "SupportedCountryIds", "MVNOOverrides"]],
@@ -87,7 +89,7 @@
     </table>
   </details>
   {#if bundle.entry.url}
-    <div class="rowflex" style="margin-top:8px">
+    <div class="rowflex gap-above">
       <a class="btn" href={bundle.entry.url} rel="noreferrer" download>Download .ipcc</a>
     </div>
   {/if}
@@ -112,8 +114,3 @@
     <Tree value={picked} {ctx} />
   </fieldset>
 {/each}
-
-<style>
-  .more { margin-top: 6px; }
-  .more > summary { cursor: pointer; padding: 2px 0; }
-</style>

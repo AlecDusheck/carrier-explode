@@ -1,18 +1,17 @@
 <script lang="ts">
-  import { parseCombo, type ComboComponent } from "$lib/decode/policy";
+  import { parseCombo, type ComboComponent, type ComboType } from "$lib/decode";
+  import { comboPart } from "$lib/format";
 
   let { combos }: { combos: string[] } = $props();
 
-  const TYPES = ["all", "EN-DC", "NR", "LTE"] as const;
+  const TYPES: Record<ComboType, string> = { endc: "EN-DC", nr: "NR", lte: "LTE" };
   let query = $state("");
-  let type = $state<(typeof TYPES)[number]>("all");
+  let type = $state<ComboType | "all">("all");
 
   const rows = $derived(
     combos.map((s, n) => {
       const c = parseCombo(s);
-      const lte = c.components.filter((x) => x.rat === "lte");
-      const nr = c.components.filter((x) => x.rat === "nr");
-      return { n, s, c, lte, nr, type: lte.length && nr.length ? "EN-DC" : nr.length ? "NR" : "LTE" };
+      return { n, s, c, lte: c.components.filter((x) => x.rat === "lte"), nr: c.components.filter((x) => x.rat === "nr") };
     }),
   );
 
@@ -25,15 +24,16 @@
   };
   const shown = $derived.by(() => {
     const toks = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
-    return rows.filter((r) => (type === "all" || r.type === type) && toks.every((t) => matches(r, t)));
+    return rows.filter((r) => (type === "all" || r.c.type === type) && toks.every((t) => matches(r, t)));
   });
-  const cc = (xs: ComboComponent[], p: string) => xs.map((x) => `${p}${x.band}${x.dl}${x.ul ? "↑" + x.ul : ""}`).join(" ");
+  const parts = (xs: ComboComponent[]) => xs.map((x) => comboPart(x)).join(" ");
 </script>
 
-<div class="rowflex" style="margin:6px 0">
-  <input class="grow" type="search" name="combo-filter" placeholder="n77 b66, or any text" aria-label="filter combos" bind:value={query} />
+<div class="filters gap-above">
+  <input type="search" name="combo-filter" placeholder="n77 b66, or any text" aria-label="filter combos" bind:value={query} />
   <select name="combo-type" aria-label="combo type" bind:value={type}>
-    {#each TYPES as t (t)}<option value={t}>{t === "all" ? "All types" : t}</option>{/each}
+    <option value="all">All types</option>
+    {#each Object.entries(TYPES) as [t, label] (t)}<option value={t}>{label}</option>{/each}
   </select>
   <span class="dimtext">{shown.length} of {rows.length}</span>
 </div>
@@ -44,9 +44,9 @@
       {#each shown as r (r.n)}
         <tr>
           <td class="mono wrap">{r.s}</td>
-          <td>{r.type}</td>
-          <td class="mono">{cc(r.lte, "B")}</td>
-          <td class="mono">{cc(r.nr, "n")}</td>
+          <td>{r.c.type ? TYPES[r.c.type] : ""}</td>
+          <td class="mono">{parts(r.lte)}</td>
+          <td class="mono">{parts(r.nr)}</td>
           <td class="num">{r.c.components.length}</td>
           <td>
             {#if r.c.nrdc}<span class="chip">NR-DC</span>{/if}

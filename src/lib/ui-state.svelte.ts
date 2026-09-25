@@ -1,4 +1,4 @@
-/** Context menu and cross-bundle scan dialog: the only state that is not in the URL. */
+/** UI state that is not in the URL: context menu, cross-bundle scan dialog, tree folding. */
 
 import type { Attachment } from "svelte/attachments";
 import { on } from "svelte/events";
@@ -32,13 +32,16 @@ class ContextMenuState {
 
 export const contextMenu = new ContextMenuState();
 
+/** Which bundles a scan reads: every country bundle, every carrier, or one country's carriers. */
+export type ScanScope = "countries" | "all" | `country:${string}`;
+
 class ScanState {
   open = $state(false);
   path = $state("");
   file = $state("carrier.plist");
-  scope = $state("countries");
+  scope = $state<ScanScope>("countries");
 
-  start(path: string, file: string, scope: string) {
+  start(path: string, file: string, scope: ScanScope) {
     this.path = path;
     this.file = file;
     this.scope = scope;
@@ -47,6 +50,42 @@ class ScanState {
 }
 
 export const scan = new ScanState();
+
+/** A node's own open/closed choice, stamped with the expand-all or collapse-all it was made after. */
+export interface FoldToggle { epoch: number; open: boolean }
+
+/**
+ * Expand all / collapse all over a tree whose nodes also open one by one. A
+ * node's own toggle counts until the next expand-all or collapse-all.
+ */
+export class Folding {
+  #epoch = $state(0);
+  #all = $state<boolean | null>(null);
+
+  expandAll() { this.#set(true); }
+  collapseAll() { this.#set(false); }
+
+  #set(open: boolean) {
+    this.#all = open;
+    this.#epoch++;
+  }
+
+  /** The toggle a node stores when it is opened or closed by hand. */
+  toggle(open: boolean): FoldToggle {
+    return { epoch: this.#epoch, open };
+  }
+
+  /** Whether a node is open: its own toggle, else the last expand/collapse-all, else `auto`. */
+  openFor(auto: boolean, toggled: FoldToggle | null | undefined): boolean {
+    if (toggled?.epoch === this.#epoch) return toggled.open;
+    return this.#all ?? auto;
+  }
+}
+
+/** Adds `key` to the set, or removes it when it is there. */
+export function toggleIn<T>(set: Set<T>, key: T) {
+  if (!set.delete(key)) set.add(key);
+}
 
 /** Right-click and long-press on an element, both opening the same menu. */
 export function menuTrigger(build: () => { title: string; items: MenuItem[] }): Attachment<HTMLElement> {

@@ -1,5 +1,5 @@
 <script lang="ts" module>
-  import type { PolicyNode } from "$lib/decode/policy";
+  import type { PolicyNode } from "$lib/decode";
 
   /** The first node of each tag, and of each tag@attribute, in document order. */
   export interface NoteFirsts { el: Record<string, PolicyNode>; attr: Record<string, PolicyNode> }
@@ -7,7 +7,8 @@
 
 <script lang="ts">
   import { SvelteSet } from "svelte/reactivity";
-  import { describePolicyAttr, describePolicyElement } from "$lib/decode/policyman";
+  import { describePolicyAttr, describePolicyElement } from "$lib/decode";
+  import { toggleIn } from "$lib/ui-state.svelte";
   import Confidence from "./Confidence.svelte";
   import PolicyItem from "./PolicyItem.svelte";
 
@@ -27,7 +28,6 @@
   const open = $derived(depth < 8 !== flipped);
   let showNote = $state(false);
   const attrOpen = new SvelteSet<string>();
-  const flip = (k: string) => (attrOpen.has(k) ? attrOpen.delete(k) : attrOpen.add(k));
 
   const kids = $derived(node.children.filter((c) => comments || c.kind !== "comment"));
   // NOT over a single leaf reads as one line.
@@ -41,12 +41,10 @@
   // With notes on, repeats stay tappable but only the first of each is explained.
   const noteOn = $derived(showNote || (notes && (!firsts || firsts.el[shown.tag] === shown)));
   const attrOn = (a: { k: string; first: boolean }) => attrOpen.has(a.k) || (notes && a.first);
-
 </script>
 
 {#snippet name(label: string, cls: string)}
   {#if doc}
-    <!-- The name is the control: tap or click for its note. -->
     <button type="button" class="{cls} doc" class:on={noteOn} aria-expanded={noteOn}
       onclick={() => (showNote = !showNote)}>{label}</button>
   {:else}
@@ -57,7 +55,7 @@
 {#snippet rest(n: PolicyNode)}
   {#each attrs as a (a.k)}
     <span class="a">{#if a.note}<button type="button" class="an doc" class:on={attrOn(a)} aria-expanded={attrOn(a)}
-        onclick={() => flip(a.k)}>{a.k}</button>{:else}{a.k}{/if}=<span class="v">{a.v}</span></span>
+        onclick={() => toggleIn(attrOpen, a.k)}>{a.k}</button>{:else}{a.k}{/if}=<span class="v">{a.v}</span></span>
   {/each}
   {#if n.text}<span class="x">{n.text}</span>{/if}
 {/snippet}
@@ -111,18 +109,13 @@
   }
   .twist { display: inline-block; width: 14px; color: var(--text-dim); }
   .w { font-weight: bold; }
-  .w.branch { color: #6a2f8a; }
-  .w.logic { color: #8a4a14; }
+  .w.branch { color: var(--policy-branch); }
+  .w.logic { color: var(--policy-logic); }
   .t { font-weight: bold; }
-  .t.condition { color: #1f3f8a; }
-  .t.action { color: #14632a; }
-  .t.define { color: #6a2f8a; }
-  .t.policy { color: #1b3d6b; }
-  .doc {
-    font: inherit; font-weight: bold; color: inherit; background: none; border: 0; padding: 0;
-    text-decoration: underline dotted #8a93a6; text-underline-offset: 3px; cursor: help;
-  }
-  .doc.on { text-decoration-style: solid; }
+  .t.condition { color: var(--policy-condition); }
+  .t.action { color: var(--policy-action); }
+  .t.define { color: var(--policy-define); }
+  .t.policy { color: var(--key); }
   button.an { font-weight: normal; }
   .a, .x, .more { margin-left: 0.7ch; }
   .a { color: var(--text-dim); }
@@ -134,6 +127,5 @@
   .children { padding-left: 12px; border-left: 1px dotted #b9b5ac; margin-left: 6px; }
   @media (max-width: 760px) {
     button.fold { min-height: 28px; min-width: 22px; }
-    .doc { padding: 6px 0; margin: -6px 0; }
   }
 </style>

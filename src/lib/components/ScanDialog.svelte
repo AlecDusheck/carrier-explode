@@ -1,13 +1,13 @@
 <script lang="ts">
   import { scanKey } from "$lib/api/tables.remote";
   import { bundleHref, shortValue } from "$lib/format";
-  import { scan, copyText } from "$lib/ui-state.svelte";
+  import { scan, copyText, type ScanScope } from "$lib/ui-state.svelte";
   import Pane from "./Pane.svelte";
 
   let mode = $state<"values" | "bundles">("values");
   let anyIndex = $state(false);
 
-  const SCOPES: Array<[string, string]> = [
+  const SCOPES: Array<[ScanScope, string]> = [
     ["countries", "Countries"],
     ["all", "All carriers"],
   ];
@@ -34,7 +34,7 @@
     </div>
 
     <div class="toolbar">
-      <span class="mono" style="word-break:break-all">{path}</span>
+      <span class="mono breakall">{path}</span>
       <span class="dimtext">in {scan.file}</span>
       <span class="grow"></span>
       {#if indexed}
@@ -61,7 +61,7 @@
       {#key args}
         <Pane>
           {@const result = await scanKey(args)}
-          <div class="rowflex" style="margin-bottom:6px">
+          <div class="filters">
             <button class="btn" class:on={mode === "values"} onclick={() => (mode = "values")}>
               Distinct values ({result.buckets.length})
             </button>
@@ -120,7 +120,7 @@
             </table>
           {/if}
 
-          <div class="rowflex" style="margin-top:8px">
+          <div class="rowflex gap-above">
             <button class="btn" onclick={() => copyText(JSON.stringify(result, null, 2))}>Copy JSON</button>
           </div>
         </Pane>

@@ -1,8 +1,8 @@
 <script lang="ts">
   import { getCbs } from "$lib/api/tables.remote";
   import { describeMessageId } from "$lib/decode";
-  import type { CbsRow } from "$lib/server/cbs";
-  import { bundleHref, link } from "$lib/format";
+  import type { CbsRow } from "$lib/types";
+  import { bundleHref, cbsEntryLabel, link } from "$lib/format";
   import Pane from "$lib/components/Pane.svelte";
 
   let { params } = $props();
@@ -49,10 +49,7 @@
         <a class="btn" href={link("/cell-broadcast")}>Cell Broadcast</a>
         <b>{row?.countryName ?? params.country}</b>
         {#if row}
-          <span class="dimtext">
-            {row.source === "image" && data.image ? `iOS ${data.image.version} image` : `OTA${row.minOS ? ` · iOS ${row.minOS}+` : ""}`}
-            · build {row.version}
-          </span>
+          <span class="dimtext">{cbsEntryLabel(row, data.image)}</span>
         {/if}
         <span class="grow"></span>
         {#if row}<a class="btn" href={bundleHref("countries", row.country)}>Open bundle</a>{/if}
@@ -70,7 +67,7 @@
           <fieldset class="hgroup">
             <legend>Alerts</legend>
             {#if row.switchGroupTitle}
-              <p class="dimtext" style="margin:0 0 6px">Listed in Settings under <b>{row.switchGroupTitle}</b>.</p>
+              <p class="dimtext note">Listed in Settings under <b>{row.switchGroupTitle}</b>.</p>
             {/if}
             <div class="hscroll">
               <table class="grid">
@@ -120,7 +117,7 @@
               </table>
             </div>
             {#if row.appleSafetyAlertRanges.length}
-              <p class="dimtext" style="margin-bottom:0">
+              <p class="dimtext last">
                 Apple safety alerts: <span class="mono">{row.appleSafetyAlertRanges.map(range).join(", ")}</span>
               </p>
             {/if}
@@ -146,6 +143,5 @@
 </div>
 
 <style>
-  .more { margin-top: 10px; }
-  .more > summary { cursor: pointer; padding: 4px 0; }
+  .last { margin-bottom: 0; }
 </style>
