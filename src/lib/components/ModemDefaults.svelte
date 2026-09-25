@@ -59,15 +59,17 @@
 
       <h4>Package files this bundle replaces</h4>
       {#if d.overrides.length}
+        <!-- The .der.pri column only earns its place when more than one file is in play. -->
+        {@const several = new Set(d.overrides.map((o) => o.pri)).size > 1}
         <div class="hscroll">
           <table class="grid">
-            <thead><tr><th>EFS path</th><th>Set by</th><th>Package copy</th><th></th></tr></thead>
+            <thead><tr><th>EFS path</th>{#if several}<th>Set by</th>{/if}<th>Package copy</th><th></th></tr></thead>
             <tbody>
               {#each d.overrides as o, oi (oi)}
                 {#each o.baseline as b (b.i)}
                   <tr class:sel={efs === o.efs && base === String(b.i) && page.url.searchParams.get("file") === o.pri}>
                     <td class="mono wrap">{o.efs}</td>
-                    <td class="mono wrap">{o.pri}</td>
+                    {#if several}<td class="mono wrap">{o.pri}</td>{/if}
                     <td><span class="mono">{b.member}</span> <Variants variants={b.variants} configs={b.configs} /></td>
                     <td>
                       {#if b.same}<span class="chip good">identical</span>

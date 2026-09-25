@@ -9,6 +9,8 @@
   const at = (path: string) => path.replace(/^\[(\d+)\]$/, (_, n) => `line ${Number(n) + 1}`) || "·";
   const CHIP: Record<DiffKind, string> = { added: "good", removed: "bad", changed: "warn", same: "" };
   let query = $state("");
+  // Digests arrive as raw byte strings; printing them is noise, that they differ is the fact.
+  const binary = (v: unknown) => typeof v === "string" && /[\u0000-\u0008\u000e-\u001f\u007f-\u009f]/.test(v);
 
   const q = $derived(query.trim().toLowerCase());
   const sections = $derived.by(() => {
@@ -18,7 +20,9 @@
 </script>
 
 {#snippet value(v: unknown)}
-  {#if v === undefined}<span class="dimtext">absent</span>{:else}{shortValue(v, 240)}{/if}
+  {#if v === undefined}<span class="dimtext">absent</span>
+  {:else if binary(v)}<span class="dimtext">{(v as string).length} bytes of binary</span>
+  {:else}{shortValue(v, 240)}{/if}
 {/snippet}
 
 {#if parts.length}

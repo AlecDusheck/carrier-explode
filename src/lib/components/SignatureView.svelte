@@ -30,10 +30,13 @@
       {:else}
         <tr><td class="k">Signer</td><td class="dimtext">none</td></tr>
       {/each}
-      <tr>
-        <td class="k">Content</td>
-        <td>{sig.contentType}{sig.detached ? ", detached (no content embedded)" : ""}</td>
-      </tr>
+      <!-- Plain "data" content is the profile shown below; only anything else is worth a row. -->
+      {#if sig.detached || sig.contentType !== "data"}
+        <tr>
+          <td class="k">Content</td>
+          <td>{sig.contentType}{sig.detached ? ", detached (no content embedded)" : ""}</td>
+        </tr>
+      {/if}
       <tr>
         <td class="k">Certificates</td>
         <td>

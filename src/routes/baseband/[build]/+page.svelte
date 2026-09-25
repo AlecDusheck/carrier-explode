@@ -59,7 +59,10 @@
       </label>
     </Pane>
     <span class="grow"></span>
-    {#each SECTIONS as [id, label] (id)}<a class="btn" href="#{id}">{label}</a>{/each}
+    <Pane quiet>
+      {@const bb = await getBaseband(params.build)}
+      {#each SECTIONS.filter(([id]) => id !== "power" || bb.amprNs.length) as [id, label] (id)}<a class="btn" href="#{id}">{label}</a>{/each}
+    </Pane>
   </div>
 
   <div class="scroll pad">
@@ -72,14 +75,7 @@
       <div class="rowflex">
         <a class="btn" href={link("/releases/" + params.build)}>{bb.version ? `iOS ${bb.version}` : params.build}</a>
         <b>{bb.package.name ?? "Baseband package"}</b>
-        <span class="dimtext">
-          {[
-            bb.package.version && "version " + bb.package.version,
-            bb.package.chipId && "chip " + bb.package.chipId,
-            bb.package.sblVersion && "SBL " + bb.package.sblVersion,
-            bb.package.restoreSblVersion && "restore SBL " + bb.package.restoreSblVersion,
-          ].filter(Boolean).join(" · ")}
-        </span>
+        {#if bb.package.version}<span class="dimtext">version {bb.package.version}</span>{/if}
       </div>
       <p class="lead dimtext order">
         Load order: the modem's built-in config, then the per-platform defaults in bbcfg.mbn, then the carrier bundle's .der.pri, which overwrites the same EFS paths.
@@ -157,7 +153,7 @@
         <p class="dimtext note">Plaintext EFS files the package writes. Where a path appears more than once, each copy serves the platforms or configs shown.</p>
         <div class="hscroll">
           <table class="grid">
-            <thead><tr><th>Path</th><th>From</th><th>Serves</th><th class="num">Size</th></tr></thead>
+            <thead><tr><th>Path</th><th>From</th><th>Serves</th></tr></thead>
             <tbody>
               {#each readable as f (f.i)}
                 <tr class:sel={fileAt === String(f.i)}>
@@ -167,7 +163,6 @@
                   </td>
                   <td class="mono">{f.member}</td>
                   <td><Variants variants={f.variants} configs={f.configs} /></td>
-                  <td class="num">{humanBytes(f.length)}</td>
                 </tr>
               {/each}
             </tbody>
@@ -207,13 +202,13 @@
         {/if}
       </fieldset>
 
-      <fieldset class="hgroup" id="power">
-        <legend>Power: A-MPR network signalling</legend>
-        {#if bb.amprNs.length}
-          {@const a = bb.amprNs[Math.min(powerSet, bb.amprNs.length - 1)]}
-          {@const pq = powerQuery.trim().toLowerCase()}
-          {@const country = (mcc: string) => bb.mccs[mcc]}
-          {@const groups = a.groups.filter((g) => !pq || g.mccs.some((m) => m.includes(pq) || (country(m)?.name ?? "").toLowerCase().includes(pq)))}
+      {#if bb.amprNs.length}
+        {@const a = bb.amprNs[Math.min(powerSet, bb.amprNs.length - 1)]}
+        {@const pq = powerQuery.trim().toLowerCase()}
+        {@const country = (mcc: string) => bb.mccs[mcc]}
+        {@const groups = a.groups.filter((g) => !pq || g.mccs.some((m) => m.includes(pq) || (country(m)?.name ?? "").toLowerCase().includes(pq)))}
+        <fieldset class="hgroup" id="power">
+          <legend>Power: A-MPR network signalling</legend>
           <p class="dimtext note">pt.mbn NV 64628: the NS value signalled per LTE band, without and with carrier aggregation, by MCC.</p>
           <div class="rowflex" style="margin-bottom:6px">
             {#if bb.amprNs.length > 1}
@@ -260,10 +255,8 @@
             </table>
           </div>
           <div class="rowflex" style="margin-top:4px"><span class="dimtext">Serves</span> <Variants variants={a.variants} /></div>
-        {:else}
-          <p class="dimtext">No A-MPR NS table in this package.</p>
-        {/if}
       </fieldset>
+      {/if}
 
       <fieldset class="hgroup" id="configs">
         <legend>Modem configs and containers</legend>
@@ -271,15 +264,13 @@
           <h4>Built into the modem image (qdsp6sw.mbn)</h4>
           <div class="hscroll">
             <table class="grid">
-              <thead><tr><th>Label</th><th>Type</th><th>Stored</th><th>Version</th><th>Trailer</th><th>Capability</th><th>Files</th></tr></thead>
+              <thead><tr><th>Label</th><th>Type</th><th>Version</th><th>Capability</th><th>Files</th></tr></thead>
               <tbody>
                 {#each bb.modemConfigs as m (m.offset)}
                   <tr>
                     <td class="mono wrap">{m.label || "(unlabelled)"}</td>
                     <td>{m.cfgType}</td>
-                    <td class="mono">{m.container} @{m.offset.toString(16)}</td>
                     <td class="mono">{m.version}</td>
-                    <td class="mono">{m.trailer?.version ?? ""}{m.trailer?.baseVersion && m.trailer.baseVersion !== m.trailer.version ? ` base ${m.trailer.baseVersion}` : ""}</td>
                     <td class="mono">{m.trailer?.capability ?? ""}</td>
                     <td>
                       <details>
@@ -295,24 +286,26 @@
         {/if}
 
         {#each bb.containers as c (c.member)}
-          <h4>{c.member} <span class="dimtext">({c.magic}, {c.records} index records, {c.blobs} blobs{c.meta.version ? `, ${c.meta.project ?? ""} ${c.meta.version}` : ""})</span></h4>
-          {#if c.errors?.length}<div class="banner err">{c.errors.length} blobs did not decode.</div>{/if}
-          <div class="hscroll">
-            <table class="grid">
-              <thead><tr><th class="num">Type</th><th>Name</th><th class="num">Blobs</th><th class="num">Records</th><th>Holds</th></tr></thead>
-              <tbody>
-                {#each c.fileTypes as t (t.type)}
-                  <tr>
-                    <td class="num">{t.type}</td>
-                    <td class="mono">{t.name}<Confidence c={t.confidence} /></td>
-                    <td class="num">{t.blobs}</td>
-                    <td class="num">{t.records}</td>
-                    <td class="dimtext">{t.note ?? ""}</td>
-                  </tr>
-                {/each}
-              </tbody>
-            </table>
-          </div>
+          {#if c.errors?.length}<div class="banner err">{c.member}: {c.errors.length} blobs did not decode.</div>{/if}
+          <details class="more">
+            <summary>What {c.member} holds ({c.fileTypes.length} blob types)</summary>
+            <div class="hscroll">
+              <table class="grid">
+                <thead><tr><th class="num">Type</th><th>Name</th><th class="num">Blobs</th><th class="num">Records</th><th>Holds</th></tr></thead>
+                <tbody>
+                  {#each c.fileTypes as t (t.type)}
+                    <tr>
+                      <td class="num">{t.type}</td>
+                      <td class="mono">{t.name}<Confidence c={t.confidence} /></td>
+                      <td class="num">{t.blobs}</td>
+                      <td class="num">{t.records}</td>
+                      <td class="dimtext">{t.note ?? ""}</td>
+                    </tr>
+                  {/each}
+                </tbody>
+              </table>
+            </div>
+          </details>
         {/each}
 
         {#if bb.images.length}
@@ -361,10 +354,13 @@
         {/if}
 
         <details class="more">
-          <summary>Package members ({bb.members.length})</summary>
+          <summary>Package details and members ({bb.members.length})</summary>
           <div class="hscroll">
             <table class="grid">
               <tbody>
+                {#if bb.package.chipId}<tr><td class="k">Chip ID</td><td class="mono">{bb.package.chipId}</td></tr>{/if}
+                {#if bb.package.sblVersion}<tr><td class="k">SBL</td><td class="mono">{bb.package.sblVersion}</td></tr>{/if}
+                {#if bb.package.restoreSblVersion}<tr><td class="k">Restore SBL</td><td class="mono">{bb.package.restoreSblVersion}</td></tr>{/if}
                 {#each bb.members as m (m.name)}<tr><td class="mono">{m.name}</td><td class="num">{humanBytes(m.size)}</td></tr>{/each}
               </tbody>
             </table>

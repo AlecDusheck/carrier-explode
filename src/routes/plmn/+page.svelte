@@ -6,6 +6,8 @@
   import Pane from "$lib/components/Pane.svelte";
 
   const LIMIT = 400;
+  /** More MVNOs than this fold behind a count. */
+  const FEW = 4;
 
   // Follows the URL, and runs ahead of it while typing.
   let q = $derived(page.url.searchParams.get("q") ?? "");
@@ -19,8 +21,9 @@
 </script>
 
 {#snippet pairTable(title: string, head: string, pairs: Array<[string, string]>)}
-  <fieldset class="hgroup">
-    <legend>{title} ({pairs.length})</legend>
+  <!-- Secondary lookups: closed until a search lands in them. -->
+  <details class="more" open={!!f && pairs.length > 0}>
+    <summary>{title} ({pairs.length})</summary>
     <table class="grid">
       <thead><tr><th>{head}</th><th>Bundle</th></tr></thead>
       <tbody>
@@ -29,7 +32,13 @@
         {/each}
       </tbody>
     </table>
-  </fieldset>
+  </details>
+{/snippet}
+
+{#snippet mvnoChips(mvnos: Array<{ bundle: string; iccid?: string; gid1?: string; gid2?: string }>)}
+  {#each mvnos as m, i (i)}
+    <a class="chip" href={bundleHref("carriers", m.bundle)}>{m.bundle} <span class="dimtext">{mvnoKey(m)}</span></a>
+  {/each}
 {/snippet}
 
 <div class="view">
@@ -53,31 +62,43 @@
             (e.bundle ?? "").toLowerCase().includes(f) ||
             e.mvnos.some((m) => m.bundle.toLowerCase().includes(f) || (m.iccid ?? "").startsWith(f)))
         : table.entries}
-      <p class="dimtext" style="margin:0 0 6px">
-        {hits.length} of {table.entries.length} networks{hits.length > LIMIT ? `, first ${LIMIT} shown` : ""}
-      </p>
+      {#if f || hits.length > LIMIT}
+        <p class="dimtext" style="margin:0 0 6px">
+          {hits.length} of {table.entries.length} networks{hits.length > LIMIT ? `, first ${LIMIT} shown; search to narrow` : ""}
+        </p>
+      {/if}
+      {@render pairTable("ICCID prefixes", "ICCID prefix", match(table.iccids))}
+      {@render pairTable("Carrier IDs", "Carrier ID", match(table.carrierIds))}
       <table class="grid">
-        <thead><tr><th class="num">MCC</th><th class="num">MNC</th><th>Bundle</th><th>MVNOs</th></tr></thead>
+        <thead><tr><th>MCC-MNC</th><th>Bundle</th><th>MVNOs</th></tr></thead>
         <tbody>
           {#each hits.slice(0, LIMIT) as e (e.plmn)}
             <tr>
-              <td class="num mono">{e.mcc}</td>
-              <td class="num mono">{e.mnc}</td>
+              <td class="mono k">{e.mcc}-{e.mnc}</td>
               <td>{#if e.bundle}<a class="chip" href={bundleHref("carriers", e.bundle)}>{e.bundle}</a>{/if}</td>
-              <td>
-                {#each e.mvnos as m, i (i)}
-                  <a class="chip" href={bundleHref("carriers", m.bundle)}>{m.bundle} <span class="dimtext">{mvnoKey(m)}</span></a>
-                {/each}
+              <td class="mvnos">
+                {#if e.mvnos.length > FEW && !f}
+                  <details>
+                    <summary>{e.mvnos.length} MVNOs</summary>
+                    {@render mvnoChips(e.mvnos)}
+                  </details>
+                {:else}
+                  {@render mvnoChips(e.mvnos)}
+                {/if}
               </td>
             </tr>
           {:else}
-            <tr><td colspan="4" class="dimtext">No match</td></tr>
+            <tr><td colspan="3" class="dimtext">No match</td></tr>
           {/each}
         </tbody>
       </table>
 
-      {@render pairTable("ICCID prefixes", "ICCID prefix", match(table.iccids))}
-      {@render pairTable("Carrier IDs", "Carrier ID", match(table.carrierIds))}
     </Pane>
   </div>
 </div>
+
+<style>
+  .more { margin-bottom: 6px; }
+  .more > summary, td summary { cursor: pointer; padding: 2px 0; }
+  .mvnos .chip { white-space: normal; overflow-wrap: anywhere; }
+</style>
