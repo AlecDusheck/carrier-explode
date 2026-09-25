@@ -1463,7 +1463,7 @@ describe("describeNv / decodeNvValue", () => {
 
   it("falls back to path families", () => {
     expect(describeNv("/nv/item_files/modem/lte/rrc/efs/lte_fgi_r10_tdd")).toMatchObject({ family: "lte_fgi", type: "bitmask", confidence: "med", name: "lte_fgi_r10_tdd" });
-    expect(describeNv("/nv/item_files/modem/mav/enable_dyn_vonr")).toMatchObject({ family: "mav", confidence: "low" });
+    expect(describeNv("/nv/item_files/modem/mav/mav_dmc_enabled")).toMatchObject({ family: "mav", confidence: "low" });
     expect(describeNv("/nv/item_files/modem/mav/drs_enable")!.family).toBe("drs");
     expect(describeNv("/nv/item_files/modem/nas/mav_force_srvcc")!.family).toBe("mav");
     expect(describeNv("/nv/item_files/modem/nas/mav_pssi_reg_gfnh_allowed_plmn_per_carrier")!.family).toBe("satellite");
@@ -1474,7 +1474,7 @@ describe("describeNv / decodeNvValue", () => {
     expect(describeNv("%qu[8]:dyn_cps_gri.lte_regulatory_info.na_table[0][0]")!.family).toBe("cps_qu");
     expect(describeNv("/nv/item_files/modem/nas/isr")!.family).toBeUndefined(); // exact wins
     expect(describeNv("/not/an/efs/path")).toBeUndefined();
-    expect(decodeNvValue("/nv/item_files/modem/mav/enable_dyn_vonr", 1)).toBeUndefined();
+    expect(decodeNvValue("/nv/item_files/modem/mav/mav_dmc_enabled", 1)).toBeUndefined();
   });
 
   it("resolves legacy NV item numbers, as numbers or strings", () => {
@@ -1501,6 +1501,27 @@ describe("describeNv / decodeNvValue", () => {
     expect(decodeNvValue(1896, Number.NaN)).toBeUndefined();
   });
 
+  it("names Apple modem options from the modem firmware's strings", () => {
+    const mav = "/nv/item_files/modem/mav/";
+    expect(describeNv(`${mav}mav_gsm_disable_mcc_list`)).toMatchObject({ name: "GSM-disabled MCCs", confidence: "med" });
+    expect(describeNv("/nv/item_files/modem/nas/mav_nr_reject_smc_null_ciphering")).toMatchObject({ type: "bool", confidence: "med" });
+    expect(decodeNvValue("/nv/item_files/modem/nas/mav_lte_reject_smc_null_ciphering", 1)).toBe("On");
+    expect(decodeNvValue("/mav/product_pri_setting_revision", 0x000d0001)).toBe("1.0.13");
+    expect(describeNv("/nv/item_files/modem/lte/rrc/bbq/bbq_mitigation")!.name).toBe("Fake eNodeB mitigation");
+    expect(describeNv(`${mav}enable_dyn_vonr`)).toMatchObject({ name: "Dynamic VoNR", confidence: "med" });
+    expect(describeNv(`${mav}drs_enable`)).toMatchObject({ family: "drs", confidence: "med" });
+    expect(describeNv(`${mav}enable_ds_partial_mitigation`)!.family).toBe("ds_mit");
+    expect(describeNv(`${mav}sa_depri_td_bwp_thresh_val`)!.family).toBe("sdm");
+    expect(describeNv(`${mav}mav_monitor_mm_mb_replace_nr5g_with_nr5guwb`)!.family).toBe("rat_icon");
+    expect(describeNv(`${mav}uwb_nr_band_bw`)!.family).toBeUndefined(); // exact wins over rat_icon
+    expect(describeNv("/mav/hst_volte_classifier_decision_threshold")!.family).toBe("hst");
+    expect(describeNv("/mav/cpms_feature_toggle")!.family).toBe("cpms");
+    expect(describeNv("/nv/item_files/modem/nas/mav_pssi_reg_unblock_hplmn_max_reg_failure")!.family).toBe("pssi");
+    expect(describeNv("/nv/item_files/modem/nas/mav_nr_prio_sub_band_per_plmn")!.family).toBe("band_per_plmn");
+    expect(describeNv("/nv/item_files/mcs/lmtsmgr/vbatt/vbatt_lte_limit")!.family).toBe("lmtsmgr");
+    expect(describeNv("/cgps/nv/item_files/me/gnss_pga_backoff_config")!.family).toBe("gps");
+  });
+
   it("keeps every table entry well-formed", () => {
     const confs = new Set(["high", "med", "low"]);
     for (const [p, v] of Object.entries(NV_PATHS)) {
@@ -1516,7 +1537,7 @@ describe("describeNv / decodeNvValue", () => {
       const d = describeNv(n);
       if (d) tally[d.confidence]++;
     }
-    expect(tally).toEqual({ high: 21, med: 127, low: 16 });
+    expect(tally).toEqual({ high: 21, med: 163, low: 18 });
   });
 });
 
