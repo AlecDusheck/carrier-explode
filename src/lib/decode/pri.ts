@@ -88,8 +88,9 @@ export const PRI_TAGS: Record<string, PriTagInfo> = {
   // plaintext .pri in CW_pa: the "Maverick" dict (Carrier ID, PRI Revision) round-trips through this pair
   "9fa711": { kind: "name", pairsWith: "9fa712", name: "Setting name (classic)", confidence: "high" },
   "9fa712": { kind: "value", name: "Setting value (classic)", confidence: "high" },
-  "9fae70": { kind: "name", pairsWith: "9fae71", name: "Setting name (CPS)", confidence: "high" },
-  "9fae71": { kind: "value", name: "Setting value (CPS)", confidence: "high" },
+  // tags 6000..6003: the Intel modem dialect, kept by Apple C1 (fixture ATT_US D321/D331/N841 = iPhone XS/XR, Intel; C1 ftab rkos; Default.bundle global_setting B, G, L)
+  "9fae70": { kind: "name", pairsWith: "9fae71", name: "Setting name (Intel / Apple C1)", confidence: "high" },
+  "9fae71": { kind: "value", name: "Setting value (Intel / Apple C1)", confidence: "high" },
   // never seen in the corpus or the test fixtures; role inferred from its place next to 9fa70c
   "9fa70e": { kind: "name", pairsWith: "9fa70f", name: "Setting name (CDMA NAM / data parameters)", confidence: "low" },
   "9fa70f": { kind: "value", name: "Setting value (CDMA NAM / data parameters)", confidence: "low" },
@@ -97,8 +98,8 @@ export const PRI_TAGS: Record<string, PriTagInfo> = {
   // same role as 9fa70c in older files, long high-tag-number encoding (test fixtures CW_pa, BhartiAirtel_in)
   "9f98808080808080a70c": { kind: "path", pairsWith: "9fa70d", name: "EFS path (long-form tag)", confidence: "high" },
   "9fa70d": { kind: "value", name: "EFS value", confidence: "high" },
-  "9fae72": { kind: "path", pairsWith: "9fae73", name: "Dynamic CPS path (%u: / %qu[N]:)", confidence: "high" },
-  "9fae73": { kind: "value", name: "Dynamic CPS value", confidence: "high" },
+  "9fae72": { kind: "path", pairsWith: "9fae73", name: "Intel / Apple C1 setting key (%u: / %qu[N]: + NVM path)", confidence: "high" },
+  "9fae73": { kind: "value", name: "Intel / Apple C1 setting value", confidence: "high" },
   "9fa708": { kind: "nv-list", name: "Legacy NV item list (uint16 LE)", confidence: "high" },
   "9fa709": { kind: "schema", name: "NV path schema index (MAVZ or NUL-separated)", confidence: "high" },
   // corpus: always 2 bytes, 0x00b2 in all 333 files that carry it
@@ -252,6 +253,8 @@ export interface PriUnknown {
 
 export interface PriDecoded {
   kind: "der.pri" | "der.gri";
+  /** Which modem family the file is written for: Qualcomm (9fa7xx tags), or Intel and its successor Apple C1 (9fae70..73). */
+  dialect: "qualcomm" | "intel" | "mixed" | "unknown";
   header: Record<string, string>;
   named: PriPair[];
   efs: PriPathEntry[];
@@ -323,6 +326,7 @@ function ccmGroup(tag: string, info: PriTagInfo, value: Uint8Array): PriFeatureG
 export function decodePri(buf: Uint8Array, kind: "der.pri" | "der.gri" = "der.pri"): PriDecoded {
   const out: PriDecoded = {
     kind,
+    dialect: "unknown",
     header: {},
     named: [],
     efs: [],
@@ -343,6 +347,8 @@ export function decodePri(buf: Uint8Array, kind: "der.pri" | "der.gri" = "der.pr
     return out;
   }
   out.leafCount = leaves.length;
+  const intel = leaves.some((l) => /^9fae7[0-3]$/.test(l.tag)), qc = leaves.some((l) => l.tag.startsWith("9fa7"));
+  out.dialect = intel && qc ? "mixed" : intel ? "intel" : qc ? "qualcomm" : "unknown";
 
   // The item list can follow the values it names, so read it first.
   const listed = new Set<number>();

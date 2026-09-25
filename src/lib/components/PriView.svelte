@@ -19,15 +19,18 @@
   const header = $derived((Object.entries(pri.header) as Array<[string, string]>).filter(([, v]) => v !== ""));
   const unknown = $derived(pri.unknown.filter((u) => u.nv === undefined));
   const unnamed = (item: number, name?: string) => !name || name === "NV " + item;
+  const MODEM: Record<string, string> = { qualcomm: "Qualcomm", intel: "Intel or Apple C1", mixed: "Qualcomm and Intel / Apple C1" };
+  const modem = $derived(pri.dialect ? MODEM[pri.dialect] : undefined);
 </script>
 
 {#if pri.error}<div class="banner err">{pri.error}</div>{/if}
 
-{#if header.length}
+{#if header.length || modem}
   <fieldset class="hgroup">
     <legend>Header</legend>
     <table class="grid">
       <tbody>
+        {#if modem}<tr><td class="k">Written for</td><td>{modem} modem</td></tr>{/if}
         {#each header as [k, v] (k)}
           <tr><td class="k">{k}</td><td class="mono">{v}</td></tr>
         {/each}
