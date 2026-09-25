@@ -17,6 +17,7 @@ A web explorer for iOS carrier and country bundles, and the baseband config that
 - `src/lib/server/data.ts`: the only module that touches R2 or Apple. The Worker only reads from R2.
 - `src/lib/api/*.remote.ts`: remote queries used by the pages.
 - `scripts/`: ingest, run by the workflows.
+- `tools/`: standalone research tools for firmware formats, each with its own README (see `tools/README.md`).
 
 ## Workflows
 - `system-bundles.yml` (daily): extracts new iOS images, betas included, into R2, including each image's `baseband.json`.
