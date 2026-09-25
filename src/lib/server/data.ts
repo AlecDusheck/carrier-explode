@@ -312,9 +312,13 @@ export async function getRelease(build: string) {
 
 const basebandKey = (build: string) => `system/${build}/baseband.json`;
 
-/** Written by the workflow with the image, never here, and fixed once written. */
+/**
+ * Written by the workflows, never here. baseband.yml can rewrite it after a
+ * decoder change and purges the "baseband" page tag when it does; an isolate's
+ * copy cannot be purged, so it is kept only an hour.
+ */
 const baseband = (build: string) =>
-  memo(`baseband:${build}`, 24 * 3600_000, () => r2json<BasebandSummary>(basebandKey(build)));
+  memo(`baseband:${build}`, 3600_000, () => r2json<BasebandSummary>(basebandKey(build)));
 
 async function mustBaseband(build: string) {
   const s = await baseband(build);

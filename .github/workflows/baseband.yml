@@ -13,7 +13,11 @@
 # system/<build>/baseband.json. Nothing is fetched from Apple, and bundles and
 # indexes are not touched.
 #
+# Either way, pages rendered from baseband.json are purged at the end (the
+# "baseband" cache tag).
+#
 # Needs: secrets CLOUDFLARE_API_TOKEN (R2 edit) and CLOUDFLARE_ACCOUNT_ID.
+# Optional: secret PURGE_TOKEN, as in system-bundles.yml.
 
 name: Baseband
 on:
@@ -127,3 +131,16 @@ jobs:
           # The index goes last, so it never points at a package that is not uploaded.
           "$W" r2 object put "$BUCKET/system/${{ matrix.image.build }}/index.json" \
             --file "system/${{ matrix.image.build }}/index.json" --content-type application/json --remote
+
+  purge:
+    needs: baseband
+    if: ${{ !cancelled() && needs.baseband.result != 'skipped' }}
+    runs-on: ubuntu-24.04
+    steps:
+      - env:
+          TOKEN: ${{ secrets.PURGE_TOKEN }}
+        run: |
+          [ -n "$TOKEN" ] || { echo "PURGE_TOKEN not set, skipping"; exit 0; }
+          curl -fsS -X POST https://carrierexplode.com/internal/purge \
+            -H "authorization: Bearer $TOKEN" -H "content-type: application/json" \
+            -d '{"tags":["baseband"]}'
