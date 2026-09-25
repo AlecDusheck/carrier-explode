@@ -16,13 +16,6 @@
 # Either way, pages rendered from package summaries are purged at the end (the
 # "baseband" cache tag).
 #
-# Migration from one package per build (index `baseband`, system/<build>/baseband.json),
-# in two passes so the live site never reads a missing key:
-#   1. a normal run adds `modems` to every index and leaves `baseband` in place;
-#   2. once the site that reads `modems` is deployed, a `contract` run drops the
-#      `baseband` field and deletes each old system/<build>/baseband.json.
-# Remove the `contract` input and job after that run.
-#
 # Needs: secrets CLOUDFLARE_API_TOKEN (R2 edit) and CLOUDFLARE_ACCOUNT_ID.
 # Optional: secret PURGE_TOKEN, as in system-bundles.yml.
 
@@ -32,10 +25,6 @@ on:
     inputs:
       rebuild:
         description: Re-decode every stored package instead of adding missing ones
-        type: boolean
-        default: false
-      contract:
-        description: "Migration, second pass: drop the one-package `baseband` index field and its old summaries"
         type: boolean
         default: false
 
@@ -50,7 +39,6 @@ env:
 
 jobs:
   plan:
-    if: ${{ !inputs.contract }}
     runs-on: ubuntu-24.04
     outputs:
       legs: ${{ steps.plan.outputs.legs }}
@@ -104,7 +92,7 @@ jobs:
   # One job for every index: they are small, and R2 prefers them in sequence.
   index:
     needs: fetch
-    if: ${{ !cancelled() && !inputs.rebuild && !inputs.contract }}
+    if: ${{ !cancelled() && !inputs.rebuild }}
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
@@ -124,26 +112,9 @@ jobs:
           python3 scripts/modems.py write --plan /tmp/plan/plan.json --indexes /tmp/plan/idx --meta /tmp/meta --out /tmp/out
           scripts/modems.sh publish /tmp/out
 
-  contract:
-    if: ${{ inputs.contract }}
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@v4
-      - name: Drop `baseband` from every index, then its old summary
-        run: |
-          npm install --no-save --silent wrangler
-          export W="$PWD/node_modules/.bin/wrangler"
-          scripts/modems.sh indexes /tmp/idx
-          python3 scripts/modems.py contract --indexes /tmp/idx --out /tmp/out > /tmp/contracted.txt
-          scripts/modems.sh publish /tmp/out
-          while read -r b; do
-            "$W" r2 object delete "$BUCKET/system/$b/baseband.json" --remote
-          done < /tmp/contracted.txt
-          echo "$(wc -l < /tmp/contracted.txt) indexes contracted"
-
   purge:
-    needs: [fetch, index, contract]
-    if: ${{ !cancelled() && (needs.fetch.result == 'success' || needs.index.result == 'success' || needs.contract.result == 'success') }}
+    needs: [fetch, index]
+    if: ${{ !cancelled() && (needs.fetch.result == 'success' || needs.index.result == 'success') }}
     runs-on: ubuntu-24.04
     steps:
       - env:

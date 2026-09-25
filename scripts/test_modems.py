@@ -4,7 +4,7 @@ import unittest
 from pathlib import Path
 from types import SimpleNamespace as Z
 
-from modems import contract, group, modem_members, modems_of, plan, plan_rebuild, read_meta, rewrite, split, stored
+from modems import group, modem_members, modems_of, plan, plan_rebuild, read_meta, rewrite, split, stored
 
 zi = lambda name, size, crc: Z(filename=name, file_size=size, CRC=crc)
 MAV24 = zi("Firmware/Mav24-3.02.02.Release.bbfw", 114158255, 0x87670AE3)
@@ -119,21 +119,10 @@ class Write(unittest.TestCase):
         self.assertIsNone(modems_of(self.groups, stored({"x": {"modems": [entry(P24, [])]}})))
 
     def test_rewrite_adds_modems_and_keeps_the_rest(self):
-        old = {"build": "24A437", "carriers": {"A": 1}, "countries": {}, "baseband": {"id": "a" * 64, "size": 1, "name": "Mav24"}}
+        old = {"build": "24A437", "carriers": {"A": 1}, "countries": {}}
         got = rewrite(old, [entry(P24, ["iPhone17,1"])])
         self.assertEqual(got["modems"][0]["family"], "Mav24")
-        # Expand only: the old field stays until the contract pass, so the live site keeps working.
-        self.assertIn("baseband", got)
         self.assertEqual(got["carriers"], {"A": 1})
-
-    def test_contract_drops_the_one_package_field(self):
-        m = [entry(P24, ["iPhone17,1"])]
-        self.assertEqual(contract({"build": "A", "modems": m, "baseband": {}}), {"build": "A", "modems": m})
-        self.assertIsNone(contract({"build": "A", "modems": m}))
-
-    def test_contract_refuses_an_index_that_was_never_expanded(self):
-        with self.assertRaises(SystemExit):
-            contract({"build": "A", "baseband": {}})
 
     def test_rewrite_leaves_an_unchanged_index_alone(self):
         m = [entry(P24, ["iPhone17,1"])]

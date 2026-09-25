@@ -195,16 +195,6 @@ def rewrite(index: dict, modems: list[dict]) -> dict | None:
     return {**index, "modems": modems}
 
 
-def contract(index: dict) -> dict | None:
-    """The index without the one-package `baseband` field, or None when it has none.
-    Only once every index has `modems` and the site that reads them is live."""
-    if "baseband" not in index:
-        return None
-    if "modems" not in index:
-        raise SystemExit(f"{index.get('build')}: no `modems` yet; run the expand pass first")
-    return {k: v for k, v in index.items() if k != "baseband"}
-
-
 def read_meta(d: Path) -> dict[tuple, dict]:
     out = {}
     for f in sorted(d.rglob("*.jsonl")) if d.exists() else []:
@@ -315,21 +305,7 @@ def main() -> None:
     p.add_argument("--indexes", type=Path, required=True)
     p.add_argument("--meta", type=Path, required=True)
     p.add_argument("--out", type=Path, required=True)
-    p = sub.add_parser("contract", help="drop the one-package `baseband` field; prints the builds whose old summary goes")
-    p.add_argument("--indexes", type=Path, required=True)
-    p.add_argument("--out", type=Path, required=True)
     a = ap.parse_args()
-
-    if a.cmd == "contract":
-        for build, index in sorted(read_indexes(a.indexes).items()):
-            new = contract(index)
-            if not new:
-                continue
-            dest = a.out / "system" / build / "index.json"
-            dest.parent.mkdir(parents=True, exist_ok=True)
-            dest.write_text(json.dumps(new, separators=(",", ":")))
-            print(build)
-        return
 
     if a.cmd == "fetch":
         fetch(a.url, a.member, a.size, a.crc32, a.out)
