@@ -144,8 +144,9 @@ export const NV_FAMILIES: Family[] = [
   f("policyman_xml", /^\/policyman\/.*\.xml$/, e("PolicyMan policy", "PolicyMan XML rules (RAT capability, bands, 5G/SA gating)", "xml", "med", "tech.ssut.me")),
   f("policyman", /^\/(mdb\/)?policyman\//, e("PolicyMan data", "PolicyMan database / flag", "bytes", "low", "name only")),
   // corpus: iOS 27.0 overrides; "%u:" paths carry uint32 values, "%qu[N]:" NUL-padded N-byte strings
-  f("cps_u", /^%u:dyn_/, e("Dynamic CPS field", "Apple dynamic CPS struct field (unsigned)", "uint32", "low", CORPUS)),
-  f("cps_qu", /^%qu\[\d+\]:dyn_/, e("Dynamic CPS string", "Apple dynamic CPS struct field (N-byte quoted string)", "string", "low", CORPUS)),
+  // Intel modem keys, kept by Apple C1: its rkos resolves "%u:" / "%qu[N]:" against NVM structures (tools/ftab)
+  f("cps_u", /^%u:dyn_/, e("Modem NVM setting", "Intel / Apple C1 modem NVM field (unsigned)", "uint32", "med", "C1 ftab rkos")),
+  f("cps_qu", /^%qu\[\d+\]:dyn_/, e("Modem NVM setting", "Intel / Apple C1 modem NVM field (N-byte string)", "string", "med", "C1 ftab rkos")),
   f("ims", /\/ims\//, e("IMS setting", "IMS", "int", "low", "path")),
   f("nas", /\/modem\/nas\//, e("NAS setting", "NAS mobility management / PLMN selection", "int", "low", "path")),
   f("mmode", /\/modem\/mmode\//, e("Multimode setting", "Call manager / system determination", "int", "low", "path")),

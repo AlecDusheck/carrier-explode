@@ -621,7 +621,7 @@ describe("decodePri: pair families", () => {
     ]);
   });
 
-  it("decodes a newer CPS-format file into %u:dyn_cps.* paths under tag 9fae72", () => {
+  it("decodes an Intel-dialect file into %u:dyn_cps.* paths under tag 9fae72", () => {
     const d = pri("ATT_US.ipcc", "overrides_D321_D331_N841.der.pri");
     expect(d.efs.length).toBe(53);
     expect([...new Set(d.efs.map((e) => e.tag))]).toEqual(["9fae72"]);
@@ -631,9 +631,11 @@ describe("decodePri: pair families", () => {
       tag: "9fae72",
       value: { kind: "int", text: "1", int: 1, hex: "01000000", len: 4 },
       name: "dyn_cps.dam.support",
-      confidence: "low",
+      confidence: "med",
     });
-    expect(d.efs[0].meaning).toContain("Dynamic CPS field");
+    expect(d.efs[0].meaning).toContain("Intel / Apple C1 modem NVM field");
+    // D321/D331/N841 are iPhone XS/XR models, which have Intel modems.
+    expect(d.dialect).toBe("intel");
   });
 
   it("never mixes the classic and CPS pair families within one file", () => {
@@ -1406,6 +1408,16 @@ describe("PRI_TAGS", () => {
 
 /* =============================================================== NV lookup */
 
+describe("dialect", () => {
+  it("tells Qualcomm files from Intel / C1 ones by their tags", () => {
+    const qc = decodePri(new Uint8Array(readFileSync(join(here, "fixtures", "ios27_Altice_LTE_US_overrides_V53_V54_V57.der.pri"))));
+    expect(qc.dialect).toBe("qualcomm");
+    // 9fae70/9fae71 name/value pairs are the Intel dialect Apple C1 kept: [6000] "PRI Name", [6001] value.
+    const c1 = new Uint8Array([0x31, 0x13, 0x80, 0x11, 0x30, 0x0f, 0x9f, 0xae, 0x70, 0x08, ...new TextEncoder().encode("PRI Name"), 0x9f, 0xae, 0x71, 0x01, 0x41]);
+    expect(decodePri(c1, "der.gri").dialect).toBe("intel");
+  });
+});
+
 describe("annotateNv", () => {
   it("names an item and labels its value", () => {
     expect(annotateNv("/nv/item_files/modem/mmode/voice_domain_pref", 1)).toMatchObject({ label: decodeNvValue("/nv/item_files/modem/mmode/voice_domain_pref", 1) });
@@ -1663,7 +1675,7 @@ describe("iOS 27.0 fixtures", () => {
     expect(qu.every((e) => e.value.kind === "string" && e.tag === "9fae72")).toBe(true);
     expect(u.every((e) => e.value.kind === "int")).toBe(true);
     expect(qu[0]).toMatchObject({ path: "%qu[8]:dyn_cps_gri.lte_regulatory_info.na_table[0][0]", value: { text: "mcc:302" } });
-    expect(qu[0].meaning).toContain("Dynamic CPS string");
+    expect(qu[0].meaning).toContain("Intel / Apple C1 modem NVM field");
     expect(d.unknown).toEqual([]);
   });
 });
