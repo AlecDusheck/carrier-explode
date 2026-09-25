@@ -2,6 +2,7 @@
   import type { PriDecoded } from "$lib/decode";
   import PriValueCell from "./PriValueCell.svelte";
   import Confidence from "./Confidence.svelte";
+  import IntelView from "./IntelView.svelte";
 
   let { pri }: { pri: PriDecoded } = $props();
 
@@ -9,11 +10,12 @@
 
   const has = (f: string, ...xs: Array<string | undefined>) => xs.some((x) => x?.toLowerCase().includes(f));
 
-  const efs = $derived.by(() => {
-    const f = filter.trim().toLowerCase();
+  const pick = (q: string) => {
+    const f = q.trim().toLowerCase();
     if (!f) return pri.efs;
     return pri.efs.filter((e) => has(f, e.path, e.value.text, e.name, e.meaning, e.label));
-  });
+  };
+  const efs = $derived(pick(filter));
 
   // Empty header fields ("Carrier ID" on most files) say nothing.
   const header = $derived((Object.entries(pri.header) as Array<[string, string]>).filter(([, v]) => v !== ""));
@@ -53,16 +55,11 @@
   </fieldset>
 {/if}
 
-<fieldset class="hgroup">
-  <legend>Baseband overrides ({pri.efs.length})</legend>
-  <div class="rowflex" style="margin-bottom:6px">
-    <input class="grow" type="search" name="pri-filter" placeholder="filter" aria-label="filter overrides" bind:value={filter} />
-    {#if filter.trim()}<span class="dimtext">{efs.length} shown</span>{/if}
-  </div>
+{#snippet efsTable(rows: typeof pri.efs)}
   <table class="grid">
     <thead><tr><th style="width:58%">Setting</th><th>Value</th></tr></thead>
     <tbody>
-      {#each efs as e, i (i)}
+      {#each rows as e, i (i)}
         <tr>
           <td>
             {#if e.name}<div><b>{e.name}</b><Confidence c={e.confidence} /></div>{/if}
@@ -76,6 +73,23 @@
       {/each}
     </tbody>
   </table>
+{/snippet}
+
+{#snippet keyList(q: string)}
+  {@render efsTable(pick(q))}
+{/snippet}
+
+<fieldset class="hgroup">
+  <legend>Baseband overrides ({pri.efs.length})</legend>
+  {#if pri.intel}
+    <IntelView tree={pri.intel} flat={keyList} />
+  {:else}
+    <div class="rowflex" style="margin-bottom:6px">
+      <input class="grow" type="search" name="pri-filter" placeholder="filter" aria-label="filter overrides" bind:value={filter} />
+      {#if filter.trim()}<span class="dimtext">{efs.length} shown</span>{/if}
+    </div>
+    {@render efsTable(efs)}
+  {/if}
 </fieldset>
 
 {#if pri.nv.length}
