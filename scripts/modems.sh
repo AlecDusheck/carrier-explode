@@ -2,7 +2,7 @@
 # Stores modem packages and points image indexes at them (scripts/modems.py plans).
 # Shared by baseband.yml and the extract job in system-bundles.yml.
 #
-#   modems.sh indexes DIR               every held system/<build>/index.json into DIR/<build>/
+#   modems.sh indexes DIR               system/builds.json and every held index into DIR/<build>/index.json
 #   modems.sh fetch PLAN LEG META       store each package of plan leg LEG, one line per package into META
 #   modems.sh run DIR OUT BUILD         plan, fetch and write one build's modems into OUT/system/BUILD/index.json
 #   modems.sh publish OUT               upload OUT/system/*/index.json
@@ -10,35 +10,39 @@
 # Needs BUCKET and wrangler credentials; run from the repo root after pnpm install.
 set -euo pipefail
 
-W="${W:-$PWD/node_modules/.bin/wrangler}"
+# shellcheck source=scripts/lib.sh
+. "$(dirname "$0")/lib.sh"
+
+export W="${W:-$PWD/node_modules/.bin/wrangler}"
 TMP="${RUNNER_TEMP:-/tmp}/modems"
 mkdir -p "$TMP"
 
-# R2's API answers 429 under load; every write here is idempotent.
-retry() {
-  for attempt in 1 2 3 4 5; do
-    "$@" && return 0
-    [ "$attempt" = 5 ] && return 1
-    sleep $(( 10 * 2 ** attempt + RANDOM % 10 ))
-  done
-}
+# Apple's carrier manifest, as src/lib/server/manifest.ts MANIFEST_URL.
+MANIFEST_URL=https://itunes.apple.com/WebObjects/MZStore.woa/wa/com.apple.jingle.appserver.client.MZITunesClientCheck/version
 
 indexes() {
   local dir=$1
-  "$W" r2 object get "$BUCKET/system/builds.json" --remote --pipe > "$TMP/builds.json"
-  for b in $(jq -r '.[].build' "$TMP/builds.json"); do
-    mkdir -p "$dir/$b"
-    retry "$W" r2 object get "$BUCKET/system/$b/index.json" --remote --file "$dir/$b/index.json" > /dev/null
-  done
+  mkdir -p "$dir"
+  retry "$W" r2 object get "$BUCKET/system/builds.json" --remote --file "$dir/builds.json" > /dev/null
+  export -f retry
+  jq -r '.[].build' "$dir/builds.json" | DIR=$dir xargs -P 8 -I{} bash -c \
+    'mkdir -p "$DIR/$1" && retry "$W" r2 object get "$BUCKET/system/$1/index.json" --remote --file "$DIR/$1/index.json" > /dev/null' \
+    _ {}
 }
 
 # Blob first, then summary; the index that points at them is written after.
 fetch() {
-  local plan=$1 leg=$2 meta=$3 n failed=0
+  local plan=$1 leg=$2 meta=$3 n failed=0 manifest=()
   n=$(jq ".legs[$leg] | length" "$plan")
   mkdir -p "$(dirname "$meta")"
+  # Once per leg rather than once per package; without it the carrier map is left out.
+  if curl -fsSL --retry 3 -A carrier-explode -o "$TMP/manifest.plist" "$MANIFEST_URL"; then
+    manifest=(--manifest "$TMP/manifest.plist")
+  else
+    echo "carrier manifest unavailable, summaries go without the carrier map"
+  fi
   for i in $(seq 0 $(( n - 1 ))); do
-    local p name kind id f="$TMP/package"
+    local p name kind id key f="$TMP/package"
     p=$(jq -c ".legs[$leg][$i]" "$plan")
     name=$(jq -r .name <<< "$p")
     kind=$(jq -r .kind <<< "$p")
@@ -53,11 +57,13 @@ fetch() {
     local sha
     sha=$(sha256sum "$f" | cut -d' ' -f1)
     if [ -n "$id" ] && [ "$sha" != "$id" ]; then echo "blobs/$id.$kind hashes to $sha"; failed=1; continue; fi
-    npx vite-node scripts/baseband.ts "$f" --name "$name" --out "$TMP/summary.json" < /dev/null || { failed=1; continue; }
+    # baseband.ts prints the key the summary belongs at: baseband/v<schema>/<sha>.json.
+    key=$(npx vite-node scripts/baseband.ts "$f" --name "$name" --out "$TMP/summary.json" "${manifest[@]}" < /dev/null) \
+      || { failed=1; continue; }
     if [ -z "$id" ]; then
       retry "$W" r2 object put "$BUCKET/blobs/$sha.$kind" --file "$f" --remote || { failed=1; continue; }
     fi
-    retry "$W" r2 object put "$BUCKET/baseband/$sha.json" --file "$TMP/summary.json" --content-type application/json --remote \
+    retry "$W" r2 object put "$BUCKET/$key" --file "$TMP/summary.json" --content-type application/json --remote \
       || { failed=1; continue; }
     jq -c --arg id "$sha" --slurpfile s "$TMP/summary.json" \
       '{name, size, crc32, kind, id: $id, family: $s[0].package.family}' <<< "$p" >> "$meta"

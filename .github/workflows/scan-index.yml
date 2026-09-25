@@ -4,12 +4,19 @@
 # never touches an IPSW; blobs and OTA files are cached across runs, so a run
 # only downloads what is new.
 #
-# Runs after every System bundles run (daily, and whenever a new image lands),
-# or by hand. Needs: secrets CLOUDFLARE_API_TOKEN (R2 edit) and CLOUDFLARE_ACCOUNT_ID.
+# Runs after every successful System bundles run (daily, and whenever a new image
+# lands), or by hand. The pointer (scan/current.json) records a hash of the head
+# set it was built from, or none when a bundle failed; when the heads have not
+# moved since a complete build, nothing is rebuilt unless `force` is set. Needs: secrets CLOUDFLARE_API_TOKEN (R2 edit) and CLOUDFLARE_ACCOUNT_ID.
 
 name: Scan index
 on:
   workflow_dispatch:
+    inputs:
+      force:
+        description: Rebuild even if the head bundles have not changed
+        type: boolean
+        default: false
   workflow_run:
     workflows: [System bundles]
     types: [completed]
@@ -25,25 +32,39 @@ env:
 
 jobs:
   scan-index:
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - run: corepack enable && pnpm install --frozen-lockfile
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
 
-      - name: Image indexes
+      - name: Heads, compared with the ones the live index was built from
+        id: heads
+        env:
+          FORCE: ${{ inputs.force }}
         run: |
-          W=node_modules/.bin/wrangler
-          "$W" r2 object get "$BUCKET/system/builds.json" --remote --pipe > /tmp/builds.json
-          for b in $(jq -r '.[].build' /tmp/builds.json); do
-            mkdir -p "/tmp/idx/$b"
-            "$W" r2 object get "$BUCKET/system/$b/index.json" --remote --pipe > "/tmp/idx/$b/index.json"
-          done
+          scripts/modems.sh indexes /tmp/idx
+          npx vite-node scripts/scan_index.ts plan --builds /tmp/idx/builds.json --indexes /tmp/idx --out /tmp/heads.json |
+            sort -u > /tmp/need.txt
+          node_modules/.bin/wrangler r2 object get "$BUCKET/scan/current.json" --remote --pipe > /tmp/current.json 2>/dev/null ||
+            echo '{}' > /tmp/current.json
+          HASH=$(sha256sum /tmp/heads.json | cut -d' ' -f1)
+          echo "hash=$HASH" >> "$GITHUB_OUTPUT"
+          if [ "$FORCE" != true ] && [ "$(jq -r '.heads // empty' /tmp/current.json)" = "$HASH" ]; then
+            echo "heads unchanged since $(jq -r .gen /tmp/current.json), nothing to rebuild"
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
 
       # Blobs are content-addressed and Apple URLs immutable, so the cache only grows.
-      - uses: actions/cache@v4
+      - if: steps.heads.outputs.changed == 'true'
+        uses: actions/cache@v4
         with:
           path: |
             /tmp/blobs
@@ -51,10 +72,9 @@ jobs:
           key: scan-bundles-${{ github.run_id }}
           restore-keys: scan-bundles-
 
-      - name: Heads, and the blobs not cached yet
+      - name: Blobs not cached yet
+        if: steps.heads.outputs.changed == 'true'
         run: |
-          npx vite-node scripts/scan_index.ts plan --builds /tmp/builds.json --indexes /tmp/idx --out /tmp/heads.json |
-            sort -u > /tmp/need.txt
           mkdir -p /tmp/blobs
           comm -23 /tmp/need.txt <(ls /tmp/blobs | sed 's/\.ipcc$//' | sort) > /tmp/fetch.txt
           echo "$(wc -l < /tmp/fetch.txt) of $(wc -l < /tmp/need.txt) blobs to fetch"
@@ -62,23 +82,22 @@ jobs:
             < /tmp/fetch.txt > /dev/null
 
       - name: Build
+        if: steps.heads.outputs.changed == 'true'
+        env:
+          HASH: ${{ steps.heads.outputs.hash }}
         run: |
-          node_modules/.bin/wrangler r2 object get "$BUCKET/scan/current.json" --remote --pipe > /tmp/current.json 2>/dev/null || echo '{}' > /tmp/current.json
           PREV=$(jq -r '.gen // empty' /tmp/current.json)
           npx vite-node scripts/scan_index.ts build --heads /tmp/heads.json --blobs /tmp/blobs --cache /tmp/ota \
-            --out /tmp/scan ${PREV:+--previous "$PREV"}
+            --out /tmp/scan --heads-hash "$HASH" ${PREV:+--previous "$PREV"}
 
       - name: Upload, flip the pointer, drop the generation before last
+        if: steps.heads.outputs.changed == 'true'
         run: |
-          W="$GITHUB_WORKSPACE/node_modules/.bin/wrangler"
-          [ -x "$W" ] || { echo "wrangler missing at $W"; exit 1; }
+          . scripts/lib.sh
+          W="$PWD/node_modules/.bin/wrangler"
           cd /tmp/scan
-          for attempt in 1 2 3 4 5 6 7; do
-            "$W" r2 bulk put "$BUCKET" --filename upload.json --remote --force --concurrency 6 && break
-            [ "$attempt" = 7 ] && exit 1
-            sleep $(( 20 * 2 ** (attempt - 1) + RANDOM % 20 ))
-          done
-          "$W" r2 object put "$BUCKET/scan/current.json" --file pointer.json --remote
+          RETRY_TRIES=7 retry "$W" r2 bulk put "$BUCKET" --filename upload.json --remote --force --concurrency 6
+          retry "$W" r2 object put "$BUCKET/scan/current.json" --file pointer.json --remote
           # The last generation stays: a warm worker may still hold its pointer for a few minutes.
           OLD=$(jq -r '.previous // empty' /tmp/current.json)
           if [ -n "$OLD" ]; then

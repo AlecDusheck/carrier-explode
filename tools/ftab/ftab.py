@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
-"""Parser for Apple C1/C1X modem firmware packages (Firmware/c4000*/Release/patched/ftab.bin)
-and for the Intel-heritage carrier files (.der.pri / .der.gri) they consume.
+"""Parser for Apple C1/C1X modem firmware packages (Firmware/c4000*/Release/patched/ftab.bin).
+The .der.pri / .der.gri carrier files they consume are decoded by src/lib/decode/pri.ts.
 
 Subcommands (add --json for machine-readable output):
   info     FTAB                 build string, entry table, entry kinds
@@ -9,24 +9,21 @@ Subcommands (add --json for machine-readable output):
   verify   FTAB                 check every rcpi SHA-384 digest against the entry bytes
   segments FTAB [TAG]           'fwsg' segment table of a code image (rkos, l1cs, cdpu, cdpd, cdph)
   car      FTAB [TAG]           section table of a CAR2/CAR3 image
-  pri      FILE.der.pri|.gri    decode a carrier PRI / global GRI file into key/value rows
   fetch    IPSW_URL OUT         copy the modem ftab member out of a remote IPSW via HTTP ranges
 
-Only the Python standard library is required.  LZFSE uses libcompression when present
-(macOS) and a pure-Python decoder otherwise (lzfse.py).
+Only the Python standard library is required; fetch also uses the repo's scripts/net.py.
+LZFSE uses libcompression when present (macOS) and a pure-Python decoder otherwise (lzfse.py).
 """
 import argparse
 import collections
 import hashlib
-import io
 import json
 import math
 import os
 import re
+import shutil
 import struct
 import sys
-import urllib.request
-import zipfile
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import lzfse  # noqa: E402
@@ -214,116 +211,21 @@ def parse_car(d):
 
 
 # ---------------------------------------------------------------------------
-# .der.pri / .der.gri
-# ---------------------------------------------------------------------------
-
-
-def _der(b, p):
-    t0 = b[p]; p += 1
-    tn = t0 & 0x1F
-    if tn == 0x1F:
-        tn = 0
-        while True:
-            x = b[p]; p += 1
-            tn = (tn << 7) | (x & 0x7F)
-            if not x & 0x80:
-                break
-    ln = b[p]; p += 1
-    if ln & 0x80:
-        n = ln & 0x7F
-        ln = int.from_bytes(b[p:p + n], "big"); p += n
-    return t0 >> 6, (t0 >> 5) & 1, tn, p, ln
-
-
-def parse_pri(b):
-    """Decode a DER carrier file.  Returns {dialect, header{}, items[(key, hex, int|None)]}.
-
-    Layout: SET { [0] { SEQ { [n+0] name  [n+1] value } } ... }.  C1/Intel files use
-    n = 6000 (0x9fae70..73) with header rows (name/value) then items (key "%u:<nvm path>",
-    raw little-endian value).  Qualcomm files use 5009.. (0x9fa711..) and carry a
-    compressed EFS payload; only their header rows are returned here.
-    """
-    _c, _k, _t, p, ln = _der(b, 0)
-    end = p + ln
-    header, items, dialect = {}, [], None
-    while p < end:
-        _c, _k, _t, q, ln = _der(b, p)
-        nxt = q + ln
-        _c2, _k2, _t2, r, ln2 = _der(b, q)  # inner SEQUENCE
-        fields = {}
-        rr = r
-        while rr < r + ln2:
-            c3, k3, t3, v, ln3 = _der(b, rr)
-            fields[t3] = b[v:v + ln3]
-            rr = v + ln3
-        tags = sorted(fields)
-        if dialect is None and tags:
-            dialect = ("c1/intel" if 6000 <= tags[0] <= 6003 else
-                       "qualcomm" if 5000 <= tags[0] <= 5020 else "unknown(%d)" % tags[0])
-        if 6000 in fields:
-            header[fields[6000].decode("latin1")] = fields.get(6001, b"").decode("latin1")
-        elif 6002 in fields:
-            v = fields.get(6003, b"")
-            if len(v) > 1 and v.endswith(b"\0") and all(32 <= c < 127 for c in v[:-1]):
-                iv = v[:-1].decode()          # NUL-terminated text value
-            elif len(v) in (1, 2, 4, 8):
-                iv = int.from_bytes(v, "little")
-            else:
-                iv = None
-            items.append((fields[6002].decode("latin1"), v.hex(), iv))
-        elif 5009 in fields:
-            header[fields[5009].decode("latin1")] = fields.get(5010, b"").decode("latin1", "replace")
-        p = nxt
-    return {"dialect": dialect, "header": header, "items": items, "size": len(b)}
-
-
-# ---------------------------------------------------------------------------
 # remote IPSW member fetch (HTTP Range)
 # ---------------------------------------------------------------------------
 
 
-class _RangeFile(io.RawIOBase):
-    def __init__(self, url):
-        self.url, self.pos = url, 0
-        with urllib.request.urlopen(urllib.request.Request(url, method="HEAD")) as r:
-            self.size = int(r.headers["Content-Length"])
-
-    def readable(self):
-        return True
-
-    def seekable(self):
-        return True
-
-    def tell(self):
-        return self.pos
-
-    def seek(self, o, w=0):
-        self.pos = o if w == 0 else self.pos + o if w == 1 else self.size + o
-        return self.pos
-
-    def readinto(self, b):
-        if self.pos >= self.size or not len(b):
-            return 0
-        end = min(self.pos + len(b), self.size) - 1
-        req = urllib.request.Request(self.url, headers={"Range": "bytes=%d-%d" % (self.pos, end)})
-        with urllib.request.urlopen(req) as r:
-            data = r.read()
-        b[:len(data)] = data
-        self.pos += len(data)
-        return len(data)
-
-
 def fetch(url, out, pattern=r"^Firmware/c\d+[^/]*/.*ftab\.bin$"):
-    z = zipfile.ZipFile(io.BufferedReader(_RangeFile(url), buffer_size=1 << 20))
-    names = [i.filename for i in z.infolist() if re.search(pattern, i.filename)]
-    if not names:
-        raise SystemExit("no member matches %s" % pattern)
-    with z.open(names[0]) as src, open(out, "wb") as dst:
-        while True:
-            chunk = src.read(1 << 22)
-            if not chunk:
-                break
-            dst.write(chunk)
+    # The repo's range reader (scripts/net.py); only this subcommand needs it.
+    sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "scripts"))
+    from net import open_zip
+
+    with open_zip(url) as z:
+        names = [i.filename for i in z.infolist() if re.search(pattern, i.filename)]
+        if not names:
+            raise SystemExit("no member matches %s" % pattern)
+        with z.open(names[0]) as src, open(out, "wb") as dst:
+            shutil.copyfileobj(src, dst, 1 << 22)
     return names[0]
 
 
@@ -420,15 +322,6 @@ def cmd_car(a):
     _out(a, obj, "\n".join(lines))
 
 
-def cmd_pri(a):
-    r = parse_pri(open(a.file, "rb").read())
-    lines = ["dialect: %s  size: %d  items: %d" % (r["dialect"], r["size"], len(r["items"]))]
-    lines += ["  %s = %s" % kv for kv in r["header"].items()]
-    for k, hx, iv in r["items"]:
-        lines.append("%s = %s" % (k, iv if iv is not None else hx))
-    _out(a, r, "\n".join(lines))
-
-
 def cmd_fetch(a):
     name = fetch(a.url, a.out)
     print("fetched %s -> %s" % (name, a.out))
@@ -450,7 +343,6 @@ def main(argv=None):
     p = sp.add_parser("verify"); p.add_argument("ftab"); p.set_defaults(f=cmd_verify)
     p = sp.add_parser("segments"); p.add_argument("ftab"); p.add_argument("tag", nargs="?"); p.set_defaults(f=cmd_segments)
     p = sp.add_parser("car"); p.add_argument("ftab"); p.add_argument("tag", nargs="?"); p.set_defaults(f=cmd_car)
-    p = sp.add_parser("pri"); p.add_argument("file"); p.set_defaults(f=cmd_pri)
     p = sp.add_parser("fetch"); p.add_argument("url"); p.add_argument("out"); p.set_defaults(f=cmd_fetch)
     a = ap.parse_args(argv)
     a.f(a)

@@ -10,7 +10,7 @@ read over HTTP ranges; packages are grouped by (name, size, CRC32) and stored on
 however many builds and phones share them:
 
     blobs/<sha256>.bbfw | blobs/<sha256>.ftab   the package, as shipped
-    baseband/<sha256>.json                      decoded (scripts/baseband.ts)
+    baseband/v<schema>/<sha256>.json            decoded (scripts/baseband.ts)
     system/<build>/index.json                   modems: [{family, package, devices}]
 
     modems.py plan --indexes DIR [--builds B ...] [--rebuild] [--legs 6] > plan.json
@@ -24,77 +24,18 @@ what the fetch legs stored ({name, size, crc32, kind, id, family} per line).
 """
 
 import argparse
-import io
 import json
 import plistlib
-import re
 import sys
-import time
 import urllib.error
-import urllib.request
-import zipfile
 import zlib
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
-UA = {"User-Agent": "carrier-explode"}
+from net import appledb, iphone_ipsws, ipsw_me, open_zip, product_key
+
 # Apple's CDN and ipsw.me are shared; a few requests at a time.
 CONCURRENCY = 4
-
-
-def get(url: str, headers: dict | None = None, method: str = "GET", tries: int = 5):
-    """urlopen with retries and backoff; 404 is final."""
-    for attempt in range(tries):
-        try:
-            return urllib.request.urlopen(urllib.request.Request(url, headers={**UA, **(headers or {})}, method=method), timeout=60)
-        except urllib.error.HTTPError as e:
-            if e.code == 404 or attempt == tries - 1:
-                raise
-        except (urllib.error.URLError, TimeoutError, ConnectionError):
-            if attempt == tries - 1:
-                raise
-        time.sleep(2 ** attempt)
-
-
-def get_json(url: str):
-    with get(url) as r:
-        return json.load(r)
-
-
-class RangeFile(io.RawIOBase):
-    """A remote file, read by HTTP range requests, for zipfile."""
-
-    def __init__(self, url: str):
-        self.url, self.pos = url, 0
-        with get(url, method="HEAD") as r:
-            self.size = int(r.headers["Content-Length"])
-
-    def readable(self):
-        return True
-
-    def seekable(self):
-        return True
-
-    def tell(self):
-        return self.pos
-
-    def seek(self, off, whence=0):
-        self.pos = off if whence == 0 else self.pos + off if whence == 1 else self.size + off
-        return self.pos
-
-    def readinto(self, b):
-        if self.pos >= self.size or not len(b):
-            return 0
-        end = min(self.pos + len(b), self.size) - 1
-        with get(self.url, {"Range": f"bytes={self.pos}-{end}"}) as r:
-            data = r.read()
-        b[:len(data)] = data
-        self.pos += len(data)
-        return len(data)
-
-
-def open_zip(url: str) -> zipfile.ZipFile:
-    return zipfile.ZipFile(io.BufferedReader(RangeFile(url), buffer_size=1 << 20))
 
 
 def modem_boards(manifest: dict) -> dict[str, set[str]]:
@@ -123,10 +64,6 @@ def modem_members(infos, manifest: dict) -> list[dict]:
 
 def key(p: dict) -> tuple:
     return (p["name"], p["size"], p["crc32"])
-
-
-def product_key(product: str) -> list[int]:
-    return [int(x) for x in re.findall(r"\d+", product)]
 
 
 def group(ipsws: dict[str, list[str]], listings: dict[str, list[dict]], boards: dict[str, list[str]]) -> list[dict]:
@@ -217,12 +154,12 @@ def read_indexes(d: Path) -> dict[str, dict]:
 
 def iphone_firmwares() -> tuple[dict[str, list[tuple[str, str]]], dict[str, list[str]]]:
     """build -> [(device, IPSW URL)] for every iPhone ipsw.me knows, and device -> its boards (d93ap)."""
-    devices = [d["identifier"] for d in get_json("https://api.ipsw.me/v4/devices") if d["identifier"].startswith("iPhone")]
+    devices = [d["identifier"] for d in ipsw_me("/devices") if d["identifier"].startswith("iPhone")]
     out: dict[str, list[tuple[str, str]]] = {}
     boards: dict[str, list[str]] = {}
 
     def fws(dev):
-        return dev, get_json(f"https://api.ipsw.me/v4/device/{dev}?type=ipsw")
+        return dev, ipsw_me(f"/device/{dev}?type=ipsw")
 
     with ThreadPoolExecutor(CONCURRENCY) as ex:
         for dev, d in ex.map(fws, devices):
@@ -236,10 +173,9 @@ def iphone_firmwares() -> tuple[dict[str, list[tuple[str, str]]], dict[str, list
 def appledb_ipsws(build: str) -> list[tuple[str, str]]:
     """Betas: ipsw.me does not list them, AppleDB carries Apple's links."""
     try:
-        devs = get_json(f"https://api.appledb.dev/ios/iOS;{build}.json").get("devices") or {}
+        return list(iphone_ipsws(appledb(f"iOS;{build}.json")).items())
     except urllib.error.HTTPError:
         return []
-    return [(d, v["ipsw"]) for d, v in devs.items() if d.startswith("iPhone") and isinstance(v, dict) and v.get("ipsw")]
 
 
 def build_groups(builds: list[str]) -> dict[str, list[dict]]:

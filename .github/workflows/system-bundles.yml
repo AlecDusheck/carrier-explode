@@ -7,11 +7,11 @@
 # dwilliamsuk's, from https://github.com/dwilliamsuk/ios-carrier-bundles
 # `extract` also stores the build's modem packages, for every iPhone that
 # received it, the way baseband.yml does (scripts/modems.sh run): blobs/<id>.bbfw
-# or .ftab, baseband/<id>.json, and the index's `modems` list.
+# or .ftab, baseband/v<schema>/<id>.json, and the index's `modems` list.
 #
 # Needs: secrets CLOUDFLARE_API_TOKEN (R2 edit) and CLOUDFLARE_ACCOUNT_ID.
-# Optional: secret PURGE_TOKEN, the same value as the worker's, so new images
-# show up at once instead of when cached pages age out (six hours).
+# Optional: secret PURGE_TOKEN (purge.yml), so new images show up at once
+# instead of when cached pages age out (six hours).
 # Optional: variable MIN_VERSION, the oldest release to keep (default: the oldest
 # image already held), and variable DEVICE (default iPhone17,1). Releases that device no longer
 # receives are taken from the newest iPhone instead.
@@ -52,10 +52,16 @@ jobs:
       matrix: ${{ steps.plan.outputs.matrix }}
     steps:
       - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
       - id: plan
         run: |
           python3 -m unittest discover -s scripts -p 'test_*.py' -q
-          npx --yes wrangler r2 object get "$BUCKET/system/builds.json" --remote --pipe > /tmp/builds.json 2>/dev/null || echo '[]' > /tmp/builds.json
+          node_modules/.bin/wrangler r2 object get "$BUCKET/system/builds.json" --remote --pipe > /tmp/builds.json 2>/dev/null || echo '[]' > /tmp/builds.json
           MATRIX=$(python3 scripts/plan_system_bundles.py --builds /tmp/builds.json \
             --device "${{ vars.DEVICE || 'iPhone17,1' }}" --version "${{ inputs.version }}" \
             --since "${{ inputs.since || vars.MIN_VERSION }}" --max "${{ inputs.max || '3' }}" \
@@ -76,10 +82,12 @@ jobs:
     name: iOS ${{ matrix.image.version }} (${{ matrix.image.build }})
     steps:
       - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - run: corepack enable && pnpm install --frozen-lockfile
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
 
       - name: Install blacktop/ipsw
         run: |
@@ -118,11 +126,10 @@ jobs:
           # The image itself says 27.2; the planner knows it is 27.2 beta 2.
           LABEL: ${{ matrix.image.beta && matrix.image.version || '' }}
         run: |
-          W="$GITHUB_WORKSPACE/node_modules/.bin/wrangler"
-          "$W" r2 object get "$BUCKET/system/builds.json" --remote --pipe > /tmp/builds.json 2>/dev/null || echo '[]' > /tmp/builds.json
+          node_modules/.bin/wrangler r2 object get "$BUCKET/system/builds.json" --remote --pipe > /tmp/builds.json 2>/dev/null || echo '[]' > /tmp/builds.json
           # Blobs are content-addressed; skip the ones an earlier image already uploaded.
           mkdir -p /tmp/idx
-          [ -s /tmp/builds.json ] && [ "$(cat /tmp/builds.json)" != "[]" ] && W="$W" scripts/modems.sh indexes /tmp/idx
+          if [ "$(jq length /tmp/builds.json)" -gt 0 ]; then scripts/modems.sh indexes /tmp/idx; fi
           cat /tmp/idx/*/index.json 2>/dev/null | jq -r '(.carriers, .countries)[].id' > /tmp/have.txt || true
           ROOT=$(echo /tmp/x/*/root/System/Library)
           python3 scripts/package_system_bundles.py \
@@ -145,17 +152,11 @@ jobs:
 
       - name: Upload to R2
         run: |
-          W="$GITHUB_WORKSPACE/node_modules/.bin/wrangler"
+          . scripts/lib.sh
+          W="$PWD/node_modules/.bin/wrangler"
           cd /tmp/out
-          # R2's API answers 429 under load. The upload is idempotent
-          # (content-addressed keys), so retry the whole thing with backoff.
-          for attempt in 1 2 3 4 5 6 7; do
-            "$W" r2 bulk put "$BUCKET" --filename upload.json --remote --force --concurrency 6 && break
-            [ "$attempt" = 7 ] && exit 1
-            delay=$(( 20 * 2 ** (attempt - 1) + RANDOM % 20 ))
-            echo "upload failed (attempt $attempt), retrying in ${delay}s"
-            sleep "$delay"
-          done
+          # Content-addressed keys: the whole upload can be retried.
+          RETRY_TRIES=7 retry "$W" r2 bulk put "$BUCKET" --filename upload.json --remote --force --concurrency 6
           # builds.json goes last so the app never lists a half-uploaded image.
           # Re-read and merge right before writing: matrix jobs overlap.
           "$W" r2 object get "$BUCKET/system/builds.json" --remote --pipe > /tmp/now.json 2>/dev/null || echo '[]' > /tmp/now.json
@@ -168,12 +169,7 @@ jobs:
   purge:
     needs: extract
     if: ${{ !cancelled() && needs.extract.result != 'skipped' }}
-    runs-on: ubuntu-24.04
-    steps:
-      - env:
-          TOKEN: ${{ secrets.PURGE_TOKEN }}
-        run: |
-          [ -n "$TOKEN" ] || { echo "PURGE_TOKEN not set, skipping"; exit 0; }
-          curl -fsS -X POST https://carrierexplode.com/internal/purge \
-            -H "authorization: Bearer $TOKEN" -H "content-type: application/json" \
-            -d '{"tags":["latest"]}'
+    uses: ./.github/workflows/purge.yml
+    with:
+      tags: latest
+    secrets: inherit

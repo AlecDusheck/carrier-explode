@@ -19,21 +19,14 @@ import argparse
 import json
 import re
 import sys
-import urllib.request
 from pathlib import Path
 
+from net import appledb, iphone_ipsws, ipsw_me, product_key
 from versions import version_key
 
 
-def api(path: str):
-    req = urllib.request.Request("https://api.ipsw.me/v4" + path, headers={"User-Agent": "carrier-explode"})
-    with urllib.request.urlopen(req) as r:
-        return json.load(r)
-
-
 def newest_iphone() -> str:
-    ids = [d["identifier"] for d in api("/devices") if d["identifier"].startswith("iPhone")]
-    return max(ids, key=lambda i: [int(x) for x in i.removeprefix("iPhone").split(",")])
+    return max((d["identifier"] for d in ipsw_me("/devices") if d["identifier"].startswith("iPhone")), key=product_key)
 
 
 def plan(held: list[dict], preferred: list[dict], fallback: list[dict],
@@ -106,20 +99,13 @@ def plan_betas(entries: list[dict], device: str, cap: int) -> list[dict]:
     for e in entries:
         if not e.get("beta"):
             continue
-        ipsws = {d: v["ipsw"] for d, v in (e.get("devices") or {}).items()
-                 if d.startswith("iPhone") and isinstance(v, dict) and v.get("ipsw")}
+        ipsws = iphone_ipsws(e)
         if not ipsws:
             continue
-        pick = device if device in ipsws else max(ipsws, key=lambda i: [int(x) for x in i.removeprefix("iPhone").split(",")])
+        pick = device if device in ipsws else max(ipsws, key=product_key)
         out.append({"version": e["version"], "build": e["build"], "device": pick, "url": ipsws[pick], "beta": True})
     out.sort(key=lambda x: version_key(x["version"]))
     return out[:cap]
-
-
-def appledb(path: str):
-    req = urllib.request.Request("https://api.appledb.dev/ios/" + path, headers={"User-Agent": "carrier-explode"})
-    with urllib.request.urlopen(req, timeout=30) as r:
-        return json.load(r)
 
 
 def main() -> None:
@@ -133,7 +119,7 @@ def main() -> None:
     a = ap.parse_args()
 
     held = json.loads(a.builds.read_text() or "[]") if a.builds.exists() else []
-    fws = lambda ident: [{**f, "identifier": ident} for f in api(f"/device/{ident}?type=ipsw")["firmwares"]]
+    fws = lambda ident: [{**f, "identifier": ident} for f in ipsw_me(f"/device/{ident}?type=ipsw")["firmwares"]]
     probe = newest_iphone()
     preferred, fallback = fws(a.device), (fws(probe) if probe != a.device else [])
     out = plan(held, preferred, fallback, a.version or None, a.since or None, a.max)
