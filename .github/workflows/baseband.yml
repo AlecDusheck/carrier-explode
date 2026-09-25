@@ -29,6 +29,10 @@ on:
         description: Re-decode every stored package instead of adding missing ones
         type: boolean
         default: false
+      prune_v1:
+        description: "One-off: delete the unversioned baseband/<id>.json summaries (after the v2 site is live)"
+        type: boolean
+        default: false
 
 concurrency:
   group: modems
@@ -41,6 +45,7 @@ env:
 
 jobs:
   plan:
+    if: ${{ !inputs.prune_v1 }}
     runs-on: ubuntu-24.04
     outputs:
       legs: ${{ steps.plan.outputs.legs }}
@@ -101,7 +106,7 @@ jobs:
   # One job for every index: they are small, and R2 prefers them in sequence.
   index:
     needs: fetch
-    if: ${{ !cancelled() && !inputs.rebuild }}
+    if: ${{ !cancelled() && !inputs.rebuild && !inputs.prune_v1 }}
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
@@ -124,6 +129,26 @@ jobs:
         run: |
           python3 scripts/modems.py write --plan /tmp/plan/plan.json --indexes /tmp/plan/idx --meta /tmp/meta --out /tmp/out
           scripts/modems.sh publish /tmp/out
+
+  # One-off after the move to baseband/v2/: remove this job and its input once it has run.
+  prune_v1:
+    if: ${{ inputs.prune_v1 }}
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Delete the unversioned summaries
+        run: |
+          export W="$PWD/node_modules/.bin/wrangler"
+          scripts/modems.sh indexes /tmp/idx
+          jq -r '.modems[]?.package.id' /tmp/idx/*/index.json | sort -u > /tmp/ids.txt
+          echo "$(wc -l < /tmp/ids.txt) packages"
+          xargs -P 8 -I{} "$W" r2 object delete "$BUCKET/baseband/{}.json" --remote < /tmp/ids.txt > /dev/null
 
   purge:
     needs: [fetch, index]
