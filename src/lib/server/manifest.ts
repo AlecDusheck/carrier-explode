@@ -3,7 +3,7 @@
  * carrier and country bundle Apple publishes.
  */
 
-import { parsePlist, type PlistValue, bytesToHex } from "$lib/decode";
+import { parsePlist, isPlistDict, type PlistDict, type PlistValue, bytesToHex } from "$lib/decode";
 import { compareVersions, countryName, splitName, versionKey } from "$lib/names";
 
 export { compareVersions, countryName, splitName, versionKey };
@@ -65,9 +65,10 @@ export interface ManifestIndex {
   watchCarriers: CarrierSummary[];
 }
 
-type Dict = Record<string, PlistValue>;
-const isDict = (v: PlistValue | undefined): v is Dict =>
-  !!v && typeof v === "object" && !Array.isArray(v) && !(v instanceof Uint8Array) && !(v instanceof Date);
+type Dict = PlistDict;
+
+/** `v` when it is a dictionary, else an empty one. */
+const dict = (v: PlistValue | undefined): Dict => (isPlistDict(v) ? v : {});
 
 function refFromEntry(os: string, e: Dict, productType?: string): BundleRef | null {
   const url = e.BundleURL;
@@ -87,39 +88,34 @@ function refFromEntry(os: string, e: Dict, productType?: string): BundleRef | nu
 /** All published refs for one carrier name: iOS-family newest first, then Watch. */
 export function carrierRefs(root: Dict, name: string): BundleRef[] {
   const out: BundleRef[] = [];
-  const byVer = root.MobileDeviceCarrierBundlesByProductVersion;
-  if (isDict(byVer) && isDict(byVer[name])) {
-    const entry = byVer[name] as Dict;
+  const entry = dict(root.MobileDeviceCarrierBundlesByProductVersion)[name];
+  if (isPlistDict(entry)) {
     for (const [os, v] of Object.entries(entry)) {
       if (os === "ByProductType") {
-        if (!isDict(v)) continue;
+        if (!isPlistDict(v)) continue;
         for (const [pt, versions] of Object.entries(v)) {
-          if (!isDict(versions)) continue;
+          if (!isPlistDict(versions)) continue;
           for (const [pos, pe] of Object.entries(versions)) {
-            if (isDict(pe)) { const r = refFromEntry(pos, pe, pt); if (r) out.push(r); }
+            if (isPlistDict(pe)) { const r = refFromEntry(pos, pe, pt); if (r) out.push(r); }
           }
         }
         continue;
       }
-      if (isDict(v)) { const r = refFromEntry(os, v); if (r) out.push(r); }
+      if (isPlistDict(v)) { const r = refFromEntry(os, v); if (r) out.push(r); }
     }
   }
-  const legacy = root.MobileDeviceCarrierBundles;
-  if (isDict(legacy) && isDict(legacy[name])) {
-    const r = refFromEntry("legacy", legacy[name] as Dict);
+  const legacy = dict(root.MobileDeviceCarrierBundles)[name];
+  if (isPlistDict(legacy)) {
+    const r = refFromEntry("legacy", legacy);
     if (r) out.push(r);
   }
   // Watch + newer-format carrier bundles
-  const cb = root.CarrierBundles;
-  if (isDict(cb)) {
-    for (const family of ["Watch", "iPhone"] as const) {
-      const fam = cb[family];
-      if (!isDict(fam) || !isDict(fam.Bundles)) continue;
-      for (const [key, v] of Object.entries(fam.Bundles as Dict)) {
-        if (!isDict(v) || v.BundleID !== name) continue;
-        const r = refFromEntry(String(v.OS && isDict(v.OS) ? v.OS.Min : "") || "—", v, family);
-        if (r) { r.build = String(v.BundleVersion ?? r.build); r.productType = family; r.os = `${family} ${key.split("_").pop()}`; out.push(r); }
-      }
+  const cb = dict(root.CarrierBundles);
+  for (const family of ["Watch", "iPhone"] as const) {
+    for (const [key, v] of Object.entries(dict(dict(cb[family]).Bundles))) {
+      if (!isPlistDict(v) || v.BundleID !== name) continue;
+      const r = refFromEntry(String(dict(v.OS).Min ?? "") || "—", v, family);
+      if (r) { r.build = String(v.BundleVersion ?? r.build); r.productType = family; r.os = `${family} ${key.split("_").pop()}`; out.push(r); }
     }
   }
   // iOS keys and Watch bundle versions are different numbering schemes, so they
@@ -134,37 +130,36 @@ export function carrierRefs(root: Dict, name: string): BundleRef[] {
 }
 
 export function buildIndex(root: Dict): ManifestIndex {
-  const byVer = isDict(root.MobileDeviceCarrierBundlesByProductVersion)
-    ? (root.MobileDeviceCarrierBundlesByProductVersion as Dict) : {};
-  const legacy = isDict(root.MobileDeviceCarrierBundles) ? (root.MobileDeviceCarrierBundles as Dict) : {};
+  const byVer = dict(root.MobileDeviceCarrierBundlesByProductVersion);
+  const legacy = dict(root.MobileDeviceCarrierBundles);
 
   const names = new Set<string>();
-  for (const k of Object.keys(byVer)) if (isDict(byVer[k])) names.add(k);
-  for (const k of Object.keys(legacy)) if (isDict(legacy[k])) names.add(k);
+  for (const k of Object.keys(byVer)) if (isPlistDict(byVer[k])) names.add(k);
+  for (const k of Object.keys(legacy)) if (isPlistDict(legacy[k])) names.add(k);
 
   const carriers: CarrierSummary[] = [];
   for (const name of [...names].sort((a, b) => a.localeCompare(b))) {
-    const entry = isDict(byVer[name]) ? (byVer[name] as Dict) : {};
+    const entry = dict(byVer[name]);
     const versions: string[] = [];
     const productTypes = new Set<string>();
     for (const [os, v] of Object.entries(entry)) {
       if (os === "ByProductType") {
-        if (isDict(v)) {
+        if (isPlistDict(v)) {
           for (const [pt, versions] of Object.entries(v)) {
             // { FallbackToByProductVersion: true } means "no bundles of its own".
-            if (!isDict(versions)) continue;
+            if (!isPlistDict(versions)) continue;
             const real = Object.values(versions).some(
-              (e) => isDict(e) && typeof e.BundleURL === "string",
+              (e) => isPlistDict(e) && typeof e.BundleURL === "string",
             );
             if (real) productTypes.add(pt);
           }
         }
         continue;
       }
-      if (isDict(v) && typeof v.BundleURL === "string") versions.push(os);
+      if (isPlistDict(v) && typeof v.BundleURL === "string") versions.push(os);
     }
     versions.sort(compareVersions);
-    const newest = versions.length ? (entry[versions[versions.length - 1]] as Dict) : undefined;
+    const newest = versions.length ? dict(entry[versions[versions.length - 1]]) : undefined;
     const { cc, display } = splitName(name);
     carriers.push({
       name,
@@ -173,39 +168,38 @@ export function buildIndex(root: Dict): ManifestIndex {
       versions,
       latestBuild: newest && typeof newest.BuildVersion === "string" ? newest.BuildVersion : undefined,
       productTypes: [...productTypes].sort(),
-      hasLegacy: isDict(legacy[name]),
+      hasLegacy: isPlistDict(legacy[name]),
     });
   }
 
   // Country bundles, both families, resolved through BundleMappings + CountryId.
   const countries: CountrySummary[] = [];
-  const cbRoot = isDict(root.CountryBundles) ? (root.CountryBundles as Dict) : {};
+  const cbRoot = dict(root.CountryBundles);
   for (const family of ["iPhone", "Watch"] as const) {
-    const fam = cbRoot[family];
-    if (!isDict(fam) || !isDict(fam.Bundles)) continue;
-    const mappings = isDict(fam.BundleMappings) ? (fam.BundleMappings as Dict) : {};
-    const countryId = isDict(fam.CountryId) ? (fam.CountryId as Dict) : {};
+    const fam = dict(cbRoot[family]);
+    const mappings = dict(fam.BundleMappings);
+    const countryId = dict(fam.CountryId);
 
     const idsFor = new Map<string, string[]>(); // bundle key -> CountryId keys
     const minOsFor = new Map<string, string>();
     for (const [mapKey, mapVal] of Object.entries(mappings)) {
-      if (!isDict(mapVal)) continue;
+      if (!isPlistDict(mapVal)) continue;
       const ids: string[] = [];
       for (const [id, v] of Object.entries(countryId)) {
-        if (isDict(v) && v.BundleMapKey === mapKey) ids.push(id);
+        if (isPlistDict(v) && v.BundleMapKey === mapKey) ids.push(id);
       }
       for (const slot of Object.values(mapVal)) {
-        if (!isDict(slot)) continue;
+        if (!isPlistDict(slot)) continue;
         const target = String(slot.BundleMatchEntry ?? "");
         if (!target) continue;
         const prev = idsFor.get(target) ?? [];
         idsFor.set(target, [...new Set([...prev, ...ids])]);
-        if (isDict(slot.OS) && typeof slot.OS.Min === "string") minOsFor.set(target, slot.OS.Min);
+        if (isPlistDict(slot.OS) && typeof slot.OS.Min === "string") minOsFor.set(target, slot.OS.Min);
       }
     }
 
-    for (const [key, v] of Object.entries(fam.Bundles as Dict)) {
-      if (!isDict(v) || typeof v.BundleURL !== "string") continue;
+    for (const [key, v] of Object.entries(dict(fam.Bundles))) {
+      if (!isPlistDict(v) || typeof v.BundleURL !== "string") continue;
       countries.push({
         id: String(v.BundleID ?? key),
         bundleId: String(v.BundleID ?? key),
@@ -221,40 +215,32 @@ export function buildIndex(root: Dict): ManifestIndex {
   countries.sort((a, b) => a.id.localeCompare(b.id) || compareVersions(a.version, b.version));
 
   const otherKnown: BundleRef[] = [];
-  const carrierBundles = isDict(root.CarrierBundles) ? (root.CarrierBundles as Dict) : {};
-  const ip = carrierBundles.iPhone;
-  if (isDict(ip) && isDict(ip.OtherKnownSettings)) {
-    for (const [, v] of Object.entries(ip.OtherKnownSettings as Dict)) {
-      if (!isDict(v)) continue;
-      const r = refFromEntry(isDict(v.OS) ? String(v.OS.Min ?? "") : "", v, "iPhone");
-      if (r) { r.build = String(v.BundleVersion ?? ""); otherKnown.push(r); }
-    }
+  const carrierBundles = dict(root.CarrierBundles);
+  for (const v of Object.values(dict(dict(carrierBundles.iPhone).OtherKnownSettings))) {
+    if (!isPlistDict(v)) continue;
+    const r = refFromEntry(String(dict(v.OS).Min ?? ""), v, "iPhone");
+    if (r) { r.build = String(v.BundleVersion ?? ""); otherKnown.push(r); }
   }
 
   const watchCarriers: CarrierSummary[] = [];
-  const watch = carrierBundles.Watch;
-  if (isDict(watch) && isDict(watch.Bundles)) {
-    const byId = new Map<string, { versions: string[]; latest?: string }>();
-    for (const [, v] of Object.entries(watch.Bundles as Dict)) {
-      if (!isDict(v)) continue;
-      const id = String(v.BundleID ?? "");
-      const rec = byId.get(id) ?? { versions: [] };
-      rec.versions.push(String(v.BundleVersion ?? ""));
-      byId.set(id, rec);
-    }
-    for (const [id, rec] of [...byId].sort((a, b) => a[0].localeCompare(b[0]))) {
-      const { cc, display } = splitName(id);
-      watchCarriers.push({
-        name: id, cc, display,
-        versions: rec.versions.sort(compareVersions),
-        latestBuild: rec.versions[rec.versions.length - 1],
-        productTypes: ["Watch"],
-        hasLegacy: false,
-      });
-    }
+  const watchVersions = new Map<string, string[]>();
+  for (const v of Object.values(dict(dict(carrierBundles.Watch).Bundles))) {
+    if (!isPlistDict(v)) continue;
+    const id = String(v.BundleID ?? "");
+    watchVersions.set(id, [...(watchVersions.get(id) ?? []), String(v.BundleVersion ?? "")]);
+  }
+  for (const [id, versions] of [...watchVersions].sort((a, b) => a[0].localeCompare(b[0]))) {
+    const { cc, display } = splitName(id);
+    versions.sort(compareVersions);
+    watchCarriers.push({
+      name: id, cc, display, versions,
+      latestBuild: versions[versions.length - 1],
+      productTypes: ["Watch"],
+      hasLegacy: false,
+    });
   }
 
-  const countOf = (k: string) => (isDict(root[k]) ? Object.keys(root[k] as Dict).length : 0);
+  const countOf = (k: string) => Object.keys(dict(root[k])).length;
 
   return {
     fetchedAt: new Date().toISOString(),
@@ -287,23 +273,25 @@ export interface MccMncEntry {
   mvnos: Array<{ bundle: string; iccid?: string; gid1?: string; gid2?: string }>;
 }
 
-export function buildMccMnc(root: Dict): {
+export interface MccMncTable {
   entries: MccMncEntry[];
   carrierIds: Array<[string, string]>;
   iccids: Array<[string, string]>;
-} {
-  const byMcc = isDict(root.MobileDeviceCarriersByMccMnc) ? (root.MobileDeviceCarriersByMccMnc as Dict) : {};
-  const flat = isDict(root.MobileDeviceCarriers) ? (root.MobileDeviceCarriers as Dict) : {};
+}
+
+export function buildMccMnc(root: Dict): MccMncTable {
+  const byMcc = dict(root.MobileDeviceCarriersByMccMnc);
+  const flat = dict(root.MobileDeviceCarriers);
   const entries: MccMncEntry[] = [];
 
   for (const [plmn, v] of Object.entries(byMcc)) {
     const mvnos: MccMncEntry["mvnos"] = [];
     let bundle: string | undefined;
-    if (isDict(v)) {
+    if (isPlistDict(v)) {
       if (typeof v.BundleName === "string") bundle = v.BundleName;
       if (Array.isArray(v.MVNOs)) {
         for (const m of v.MVNOs) {
-          if (!isDict(m)) continue;
+          if (!isPlistDict(m)) continue;
           mvnos.push({
             bundle: String(m.BundleName ?? ""),
             iccid: typeof m.ICCID === "string" ? m.ICCID : undefined,
@@ -323,7 +311,7 @@ export function buildMccMnc(root: Dict): {
     .filter((e): e is [string, string] => typeof e[1] === "string")
     .sort((a, b) => a[0].localeCompare(b[0]));
 
-  const idsRoot = isDict(root.MobileDeviceCarriersByCarrierID) ? (root.MobileDeviceCarriersByCarrierID as Dict) : {};
+  const idsRoot = dict(root.MobileDeviceCarriersByCarrierID);
   const carrierIds = Object.entries(idsRoot)
     .filter((e): e is [string, string] => typeof e[1] === "string")
     .sort((a, b) => a[0].localeCompare(b[0]));
@@ -333,6 +321,20 @@ export function buildMccMnc(root: Dict): {
 
 export function parseManifest(bytes: Uint8Array): Dict {
   const v = parsePlist(bytes);
-  if (!isDict(v)) throw new Error("manifest is not a dictionary");
+  if (!isPlistDict(v)) throw new Error("manifest is not a dictionary");
   return v;
+}
+
+/** Everything the app reads off the manifest: the lists, each bundle's refs, and the PLMN table. */
+export interface ManifestTables {
+  index: ManifestIndex;
+  refs: Record<string, BundleRef[]>;
+  plmn: MccMncTable;
+}
+
+export function manifestTables(root: Dict): ManifestTables {
+  const index = buildIndex(root);
+  const refs: Record<string, BundleRef[]> = {};
+  for (const c of [...index.carriers, ...index.watchCarriers]) refs[c.name] ??= carrierRefs(root, c.name);
+  return { index, refs, plmn: buildMccMnc(root) };
 }

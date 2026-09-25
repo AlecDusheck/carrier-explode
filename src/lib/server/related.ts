@@ -8,7 +8,8 @@
  * carrier's name.
  */
 
-export type CountryPlists = Record<string, { ISOAlpha2CountryCode?: unknown }>;
+/** Country bundle name -> its decoded carrier.plist (system/<build>/countries.json). */
+export type CountryPlists = Record<string, Record<string, unknown>>;
 
 export function isoIndex(plists: CountryPlists): Map<string, string> {
   const out = new Map<string, string>();

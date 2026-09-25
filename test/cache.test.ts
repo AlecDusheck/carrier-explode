@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import type { RequestEvent } from "@sveltejs/kit";
-import { cachePolicy, rateClass } from "../src/hooks.server.ts";
+import { cachePolicy, rateClass, remoteQuery } from "../src/hooks.server.ts";
 
 const event = (opts: { method?: string; remote?: boolean; version?: string; perVisitor?: boolean; url?: string } = {}) => ({
   request: new Request(opts.url ?? "https://carrierexplode.com/carriers/ATT_US", { method: opts.method ?? "GET" }),
@@ -31,6 +31,8 @@ describe("cachePolicy", () => {
     expect(at("/baseband/[build]")).toContain("baseband");
     expect(at("/[kind=kind]/[name]/[version]/baseband", "ios-27.0")).toEqual(["pinned", "baseband"]);
     expect(at("/[kind=kind]/[name]/[version]/changes", "ios-27.0")).not.toContain("baseband");
+    // It lists every image's modem packages.
+    expect(at("/sitemap.xml")).toContain("baseband");
   });
 
   it("tags what a purge has to be able to name", () => {
@@ -73,27 +75,38 @@ const page = (id: RequestEvent["route"]["id"], version?: string) =>
   ({ ...event({ version }), route: { id }, params: version ? { version } : {} });
 
 describe("rateClass", () => {
+  const rate = (e: ReturnType<typeof remote> | ReturnType<typeof page>) => rateClass(e, remoteQuery(e));
+
   it("puts the fan-out scan in its own budget", () => {
-    expect(rateClass(remote("scanKey"))).toBe("scan");
-    expect(rateClass(remote("getComparison"))).toBe("diff");
-    expect(rateClass(remote("getBasebandDiff"))).toBe("diff");
+    expect(rate(remote("scanKey"))).toBe("scan");
+    expect(rate(remote("getComparison"))).toBe("diff");
+    expect(rate(remote("getBasebandDiff"))).toBe("diff");
   });
 
   it("counts anything that can open a bundle together", () => {
-    expect(rateClass(remote("getBundle"))).toBe("bundle");
-    expect(rateClass(remote("getFile"))).toBe("bundle");
-    expect(rateClass(remote("getBasebandDefaults"))).toBe("bundle");
-    expect(rateClass(page("/raw/[kind=kind]/[name]/[version]/[...path]", "ios-27.0"))).toBe("bundle");
-    expect(rateClass(page("/compare"))).toBe("bundle");
-    expect(rateClass(page("/[kind=kind]/[name]/[version]", "ios-27.0"))).toBe("bundle");
+    expect(rate(remote("getBundle"))).toBe("bundle");
+    expect(rate(remote("getFile"))).toBe("bundle");
+    expect(rate(remote("getBasebandDefaults"))).toBe("bundle");
+    expect(rate(page("/raw/[kind=kind]/[name]/[version]/[...path]", "ios-27.0"))).toBe("bundle");
+    expect(rate(page("/compare"))).toBe("bundle");
+    expect(rate(page("/[kind=kind]/[name]/[version]", "ios-27.0"))).toBe("bundle");
   });
 
-  it("leaves the memoised tables and the plain lists on the base budget", () => {
-    expect(rateClass(remote("getIndex"))).toBe("base");
-    expect(rateClass(remote("getRelease"))).toBe("base");
-    expect(rateClass(remote("getBaseband"))).toBe("base");
-    expect(rateClass(remote("getPlmn"))).toBe("base");
-    expect(rateClass(page("/[kind=kind]"))).toBe("base");
-    expect(rateClass(page("/plmn"))).toBe("base");
+  it("leaves the cached tables and the plain lists on the base budget", () => {
+    expect(rate(remote("getIndex"))).toBe("base");
+    expect(rate(remote("getRelease"))).toBe("base");
+    expect(rate(remote("getBaseband"))).toBe("base");
+    expect(rate(remote("getPlmn"))).toBe("base");
+    expect(rate(remote("notAQuery"))).toBe("base");
+    expect(rate(page("/[kind=kind]"))).toBe("base");
+    expect(rate(page("/plmn"))).toBe("base");
+  });
+});
+
+describe("remoteQuery", () => {
+  it("lets only the queries that read nobody be shared", () => {
+    expect(remoteQuery(remote("getStats"))?.shared).toBe(true);
+    expect(remoteQuery(remote("guessCarrier"))?.shared).toBeUndefined();
+    expect(remoteQuery(page("/[kind=kind]"))).toBeNull();
   });
 });

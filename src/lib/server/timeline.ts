@@ -5,6 +5,7 @@
 
 import { compareVersions, imageSlug, isPrerelease } from "$lib/names";
 import type { ModemKind } from "$lib/decode/modem";
+import type { Kind, TimelineEntry } from "$lib/types";
 import type { BundleRef, CountrySummary } from "./manifest";
 
 export interface ImageBuild { build: string; version: string; device: string; product?: string; extractedAt: string; scheme?: number }
@@ -17,36 +18,13 @@ export interface ImageIndex extends ImageBuild {
   modems: ImageModem[];
 }
 
-/** Stored as blobs/<id>.<kind>, decoded in baseband/<id>.json. `name` is the path under Firmware/. */
+/** Stored as blobs/<id>.<kind>, decoded at summaryKey(id) (./modems.ts). `name` is the path under Firmware/. */
 export interface ModemPackage { id: string; size: number; name: string; crc32: string; kind: ModemKind }
 export interface ImageModem { family: string; package: ModemPackage; devices: string[] }
 
-export interface TimelineEntry {
-  /** URL segment: ios-27.0, ios-27.2-beta-3, ota-58.1, ota-58.1-iPad, ota-legacy. */
-  slug: string;
-  source: "image" | "ota";
-  /** iOS versions: the images that carry this exact bundle, or the OTA minimum-OS keys. */
-  ios: string[];
-  build: string;
-  productType?: string;
-  /** False when the content is identical to the entry below it. */
-  changed: boolean;
-  /** Only ever shipped in beta images: newest, but not what a phone on a release runs. */
-  beta?: boolean;
-  /** Where the bytes live: blob:<content id> or an Apple URL. Never sent to the browser as a link target for blobs. */
-  src: string;
-  /** Image entries: content id, its scheme, and the newest image build carrying it. */
-  id?: string;
-  scheme?: number;
-  image?: string;
-  /** OTA entries: the digests Apple publishes for the file. */
-  sha1?: string;
-  sha384?: string;
-}
-
 /** `images` must be newest first. */
 export function buildTimeline(
-  kind: "carriers" | "countries" | "watch",
+  kind: Kind,
   name: string,
   images: ImageIndex[],
   refs: BundleRef[],

@@ -8,7 +8,7 @@
  * are reported as unindexed until the next one.
  */
 
-import { lookupAll, type Flat } from "$lib/decode";
+import { lookupAll, stable, type Flat } from "$lib/decode";
 
 /* ------------------------------------------------------------ storage layout */
 
@@ -17,6 +17,10 @@ export interface ScanPointer {
   gen: string;
   builtAt: string;
   bundles: number;
+  /** The generation before this one, kept for readers still on it; the next run deletes it. */
+  previous?: string;
+  /** Hash of the head set it was built from; absent when a bundle failed, so the next run rebuilds. */
+  heads?: string;
 }
 
 /** `scan/<gen>/<file>.idx.json`. */
@@ -41,7 +45,7 @@ export const fileDataKey = (gen: string, file: string) => `${fileStem(gen, file)
 
 /** First path segment: the shard a query reads. `apns[*].x` → `apns`. */
 export function topKey(path: string): string {
-  return /^[^.[]*/.exec(path)![0];
+  return path.split(/[.[]/, 1)[0];
 }
 
 /** Pack flattened bundles into one `{index, data}` pair per member file. */
@@ -139,13 +143,6 @@ export interface ScanResult {
   hits: ScanHit[];
 }
 
-function stableKey(v: unknown): string {
-  if (v === null || typeof v !== "object") return JSON.stringify(v) ?? "undefined";
-  if (Array.isArray(v)) return `[${v.map(stableKey).join(",")}]`;
-  const o = v as Record<string, unknown>;
-  return `{${Object.keys(o).sort().map((k) => `${JSON.stringify(k)}:${stableKey(o[k])}`).join(",")}}`;
-}
-
 const BUCKET_NAMES = 60;
 
 /**
@@ -173,7 +170,7 @@ export function keyScan(targets: ScanTarget[], rows: TargetRow[], file: string, 
     if (!h.matches.length) { add("\0absent", null, false, h.name); continue; }
     const seen = new Set<string>();
     for (const m of h.matches) {
-      const k = stableKey(m.value);
+      const k = stable(m.value);
       if (!seen.has(k)) { seen.add(k); add(k, m.value, true, h.name); }
     }
   }
