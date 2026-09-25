@@ -1,7 +1,7 @@
 <script lang="ts">
   import { page } from "$app/state";
   import { getCbs } from "$lib/api/tables.remote";
-  import { describeMessageId } from "$lib/knowledge";
+  import { describeMessageId } from "$lib/decode";
   import type { CbsRow } from "$lib/server/cbs";
   import { link } from "$lib/format";
   import Pane from "$lib/components/Pane.svelte";

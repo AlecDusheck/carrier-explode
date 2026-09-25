@@ -37,13 +37,11 @@ class ScanState {
   path = $state("");
   file = $state("carrier.plist");
   scope = $state("countries");
-  limit = $state(40);
 
-  start(path: string, file: string, scope: string, limit = 40) {
+  start(path: string, file: string, scope: string) {
     this.path = path;
     this.file = file;
     this.scope = scope;
-    this.limit = limit;
     this.open = true;
   }
 }

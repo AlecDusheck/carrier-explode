@@ -21,7 +21,7 @@
       <li>
         {#if e.slug === current}
           <a href={href(e.slug)} aria-current="true" onclick={() => (open = false)} {@attach reveal}>
-            <span class="what">{entryLabel(e)}</span><span class="flag">shown</span>
+            <span class="what">{entryLabel(e)}</span>
           </a>
         {:else}
           <a href={href(e.slug)} onclick={() => (open = false)}>

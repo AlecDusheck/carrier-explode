@@ -17,6 +17,7 @@
     ["/watch", "Watch"],
     ["/cell-broadcast", "Cell Broadcast"],
     ["/plmn", "PLMN"],
+    ["/baseband", "Baseband"],
     ["/compare", "Compare"],
     ["/releases", "Releases"],
   ];
@@ -64,7 +65,6 @@
           {#if stats.beta}&middot; beta iOS {stats.beta.version} ({stats.beta.build}){/if}
         </Pane>
       </span>
-      {#if page.params.name}<span class="cell">{page.params.name}</span>{/if}
       <a class="cell" href="https://github.com/AlecDusheck/carrier-explode" rel="noreferrer">GitHub</a>
       <span class="cell" style="width:64px" aria-live="polite">{busy ? "Working…" : "Ready"}</span>
     </div>

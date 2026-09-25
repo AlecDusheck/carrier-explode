@@ -8,7 +8,7 @@
   import { goto } from "$app/navigation";
   import { page, navigating } from "$app/state";
   import type { Attachment } from "svelte/attachments";
-  import { getIndex, getStats, guessCarrier, guessCountry } from "$lib/api/bundles.remote";
+  import { getIndex, guessCarrier, guessCountry } from "$lib/api/bundles.remote";
   import { bundleHref, link } from "$lib/format";
   import { menuTrigger, copyText } from "$lib/ui-state.svelte";
   import Pane from "$lib/components/Pane.svelte";
@@ -92,7 +92,7 @@
   <div class="pane-left" class:open={drawerOpen}>
     <div style="padding:6px; display:flex; gap:6px">
       <input class="grow" type="search" name="find" placeholder="find" aria-label="find in {params.kind}" bind:value={query} />
-      {#if fromIp}<span class="chip" style="align-self:center" title="Guessed from your IP address">from IP</span>{/if}
+      {#if fromIp}<span class="dimtext" style="align-self:center" title="Guessed from your IP address">from IP</span>{/if}
       <button class="btn drawer-btn" onclick={() => (drawerOpen = false)}>Close</button>
     </div>
     {#if showList}
@@ -132,10 +132,7 @@
 
   <div class="pane-right">
     <div class="toolbar drawer-bar">
-      <button class="btn drawer-btn drawer-open" onclick={() => (drawerOpen = true)}>
-        {label}
-        <Pane quiet>({(await getStats())[params.kind]})</Pane>
-      </button>
+      <button class="btn drawer-btn drawer-open" onclick={() => (drawerOpen = true)}>{label}</button>
     </div>
     {@render children()}
   </div>

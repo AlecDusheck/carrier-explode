@@ -1,17 +1,19 @@
 <script lang="ts">
   import { goto } from "$app/navigation";
   import { page } from "$app/state";
-  import { getBundle, getDiff, getIndex } from "$lib/api/bundles.remote";
+  import { getBundle, getComparison, getIndex } from "$lib/api/bundles.remote";
   import type { Kind } from "$lib/server/data";
   import { entryLabel, withParams } from "$lib/format";
   import Pane from "$lib/components/Pane.svelte";
-  import DiffTable from "$lib/components/DiffTable.svelte";
+  import BundleCompare from "$lib/components/BundleCompare.svelte";
 
   const sp = $derived(page.url.searchParams);
-  const file = $derived(sp.get("file") || "carrier.plist");
+  const file = $derived(sp.get("file"));
 
   const set = (changes: Record<string, string | null>) =>
     goto(withParams(page.url, changes), { keepFocus: true, noScroll: true });
+
+  const swap = () => set({ a: sp.get("b"), av: sp.get("bv"), b: sp.get("a"), bv: sp.get("av") });
 
   type Index = Awaited<ReturnType<typeof getIndex>>;
   const KINDS: Kind[] = ["carriers", "countries", "watch"];
@@ -71,30 +73,34 @@
       {@render picker("Right", "b", b)}
 
       <div class="rowflex">
+        <button class="btn" onclick={swap} disabled={!sp.get("a") && !sp.get("b")}>Swap sides</button>
         <label class="lbl">
           File
-          <input type="text" name="file" value={file} style="min-width:220px" onchange={(e) => set({ file: e.currentTarget.value.trim() })} />
+          <input
+            type="text"
+            name="file"
+            placeholder="whole bundle"
+            value={file ?? ""}
+            style="min-width:220px"
+            onchange={(e) => set({ file: e.currentTarget.value.trim() })}
+          />
         </label>
+        {#if file}<button class="btn" onclick={() => set({ file: null })}>Whole bundle</button>{/if}
       </div>
 
       {#if a && b}
         <Pane>
-          {@const result = await getDiff({ a, b, path: file })}
-          {#if result.shared.length > 1}
-            <p style="margin:8px 0 0">
-              {#each result.shared.slice(0, 60) as f (f)}
-                <a class="chip mono" href={withParams(page.url, { file: f })} aria-current={f === file ? "true" : undefined}>{f}</a>
-              {/each}
-            </p>
+          {@const cmp = await getComparison({ a, b, ...(file ? { path: file } : {}) })}
+          {#if cmp.a && cmp.diff}
+            <BundleCompare
+              diff={cmp.diff}
+              a={cmp.a}
+              b={cmp.b}
+              left="Left"
+              right="Right"
+              narrowHref={(path) => withParams(page.url, { file: path })}
+            />
           {/if}
-          <fieldset class="hgroup">
-            <legend>{result.counts.changed} changed, {result.counts.added} added, {result.counts.removed} removed</legend>
-            {#if result.rows.length}
-              <DiffTable rows={result.rows} left="Left" right="Right" />
-            {:else}
-              <span class="dimtext">Identical.</span>
-            {/if}
-          </fieldset>
         </Pane>
       {:else}
         <p class="dimtext">Pick two bundles, or one bundle at two versions.</p>
