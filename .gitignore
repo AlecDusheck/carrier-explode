@@ -8,3 +8,4 @@ tsconfig.*.tsbuildinfo
 package-lock.json
 system-bundles/
 .svelte-kit/
+__pycache__/
