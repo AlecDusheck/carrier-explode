@@ -19,6 +19,8 @@
  */
 
 import type { Handle, RequestEvent } from "@sveltejs/kit";
+import type { RouteId } from "$app/types";
+import { QUERIES, isQueryName, type QueryPolicy, type RateClass } from "$lib/api/policy";
 
 /**
  * Per-IP budgets, sized to the work a request can start rather than to the
@@ -27,7 +29,7 @@ import type { Handle, RequestEvent } from "@sveltejs/kit";
  * from one source, not an accounting system. A cache hit never reaches the
  * worker, so only the misses — the expensive ones — are counted.
  */
-const BUDGET = {
+const BUDGET: Record<RateClass, "RL_SCAN" | "RL_DIFF" | "RL_BUNDLE" | "RL_BASE"> = {
   // A scan is one shard read from the precomputed index. Its cache key is
   // built from client-supplied strings, so a miss costs nothing to manufacture;
   // ten a minute is a fidgety human and a tenth of what a script would want.
@@ -38,35 +40,49 @@ const BUDGET = {
   // a page pinned to a version. The assets gallery fires one /raw per image, so
   // this has to hold a page view plus its burst.
   bundle: "RL_BUNDLE",
-  // Pages and the memoised tables. Cheap, but /carriers is no-store and so runs
+  // Pages and the cached tables. Cheap, but /carriers is no-store and so runs
   // the worker every time.
   base: "RL_BASE",
-} as const;
+};
+
+const RAW: RouteId = "/raw/[kind=kind]/[name]/[version]/[...path]";
+
+/** Pages that open a bundle whether or not they name a version: a member as-is, and a diff. */
+const BUNDLE_ROUTES: ReadonlySet<RouteId> = new Set<RouteId>([RAW, "/compare"]);
+
+/**
+ * Pages rendered from modem package summaries or an image index's modems, both
+ * of which baseband.yml can rewrite; it purges the "baseband" tag when it does.
+ */
+const BASEBAND_ROUTES: ReadonlySet<RouteId> = new Set<RouteId>([
+  "/baseband", "/baseband/[build]", "/baseband/[build]/[family]", "/[kind=kind]/[name]/[version]/baseband", "/sitemap.xml",
+]);
+
+const routeIn = (routes: ReadonlySet<RouteId>, id: RouteId | null) => id !== null && routes.has(id);
+
+/**
+ * The policy of the remote query a request calls, or null for a page. For a
+ * remote call `event.url` is the page it came from, so the function name has
+ * to come off the request: /_app/remote/<hash>/<name>.
+ */
+export function remoteQuery(event: Pick<RequestEvent, "request" | "isRemoteRequest">): QueryPolicy | null {
+  if (!event.isRemoteRequest) return null;
+  const name = new URL(event.request.url).pathname.split("/remote/")[1]?.split("/")[1] ?? "";
+  return isQueryName(name) ? QUERIES[name] : { rate: "base" };
+}
 
 /** Split out from the hook so it can be tested without a worker. */
-export function rateClass(
-  event: Pick<RequestEvent, "request" | "route" | "params" | "isRemoteRequest">,
-): keyof typeof BUDGET {
-  if (event.isRemoteRequest) {
-    // For a remote call `event.url` is the page it came from, so the function
-    // name has to come off the request: /_app/remote/<hash>/<name>.
-    const name = new URL(event.request.url).pathname.split("/remote/")[1]?.split("/")[1];
-    if (name === "scanKey") return "scan";
-    if (name === "getComparison" || name === "getBasebandDiff") return "diff";
-    return name === "getBundle" || name === "getFile" || name === "getBasebandDefaults" || name === "getBasebandOverride"
-      ? "bundle"
-      : "base";
-  }
-  // /compare renders a diff, and every other bundle page is pinned to a version.
-  if (event.route.id?.startsWith("/raw/") || event.route.id === "/compare") return "bundle";
-  return event.params.version ? "bundle" : "base";
+export function rateClass(event: Pick<RequestEvent, "route" | "params">, query: QueryPolicy | null): RateClass {
+  if (query) return query.rate;
+  // Every other bundle page is pinned to a version.
+  return routeIn(BUNDLE_ROUTES, event.route.id) || event.params.version ? "bundle" : "base";
 }
 
 /** A 429, or null to let the request through. Missing binding or IP fails open. */
-async function overBudget(event: RequestEvent): Promise<Response | null> {
+async function overBudget(event: RequestEvent, rate: RateClass): Promise<Response | null> {
   const ip = event.request.headers.get("cf-connecting-ip");
-  const limiter = ip ? event.platform?.env[BUDGET[rateClass(event)]] : undefined;
-  if (!limiter || (await limiter.limit({ key: ip! })).success) return null;
+  const limiter = event.platform?.env[BUDGET[rate]];
+  if (!ip || !limiter || (await limiter.limit({ key: ip })).success) return null;
 
   const message = "Too many requests from your address. Give it a minute.";
   // The remote client parses this shape off a failed response and throws it
@@ -85,7 +101,7 @@ async function overBudget(event: RequestEvent): Promise<Response | null> {
 }
 
 const PINNED_EDGE = "max-age=86400, stale-while-revalidate=2592000";
-// Six hours matches the manifest memo in lib/server/data.ts: a shorter page TTL
+// Six hours matches the manifest window in lib/server/data.ts: a shorter page TTL
 // buys freshness the data behind it does not have, and a longer one outlives it.
 // An ingest purges "latest" when it lands, which is what actually cuts it short.
 const LATEST_EDGE = "max-age=21600, stale-while-revalidate=86400";
@@ -120,11 +136,10 @@ export function cachePolicy(
 
   const tags = [event.params.version ? "pinned" : "latest"];
   if (event.params.name) tags.push(`b-${event.params.name}`);
-  // Rendered from modem package summaries, which baseband.yml can rewrite; it purges this tag when it does.
-  if (event.route.id?.startsWith("/baseband") || event.route.id?.endsWith("/baseband")) tags.push("baseband");
+  if (routeIn(BASEBAND_ROUTES, event.route.id)) tags.push("baseband");
 
   if (status === 404) return { browser: REVALIDATE, edge: MISSING_EDGE, tags };
-  if (event.route.id?.startsWith("/raw/")) return { browser: RAW_BROWSER, edge: RAW_EDGE, tags };
+  if (event.route.id === RAW) return { browser: RAW_BROWSER, edge: RAW_EDGE, tags };
   // A pinned version is a fixed bundle. Without one the page tracks "newest",
   // which moves whenever the manifest does.
   return { browser: REVALIDATE, edge: event.params.version ? PINNED_EDGE : LATEST_EDGE, tags };
@@ -132,25 +147,22 @@ export function cachePolicy(
 
 /**
  * Remote responses are private, no-store by the framework, which is right for
- * everything that reads the visitor. These two read nothing: they are the same
- * bytes for everybody and the client asks for them on most navigations.
+ * everything that reads the visitor. A shared query reads nothing: it is the
+ * same bytes for everybody and the client asks for it on most navigations.
  */
-const SHARED_QUERIES = new Set(["getIndex", "getStats"]);
+const SHARED: Policy = { browser: REVALIDATE, edge: LATEST_EDGE, tags: ["latest"] };
 
-function sharedQuery(event: Pick<RequestEvent, "request" | "isRemoteRequest" | "locals">, status: number): boolean {
-  if (!event.isRemoteRequest || event.request.method !== "GET" || status !== 200) return false;
-  if (event.locals.perVisitor) return false;
-  const name = new URL(event.request.url).pathname.split("/remote/")[1]?.split("/")[1];
-  return !!name && SHARED_QUERIES.has(name);
-}
+const shareable = (event: Pick<RequestEvent, "request" | "locals">, query: QueryPolicy | null, status: number) =>
+  !!query?.shared && event.request.method === "GET" && status === 200 && !event.locals.perVisitor;
 
 export const handle: Handle = async ({ event, resolve }) => {
-  const limited = await overBudget(event);
+  const query = remoteQuery(event);
+  const limited = await overBudget(event, rateClass(event, query));
   if (limited) return limited;
 
   const response = await resolve(event);
-  const policy = sharedQuery(event, response.status)
-    ? { browser: REVALIDATE, edge: LATEST_EDGE, tags: ["latest"] }
+  const policy = shareable(event, query, response.status)
+    ? SHARED
     : response.headers.has("cache-control")
       ? null // already decided: a remote call that reads the visitor, or an error
       : cachePolicy(event, response.status);

@@ -6,171 +6,105 @@
  * user can switch it off is the interesting difference between bundles.
  */
 
-import { openIpcc, decodeFile } from "$lib/decode";
-import type { CountrySummary } from "./manifest";
-import { compareVersions } from "./manifest";
+import { openIpcc, decodeFile, decodedPlist, isRecord } from "$lib/decode";
+import type { CbsAlertType, CbsMapping, CbsRow } from "$lib/types";
+import { compareVersions, type CountrySummary } from "./manifest";
 
-export interface CbsMapping {
-  from: number;
-  to: number;
-  alertType?: string;
-  configuration?: string;
-}
+type Rec = Record<string, unknown>;
 
-export interface CbsAlertType {
-  name: string;
-  enabledByDefault?: boolean;
-  userConfigurable?: boolean;
-  switchName?: string;
-  notificationTitle?: string;
-  soundAlertDeviceInMute?: boolean;
-  soundIsMutableInDND?: boolean;
-  customPreferences?: number;
-}
-
-export interface CbsRow {
-  country: string;
-  key: string;
-  version: string;
-  minOS?: string;
-  url: string;
-  iso: string[];
-  countryName?: string;
-  /** CountryId keys that route here: numeric MCCs and reverse-DNS ids alike. */
-  countryIds: string[];
-  switchGroupTitle?: string;
-  languages: string[];
-  minimumDeviceCategory?: number;
-  geofencing?: boolean;
-  duplicateWindowMinutes?: number;
-  interSimDuplicateDetection?: boolean;
-  intraSimDuplicateDetection?: boolean;
-  mappings: CbsMapping[];
-  alertTypes: CbsAlertType[];
-  alertConfigurations: Array<{ name: string; sound?: string; vibration?: string }>;
-  appleSafetyAlertRanges: Array<{ from: number; to: number }>;
-  /** 4382 — operator-defined CMAS identifier. */
-  maps4382: boolean;
-  alertType4382?: string;
-  configurable4382?: boolean | null;
-  emergencyNumbers: string[];
-  amlDestination?: string;
-  cbMessageLocales: string[];
-  /** false = the bundle carries no CellBroadcast dictionary at all. */
-  hasCellBroadcast: boolean;
-  /** "image" = from the OS image in R2, "cdn" = Apple's asset server. */
-  source: "image" | "cdn";
-  error?: string;
-}
-
-type Any = Record<string, any>;
-
+const rec = (v: unknown): Rec => (isRecord(v) ? v : {});
+const recs = (v: unknown): Rec[] => (Array.isArray(v) ? v.filter(isRecord) : []);
+const strs = (v: unknown): string[] => (Array.isArray(v) ? v.filter((x): x is string => typeof x === "string") : []);
 const num = (v: unknown): number | undefined => (typeof v === "number" ? v : undefined);
 const bool = (v: unknown): boolean | undefined => (typeof v === "boolean" ? v : undefined);
 const str = (v: unknown): string | undefined => (typeof v === "string" ? v : undefined);
 
-function countPrefs(v: unknown): number | undefined {
-  return Array.isArray(v) ? v.length : undefined;
-}
-
 export type Fetcher = (url: string) => Promise<Uint8Array>;
 
+const emptyRow = (row: Pick<CbsRow, "country" | "key" | "version" | "url" | "source"> & Partial<CbsRow>): CbsRow => ({
+  iso: [], countryIds: [], languages: [], mappings: [], alertTypes: [], alertConfigurations: [],
+  appleSafetyAlertRanges: [], maps4382: false, emergencyNumbers: [], cbMessageLocales: [], hasCellBroadcast: false,
+  ...row,
+});
+
+/** A country's row from its OTA bundle. A bundle that fails to fetch or decode gives a row with `error` set. */
 export async function buildCbsRow(c: CountrySummary, fetchUpstream: Fetcher): Promise<CbsRow> {
-  const row: CbsRow = {
-    country: c.id, key: c.key, version: c.version, minOS: c.minOS, url: c.url,
-    iso: [], countryIds: c.countryIds, languages: [], mappings: [], alertTypes: [],
-    alertConfigurations: [], appleSafetyAlertRanges: [], maps4382: false,
-    emergencyNumbers: [], cbMessageLocales: [], hasCellBroadcast: false, source: "cdn",
-  };
+  const row = emptyRow({ country: c.id, key: c.key, version: c.version, minOS: c.minOS, url: c.url, countryIds: c.countryIds, source: "cdn" });
   try {
-    const bytes = await fetchUpstream(c.url);
-    const bundle = openIpcc(bytes);
+    const bundle = openIpcc(await fetchUpstream(c.url));
     row.cbMessageLocales = bundle.info.files
       .filter((f) => f.path.endsWith("CBMessage.strings"))
       .map((f) => f.locale ?? "")
       .filter(Boolean)
       .sort();
-    const carrierFile = bundle.info.files.find((f) => f.path === "carrier.plist");
-    if (!carrierFile) { row.error = "no carrier.plist"; return row; }
-    const p = decodeFile(bundle, "carrier.plist").plist as Any | undefined;
-    if (!p) { row.error = "carrier.plist did not decode"; return row; }
+    if (!bundle.info.files.some((f) => f.path === "carrier.plist")) return { ...row, error: "no carrier.plist" };
+    const p = decodedPlist(decodeFile(bundle, "carrier.plist"));
+    if (!isRecord(p)) return { ...row, error: "carrier.plist did not decode" };
     fillRow(row, p);
   } catch (e) {
-    row.error = (e as Error).message;
+    row.error = e instanceof Error ? e.message : String(e);
   }
   return row;
 }
 
-/** Fill a row from an already-decoded country carrier.plist. */
-export function fillRow(row: CbsRow, p: Any): void {
-  {
-    row.countryName = str(p.CountryName);
-    row.iso = Array.isArray(p.ISOAlpha2CountryCode) ? p.ISOAlpha2CountryCode.filter((x: unknown) => typeof x === "string") : [];
+/** A 3GPP message ID range; a single ID has no ToServiceID. */
+function range(m: Rec): { from: number; to: number } | undefined {
+  const from = num(m.FromServiceID), to = num(m.ToServiceID) ?? from;
+  return from === undefined || to === undefined ? undefined : { from, to };
+}
 
-    const cb = p.CellBroadcast as Any | undefined;
-    row.hasCellBroadcast = !!cb;
-    if (cb) {
-      row.switchGroupTitle = str(cb.SwitchGroupTitle);
-      row.languages = Array.isArray(cb.PrimaryBroadcastLanguages) ? cb.PrimaryBroadcastLanguages : [];
-      row.minimumDeviceCategory = num(cb.MinimumDeviceCategorySupported);
-      row.geofencing = bool(cb.GeofencingConfiguration?.FeatureEnabled);
-      row.duplicateWindowMinutes = num(cb.DuplicateDetectionParameters?.DuplicationWindowInMinutes);
-      row.interSimDuplicateDetection = bool(cb.DuplicateDetectionParameters?.PerformInterSimDuplicateDetection);
-      row.intraSimDuplicateDetection = bool(cb.DuplicateDetectionParameters?.PerformIntraSimDuplicateDetection);
+/** Fill a row from a decoded country carrier.plist. */
+function fillRow(row: CbsRow, p: Rec): void {
+  row.countryName = str(p.CountryName);
+  row.iso = strs(p.ISOAlpha2CountryCode);
 
-      if (Array.isArray(cb.MessageIDParameters3GPP)) {
-        for (const m of cb.MessageIDParameters3GPP as Any[]) {
-          const from = num(m.FromServiceID), to = num(m.ToServiceID) ?? num(m.FromServiceID);
-          if (from === undefined || to === undefined) continue;
-          row.mappings.push({ from, to, alertType: str(m.AlertType), configuration: str(m.AlertConfiguration) });
-        }
-        row.mappings.sort((a, b) => a.from - b.from);
-      }
-      if (Array.isArray(cb.AppleSafetyAlert?.MessageIDParameters3GPP)) {
-        for (const m of cb.AppleSafetyAlert.MessageIDParameters3GPP as Any[]) {
-          const from = num(m.FromServiceID), to = num(m.ToServiceID) ?? num(m.FromServiceID);
-          if (from !== undefined && to !== undefined) row.appleSafetyAlertRanges.push({ from, to });
-        }
-      }
-      if (cb.AlertTypes && typeof cb.AlertTypes === "object") {
-        for (const [name, v] of Object.entries(cb.AlertTypes as Any)) {
-          const a = v as Any;
-          row.alertTypes.push({
-            name,
-            enabledByDefault: bool(a.EnabledByDefault),
-            userConfigurable: bool(a.UserConfigurable),
-            switchName: str(a.SwitchName),
-            notificationTitle: str(a.NotificationTitle),
-            soundAlertDeviceInMute: bool(a.SoundAlertDeviceInMute),
-            soundIsMutableInDND: bool(a.SoundIsMutableInDND),
-            customPreferences: countPrefs(a.CustomPreferences),
-          });
-        }
-        row.alertTypes.sort((a, b) => a.name.localeCompare(b.name));
-      }
-      if (cb.AlertConfigurations && typeof cb.AlertConfigurations === "object") {
-        for (const [name, v] of Object.entries(cb.AlertConfigurations as Any)) {
-          row.alertConfigurations.push({ name, sound: str((v as Any).Sound), vibration: str((v as Any).Vibration) });
-        }
-      }
+  const cb = p.CellBroadcast;
+  row.hasCellBroadcast = isRecord(cb);
+  if (isRecord(cb)) {
+    const dup = rec(cb.DuplicateDetectionParameters);
+    row.switchGroupTitle = str(cb.SwitchGroupTitle);
+    row.languages = strs(cb.PrimaryBroadcastLanguages);
+    row.minimumDeviceCategory = num(cb.MinimumDeviceCategorySupported);
+    row.geofencing = bool(rec(cb.GeofencingConfiguration).FeatureEnabled);
+    row.duplicateWindowMinutes = num(dup.DuplicationWindowInMinutes);
+    row.interSimDuplicateDetection = bool(dup.PerformInterSimDuplicateDetection);
+    row.intraSimDuplicateDetection = bool(dup.PerformIntraSimDuplicateDetection);
 
-      const hit = row.mappings.find((m) => 4382 >= m.from && 4382 <= m.to);
-      row.maps4382 = !!hit;
-      row.alertType4382 = hit?.alertType;
-      if (hit?.alertType) {
-        const at = row.alertTypes.find((a) => a.name === hit.alertType);
-        row.configurable4382 = at?.userConfigurable ?? null;
-      }
-    }
+    row.mappings = recs(cb.MessageIDParameters3GPP)
+      .flatMap((m): CbsMapping[] => {
+        const r = range(m);
+        return r ? [{ ...r, alertType: str(m.AlertType), configuration: str(m.AlertConfiguration) }] : [];
+      })
+      .sort((a, b) => a.from - b.from);
+    row.appleSafetyAlertRanges = recs(rec(cb.AppleSafetyAlert).MessageIDParameters3GPP).flatMap((m) => range(m) ?? []);
+    row.alertTypes = Object.entries(rec(cb.AlertTypes))
+      .map(([name, v]): CbsAlertType => {
+        const a = rec(v);
+        return {
+          name,
+          enabledByDefault: bool(a.EnabledByDefault),
+          userConfigurable: bool(a.UserConfigurable),
+          switchName: str(a.SwitchName),
+          notificationTitle: str(a.NotificationTitle),
+          soundAlertDeviceInMute: bool(a.SoundAlertDeviceInMute),
+          soundIsMutableInDND: bool(a.SoundIsMutableInDND),
+          customPreferences: Array.isArray(a.CustomPreferences) ? a.CustomPreferences.length : undefined,
+        };
+      })
+      .sort((a, b) => a.name.localeCompare(b.name));
+    row.alertConfigurations = Object.entries(rec(cb.AlertConfigurations)).map(([name, v]) => {
+      const c = rec(v);
+      return { name, sound: str(c.Sound), vibration: str(c.Vibration) };
+    });
 
-    const em = p.EmergencyCalling as Any | undefined;
-    if (Array.isArray(em?.EmergencyNumbers)) {
-      row.emergencyNumbers = (em.EmergencyNumbers as Any[])
-        .map((e) => str(e.Number))
-        .filter((x): x is string => !!x);
-    }
-    row.amlDestination = str(p.Location?.EmergencyLocation?.AugmentedEmergencyAction?.AML?.SMS?.Destination);
+    const hit = row.mappings.find((m) => 4382 >= m.from && 4382 <= m.to);
+    row.maps4382 = !!hit;
+    row.alertType4382 = hit?.alertType;
+    if (hit?.alertType) row.configurable4382 = row.alertTypes.find((a) => a.name === hit.alertType)?.userConfigurable ?? null;
   }
+
+  row.emergencyNumbers = recs(rec(p.EmergencyCalling).EmergencyNumbers).map((e) => str(e.Number)).filter((n): n is string => !!n);
+  row.amlDestination = str(rec(rec(rec(rec(rec(p.Location).EmergencyLocation).AugmentedEmergencyAction).AML).SMS).Destination);
 }
 
 export interface ImageCountries {
@@ -179,27 +113,18 @@ export interface ImageCountries {
   /** Bundle name -> bundle build, from the image index. */
   builds: Record<string, string>;
   /** Bundle name -> decoded carrier.plist. */
-  plists: Record<string, Any>;
+  plists: Record<string, Rec>;
 }
 
 /**
  * One row per country. The OS image is the base; a CDN bundle replaces the
  * image's only when its build is newer, which is what the phone itself does.
  */
-export async function buildMergedCbsMatrix(
-  image: ImageCountries | null,
-  cdn: CountrySummary[],
-  fetchUpstream: Fetcher,
-) {
+export async function buildMergedCbsMatrix(image: ImageCountries | null, cdn: CountrySummary[], fetchUpstream: Fetcher) {
   const rows = new Map<string, CbsRow>();
   if (image) {
     for (const [name, plist] of Object.entries(image.plists)) {
-      const row: CbsRow = {
-        country: name, key: name, version: image.builds[name] ?? "", url: "",
-        iso: [], countryIds: [], languages: [], mappings: [], alertTypes: [], alertConfigurations: [],
-        appleSafetyAlertRanges: [], maps4382: false, emergencyNumbers: [], cbMessageLocales: [],
-        hasCellBroadcast: false, source: "image",
-      };
+      const row = emptyRow({ country: name, key: name, version: image.builds[name] ?? "", url: "", source: "image" });
       fillRow(row, plist);
       rows.set(name, row);
     }
@@ -217,7 +142,7 @@ export async function buildMergedCbsMatrix(
   const ids = new Set<number>();
   for (const r of out) for (const m of r.mappings) for (let id = m.from; id <= m.to && id - m.from < 64; id++) ids.add(id);
   return {
-    family: "iPhone",
+    family: "iPhone" as const,
     generatedAt: new Date().toISOString(),
     image: image ? { version: image.version, build: image.build } : null,
     messageIds: [...ids].sort((a, b) => a - b),
@@ -225,8 +150,8 @@ export async function buildMergedCbsMatrix(
   };
 }
 
-/** Latest bundle per country for the given family. */
-export function latestPerCountry(countries: CountrySummary[], family: "iPhone" | "Watch"): CountrySummary[] {
+/** Latest bundle per country of one family. */
+export function latestPerCountry(countries: CountrySummary[], family: CountrySummary["family"]): CountrySummary[] {
   const best = new Map<string, CountrySummary>();
   for (const c of countries) {
     if (c.family !== family) continue;
@@ -234,25 +159,4 @@ export function latestPerCountry(countries: CountrySummary[], family: "iPhone" |
     if (!prev || compareVersions(c.version, prev.version) > 0) best.set(c.id, c);
   }
   return [...best.values()].sort((a, b) => a.id.localeCompare(b.id));
-}
-
-export async function buildCbsMatrix(
-  countries: CountrySummary[],
-  fetchUpstream: Fetcher,
-  family: "iPhone" | "Watch" = "iPhone",
-) {
-  const targets = latestPerCountry(countries, family);
-  const rows: CbsRow[] = [];
-  const CONCURRENCY = 8;
-  for (let i = 0; i < targets.length; i += CONCURRENCY) {
-    rows.push(...(await Promise.all(targets.slice(i, i + CONCURRENCY).map((t) => buildCbsRow(t, fetchUpstream)))));
-  }
-  const ids = new Set<number>();
-  for (const r of rows) for (const m of r.mappings) for (let id = m.from; id <= m.to && id - m.from < 64; id++) ids.add(id);
-  return {
-    family,
-    generatedAt: new Date().toISOString(),
-    messageIds: [...ids].sort((a, b) => a - b),
-    rows,
-  };
 }

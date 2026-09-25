@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { byNewest, compareProducts, modemFor, overridesFor, phoneList, sharedPri, sortPhones } from "../src/lib/phones.ts";
+import { byNewest, compareProducts, homePhone, modemFor, overridesFor, phoneList, sharedPri, sortPhones } from "../src/lib/phones.ts";
 import { modemLabel, modemName } from "../src/lib/decode/modem.ts";
 import { describeDevices, productName } from "../src/lib/decode/devices.ts";
 import type { BundleFile } from "../src/lib/decode/bundle.ts";
@@ -90,5 +90,14 @@ describe("defaultModem", () => {
     ];
     expect(defaultModem(modems).family).toBe("Mav25");
     expect(defaultModem([{ family: "c4020", devices: [{ id: "iPhone19,2" }] }]).family).toBe("c4020");
+  });
+});
+
+describe("homePhone", () => {
+  it("is a per-model OTA file's phone, else the image's", () => {
+    expect(homePhone({ productType: "iPhone17,1" }, { product: "iPhone18,1" })).toBe("iPhone17,1");
+    // A family variant ("iPad") names no single phone.
+    expect(homePhone({ productType: "iPad" }, { product: "iPhone18,1" })).toBe("iPhone18,1");
+    expect(homePhone({}, {})).toBeUndefined();
   });
 });

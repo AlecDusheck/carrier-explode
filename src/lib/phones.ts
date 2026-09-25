@@ -1,6 +1,6 @@
 /** Phones by the modem package that serves them, and the bundle files each one reads. */
 
-import type { BundleFile } from "./decode/bundle";
+import type { BundleFile } from "./decode";
 
 export interface Phone { id: string; name?: string }
 export interface PhoneModem { family: string; devices: Phone[] }
@@ -27,7 +27,9 @@ export const defaultModem = <M extends PhoneModem>(modems: M[]) => {
 
 /** Named phones in name order, then unnamed ones by product type. */
 export function sortPhones(phones: Phone[]): Phone[] {
-  const named = phones.filter((p) => p.name).sort((a, b) => a.name!.localeCompare(b.name!, "en", { numeric: true }));
+  const named = phones
+    .filter((p): p is Phone & { name: string } => !!p.name)
+    .sort((a, b) => a.name.localeCompare(b.name, "en", { numeric: true }));
   return [...named, ...phones.filter((p) => !p.name).sort((a, b) => compareProducts(a.id, b.id))];
 }
 
@@ -40,6 +42,14 @@ export function phoneList(phones: Phone[]): string {
 /** The package serving `productType`. */
 export const modemFor = <M extends PhoneModem>(modems: M[], productType?: string) =>
   productType ? modems.find((m) => m.devices.some((d) => d.id === productType)) : undefined;
+
+/**
+ * The phone a bundle version means when none is named: a per-model OTA file's
+ * (its product type is a model, "iPhone17,1", not a family like "iPad"), else
+ * the one the image was cut for.
+ */
+export const homePhone = (entry: { productType?: string }, image: { product?: string }) =>
+  entry.productType?.includes(",") ? entry.productType : image.product;
 
 const isPri = (f: Pick<BundleFile, "kind">) => f.kind === "pri-der" || f.kind === "pri-plain";
 
