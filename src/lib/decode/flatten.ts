@@ -1,19 +1,17 @@
 /** Leaf-path view of decoded values: `apns[0].type-mask` → 3. Used for cross-bundle lookups. */
 
-import { decodeFile, type OpenedBundle } from "./bundle";
+import { decodeFile, decodedPlist, type OpenedBundle } from "./bundle";
 import { comparable } from "./compare";
+import { isJsonDict } from "./plist";
 
 export type Flat = Record<string, unknown>;
 
-const isObj = (v: unknown): v is Record<string, unknown> =>
-  !!v && typeof v === "object" && !Array.isArray(v);
-
-/** Leaves only; empty containers are kept as leaves so they stay visible. */
+/** Leaves only; tagged scalars (data, dates, big integers, UIDs) are leaves, and empty containers are kept so they stay visible. */
 export function flatten(value: unknown, prefix = "", out: Flat = {}): Flat {
   if (Array.isArray(value)) {
     if (!value.length) out[prefix] = [];
     value.forEach((v, i) => flatten(v, `${prefix}[${i}]`, out));
-  } else if (isObj(value) && !("__data" in value) && !("__date" in value) && !("__int" in value)) {
+  } else if (isJsonDict(value)) {
     const keys = Object.keys(value);
     if (!keys.length && prefix) out[prefix] = {};
     for (const k of keys) flatten(value[k], prefix ? `${prefix}.${k}` : k, out);
@@ -31,7 +29,7 @@ export function flattenBundle(b: OpenedBundle): Record<string, Flat> {
     try {
       const d = decodeFile(b, f.path);
       // PRIs flatten by setting name, the same view the diff uses.
-      const v = d.pri ? comparable(d) : d.plist;
+      const v = d.kind === "pri-der" ? comparable(d) : decodedPlist(d);
       if (v !== undefined) out[f.path] = flatten(v);
     } catch {
       // Undecodable members simply have no leaves.

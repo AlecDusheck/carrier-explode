@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 
-import { openIpcc, decodeFile } from "../src/lib/decode/bundle.ts";
+import { openIpcc, decodeFile, decodedPlist } from "../src/lib/decode/bundle.ts";
 import {
   FIELDS,
   CONTEXT_FIELDS,
@@ -17,24 +17,21 @@ import {
   IMS_SERVICE_BITS,
   DATA_MODE_BITS,
   SMS_FORKING_MECHANISM,
-  BITMASK_KEYS,
-  PLMN_KEYS,
-  KEY_NOTES,
-  decodeBits,
-  maskBits,
   describeField,
   describeValue,
-  describeMessageId,
   type FieldDoc,
 } from "../src/lib/decode/fields.ts";
+import { maskBits } from "../src/lib/decode/bytes.ts";
+import { describeMessageId } from "../src/lib/decode/cbs.ts";
 
 const here = dirname(fileURLToPath(import.meta.url));
+const labelsOf = (...a: Parameters<typeof describeValue>) => describeValue(...a)?.map((l) => l.label);
 const fixture = (n: string) => new Uint8Array(readFileSync(join(here, "fixtures", n)));
 
 type Dict = Record<string, unknown>;
 const plistOf = (bundle: string, file: string) => {
   const b = openIpcc(fixture(bundle));
-  return decodeFile(b, file).plist as Dict;
+  return decodedPlist(decodeFile(b, file)) as Dict;
 };
 
 const allDocs = (): Array<[string, FieldDoc]> => [
@@ -90,7 +87,7 @@ describe("field table shape", () => {
   });
 
   it("technology-mask bits are 1 UMTS, 2 CDMA, 4 eHRPD, 8 LTE, 16 NR", () => {
-    expect([1, 2, 4, 8, 16].map((v) => describeValue("technology-mask", v)![0])).toEqual(["UMTS (GSM/UMTS, 3GPP)", "CDMA 1x", "eHRPD", "LTE", "NR (5G)"]);
+    expect([1, 2, 4, 8, 16].map((v) => labelsOf("technology-mask", v)![0])).toEqual(["UMTS (GSM/UMTS, 3GPP)", "CDMA 1x", "eHRPD", "LTE", "NR (5G)"]);
     expect(FIELDS["technology-mask"].confidence).toBeUndefined();
   });
 
@@ -104,19 +101,19 @@ describe("describeValue on real bundles", () => {
     const carrier = plistOf("ATT_US.ipcc", "carrier.plist");
     const masks = (carrier.apns as Dict[]).map((a) => a["type-mask"]);
     expect(masks).toEqual(expect.arrayContaining([32775, 16, 32774]));
-    expect(describeValue("type-mask", 16)).toEqual(["WirelessModemTraffic (Personal Hotspot data)"]);
-    expect(describeValue("type-mask", 32775)).toEqual(["Internet", "VVM (visual voicemail)", "MMS", "EntitlementTraffic"]);
-    expect(describeValue("type-mask", (carrier.OTAActivationAPN as Dict)["type-mask"])).toEqual(["OTAActivation"]);
+    expect(labelsOf("type-mask", 16)).toEqual(["WirelessModemTraffic (Personal Hotspot data)"]);
+    expect(labelsOf("type-mask", 32775)).toEqual(["Internet", "VVM (visual voicemail)", "MMS", "EntitlementTraffic"]);
+    expect(labelsOf("type-mask", (carrier.OTAActivationAPN as Dict)["type-mask"])).toEqual(["OTAActivation"]);
   });
 
   it("decodes ATT_US override APNs (IMS, SOS, full default APN = 0x108007)", () => {
     const b = openIpcc(fixture("ATT_US.ipcc"));
     const f = b.info.files.find((x) => /^overrides_.*\.plist$/.test(x.path))!;
-    const apns = (decodeFile(b, f.path).plist as Dict).apns as Dict[];
+    const apns = (decodedPlist(decodeFile(b, f.path)) as Dict).apns as Dict[];
     const byName = Object.fromEntries(apns.map((a) => [a.apn, a]));
-    expect(describeValue("type-mask", byName.ims["type-mask"])).toEqual(["IMS"]);
-    expect(describeValue("type-mask", byName.sos["type-mask"])).toEqual(["Emergency"]);
-    expect(describeValue("tech-type-mask", 1081351)).toEqual([
+    expect(labelsOf("type-mask", byName.ims["type-mask"])).toEqual(["IMS"]);
+    expect(labelsOf("type-mask", byName.sos["type-mask"])).toEqual(["Emergency"]);
+    expect(labelsOf("tech-type-mask", 1081351)).toEqual([
       "Internet",
       "VVM (visual voicemail)",
       "MMS",
@@ -128,11 +125,11 @@ describe("describeValue on real bundles", () => {
   it("decodes MTU technology-mask and entitlement bits", () => {
     const carrier = plistOf("ATT_US.ipcc", "carrier.plist");
     const mtu = (carrier.MTU as Dict[])[0];
-    expect(describeValue("technology-mask", mtu["technology-mask"])).toEqual(["UMTS (GSM/UMTS, 3GPP)", "LTE"]);
-    expect(describeValue("technology-mask", 32)).toEqual(["bit 5"]);
+    expect(labelsOf("technology-mask", mtu["technology-mask"])).toEqual(["UMTS (GSM/UMTS, 3GPP)", "LTE"]);
+    expect(labelsOf("technology-mask", 32)).toEqual(["bit 5"]);
     const ent = (carrier.CarrierEntitlements as Dict).SupportedEntitlements as number;
     expect(ent).toBe(12173);
-    expect(describeValue("SupportedEntitlements", ent)).toEqual([
+    expect(labelsOf("SupportedEntitlements", ent)).toEqual([
       "bit 0",
       "facetime",
       "tethering",
@@ -149,11 +146,11 @@ describe("describeValue on real bundles", () => {
     const carrier = plistOf("Verizon_LTE_US.ipcc", "carrier.plist");
     const mtu = (carrier.MTU as Dict[]).map((m) => m["technology-mask"]);
     expect(mtu).toEqual(expect.arrayContaining([12, 2]));
-    expect(describeValue("technology-mask", 12)).toEqual(["eHRPD", "LTE"]);
-    expect(describeValue("technology-mask", 14)).toEqual(["CDMA 1x", "eHRPD", "LTE"]);
-    expect(describeValue("technology-mask", 28)).toEqual(["eHRPD", "LTE", "NR (5G)"]);
-    expect(describeValue("FallbackMethod", carrier.FallbackMethod)).toEqual(["CDMA 1x"]);
-    expect(describeValue("SupportedEntitlements", 4238745)).toEqual([
+    expect(labelsOf("technology-mask", 12)).toEqual(["eHRPD", "LTE"]);
+    expect(labelsOf("technology-mask", 14)).toEqual(["CDMA 1x", "eHRPD", "LTE"]);
+    expect(labelsOf("technology-mask", 28)).toEqual(["eHRPD", "LTE", "NR (5G)"]);
+    expect(labelsOf("FallbackMethod", carrier.FallbackMethod)).toEqual(["CDMA 1x"]);
+    expect(labelsOf("SupportedEntitlements", 4238745)).toEqual([
       "bit 0",
       "tethering",
       "bit 4",
@@ -172,43 +169,43 @@ describe("describeValue on real bundles", () => {
     expect(d.default).toBe(0x1b01c);
     expect(d.confidence).toBe("med");
     expect(d.bits).toBe(DATA_MODE_BITS);
-    expect(describeValue("IPv6SupportedDataModeMask", 0x1b01c)).toEqual(["WCDMA", "HSDPA", "HSUPA", "eHRPD", "LTE", "NR NSA", "NR SA"]);
+    expect(labelsOf("IPv6SupportedDataModeMask", 0x1b01c)).toEqual(["WCDMA", "HSDPA", "HSUPA", "eHRPD", "LTE", "NR NSA", "NR SA"]);
     // bundle tally values 57372 and 106527
-    expect(describeValue("IPv6SupportedDataModeMask", 57372)).toEqual(["WCDMA", "HSDPA", "HSUPA", "LTE", "EV-DO RevB", "NR NSA"]);
-    expect(describeValue("IPv6SupportedDataModeMask", 106527)).toEqual(["GPRS", "EDGE", "WCDMA", "HSDPA", "HSUPA", "LTE", "NR NSA", "NR SA"]);
+    expect(labelsOf("IPv6SupportedDataModeMask", 57372)).toEqual(["WCDMA", "HSDPA", "HSUPA", "LTE", "EV-DO RevB", "NR NSA"]);
+    expect(labelsOf("IPv6SupportedDataModeMask", 106527)).toEqual(["GPRS", "EDGE", "WCDMA", "HSDPA", "HSUPA", "LTE", "NR NSA", "NR SA"]);
     for (const b of [5, 6, 7, 8]) expect(DATA_MODE_BITS[b], `bit ${b}`).toBeUndefined();
   });
 
   it("decodes TechSettings masks and enums from a real bundle", () => {
     const carrier = plistOf("ATT_RedPocket_Watch.ipcc", "carrier.plist");
     const ts = carrier.TechSettings as Dict;
-    expect(describeValue("5wiServiceMask", ts["5wiServiceMask"])).toEqual(["Internet", "VVM (visual voicemail)"]);
-    expect(describeValue("5wiServiceMask", 1)).toEqual(["Internet"]);
+    expect(labelsOf("5wiServiceMask", ts["5wiServiceMask"])).toEqual(["Internet", "VVM (visual voicemail)"]);
+    expect(labelsOf("5wiServiceMask", 1)).toEqual(["Internet"]);
     expect(FIELDS.IMSServiceMask.bits).toBe(IMS_SERVICE_BITS);
-    expect(describeValue("IMSServiceMask", 2, "IMSConfig.Satellite.IMSServiceMask")).toEqual(["SMS"]);
-    expect(describeValue("IMSServiceMask", 3)).toEqual(["Voice", "SMS"]);
-    expect(describeValue("DHGroup", 2)).toEqual(["1024-bit MODP"]);
+    expect(labelsOf("IMSServiceMask", 2, "IMSConfig.Satellite.IMSServiceMask")).toEqual(["SMS"]);
+    expect(labelsOf("IMSServiceMask", 3)).toEqual(["Voice", "SMS"]);
+    expect(labelsOf("DHGroup", 2)).toEqual(["1024-bit MODP"]);
     for (const g of [1, 2, 5, 14, 15, 16, 18, 21]) expect(IKE_DH_GROUP[g], `group ${g}`).toBeTruthy();
-    expect(describeValue("AllowedPdpTypeMask", 3)).toEqual(["IPv4v6 (dual stack)"]);
+    expect(labelsOf("AllowedPdpTypeMask", 3)).toEqual(["IPv4v6 (dual stack)"]);
   });
 
   it("reads AllowedProtocolMask as an enum, not bits", () => {
-    expect(BITMASK_KEYS.has("AllowedProtocolMask")).toBe(false);
-    expect(describeValue("AllowedProtocolMask", 3)).toEqual(["IPv4v6 (dual stack)"]);
-    expect(describeValue("AllowedProtocolMaskInRoamingLTE", 2)).toEqual(["IPv6"]);
-    expect(describeValue("AllowedProtocolMask", 9)).toEqual([]);
+    expect(FIELDS.AllowedProtocolMask.format).toBe("enum");
+    expect(labelsOf("AllowedProtocolMask", 3)).toEqual(["IPv4v6 (dual stack)"]);
+    expect(labelsOf("AllowedProtocolMaskInRoamingLTE", 2)).toEqual(["IPv6"]);
+    expect(labelsOf("AllowedProtocolMask", 9)).toEqual([]);
   });
 
   it("labels string enums and message IDs", () => {
-    expect(describeValue("DataIndicatorOverrideForNRMmwave", "NRUWB")).toEqual(["5G UW"]);
-    expect(describeValue("DataIndicatorOverrideForEvo", "5GE")![0]).toMatch(/^5GE/);
-    expect(["NRPlus", "NRUWB", "NRUC", "NRCA"].every((v) => describeValue("DataIndicatorOverrideForNRMmwave", v)!.length === 1)).toBe(true);
-    expect(describeValue("DataIndicatorOverrideForLTE", "LTE")).toEqual(["LTE"]);
-    expect(describeValue("DataIndicatorOverride", "4G")).toEqual(["4G"]);
-    expect(describeValue("FromServiceID", 4379)).toEqual(["Child abduction (AMBER)"]);
-    expect(describeValue("DHGroup", 14)).toEqual(["2048-bit MODP"]);
-    expect(describeValue("CarrierName", "AT&T")).toBeUndefined();
-    expect(describeValue("no-such-key", 1)).toBeUndefined();
+    expect(labelsOf("DataIndicatorOverrideForNRMmwave", "NRUWB")).toEqual(["5G UW"]);
+    expect(labelsOf("DataIndicatorOverrideForEvo", "5GE")![0]).toMatch(/^5GE/);
+    expect(["NRPlus", "NRUWB", "NRUC", "NRCA"].every((v) => labelsOf("DataIndicatorOverrideForNRMmwave", v)!.length === 1)).toBe(true);
+    expect(labelsOf("DataIndicatorOverrideForLTE", "LTE")).toEqual(["LTE"]);
+    expect(labelsOf("DataIndicatorOverride", "4G")).toEqual(["4G"]);
+    expect(labelsOf("FromServiceID", 4379)).toEqual(["Child abduction (AMBER)"]);
+    expect(labelsOf("DHGroup", 14)).toEqual(["2048-bit MODP"]);
+    expect(labelsOf("CarrierName", "AT&T")).toBeUndefined();
+    expect(labelsOf("no-such-key", 1)).toBeUndefined();
   });
 });
 
@@ -216,9 +213,10 @@ describe("high bits", () => {
   it("decodes InternetSlice bits 28-35 exactly", () => {
     const v = 2 ** 28 + 2 ** 31 + 2 ** 32 + 2 ** 35;
     expect(maskBits(v)).toEqual([28, 31, 32, 35]);
-    expect(describeValue("type-mask", v)).toEqual(["InternetSlice1", "InternetSlice4", "InternetSlice5", "InternetSlice8"]);
-    expect(describeValue("type-mask", 1n << 34n)).toEqual(["InternetSlice7"]);
-    expect(describeValue("type-mask", 2 ** 36)).toEqual(["bit 36"]);
+    expect(labelsOf("type-mask", v)).toEqual(["InternetSlice1", "InternetSlice4", "InternetSlice5", "InternetSlice8"]);
+    expect(labelsOf("type-mask", 1n << 34n)).toEqual(["InternetSlice7"]);
+    expect(labelsOf("type-mask", 2 ** 36)).toEqual(["bit 36"]);
+    expect(describeValue("type-mask", 2 ** 36 + 1)).toEqual([{ label: "Internet", named: true, bit: 0 }, { label: "bit 36", named: false, bit: 36 }]);
   });
 
   it("stays exact up to 2^53 and reads negatives as 64-bit", () => {
@@ -232,18 +230,18 @@ describe("high bits", () => {
 describe("parent-dependent keys", () => {
   it("resolves Type by its nearest known ancestor", () => {
     expect(describeField("Type", "AttachAPN.3GPP")?.values).toBe(ATTACH_APN_TYPE);
-    expect(describeValue("Type", 3, ["AttachAPN", "3GPP"])).toEqual(["WiFiCalling"]);
-    expect(describeValue("Type", "Non3GPP", "apns[0].configuration[1].NoCellularReconnectCauseCodes[0].Type")![0]).toMatch(/Wi-Fi/);
+    expect(labelsOf("Type", 3, ["AttachAPN", "3GPP"])).toEqual(["WiFiCalling"]);
+    expect(labelsOf("Type", "Non3GPP", "apns[0].configuration[1].NoCellularReconnectCauseCodes[0].Type")![0]).toMatch(/Wi-Fi/);
     expect(describeField("Type", "CarrierEntitlements/Authentication")?.confidence).toBe("low");
     expect(describeField("Type")).toBeUndefined();
     expect(describeField("Type", "Somewhere.Else")).toBeUndefined();
   });
 
   it("resolves Category and Identifier from a real bundle path", () => {
-    expect(describeValue("Category", 4097, "CellBroadcast.MessageIDParameters3GPP2[0]")).toEqual(["Extreme threat"]);
-    expect(describeValue("Category", 6, "EmergencyCalling.EmergencyNumbers[2]")).toEqual(["Ambulance", "Fire Brigade"]);
-    expect(describeValue("Identifier", 16386, "TechSettings.ExtraConfigurationAttributeRequestv6[0]")).toEqual(["Private use"]);
-    expect(describeValue("Identifier", 21, ["TechSettings", "ExtraConfigurationAttributeRequestv4[]"])).toEqual(["P_CSCF_IP6_ADDRESS"]);
+    expect(labelsOf("Category", 4097, "CellBroadcast.MessageIDParameters3GPP2[0]")).toEqual(["Extreme threat"]);
+    expect(labelsOf("Category", 6, "EmergencyCalling.EmergencyNumbers[2]")).toEqual(["Ambulance", "Fire Brigade"]);
+    expect(labelsOf("Identifier", 16386, "TechSettings.ExtraConfigurationAttributeRequestv6[0]")).toEqual(["Private use"]);
+    expect(labelsOf("Identifier", 21, ["TechSettings", "ExtraConfigurationAttributeRequestv4[]"])).toEqual(["P_CSCF_IP6_ADDRESS"]);
   });
 
   it("falls back to the plain entry for ordinary keys", () => {
@@ -251,22 +249,19 @@ describe("parent-dependent keys", () => {
   });
 });
 
-describe("backward-compatible exports", () => {
-  it("derives the old sets and notes from FIELDS", () => {
+describe("field formats", () => {
+  it("marks bitmasks and PLMN lists", () => {
     for (const k of ["SupportedEntitlements", "type-mask", "tech-type-mask", "technology-mask", "APNEditabilityTypemask", "IPv6SupportedDataModeMask", "SupportedEntitlementsStandaloneMode", "StaticNATType"])
-      expect(BITMASK_KEYS.has(k), k).toBe(true);
+      expect(FIELDS[k].format, k).toBe("bitmask");
     for (const k of ["SupportedPLMNs", "SupportedSIMs", "IntlDataRoamingAllowed", "IntlDataRoamingExceptions", "BlacklistedSIMs", "AllPLMNs"])
-      expect(PLMN_KEYS.has(k), k).toBe(true);
-    expect(Object.keys(KEY_NOTES)).toHaveLength(Object.keys(FIELDS).length);
-    expect(KEY_NOTES["tech-type-mask"]).not.toMatch(/radio technolog/i);
-    expect(KEY_NOTES.CarrierName).toBe(FIELDS.CarrierName.note);
+      expect(FIELDS[k].format, k).toBe("plmn");
+    expect(FIELDS["tech-type-mask"].note).not.toMatch(/radio technolog/i);
   });
 
-  it("keeps decodeBits and describeMessageId", () => {
-    expect(decodeBits(32768)).toEqual([15]);
-    expect(decodeBits(9)).toEqual([0, 3]);
-    expect(decodeBits(-4)).toEqual([]);
-    expect(decodeBits(2 ** 35 + 1)).toEqual([0, 35]);
+  it("reads set bits and message ids", () => {
+    expect(maskBits(32768)).toEqual([15]);
+    expect(maskBits(9)).toEqual([0, 3]);
+    expect(maskBits(2 ** 35 + 1)).toEqual([0, 35]);
     expect(describeMessageId(4382)).toMatch(/Operator-defined/);
     expect(describeMessageId(4352)).toMatch(/ETWS/);
     expect(describeMessageId(1)).toBeUndefined();
@@ -282,12 +277,12 @@ describe("IMSConfig keys resolve through the IMS registry", () => {
     const abt = describeField("AccessBarringType", "IMSConfig.Signaling.AccessBarringType")!;
     expect(abt.format).toBe("enum");
     expect(abt.default).toBe("SSAC");
-    expect(describeValue("AccessBarringType", sig.AccessBarringType, "IMSConfig.Signaling.AccessBarringType")).toEqual(["ACB"]);
-    expect(describeValue("AccessBarringType", "Bogus", "IMSConfig.Signaling")).toEqual([]);
-    expect(describeValue("Preconditions", sig.Preconditions, "IMSConfig.Signaling")).toEqual(["Supported"]);
-    expect(describeValue("CountryOfOriginationFormat", sig.CountryOfOriginationFormat, "IMSConfig.Signaling")).toEqual(["BOTH"]);
-    expect(describeValue("EmergencyPreferredIdentity", "IMSI", "IMSConfig.Signaling")).toEqual(["IMSI (default)"]);
-    expect(describeValue("AccessNetworkRefreshMethod", "", "IMSConfig.Signaling")).toEqual(["empty (off) (default)"]);
+    expect(labelsOf("AccessBarringType", sig.AccessBarringType, "IMSConfig.Signaling.AccessBarringType")).toEqual(["ACB"]);
+    expect(labelsOf("AccessBarringType", "Bogus", "IMSConfig.Signaling")).toEqual([]);
+    expect(labelsOf("Preconditions", sig.Preconditions, "IMSConfig.Signaling")).toEqual(["Supported"]);
+    expect(labelsOf("CountryOfOriginationFormat", sig.CountryOfOriginationFormat, "IMSConfig.Signaling")).toEqual(["BOTH"]);
+    expect(labelsOf("EmergencyPreferredIdentity", "IMSI", "IMSConfig.Signaling")).toEqual(["IMSI (default)"]);
+    expect(labelsOf("AccessNetworkRefreshMethod", "", "IMSConfig.Signaling")).toEqual(["empty (off) (default)"]);
 
     const ring = describeField("RingingTimerSeconds", "IMSConfig.Signaling.RingingTimerSeconds")!;
     expect(ring).toMatchObject({ type: "integer", default: 40, unit: "s" });
@@ -336,8 +331,8 @@ describe("IMSConfig keys resolve through the IMS registry", () => {
     expect(describeField("NotFound", "IMSConfig.Signaling.IncomingCallEndReasons")!.note).toMatch(/Carrier-defined/);
     expect(describeField("RejectedByUser", "IMSConfig.Signaling.CallEndReasons")!.note).toMatch(/SIP 486, event LocalHangup, Reason "Call Rejected By User"/);
     const p = "IMSConfig.Signaling.IncomingCallEndReasons.TemporarilyUnavailable.TerminationEvent";
-    expect(describeValue("TerminationEvent", inc.TemporarilyUnavailable.TerminationEvent, p)).toEqual(["ReasonCode 1"]);
-    expect(describeValue("TerminationEvent", "CallAudioServiceCrash", p)).toEqual(["ReasonCode 38"]);
+    expect(labelsOf("TerminationEvent", inc.TemporarilyUnavailable.TerminationEvent, p)).toEqual(["ReasonCode 1"]);
+    expect(labelsOf("TerminationEvent", "CallAudioServiceCrash", p)).toEqual(["ReasonCode 38"]);
     expect(describeField("StatusCode", p.replace("TerminationEvent", "StatusCode"))!.type).toBe("integer");
   });
 
@@ -354,15 +349,15 @@ describe("wave-2 findings", () => {
       expect(FIELDS[k].default, k).toBe(false);
     expect(FIELDS.WifiAccessInfo.default).toBe("ffffffffffff");
     expect(FIELDS.T3396PdpBackOffSeconds).toMatchObject({ default: 0, unit: "s" });
-    expect(describeValue("supported", true, "IMSConfig.XCAP.supported")).toBeUndefined();
+    expect(labelsOf("supported", true, "IMSConfig.XCAP.supported")).toBeUndefined();
     expect(describeField("supported", "IMSConfig.XCAP")!.default).toBe(false);
   });
 
   it("decodes QuickSwitch SMS forking and satellite tier enums", () => {
-    expect(describeValue("SMSForkingMechanism", 3)).toEqual(["selective"]);
+    expect(labelsOf("SMSForkingMechanism", 3)).toEqual(["selective"]);
     expect(Object.keys(SMS_FORKING_MECHANISM)).toHaveLength(5);
-    expect(describeValue("Tier", 4, "SatelliteAccessInfo.Tier")).toEqual(["Tier D"]);
-    expect(describeValue("TechnologyMask", 24, "NRSlicing.AppCategories[0].TechnologyMask")).toEqual(["LTE", "NR (5G)"]);
+    expect(labelsOf("Tier", 4, "SatelliteAccessInfo.Tier")).toEqual(["Tier D"]);
+    expect(labelsOf("TechnologyMask", 24, "NRSlicing.AppCategories[0].TechnologyMask")).toEqual(["LTE", "NR (5G)"]);
   });
 
   it("resolves generic child keys by parent", () => {
@@ -372,7 +367,7 @@ describe("wave-2 findings", () => {
     expect(describeField("Mode", "TechSettingsSecondaryOverlay.ChildSAs.FirstChild.Mode")!.default).toBe("Tunnel");
     expect(describeField("LTE", "IMSConfig.SMS.SupportedDomains.LTE")!.type).toBe("boolean");
     expect(describeField("LTE")).toBeUndefined();
-    expect(describeValue("Category", 1, "EmergencyCalling.EmergencyNumbers[0]")).toEqual(["Police"]);
+    expect(labelsOf("Category", 1, "EmergencyCalling.EmergencyNumbers[0]")).toEqual(["Police"]);
   });
 
   it("notes keys with no iOS 27 reader without touching dyld-backed entries", () => {

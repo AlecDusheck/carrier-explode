@@ -8,9 +8,10 @@
 // An NV-value tag's number IS the legacy NV item number, e.g. 9f8732 = NV 946; every one is listed in 9fa708 (corpus: iOS 27.0 overrides + test fixtures).
 
 import { inflateSync, unzlibSync } from "fflate";
-import { bytesToHex } from "./plist";
+import { asciiAt, bytesToHex, leBigInt, maybeText, u16le } from "./bytes";
 import { readTlv, type Tlv } from "./der";
-import { CCM_ITEMS, annotateNv, describeNv, type NvConfidence } from "./nv";
+import { CCM_ITEMS, annotateNv, describeNv, } from "./nv";
+import type { Confidence, ConfidenceOrUnknown } from "./confidence";
 import { intelTree, type IntelTree } from "./intel";
 
 const td = new TextDecoder();
@@ -75,7 +76,7 @@ export interface PriTagInfo {
   /** Legacy NV item this tag carries. */
   nv?: number;
   note?: string;
-  confidence: NvConfidence;
+  confidence: Confidence;
 }
 
 // NV items seen as value tags (corpus: iOS 27.0 overrides + test fixtures).
@@ -105,13 +106,13 @@ export const PRI_TAGS: Record<string, PriTagInfo> = {
   "9fa709": { kind: "schema", name: "NV path schema index (MAVZ or NUL-separated)", confidence: "high" },
   // corpus: always 2 bytes, 0x00b2 in all 333 files that carry it
   "9fa710": { kind: "meta", name: "Blob before the NV item list", note: "small binary blob that precedes the NV item list", confidence: "low" },
-  ...Object.fromEntries(
+  .../* @__PURE__ */ Object.fromEntries(
     Object.entries(CCM_ITEMS).map(([n, name]) => [
       nvTag(+n),
       { kind: "ccm", nv: +n, name, confidence: +n === 62035 ? "low" : "high" } satisfies PriTagInfo,
     ]),
   ),
-  ...Object.fromEntries(
+  .../* @__PURE__ */ Object.fromEntries(
     NV_VALUE_ITEMS.map((n) => {
       const d = describeNv(n);
       const name = d?.name ?? `NV ${n}`;
@@ -138,16 +139,10 @@ export interface PriValue {
   xml?: string;
 }
 
-function looksPrintable(b: Uint8Array): { text: string; padded: boolean } | null {
-  if (b.length === 0) return null;
-  let end = b.length;
-  while (end > 0 && b[end - 1] === 0) end--; // NUL padding
-  if (end === 0) return null;
-  for (let i = 0; i < end; i++) {
-    const c = b[i];
-    if (!(c === 9 || c === 10 || c === 13 || (c >= 0x20 && c < 0x7f))) return null;
-  }
-  return { text: td.decode(b.subarray(0, end)), padded: end < b.length };
+/** The value as text at any length, and whether NUL padding followed it. */
+function looksPrintable(b: Uint8Array): { text: string; padded: boolean } | undefined {
+  const text = maybeText(b, Infinity);
+  return text === undefined ? undefined : { text, padded: b[b.length - 1] === 0 };
 }
 
 export function decodeValue(b: Uint8Array, preferText = false): PriValue {
@@ -166,22 +161,19 @@ export function decodeValue(b: Uint8Array, preferText = false): PriValue {
   if (b.length <= 8) {
     // A NUL-padded fixed-width value is a scalar (0x78 0 0 0 is 120, not "x"); a word
     // or dotted version is text. `preferText` wins where the field declares a string.
-    const isScalar = !asText || printable!.padded || asText.length < 2 || !meaningful;
-    if (isScalar && !(preferText && asText)) {
-      // BigInt: 7- and 8-byte values exceed the exact range of a double.
-      let big = 0n;
-      for (let i = b.length - 1; i >= 0; i--) big = (big << 8n) | BigInt(b[i]);
-      const n = Number(big);
-      return {
-        kind: "int",
-        text: big.toString(),
-        int: n,
-        exact: Number.isSafeInteger(n) ? undefined : big.toString(),
-        hex,
-        len: b.length,
-      };
-    }
-    return { kind: "string", text: asText!, hex, len: b.length };
+    const isScalar = !printable || printable.padded || printable.text.length < 2 || !meaningful;
+    if (printable && (preferText || !isScalar)) return { kind: "string", text: printable.text, hex, len: b.length };
+    // BigInt: 7- and 8-byte values exceed the exact range of a double.
+    const big = leBigInt(b);
+    const n = Number(big);
+    return {
+      kind: "int",
+      text: big.toString(),
+      int: n,
+      exact: Number.isSafeInteger(n) ? undefined : big.toString(),
+      hex,
+      len: b.length,
+    };
   }
 
   if (asText) return { kind: "string", text: asText, hex, len: b.length };
@@ -201,7 +193,7 @@ export interface PriPathEntry {
   meaning?: string;
   /** Enum / bit label for an integer value, when known. */
   label?: string;
-  confidence?: NvConfidence;
+  confidence?: Confidence;
 }
 
 export interface PriCcmFlag {
@@ -211,7 +203,7 @@ export interface PriCcmFlag {
   set: boolean;
   /** Per-flag meaning; no public or on-device source names any of them. */
   name?: string;
-  confidence: NvConfidence | "unknown";
+  confidence: ConfidenceOrUnknown;
 }
 
 export interface PriFeatureGroup {
@@ -222,7 +214,7 @@ export interface PriFeatureGroup {
   total: number;
   hex: string;
   nv: number;
-  confidence: NvConfidence;
+  confidence: Confidence;
   flags: PriCcmFlag[];
   /** False if any byte is outside {0, 1}. */
   boolean: boolean;
@@ -231,11 +223,12 @@ export interface PriFeatureGroup {
 export interface PriNvEntry {
   item: number;
   tag: string;
-  name: string;
+  /** Absent when no NV table names the item. */
+  name?: string;
   value: PriValue;
   meaning?: string;
   label?: string;
-  confidence: NvConfidence;
+  confidence: Confidence;
 }
 
 export interface PriNvListed { item: number; name?: string; set: boolean }
@@ -252,10 +245,12 @@ export interface PriUnknown {
   count: number;
 }
 
+/** Which modem family a PRI is written for: Qualcomm (9fa7xx tags), or Intel and its successor Apple C1 (9fae70..73). */
+export type PriDialect = "qualcomm" | "intel" | "mixed" | "unknown";
+
 export interface PriDecoded {
   kind: "der.pri" | "der.gri";
-  /** Which modem family the file is written for: Qualcomm (9fa7xx tags), or Intel and its successor Apple C1 (9fae70..73). */
-  dialect: "qualcomm" | "intel" | "mixed" | "unknown";
+  dialect: PriDialect;
   header: Record<string, string>;
   named: PriPair[];
   efs: PriPathEntry[];
@@ -289,7 +284,7 @@ function annotate(path: string, v: PriValue): Omit<PriPathEntry, "path" | "tag" 
 function decodeSchema(value: Uint8Array): PriDecoded["schema"] {
   let raw: Uint8Array | null = null;
   let source: "MAVZ" | "raw" | "none" = "raw";
-  if (value.length > 8 && td.decode(value.subarray(0, 4)) === "MAVZ") {
+  if (value.length > 8 && asciiAt(value, 0, "MAVZ")) {
     // "MAVZ" + uint32-LE uncompressed length + zlib (78 9c) stream (corpus: iOS 27.0 overrides)
     source = "MAVZ";
     const body = value.subarray(8);
@@ -311,7 +306,7 @@ function decodeSchema(value: Uint8Array): PriDecoded["schema"] {
   return { source, count: paths.length, paths };
 }
 
-function ccmGroup(tag: string, info: PriTagInfo, value: Uint8Array): PriFeatureGroup {
+function ccmGroup(tag: string, info: PriTagInfo, nv: number, value: Uint8Array): PriFeatureGroup {
   const flags: PriCcmFlag[] = Array.from(value, (b, index) => ({ index, value: b, set: b !== 0, confidence: "unknown" as const }));
   return {
     tag,
@@ -319,7 +314,7 @@ function ccmGroup(tag: string, info: PriTagInfo, value: Uint8Array): PriFeatureG
     bits: flags.filter((x) => x.set).map((x) => x.index),
     total: 25,
     hex: bytesToHex(value),
-    nv: info.nv!,
+    nv,
     confidence: info.confidence,
     flags,
     boolean: flags.every((x) => x.value <= 1),
@@ -357,7 +352,7 @@ export function decodePri(buf: Uint8Array, kind: "der.pri" | "der.gri" = "der.pr
   const listed = new Set<number>();
   for (const l of leaves) {
     if (l.tag !== "9fa708") continue;
-    for (let k = 0; k + 1 < l.value.length; k += 2) listed.add(l.value[k] | (l.value[k + 1] << 8));
+    for (let k = 0; k + 1 < l.value.length; k += 2) listed.add(u16le(l.value, k));
   }
 
   const unknownAgg = new Map<string, PriUnknown>();
@@ -387,14 +382,14 @@ export function decodePri(buf: Uint8Array, kind: "der.pri" | "der.gri" = "der.pr
       continue;
     }
 
-    if (info?.kind === "ccm" && value.length === 25) {
-      out.featureGroups.push(ccmGroup(tag, info, value));
-      seenNv.add(info.nv!);
+    if (info?.kind === "ccm" && info.nv !== undefined && value.length === 25) {
+      out.featureGroups.push(ccmGroup(tag, info, info.nv, value));
+      seenNv.add(info.nv);
       continue;
     }
 
     if (info?.kind === "nv-list") {
-      for (let k = 0; k + 1 < value.length; k += 2) out.nvItems.push(value[k] | (value[k + 1] << 8));
+      for (let k = 0; k + 1 < value.length; k += 2) out.nvItems.push(u16le(value, k));
       continue;
     }
 
@@ -409,7 +404,7 @@ export function decodePri(buf: Uint8Array, kind: "der.pri" | "der.gri" = "der.pr
     if (item !== undefined) {
       const v = decodeValue(value, describeNv(item)?.type === "string");
       const a = annotateNv(item, scalar(v));
-      out.nv.push({ item, tag, value: v, ...a, name: a?.name ?? `NV ${item}`, confidence: a?.confidence ?? "low" });
+      out.nv.push({ item, tag, value: v, ...a, confidence: a?.confidence ?? "low" });
       seenNv.add(item);
     }
 

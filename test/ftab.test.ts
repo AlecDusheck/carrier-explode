@@ -5,7 +5,7 @@
 
 import { describe, it, expect } from "vitest";
 import { ftabSummary, parseBver, parseFtab } from "../src/lib/decode/ftab.ts";
-import { modemChip, modemFamily, modemVendor } from "../src/lib/decode/modem.ts";
+import { dialectLabel, modemCapabilities, modemChip, modemFamily, modemVendor } from "../src/lib/decode/modem.ts";
 
 const BVER = "240.3431000025000000.5941|24.0.0.0|BBFW:3.01.03|date:2026 8 13|c4000v59|chip_revision_b0";
 
@@ -55,7 +55,7 @@ describe("parseBver", () => {
 describe("ftabSummary", () => {
   it("names the package, its family and build", () => {
     const s = ftabSummary(pkg, { name: "c4000v59/Release/patched/ftab.bin" });
-    expect(s).toMatchObject({ schema: 1, kind: "ftab", package: { name: "c4000v59/Release/patched/ftab.bin", family: "C1", version: "3.01.03", bver: BVER } });
+    expect(s).toMatchObject({ schema: 2, kind: "ftab", package: { name: "c4000v59/Release/patched/ftab.bin", family: "C1", version: "3.01.03", bver: BVER } });
     expect(s.entries.map((e) => e.tag)).toEqual(["illb", "bver", "CR11"]);
   });
 });
@@ -77,5 +77,19 @@ describe("modemFamily", () => {
 
   it("knows each family's vendor", () => {
     expect(["Mav24", "ICE19", "C1", "c4020", "Rose"].map(modemVendor)).toEqual(["qualcomm", "intel", "apple", "apple", undefined]);
+  });
+});
+
+describe("modem capabilities", () => {
+  it("says what each family's package holds", () => {
+    expect(modemCapabilities("Mav25")).toEqual({ plaintextDefaults: true, carrierConfigIn: "package" });
+    expect(modemCapabilities("ICE19")).toEqual({ plaintextDefaults: false, carrierConfigIn: "package" });
+    expect(modemCapabilities("C1")).toEqual({ plaintextDefaults: false, carrierConfigIn: "bundle" });
+    expect(modemCapabilities("Zed9")).toBeUndefined();
+  });
+
+  it("labels PRI dialects", () => {
+    expect(dialectLabel("intel")).toBe("Intel or Apple C1");
+    expect(dialectLabel("unknown")).toBeUndefined();
   });
 });

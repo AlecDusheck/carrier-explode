@@ -23,7 +23,7 @@ import {
   type IntelTree,
   type IntelValue,
 } from "../src/lib/decode/intel.ts";
-import { openIpcc, decodeFile } from "../src/lib/decode/bundle.ts";
+import { openIpcc, decodeFile, decodedPri } from "../src/lib/decode/bundle.ts";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const fixture = (...p: string[]) => new Uint8Array(readFileSync(join(here, "fixtures", ...p)));
@@ -100,13 +100,13 @@ describe("intelTree: KDDI_jp D23", () => {
   it("reads multi-word band bitmaps, and matches them against the list they mirror", () => {
     const nc = at(t, "dyn_cps.apf.ue_capability_enhancement.bc_filters.lte_disallowed_nc_ca_band_bitmap") as IntelList;
     expect(nc.items.map((x) => x.value.int)).toEqual([5, 768]);
-    expect(nc.decoded).toEqual({ kind: "bands", rat: "lte", bands: [1, 3, 41, 42], confidence: "high" });
+    expect(nc.value).toEqual({ raw: "5, 768", text: "5, 768", decoded: { kind: "bands", rat: "lte", bands: [1, 3, 41, 42], confidence: "high" } });
     const dl = at(t, "dyn_cps.apf.ue_capability_enhancement.bc_filters.lte_ca_dl_disallowed_list") as IntelTable;
     expect(dl.rows.map((x) => (x.cells.band as IntelValue).int).sort((a, b) => a! - b!)).toEqual([1, 3, 41, 42]);
 
     // NR words are not band numbers (n15 / n22 are not KDDI bands): only the bit positions are given.
     const sa = at(t, "dyn_cps.op_features.hplmn_band_restriction.allowed_sa_band_bitmap") as IntelList;
-    expect(sa.decoded).toMatchObject({ kind: "bits", bits: [2, 14, 20, 21, 36], confidence: "low" });
+    expect(sa.value?.decoded).toMatchObject({ kind: "bits", bits: [2, 14, 20, 21, 36], confidence: "low" });
   });
 
   it("parses the NR band-combination whitelist", () => {
@@ -176,7 +176,7 @@ describe("intelTree: label:value strings and GRI tables", () => {
     const reg = t.regulatory!;
     expect(reg.mcc.map((r) => [r.region, r.mcc])).toEqual([["na", "302"], ["na", "308"], ["na", "310"], ["ww", "901"]]);
     expect(reg.mcc[0]).toEqual({
-      region: "na", mcc: "302",
+      region: "na", regionName: "North America", mcc: "302",
       lte: [2, 4, 5, 7, 12, 13, 14, 17, 25, 29, 30, 38, 41, 46, 53, 66, 71],
       nrSa: [2, 5, 7, 12, 25, 29, 41, 53, 66, 71, 77, 78],
       nrNsa: [2, 5, 7, 12, 25, 29, 41, 53, 66, 71, 77, 78],
@@ -215,7 +215,7 @@ describe("intelTree: label:value strings and GRI tables", () => {
 
 describe("intelTree: older Intel file (ATT_US D321/D331/N841, iPhone XS/XR)", () => {
   const b = openIpcc(new Uint8Array(readFileSync(join(here, "fixtures", "ATT_US.ipcc"))));
-  const d = decodeFile(b, "overrides_D321_D331_N841.der.pri").pri!;
+  const d = decodedPri(decodeFile(b, "overrides_D321_D331_N841.der.pri"))!;
 
   it("still decodes, with range-named bitmasks folded", () => {
     expect(d.efs).toHaveLength(53);

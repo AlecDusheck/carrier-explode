@@ -1,6 +1,7 @@
-/** Structural diff over decoded bundle files, and file-by-file diff of two bundles. */
+/** Structural diff over decoded values, keyed collections, and file by file over two bundles. */
 
-import { decodeFile, type DecodedFile, type OpenedBundle } from "./bundle";
+import { decodeFile, decodedPlist, type DecodedFile, type OpenedBundle } from "./bundle";
+import { isJsonDict, isRecord } from "./plist";
 import type { PriDecoded } from "./pri";
 
 export type DiffKind = "added" | "removed" | "changed" | "same";
@@ -14,16 +15,19 @@ export interface DiffRow {
 
 export type DiffCounts = Record<DiffKind, number>;
 
-const isObj = (v: unknown): v is Record<string, unknown> =>
-  !!v && typeof v === "object" && !Array.isArray(v);
-
-function stable(v: unknown): string {
+/** Canonical text of a JSON-like value: dict keys sorted, so equal values give equal strings. `memo` caches containers already seen. */
+export function stable(v: unknown, memo?: WeakMap<object, string>): string {
   if (v === null || v === undefined) return String(v);
-  if (Array.isArray(v)) return `[${v.map(stable).join(",")}]`;
-  if (isObj(v)) {
-    return `{${Object.keys(v).sort().map((k) => `${JSON.stringify(k)}:${stable(v[k])}`).join(",")}}`;
-  }
-  return JSON.stringify(v);
+  if (typeof v !== "object") return JSON.stringify(v);
+  const hit = memo?.get(v);
+  if (hit !== undefined) return hit;
+  const out = Array.isArray(v)
+    ? `[${v.map((x) => stable(x, memo)).join(",")}]`
+    : isRecord(v)
+      ? `{${Object.keys(v).sort().map((k) => `${JSON.stringify(k)}:${stable(v[k], memo)}`).join(",")}}`
+      : JSON.stringify(v);
+  memo?.set(v, out);
+  return out;
 }
 
 /** Past this many cells the LCS table costs more than it saves; align by index instead. */
@@ -55,6 +59,8 @@ function lcs(x: string[], y: string[]): Array<[number, number]> {
  */
 export function diffValues(a: unknown, b: unknown, includeSame = false): DiffRow[] {
   const rows: DiffRow[] = [];
+  const memo = new WeakMap<object, string>();
+  const key = (v: unknown) => stable(v, memo);
   walk("", a, b);
   return rows;
 
@@ -66,29 +72,36 @@ export function diffValues(a: unknown, b: unknown, includeSame = false): DiffRow
     if (x === undefined && y === undefined) return;
     if (x === undefined) { rows.push({ path, kind: "added", b: y }); return; }
     if (y === undefined) { rows.push({ path, kind: "removed", a: x }); return; }
-    if (isObj(x) && isObj(y)) {
+    if (isJsonDict(x) && isJsonDict(y)) {
       for (const k of [...new Set([...Object.keys(x), ...Object.keys(y)])].sort()) {
         walk(path ? `${path}.${k}` : k, x[k], y[k]);
       }
       return;
     }
     if (Array.isArray(x) && Array.isArray(y)) {
-      const sx = x.map(stable), sy = y.map(stable);
-      if (sx.length === sy.length && sx.every((s, i) => s === sy[i])) { same(path, x, y); return; }
-      const anchors: Array<[number, number]> =
-        x.length * y.length <= LCS_LIMIT ? lcs(sx, sy) : [];
-      anchors.push([x.length, y.length]);
-      let i = 0, j = 0;
+      const sx = x.map(key), sy = y.map(key);
+      // Common head and tail match as they are; only the middle needs aligning.
+      let head = 0;
+      while (head < sx.length && head < sy.length && sx[head] === sy[head]) head++;
+      let tail = 0;
+      while (tail < sx.length - head && tail < sy.length - head && sx[sx.length - 1 - tail] === sy[sy.length - 1 - tail]) tail++;
+      if (head === sx.length && head === sy.length) { same(path, x, y); return; }
+      for (let k = 0; k < head; k++) same(`${path}[${k}]`, x[k], y[k]);
+      const mx = sx.slice(head, sx.length - tail), my = sy.slice(head, sy.length - tail);
+      const anchors: Array<[number, number]> = (mx.length * my.length <= LCS_LIMIT ? lcs(mx, my) : []).map(([i, j]) => [i + head, j + head]);
+      anchors.push([x.length - tail, y.length - tail]);
+      let i = head, j = head;
       for (const [ai, bj] of anchors) {
         // Pair the unmatched run positionally, then report the leftovers.
         while (i < ai && j < bj) walk(`${path}[${j}]`, x[i++], y[j++]);
         while (i < ai) { walk(`${path}[${i}]`, x[i], undefined); i++; }
         while (j < bj) { walk(`${path}[${j}]`, undefined, y[j]); j++; }
-        if (ai < x.length) { same(`${path}[${bj}]`, x[ai], y[bj]); i++; j++; }
+        if (ai < x.length - tail) { same(`${path}[${bj}]`, x[ai], y[bj]); i++; j++; }
       }
+      for (let k = 0; k < tail; k++) same(`${path}[${y.length - tail + k}]`, x[x.length - tail + k], y[y.length - tail + k]);
       return;
     }
-    if (stable(x) === stable(y)) { same(path, x, y); return; }
+    if (key(x) === key(y)) { same(path, x, y); return; }
     rows.push({ path, kind: "changed", a: x, b: y });
   }
 }
@@ -122,8 +135,9 @@ function priComparable(p: PriDecoded): Record<string, unknown> {
 
 /** What a decoded file is diffed as: its value tree, its PRI settings, or its lines. */
 export function comparable(d: DecodedFile): unknown {
-  if (d.pri) return priComparable(d.pri);
-  if (d.plist !== undefined) return d.plist;
+  if (d.kind === "pri-der") return priComparable(d.pri);
+  const plist = decodedPlist(d);
+  if (plist !== undefined) return plist;
   if (d.text !== undefined) return d.text.split("\n");
   return d.hex ?? null;
 }
@@ -154,6 +168,27 @@ export interface CompareOptions {
   maxRows?: number;
 }
 
+export interface KeyedDiffOptions {
+  /** Cap on rows per key (default 400). */
+  maxRows?: number;
+  /** Keep keys whose values match. */
+  includeSame?: boolean;
+}
+
+/** Key-by-key diff of two keyed collections: a key only on one side is added or removed, one on both is diffed as a value. */
+export function diffKeyed(a: Record<string, unknown>, b: Record<string, unknown>, opts: KeyedDiffOptions = {}): FileDiff[] {
+  const max = opts.maxRows ?? 400;
+  const out: FileDiff[] = [];
+  for (const path of [...new Set([...Object.keys(a), ...Object.keys(b)])].sort()) {
+    const inA = Object.hasOwn(a, path), inB = Object.hasOwn(b, path);
+    const rows = inA && inB ? diffValues(a[path], b[path]) : [];
+    const kind: DiffKind = !inA ? "added" : !inB ? "removed" : rows.length ? "changed" : "same";
+    if (kind === "same" && !opts.includeSame) continue;
+    out.push({ path, kind, rows: rows.slice(0, max), counts: summariseDiff(rows), truncated: rows.length > max });
+  }
+  return out;
+}
+
 function bytesEqual(x: Uint8Array, y: Uint8Array): boolean {
   if (x.length !== y.length) return false;
   for (let i = 0; i < x.length; i++) if (x[i] !== y[i]) return false;
@@ -170,25 +205,27 @@ function decodedOrNull(o: OpenedBundle, path: string): unknown {
 
 /** File-by-file diff of bundle `a` (before/left) against `b` (after/right). */
 export function compareBundles(a: OpenedBundle, b: OpenedBundle, opts: CompareOptions = {}): BundleDiff {
-  const max = opts.maxRows ?? 400;
   const pa = new Set(a.info.files.map((f) => f.path));
   const pb = new Set(b.info.files.map((f) => f.path));
   const all = opts.path ? [opts.path] : [...new Set([...pa, ...pb])].sort();
-  const files: FileDiff[] = [];
   const counts: DiffCounts = { added: 0, removed: 0, changed: 0, same: 0 };
-
+  const same: FileDiff[] = [];
+  // Only files whose bytes differ are decoded; added and removed ones link to the file itself, so their value is never read.
+  const va: Record<string, unknown> = {}, vb: Record<string, unknown> = {};
   for (const path of all) {
     const inA = pa.has(path), inB = pb.has(path);
     if (!inA && !inB) continue;
-    let kind: DiffKind;
-    if (!inA) kind = "added";
-    else if (!inB) kind = "removed";
-    else kind = bytesEqual(a.entries[a.prefix + path], b.entries[b.prefix + path]) ? "same" : "changed";
-    counts[kind]++;
-    if (kind === "same" && !opts.includeSame) continue;
-    // Added/removed files link to the file itself; a row dump of the whole value adds nothing.
-    const rows = kind === "changed" ? diffValues(decodedOrNull(a, path), decodedOrNull(b, path)) : [];
-    files.push({ path, kind, rows: rows.slice(0, max), counts: summariseDiff(rows), truncated: rows.length > max });
+    if (inA && inB && bytesEqual(a.entries[a.prefix + path], b.entries[b.prefix + path])) {
+      counts.same++;
+      if (opts.includeSame) same.push({ path, kind: "same", rows: [], counts: summariseDiff([]), truncated: false });
+      continue;
+    }
+    counts[!inA ? "added" : !inB ? "removed" : "changed"]++;
+    if (inA) va[path] = inB ? decodedOrNull(a, path) : null;
+    if (inB) vb[path] = inA ? decodedOrNull(b, path) : null;
   }
+  // Bytes that differ make a changed file even when the decoded values match.
+  const differ = diffKeyed(va, vb, { maxRows: opts.maxRows, includeSame: true }).map((f): FileDiff => (f.kind === "same" ? { ...f, kind: "changed" } : f));
+  const files = [...same, ...differ].sort((x, y) => (x.path < y.path ? -1 : x.path > y.path ? 1 : 0));
   return { files, counts, shared: [...pa].filter((p) => pb.has(p)).sort() };
 }

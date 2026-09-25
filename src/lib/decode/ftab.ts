@@ -6,7 +6,8 @@
  *   0x20 'rkos' 'ftab', 0x28 u32 count, 0x30 count × { tag[4], u32 offset, u32 size, u32 0 }
  */
 
-import { modemFamily } from "./modem";
+import { asciiAt, latin1, u32le } from "./bytes";
+import { MODEM_SUMMARY_SCHEMA, modemFamily } from "./modem";
 
 export interface FtabEntry { tag: string; offset: number; size: number }
 
@@ -24,22 +25,19 @@ export interface FtabBuild {
 }
 
 export interface FtabSummary {
-  schema: 1;
+  schema: typeof MODEM_SUMMARY_SCHEMA;
   kind: "ftab";
   package: FtabBuild & { name?: string; family?: string; bver?: string };
   entries: FtabEntry[];
 }
 
-const latin1 = new TextDecoder("latin1");
-
 export function parseFtab(b: Uint8Array): FtabEntry[] {
-  if (b.length < 0x30 || latin1.decode(b.subarray(0x20, 0x28)) !== "rkosftab") throw new Error("not an rkos/ftab container");
-  const dv = new DataView(b.buffer, b.byteOffset, b.byteLength);
-  const n = dv.getUint32(0x28, true);
+  if (b.length < 0x30 || !asciiAt(b, 0x20, "rkosftab")) throw new Error("not an rkos/ftab container");
+  const n = u32le(b, 0x28);
   if (0x30 + 16 * n > b.length) throw new Error(`ftab entry table (${n}) runs past the file`);
   const out: FtabEntry[] = [];
   for (let i = 0, p = 0x30; i < n; i++, p += 16) {
-    const e = { tag: latin1.decode(b.subarray(p, p + 4)).replace(/\0+$/, ""), offset: dv.getUint32(p + 4, true), size: dv.getUint32(p + 8, true) };
+    const e = { tag: latin1(b.subarray(p, p + 4)).replace(/\0+$/, ""), offset: u32le(b, p + 4), size: u32le(b, p + 8) };
     if (e.offset + e.size > b.length) throw new Error(`ftab entry ${e.tag} runs past the file`);
     out.push(e);
   }
@@ -66,11 +64,11 @@ export function parseBver(s: string): FtabBuild {
 export function ftabSummary(b: Uint8Array, opts: { name?: string } = {}): FtabSummary {
   const entries = parseFtab(b);
   const bver = entries.find((e) => e.tag === "bver");
-  const text = bver ? latin1.decode(b.subarray(bver.offset, bver.offset + bver.size)).replace(/\0+$/, "").trim() : undefined;
+  const text = bver ? latin1(b.subarray(bver.offset, bver.offset + bver.size)).replace(/\0+$/, "").trim() : undefined;
   const name = opts.name;
   const family = name && modemFamily(name);
   return {
-    schema: 1,
+    schema: MODEM_SUMMARY_SCHEMA,
     kind: "ftab",
     package: {
       ...(name ? { name } : {}),

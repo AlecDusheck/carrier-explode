@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 
-import { openIpcc, decodeFile } from "../src/lib/decode/bundle.ts";
+import { openIpcc, decodeFile, decodedPlist } from "../src/lib/decode/bundle.ts";
 import {
   IMS_ENUMS,
   IMS_RENAMES,
@@ -21,7 +21,7 @@ const here = dirname(fileURLToPath(import.meta.url));
 type Dict = Record<string, unknown>;
 const carrierOf = (bundle: string) => {
   const b = openIpcc(new Uint8Array(readFileSync(join(here, "fixtures", bundle))));
-  return decodeFile(b, "carrier.plist").plist as Dict;
+  return decodedPlist(decodeFile(b, "carrier.plist")) as Dict;
 };
 
 describe("IMS registry table", () => {

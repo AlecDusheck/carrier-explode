@@ -3,7 +3,7 @@
  * BER indefinite-length and constructed-string forms that signed profiles use.
  */
 
-import { colonHex } from "./bytes";
+import { b64ToBytes, colonHex, latin1 } from "./bytes";
 
 export interface Tlv {
   /** Identifier octet (low-tag-number form). */
@@ -156,7 +156,6 @@ export function readOid(b: Uint8Array, t: Tlv): string {
   return oidString(b.subarray(t.contentStart, t.contentEnd));
 }
 
-const latin1 = { decode: (v: Uint8Array) => String.fromCharCode(...v) };
 const utf8 = new TextDecoder();
 const utf16 = new TextDecoder("utf-16be");
 
@@ -170,14 +169,14 @@ export function readString(b: Uint8Array, t: Tlv): string {
       for (let i = 0; i + 3 < v.length; i += 4) s += String.fromCodePoint(((v[i] << 24) | (v[i + 1] << 16) | (v[i + 2] << 8) | v[i + 3]) >>> 0);
       return s;
     }
-    case 0x14: return latin1.decode(v); // T61String, treated as Latin-1 like most tools
+    case 0x14: return latin1(v); // T61String, treated as Latin-1 like most tools
     default: return utf8.decode(v);
   }
 }
 
 /** UTCTime or GeneralizedTime as an ISO 8601 string. */ // RFC 5280 §4.1.2.5
 export function readTime(b: Uint8Array, t: Tlv): string {
-  const s = latin1.decode(b.subarray(t.contentStart, t.contentEnd));
+  const s = latin1(b.subarray(t.contentStart, t.contentEnd));
   const m = /^(\d{2}|\d{4})(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})?(?:\.\d+)?(Z|[+-]\d{4})?$/.exec(s);
   if (!m) return s;
   let year = m[1];
@@ -275,12 +274,5 @@ export function parseCertificate(b: Uint8Array, off = 0): CertInfo {
 /** Every PEM block of the given label in `text`, decoded. */ // RFC 7468
 export function pemBlocks(text: string, label = "CERTIFICATE"): Uint8Array[] {
   const re = new RegExp(`-----BEGIN ${label}-----([^-]*)-----END ${label}-----`, "g");
-  const out: Uint8Array[] = [];
-  for (const m of text.matchAll(re)) {
-    try {
-      const bin = atob(m[1].replace(/[^A-Za-z0-9+/=]/g, ""));
-      out.push(Uint8Array.from(bin, (c) => c.charCodeAt(0)));
-    } catch { /* skip a damaged block */ }
-  }
-  return out;
+  return [...text.matchAll(re)].map((m) => b64ToBytes(m[1])).filter((b) => b.length > 0);
 }

@@ -9,9 +9,10 @@
  * value pattern; "low" means inferred from the name and values only.
  */
 
+import { maskBits } from "./bytes";
+import { describeMessageId } from "./cbs";
+import type { Confidence } from "./confidence";
 import { describeImsSetting, defaultEndReason, TERMINATION_EVENTS, type ImsSetting } from "./ims";
-
-export type Confidence = "high" | "med" | "low";
 
 export type FieldType = "string" | "integer" | "real" | "boolean" | "data" | "date" | "array" | "dict";
 
@@ -316,7 +317,7 @@ export const SATELLITE_TIER: Readonly<Record<string, string>> = {
 /* ------------------------------------------------------------------------ */
 
 /** TerminationEvent name -> its ReasonCode. */
-const TERMINATION_EVENT_VALUES: Readonly<Record<string, string>> = Object.fromEntries(
+const TERMINATION_EVENT_VALUES: Readonly<Record<string, string>> = /* @__PURE__ */ Object.fromEntries(
   TERMINATION_EVENTS.map((name, code) => [name, `ReasonCode ${code}`]),
 );
 
@@ -330,9 +331,9 @@ const BODY_THRESHOLD_KEYS = [
 ];
 const bodyThreshold = (): Record<string, FieldDoc> =>
   Object.fromEntries(
-    BODY_THRESHOLD_KEYS.map((k) => [
+    BODY_THRESHOLD_KEYS.map((k): [string, FieldDoc] => [
       `CMOnBodyStatusManager${k}`,
-      { note: `CoreMotion on-body detection parameter (${k}); one file per device class.`, confidence: "med" as Confidence },
+      { note: `CoreMotion on-body detection parameter (${k}); one file per device class.`, confidence: "med" },
     ]),
   );
 
@@ -1108,7 +1109,7 @@ export const FIELDS: Readonly<Record<string, FieldDoc>> = {
   SupportedSIMOverrides: { note: "Per-SIM-variant overrides (e.g. SupportedDevices), keyed by <PLMN>_GID<n>-<value>.", type: "dict", confidence: "med" }, // bundle data
   SupportedDevices: { note: "Device models this override applies to.", type: "array", confidence: "low" }, // SoftwareUpdateServices: +[SUAssetSupport setAssetQueryFilters:]
   TimeWindows: { note: "Off-peak windows keyed by weekday (Sunday-Saturday): {StartTime, EndTime, WindowType} entries. No iOS 27 reader found.", type: "dict", confidence: "low" }, // bundle values
-  ...bodyThreshold(),
+  .../* @__PURE__ */ bodyThreshold(),
 
   /* ---- keys kept from older builds; not in the iOS 27 corpus ---- */
   SupportedServicesMask: unnamedMask("Supported-services bitmask. Not in the iOS 27 bundles."),
@@ -1306,96 +1307,37 @@ export function describeField(key: string, parentPath?: string | readonly string
   return s && !s.section.endsWith("/SipTimers") ? imsDoc(s) : undefined;
 }
 
-/** Set-bit indices, lowest first. Exact for any safe integer or bigint; negative
- *  values are read as 64-bit two's complement. */
-export function maskBits(value: number | bigint): number[] {
-  let v: bigint;
-  if (typeof value === "bigint") v = value;
-  else if (Number.isSafeInteger(value)) v = BigInt(value);
-  else return [];
-  if (v < 0n) v = BigInt.asUintN(64, v);
-  const bits: number[] = [];
-  for (let i = 0; v > 0n; i++, v >>= 1n) if (v & 1n) bits.push(i);
-  return bits;
+/** One label of a decoded value. */
+export interface ValueLabel {
+  /** The name, or "bit N" for a set bit the table does not name. */
+  label: string;
+  named: boolean;
+  /** Bit index, for bitmasks. */
+  bit?: number;
 }
 
-/** Labels for a value: one per set bit for bitmasks ("bit N" when unnamed), the
- *  enum label for enums, the alert label for CBS message IDs. `[]` for an enum
- *  value with no known label; undefined when the key has no decodable format. */
-export function describeValue(key: string, value: unknown, parentPath?: string | readonly string[]): string[] | undefined {
+/** Labels for a value: one per set bit for bitmasks, the enum label for enums, the
+ *  alert label for CBS message IDs. `[]` for an enum value with no known label;
+ *  undefined when the key has no decodable format. */
+export function describeValue(key: string, value: unknown, parentPath?: string | readonly string[]): ValueLabel[] | undefined {
   const doc = describeField(key, parentPath);
   if (!doc) return undefined;
   if (doc.format === "bitmask" || (doc.bits && !doc.format)) {
     if (typeof value !== "number" && typeof value !== "bigint") return undefined;
-    return maskBits(value).map((b) => doc.bits?.[b] ?? `bit ${b}`);
+    return maskBits(value).map((bit) => {
+      const name = doc.bits?.[bit];
+      return { label: name ?? `bit ${bit}`, named: name !== undefined, bit };
+    });
   }
   if (doc.format === "cbs-message-id") {
     if (typeof value !== "number") return undefined;
-    const l = describeMessageId(value);
-    return l ? [l] : [];
+    const label = describeMessageId(value);
+    return label ? [{ label, named: true }] : [];
   }
   if (doc.values) {
     if (typeof value !== "number" && typeof value !== "string" && typeof value !== "bigint") return undefined;
-    const l = doc.values[String(value)];
-    return l ? [l] : [];
+    const label = doc.values[String(value)];
+    return label ? [{ label, named: true }] : [];
   }
   return undefined;
-}
-
-/* ------------------------------------------------------------------------ */
-/* Cell-broadcast message identifiers                                       */
-/* ------------------------------------------------------------------------ */
-
-/** Cross-reference for cell-broadcast message identifiers. 3GPP TS 23.041 9.4.1.2.2 */
-export const CBS_MESSAGE_IDS: Array<{ from: number; to: number; label: string }> = [
-  { from: 4352, to: 4352, label: "ETWS earthquake warning" },
-  { from: 4353, to: 4353, label: "ETWS tsunami warning" },
-  { from: 4354, to: 4354, label: "ETWS earthquake and tsunami warning" },
-  { from: 4355, to: 4355, label: "ETWS test message" },
-  { from: 4356, to: 4356, label: "ETWS other emergency" },
-  { from: 4370, to: 4370, label: "Presidential-level alert (CMAS class 1)" },
-  { from: 4371, to: 4372, label: "Extreme threat, observed/likely" },
-  { from: 4373, to: 4378, label: "Severe threat" },
-  { from: 4379, to: 4379, label: "Child abduction (AMBER)" },
-  { from: 4380, to: 4380, label: "Required monthly test" },
-  { from: 4381, to: 4381, label: "CMAS exercise" },
-  { from: 4382, to: 4382, label: "Operator-defined use" },
-  { from: 4383, to: 4383, label: "Presidential-level alert (additional language)" },
-  { from: 4384, to: 4391, label: "Extreme/severe threat (additional language)" },
-  { from: 4392, to: 4392, label: "Child abduction (additional language)" },
-  { from: 4393, to: 4393, label: "Required monthly test (additional language)" },
-  { from: 4394, to: 4394, label: "CMAS exercise (additional language)" },
-  { from: 4395, to: 4395, label: "Operator-defined use (additional language)" },
-  { from: 4396, to: 4397, label: "Public safety message" },
-  { from: 4398, to: 4399, label: "State/local test" },
-  { from: 4400, to: 4400, label: "Geofence trigger message (not user-visible)" },
-];
-
-export function describeMessageId(id: number): string | undefined {
-  for (const r of CBS_MESSAGE_IDS) if (id >= r.from && id <= r.to) return r.label;
-  return undefined;
-}
-
-/* ------------------------------------------------------------------------ */
-/* Backward-compatible views of FIELDS                                      */
-/* ------------------------------------------------------------------------ */
-
-const keysWhere = (pred: (d: FieldDoc) => boolean) =>
-  new Set(Object.entries(FIELDS).filter(([, d]) => pred(d)).map(([k]) => k));
-
-/** Integer fields that encode a bitmask. */
-export const BITMASK_KEYS: Set<string> = keysWhere((d) => d.format === "bitmask");
-
-/** Fields whose value is a raw MCC+MNC (or a list of them). */
-export const PLMN_KEYS: Set<string> = keysWhere((d) => d.format === "plmn");
-
-/** Key -> one-line note. */
-export const KEY_NOTES: Record<string, string> = Object.fromEntries(
-  Object.entries(FIELDS).map(([k, d]) => [k, d.note]),
-);
-
-/** Set-bit indices of a non-negative integer. Prefer maskBits. */
-export function decodeBits(n: number): number[] {
-  if (!Number.isFinite(n) || n < 0) return [];
-  return maskBits(Math.trunc(n));
 }

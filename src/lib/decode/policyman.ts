@@ -2,10 +2,10 @@
  * What each policyman XML element means, from the modem image's rule-engine
  * tables and strings (qdsp6sw.mbn, Mav25-2.10.01). The handlers themselves are
  * compressed, so most meanings rest on the name, the table it sits in and how
- * the shipped XML uses it. Self-contained, no dependencies.
+ * the shipped XML uses it.
  */
 
-export type PolicyConfidence = "high" | "med" | "low";
+import type { Confidence } from "./confidence";
 
 export interface PolicyElementDoc {
   kind: "root" | "block" | "condition" | "action" | "value";
@@ -15,13 +15,13 @@ export interface PolicyElementDoc {
   attrs?: Record<string, string>;
   /** Accepted text values, when the firmware lists them. */
   values?: string[];
-  confidence: PolicyConfidence;
+  confidence: Confidence;
 }
 
 type D = PolicyElementDoc;
-const c = (note: string, confidence: PolicyConfidence = "med", more: Partial<D> = {}): D => ({ kind: "condition", note, confidence, ...more });
-const a = (note: string, confidence: PolicyConfidence = "med", more: Partial<D> = {}): D => ({ kind: "action", note, confidence, ...more });
-const v = (note: string, confidence: PolicyConfidence = "med", more: Partial<D> = {}): D => ({ kind: "value", note, confidence, ...more });
+const c = (note: string, confidence: Confidence = "med", more: Partial<D> = {}): D => ({ kind: "condition", note, confidence, ...more });
+const a = (note: string, confidence: Confidence = "med", more: Partial<D> = {}): D => ({ kind: "action", note, confidence, ...more });
+const v = (note: string, confidence: Confidence = "med", more: Partial<D> = {}): D => ({ kind: "value", note, confidence, ...more });
 
 // qdsp6sw.mbn rodata: policyman subs/base/namespace strings (policyman_subs.c, mre_namedobj.c)
 export const POLICY_ATTRS: Record<string, string> = {

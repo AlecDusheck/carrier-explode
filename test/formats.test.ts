@@ -4,14 +4,14 @@ import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { zipSync } from "fflate";
 
-import { decodePrl, isPrl, roamIndName } from "../src/lib/decode/prl.ts";
+import { decodePrl, describePrl, isPrl, roamIndName } from "../src/lib/decode/prl.ts";
 import { crc16Ccitt, BitReader } from "../src/lib/decode/bytes.ts";
 import { readTlv, children, octets, oidString, readTime, parseCertificate, pemBlocks } from "../src/lib/decode/der.ts";
 import { isCmsSignedData, parseSignedData } from "../src/lib/decode/cms.ts";
 import { decodeDmu } from "../src/lib/decode/dmu.ts";
 import { decodeCaf } from "../src/lib/decode/caf.ts";
 import { parsePlist } from "../src/lib/decode/plist.ts";
-import { openIpcc, decodeFile, contentTypeOf } from "../src/lib/decode/bundle.ts";
+import { openIpcc, decodeFile, contentTypeOf, decodedPlist } from "../src/lib/decode/bundle.ts";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const fx = (n: string) => new Uint8Array(readFileSync(join(here, "fixtures", "formats", n)));
@@ -104,9 +104,9 @@ describe("PRL", () => {
   it("is wired into decodeFile as kind prl", () => {
     const b = bundleWith({ "carrier.prl": fx("extended-sprint-400.prl") });
     const d = decodeFile(b, "carrier.prl");
-    expect(d.kind).toBe("prl");
-    expect(d.prl?.id).toBe(400);
-    expect(d.note).toMatch(/^Extended PRL \(SSPR_P_REV 3\), ID 400: 2 acquisition records, 2 system records/);
+    if (d.kind !== "prl" || !d.prl) throw new Error(d.kind);
+    expect(d.prl.id).toBe(400);
+    expect(describePrl(d.prl)).toMatch(/^Extended PRL \(SSPR_P_REV 3\), ID 400: 2 acquisition records, 2 system records/);
     expect(d.hex).toBeTruthy();
     expect(() => JSON.stringify(d)).not.toThrow();
   });
@@ -185,14 +185,14 @@ describe("certificates", () => {
   it("finds every certificate in an OpenSSL text export", () => {
     const b = bundleWith({ "CarrierCA.crt": fx("openssl-text-Dish_MVNO_US.crt") });
     const d = decodeFile(b, "CarrierCA.crt");
-    expect(d.kind).toBe("certificate");
+    if (d.kind !== "certificate") throw new Error(d.kind);
     expect(d.text).toContain("subject=CN=Entrust");
     expect(d.certificates).toHaveLength(2);
-    expect(d.certificates![0].subject).toBe(
+    expect(d.certificates[0].subject).toBe(
       "CN=Entrust Certification Authority - L1K, OU=(c) 2012 Entrust, Inc. - for authorized use only, OU=See www.entrust.net/legal-terms, O=Entrust, Inc., C=US",
     );
-    expect(d.certificates![0].notAfter).toBe("2024-08-27T08:34:47Z");
-    expect(d.note).toMatch(/OpenSSL subject\/issuer lines, 2 X\.509 certificates/);
+    expect(d.certificates[0].notAfter).toBe("2024-08-27T08:34:47Z");
+    expect(d.note).toMatch(/OpenSSL subject\/issuer lines/);
   });
 });
 
@@ -217,11 +217,11 @@ describe("signed configuration profiles", () => {
   it("is wired into decodeFile, keeping kind mobileconfig", () => {
     const b = bundleWith({ "profile.mobileconfig": fx("signed-AWCC_af.mobileconfig") });
     const d = decodeFile(b, "profile.mobileconfig");
-    expect(d.kind).toBe("mobileconfig");
-    expect((d.plist as Record<string, unknown>).PayloadType).toBe("Configuration");
-    expect(d.signature?.signers[0]).toMatchObject({ digestAlgorithm: "sha1", signatureAlgorithm: "rsaEncryption" });
-    expect(d.signature!.certificates.some((c) => c.subject.endsWith("CN=Apple Configurator (A8:20:66:16:A6:1E)"))).toBe(true);
-    expect(d.note).toMatch(/^signed profile \(CMS SignedData, sha1\); signer C=SG, O=vaishnavis-mbp, CN=Apple Configurator .*signature not verified$/);
+    if (d.kind !== "mobileconfig" || !d.signature) throw new Error(d.kind);
+    expect((decodedPlist(d) as Record<string, unknown>).PayloadType).toBe("Configuration");
+    expect(d.signature.signers[0]).toMatchObject({ digestAlgorithm: "sha1", signatureAlgorithm: "rsaEncryption" });
+    expect(d.signature.certificates.some((c) => c.subject.endsWith("CN=Apple Configurator (A8:20:66:16:A6:1E)"))).toBe(true);
+    expect(d.note).toBeUndefined();
     expect(() => JSON.stringify(d)).not.toThrow();
   });
 
@@ -236,14 +236,14 @@ describe("other bundle members", () => {
     const k = decodeDmu(fx("Verizon_LTE_US.dmu"));
     expect(k).toMatchObject({ pkoid: 0x0a, pkoidName: "Verizon Wireless", pkoi: 2, pkExpansion: 0xff, atv: 1, algorithm: "RSA-1024", dmuVersion: 0, exponent: "17", modulusBits: 1024 });
     const d = decodeFile(bundleWith({ "carrier.dmu": fx("Verizon_LTE_US.dmu") }), "carrier.dmu");
-    expect(d.kind).toBe("dmu");
-    expect(d.note).toBe("DMU public key: RSA-1024, exponent 17, PKOID 0x0a (Verizon Wireless), PKOI 2");
+    if (d.kind !== "dmu") throw new Error(d.kind);
+    expect(d.dmu).toEqual(k);
   });
 
   it("parses .loctable as a plist keyed by locale", () => {
     const d = decodeFile(bundleWith({ "carrier.loctable": fx("Rogers_chatr_ca.loctable") }), "carrier.loctable");
     expect(d.kind).toBe("plist");
-    const p = d.plist as Record<string, Record<string, string>>;
+    const p = decodedPlist(d) as Record<string, Record<string, string>>;
     expect(p.en["chatr Page_MYACCOUNTURLTITLE"]).toBe("chatr Page");
     expect(Object.keys(p)).toContain("fr_CA");
     expect(contentTypeOf("carrier.loctable")).toBe("application/x-plist");
@@ -251,7 +251,7 @@ describe("other bundle members", () => {
 
   it("parses ERI.plist as a normal plist", () => {
     const d = decodeFile(bundleWith({ "ERI.plist": fx("ATN_vi-ERI.plist") }), "ERI.plist");
-    const p = d.plist as Record<string, any>;
+    const p = decodedPlist(d) as Record<string, any>;
     expect(p.name).toBe("CHOICE");
     expect(p.roaming_indicator_table["0"].text).toBe("Extended");
   });
@@ -261,8 +261,8 @@ describe("other bundle members", () => {
     expect(a).toMatchObject({ sampleRate: 44100, format: "lpcm", channels: 2, bitsPerChannel: 16, encoding: "int, big-endian" });
     expect(a.duration).toBeCloseTo(11.078, 2);
     const d = decodeFile(bundleWith({ "cbs_alert_us.caf": fx("cbs_alert_us-head.caf") }), "cbs_alert_us.caf");
-    expect(d.kind).toBe("audio");
-    expect(d.note).toBe("Core Audio file: lpcm (16-bit int, big-endian), 44100 Hz, 2 channels, 11.078 s");
+    if (d.kind !== "audio") throw new Error(d.kind);
+    expect(d.audio).toEqual(a);
   });
 
   it("shows long plain-text members as text rather than hex", () => {

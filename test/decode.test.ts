@@ -4,12 +4,13 @@ import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 
 import { parsePlist, parseXmlPlist, parseBinaryPlist, toJsonSafe } from "../src/lib/decode/plist.ts";
-import { openIpcc, decodeFile } from "../src/lib/decode/bundle.ts";
+import { openIpcc, decodeFile, decodedPlist, decodedPri } from "../src/lib/decode/bundle.ts";
 import { decodePri, flattenDer } from "../src/lib/decode/pri.ts";
 import { describeDevices } from "../src/lib/decode/devices.ts";
 import { diffValues } from "../src/lib/decode/compare.ts";
 import { splitName, compareVersions } from "../src/lib/server/manifest.ts";
-import { decodeBits, describeMessageId } from "../src/lib/decode/fields.ts";
+import { maskBits } from "../src/lib/decode/bytes.ts";
+import { describeMessageId } from "../src/lib/decode/cbs.ts";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const fixture = (n: string) => new Uint8Array(readFileSync(join(here, "fixtures", n)));
@@ -41,8 +42,8 @@ describe("plist", () => {
     const strings = b.info.files.find((f) => f.path === "en.lproj/carrier.strings")!;
     expect(strings).toBeTruthy();
     const d = decodeFile(b, strings.path);
-    expect(d.plist).toBeTruthy();
-    expect(Object.keys(d.plist as object).length).toBeGreaterThan(0);
+    expect(decodedPlist(d)).toBeTruthy();
+    expect(Object.keys(decodedPlist(d) as object).length).toBeGreaterThan(0);
   });
 
   it("round-trips a hand-built binary plist header", () => {
@@ -74,7 +75,7 @@ describe("ipcc", () => {
   it("decodes carrier.plist of a country bundle", () => {
     const b = openIpcc(fixture("UnitedStates.ipcc"));
     const d = decodeFile(b, "carrier.plist");
-    const p = d.plist as any;
+    const p = decodedPlist(d) as any;
     expect(p.CountryName).toBe("United States of America");
     expect(p.CellBroadcast.MessageIDParameters3GPP.length).toBeGreaterThan(5);
     const presidential = p.CellBroadcast.MessageIDParameters3GPP.find((m: any) => m.FromServiceID === 4370);
@@ -88,7 +89,7 @@ describe("der pri", () => {
     const b = openIpcc(fixture("CW_pa.ipcc"));
     const der = b.info.files.find((f) => f.kind === "pri-der")!;
     const d = decodeFile(b, der.path);
-    const pri = d.pri!;
+    const pri = decodedPri(d)!;
     expect(pri.error).toBeUndefined();
     expect(pri.leafCount).toBeGreaterThan(5);
     expect(pri.header["PRI Revision"]).toMatch(/\d+\.\d+/);
@@ -100,7 +101,7 @@ describe("der pri", () => {
     const b = openIpcc(fixture("ATT_US.ipcc"));
     let found = false;
     for (const f of b.info.files.filter((x) => x.kind === "pri-der")) {
-      const pri = decodeFile(b, f.path).pri!;
+      const pri = decodedPri(decodeFile(b, f.path))!;
       for (const g of pri.featureGroups) {
         expect(g.total).toBe(25);
         expect(g.name).toMatch(/Feature Group/);
@@ -114,7 +115,7 @@ describe("der pri", () => {
   it("separates the NV path schema index from assigned overrides", () => {
     const b = openIpcc(fixture("ATT_US.ipcc"));
     const f = b.info.files.find((x) => x.kind === "pri-der")!;
-    const pri = decodeFile(b, f.path).pri!;
+    const pri = decodedPri(decodeFile(b, f.path))!;
     // The MAVZ/raw blob is a schema index; it carries paths but no values.
     expect(["MAVZ", "raw", "none"]).toContain(pri.schema.source);
     if (pri.schema.count > 0) {
@@ -128,7 +129,7 @@ describe("der pri", () => {
     const b = openIpcc(fixture("ATT_US.ipcc"));
     let sawXml = false;
     for (const f of b.info.files.filter((x) => x.kind === "pri-der")) {
-      for (const e of decodeFile(b, f.path).pri!.efs) {
+      for (const e of decodedPri(decodeFile(b, f.path))!.efs) {
         if (e.value.kind === "xml") { sawXml = true; expect(e.value.xml!.startsWith("<?xml")).toBe(true); }
         if (e.value.kind === "int") expect(typeof e.value.int).toBe("number");
       }
@@ -173,8 +174,8 @@ describe("helpers", () => {
   });
 
   it("decodes bitmasks and 3GPP message ids", () => {
-    expect(decodeBits(32768)).toEqual([15]);
-    expect(decodeBits(9)).toEqual([0, 3]);
+    expect(maskBits(32768)).toEqual([15]);
+    expect(maskBits(9)).toEqual([0, 3]);
     expect(describeMessageId(4382)).toMatch(/Operator-defined/);
     expect(describeMessageId(4370)).toMatch(/Presidential/);
   });

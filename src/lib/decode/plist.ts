@@ -3,6 +3,8 @@
  * Written from scratch so it runs unmodified on the Workers runtime.
  */
 
+import { asciiAt, b64ToBytes, bytesToHex, maybeText } from "./bytes";
+
 /** A bplist UID (NSKeyedArchiver object reference), kept apart from integers. */
 export class PlistUid {
   constructor(readonly uid: number) {}
@@ -22,21 +24,15 @@ export type PlistValue =
   | Date
   | Uint8Array
   | PlistValue[]
-  | { [k: string]: PlistValue };
+  | PlistDict;
+
+export type PlistDict = { [k: string]: PlistValue };
 
 const td = new TextDecoder();
 const tdUtf16 = new TextDecoder("utf-16be");
 
-function isBinary(buf: Uint8Array): boolean {
-  return (
-    buf.length > 8 &&
-    buf[0] === 0x62 && buf[1] === 0x70 && buf[2] === 0x6c && buf[3] === 0x69 &&
-    buf[4] === 0x73 && buf[5] === 0x74
-  );
-}
-
 export function parsePlist(buf: Uint8Array): PlistValue {
-  if (isBinary(buf)) return parseBinaryPlist(buf);
+  if (buf.length > 8 && asciiAt(buf, 0, "bplist")) return parseBinaryPlist(buf);
   return parseXmlPlist(td.decode(buf));
 }
 
@@ -209,25 +205,6 @@ function decodeEntities(s: string): string {
   });
 }
 
-function b64ToBytes(s: string): Uint8Array {
-  // Whitespace and line breaks inside <data> are normal; anything else is junk.
-  let clean = s.replace(/[^A-Za-z0-9+/]/g, "");
-  // atob rejects a length that is not a multiple of 4, and a lone trailing
-  // character carries no whole byte. Both are recoverable: decode what is there.
-  const rem = clean.length % 4;
-  if (rem === 1) clean = clean.slice(0, -1);
-  else if (rem) clean += "=".repeat(4 - rem);
-  let bin: string;
-  try {
-    bin = atob(clean);
-  } catch {
-    return new Uint8Array();
-  }
-  const out = new Uint8Array(bin.length);
-  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
-  return out;
-}
-
 function tokenize(xml: string): Tok[] {
   const toks: Tok[] = [];
   let i = 0;
@@ -370,6 +347,29 @@ function xmlInteger(text: string): number | bigint {
   return exact(m[1] === "-" ? -v : v);
 }
 
+/** A dict: an object that is not an array, bytes, a date or a UID. */
+export function isRecord(v: unknown): v is Record<string, unknown> {
+  return typeof v === "object" && v !== null && !Array.isArray(v) && !(v instanceof Uint8Array) && !(v instanceof Date) && !(v instanceof PlistUid);
+}
+
+export const isPlistDict = (v: PlistValue | undefined): v is PlistDict => isRecord(v);
+
+/* Tagged scalars in toJsonSafe output. */
+export interface JsonBlob { __data: string; __len: number; __text?: string }
+export interface JsonDate { __date: string }
+export interface JsonBigInt { __int: string }
+export interface JsonUid { __uid: number }
+
+export const isBlob = (v: unknown): v is JsonBlob => isRecord(v) && typeof v.__data === "string" && typeof v.__len === "number";
+export const isDate = (v: unknown): v is JsonDate => isRecord(v) && typeof v.__date === "string";
+export const isBigInt = (v: unknown): v is JsonBigInt => isRecord(v) && typeof v.__int === "string";
+export const isUid = (v: unknown): v is JsonUid => isRecord(v) && typeof v.__uid === "number";
+
+export const isTagged = (v: unknown): v is JsonBlob | JsonDate | JsonBigInt | JsonUid => isBlob(v) || isDate(v) || isBigInt(v) || isUid(v);
+
+/** A dict in toJsonSafe output: a record that is not a tagged scalar. */
+export const isJsonDict = (v: unknown): v is Record<string, unknown> => isRecord(v) && !isTagged(v);
+
 /**
  * Serialise a parsed plist to JSON-safe values, tagging binary and dates.
  * Integers beyond 2^53 become `{ __int: "<decimal>" }` and UIDs `{ __uid: n }`.
@@ -384,30 +384,10 @@ export function toJsonSafe(v: PlistValue): unknown {
     return { __date: Number.isNaN(v.getTime()) ? "invalid date" : v.toISOString() };
   }
   if (Array.isArray(v)) return v.map(toJsonSafe);
-  if (v && typeof v === "object") {
+  if (isPlistDict(v)) {
     const out: Record<string, unknown> = {};
-    for (const [k, val] of Object.entries(v)) out[k] = toJsonSafe(val as PlistValue);
+    for (const [k, val] of Object.entries(v)) out[k] = toJsonSafe(val);
     return out;
   }
   return v;
-}
-
-export function bytesToHex(b: Uint8Array): string {
-  let s = "";
-  for (let i = 0; i < b.length; i++) s += b[i].toString(16).padStart(2, "0");
-  return s;
-}
-
-export function maybeText(b: Uint8Array): string | undefined {
-  if (b.length === 0 || b.length > 4096) return undefined;
-  // Fixed-width fields are NUL-padded, often by more than one byte; the text is
-  // whatever precedes the padding.
-  let end = b.length;
-  while (end > 0 && b[end - 1] === 0) end--;
-  if (end === 0) return undefined;
-  for (let i = 0; i < end; i++) {
-    const c = b[i];
-    if (!(c === 9 || c === 10 || c === 13 || (c >= 0x20 && c < 0x7f))) return undefined;
-  }
-  return td.decode(b.subarray(0, end));
 }

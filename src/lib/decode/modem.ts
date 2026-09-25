@@ -7,8 +7,16 @@
 
 import type { BasebandSummary } from "./bbfw";
 import type { FtabSummary } from "./ftab";
+import type { PriDialect } from "./pri";
 
-/** What baseband/<id>.json holds. */
+/**
+ * Version of the stored summary shape. It names the storage path (see
+ * src/lib/server/modems.ts), so a change the stored summaries must be rebuilt
+ * for bumps it and the new ones land beside the old.
+ */
+export const MODEM_SUMMARY_SCHEMA = 2;
+
+/** A decoded modem package, as stored. */
 export type ModemSummary = BasebandSummary | FtabSummary;
 
 export type ModemKind = "bbfw" | "ftab";
@@ -60,3 +68,31 @@ export function modemLabel(family: string): string {
   if (!name) return family;
   return name.endsWith(" " + family) ? name : `${name} · ${family}`;
 }
+
+export interface ModemCapabilities {
+  /** The package ships its carrier defaults as plaintext files a bundle's .der.pri can be compared against. */
+  plaintextDefaults: boolean;
+  /** Where the modem's carrier config lives: package defaults the bundle overrides, or the bundle alone. */
+  carrierConfigIn: "package" | "bundle";
+}
+
+const CAPABILITIES: Record<ModemVendor, ModemCapabilities> = {
+  qualcomm: { plaintextDefaults: true, carrierConfigIn: "package" },
+  intel: { plaintextDefaults: false, carrierConfigIn: "package" },
+  apple: { plaintextDefaults: false, carrierConfigIn: "bundle" },
+};
+
+/** What a family's package holds, so views need not branch on the vendor. */
+export function modemCapabilities(family: string): ModemCapabilities | undefined {
+  const v = modemVendor(family);
+  return v && CAPABILITIES[v];
+}
+
+const DIALECT_LABELS: Record<Exclude<PriDialect, "unknown">, string> = {
+  qualcomm: "Qualcomm",
+  intel: "Intel or Apple C1",
+  mixed: "Qualcomm and Intel / Apple C1",
+};
+
+/** The modems a PRI dialect is written for; undefined when the tags do not say. */
+export const dialectLabel = (d: PriDialect): string | undefined => (d === "unknown" ? undefined : DIALECT_LABELS[d]);

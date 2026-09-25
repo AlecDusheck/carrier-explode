@@ -8,11 +8,10 @@ import {
   parseXmlPlist,
   parseBinaryPlist,
   toJsonSafe,
-  bytesToHex,
-  maybeText,
   PlistUid,
   type PlistValue,
 } from "../src/lib/decode/plist.ts";
+import { bytesToHex, maybeText } from "../src/lib/decode/bytes.ts";
 import { openIpcc } from "../src/lib/decode/bundle.ts";
 
 const here = dirname(fileURLToPath(import.meta.url));

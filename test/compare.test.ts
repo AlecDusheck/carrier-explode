@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 
-import { diffValues, summariseDiff, compareBundles, comparable } from "../src/lib/decode/compare.ts";
+import { diffKeyed, diffValues, summariseDiff, compareBundles, comparable, stable } from "../src/lib/decode/compare.ts";
 import { openIpcc, decodeFile } from "../src/lib/decode/bundle.ts";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -45,10 +45,34 @@ describe("diffValues", () => {
     expect(summariseDiff(rows)).toEqual({ added: 0, removed: 0, changed: 1, same: 1 });
   });
 
+  it("treats tagged plist scalars as leaves", () => {
+    expect(diffValues({ d: { __data: "00", __len: 1 } }, { d: { __data: "01", __len: 1 } })).toEqual([
+      { path: "d", kind: "changed", a: { __data: "00", __len: 1 }, b: { __data: "01", __len: 1 } },
+    ]);
+  });
+
+  it("aligns only the middle once a common head and tail are trimmed", () => {
+    const big = Array.from({ length: 3000 }, (_, i) => i);
+    expect(diffValues(big, [...big.slice(0, 1500), -1, ...big.slice(1500)])).toEqual([{ path: "[1500]", kind: "added", b: -1 }]);
+  });
+
   it("falls back to index alignment past the LCS budget", () => {
     const big = Array.from({ length: 2100 }, (_, i) => i);
     const rows = diffValues(big, [...big.slice(0, 2000), -1, ...big.slice(2001)]);
     expect(rows).toEqual([{ path: "[2000]", kind: "changed", a: 2000, b: -1 }]);
+  });
+});
+
+describe("stable and diffKeyed", () => {
+  it("writes dicts with sorted keys", () => {
+    expect(stable({ b: [1, { d: 2, c: 3 }], a: null })).toBe('{"a":null,"b":[1,{"c":3,"d":2}]}');
+  });
+
+  it("diffs keyed collections key by key", () => {
+    const parts = diffKeyed({ x: [1, 2], y: 1, gone: 0 }, { x: [1, 3], y: 1, new: 0 }, { maxRows: 5 });
+    expect(parts.map((p) => [p.path, p.kind, p.rows.length])).toEqual([["gone", "removed", 0], ["new", "added", 0], ["x", "changed", 1]]);
+    expect(diffKeyed({ y: 1 }, { y: 1 }, { includeSame: true }).map((p) => p.kind)).toEqual(["same"]);
+    expect(diffKeyed({ x: [1, 2, 3] }, { x: [4, 5, 6] }, { maxRows: 2 })[0]).toMatchObject({ truncated: true, counts: { changed: 3 } });
   });
 });
 

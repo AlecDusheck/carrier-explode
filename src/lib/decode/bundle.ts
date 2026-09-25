@@ -4,11 +4,12 @@
  */
 
 import { unzipSync } from "fflate";
-import { parsePlist, toJsonSafe, bytesToHex, maybeText } from "./plist";
+import { asciiAt, bytesToHex, latin1, maybeText } from "./bytes";
+import { parsePlist, toJsonSafe } from "./plist";
 import { decodePri, type PriDecoded } from "./pri";
 import { describeDevices } from "./devices";
 import { pngDimensions, isCgBI } from "./png";
-import { decodePrl, describePrl, type PrlDecoded } from "./prl";
+import { decodePrl, type PrlDecoded } from "./prl";
 import { isCmsSignedData, parseSignedData, type CmsSignedData } from "./cms";
 import { parseCertificate, pemBlocks, type CertInfo } from "./der";
 import { decodeDmu, type DmuKey } from "./dmu";
@@ -89,7 +90,7 @@ export interface BundleFile {
   /** lproj locale when the file lives in a localisation folder. */
   locale?: string;
   /** Devices the file applies to, for overrides_* files. */
-  devices?: Array<{ code: string; name?: string; ids?: string }>;
+  devices?: DeviceRef[];
 }
 
 export interface BundleInfo {
@@ -101,30 +102,56 @@ export interface BundleInfo {
   deviceStems: string[];
 }
 
-export interface DecodedFile {
-  path: string;
-  kind: FileKind;
-  size: number;
-  plist?: unknown;
-  pri?: PriDecoded;
-  text?: string;
-  hex?: string;
-  note?: string;
-  devices?: Array<{ code: string; name?: string; ids?: string }>;
-  /** CDMA Preferred Roaming List, for kind "prl". */
-  prl?: PrlDecoded;
-  /** CMS SignedData envelope of a signed profile; `plist` holds the content. */
-  signature?: Omit<CmsSignedData, "content">;
-  /** X.509 certificates found in the file. */
-  certificates?: CertInfo[];
-  /** DMU public key, for kind "dmu". */
-  dmu?: DmuKey;
-  /** Audio format, for kind "audio". */
-  audio?: CafInfo;
+export type DeviceRef = { code: string; name?: string; ids?: string };
+
+/** CMS SignedData envelope of a signed profile, without its content. */
+export type CmsSignature = Omit<CmsSignedData, "content">;
+
+/** Why a member did not decode as its name says: the decoder threw, or the bytes are not that format. */
+export interface DecodeError {
+  reason: "failed" | "unrecognised";
+  message?: string;
 }
 
-const certLine = (c: CertInfo) =>
-  `${c.subject}${c.selfIssued ? " (self-issued)" : `, issued by ${c.issuer}`}, valid ${c.notBefore.slice(0, 10)} to ${c.notAfter.slice(0, 10)}`;
+interface DecodedCommon {
+  path: string;
+  size: number;
+  devices?: DeviceRef[];
+  /** What the member is, when the structure does not say. */
+  note?: string;
+  error?: DecodeError;
+  /** Whole-file text, where the content is text. */
+  text?: string;
+  /** Hex of the bytes (the first 8 KiB for big members), where there is no text. */
+  hex?: string;
+}
+
+/** Kinds decoded as a value tree: plists, strings, profiles, plain PRIs and packager metadata. */
+export type PlistKind = "plist" | "strings" | "mobileconfig" | "pri-plain" | "metadata";
+
+export type DecodedFile = DecodedCommon & (
+  | { kind: PlistKind; plist?: unknown; signature?: CmsSignature }
+  | { kind: "pri-der"; pri: PriDecoded }
+  | { kind: "prl"; prl?: PrlDecoded }
+  | { kind: "dmu"; dmu?: DmuKey }
+  | { kind: "audio"; audio?: CafInfo }
+  | { kind: "certificate"; certificates: CertInfo[] }
+  | { kind: "image"; image?: { width: number; height: number; cgbi: boolean } }
+  | { kind: "xml" | "binary" }
+);
+
+const PLIST_KINDS: ReadonlySet<FileKind> = new Set<PlistKind>(["plist", "strings", "mobileconfig", "pri-plain", "metadata"]);
+export const isPlistKind = (k: FileKind): k is PlistKind => PLIST_KINDS.has(k);
+
+/** The value tree of a decoded member, when it has one. */
+export const decodedPlist = (d: DecodedFile): unknown => ("plist" in d ? d.plist : undefined);
+
+/** The decoded PRI of a `.der.pri` / `.der.gri` member (or a DER one under a plain name). */
+export const decodedPri = (d: DecodedFile): PriDecoded | undefined => (d.kind === "pri-der" ? d.pri : undefined);
+
+/** Hex shown for a member with no better view; at most 8 KiB of it. */
+const HEX_PREVIEW = 8192;
+const failed = (e: unknown): DecodeError => ({ reason: "failed", message: e instanceof Error ? e.message : String(e) });
 
 function classify(path: string): FileKind {
   const base = path.split("/").pop() ?? path;
@@ -210,153 +237,91 @@ export function openIpcc(bytes: Uint8Array): OpenedBundle {
 
 export function decodeFile(b: OpenedBundle, relPath: string): DecodedFile {
   if (!relPath || relPath.endsWith("/")) throw new Error(`not a file: ${relPath || "(empty path)"}`);
-  const key = b.prefix + relPath;
-  const bytes = b.entries[key] ?? b.entries[relPath];
+  const bytes = b.entries[b.prefix + relPath] ?? b.entries[relPath];
   if (!bytes) throw new Error(`no such file in bundle: ${relPath}`);
-  const kind = classify(relPath);
   const stem = deviceStem(relPath);
-  const devices = stem ? describeDevices(stem) : undefined;
-  const out: DecodedFile = { path: relPath, kind, size: bytes.length, devices };
-
+  const base: DecodedCommon = { path: relPath, size: bytes.length, ...(stem ? { devices: describeDevices(stem) } : {}) };
+  const kind = classify(relPath);
   try {
-    switch (kind) {
-      case "plist":
-      case "strings":
-      case "mobileconfig":
-      case "pri-plain": {
-        // Some `.pri` files are plists; a few are raw XML documents; the legacy
-        // `.strings` format is plain text. Signed profiles are CMS-wrapped plists.
-        if (isCmsSignedData(bytes)) {
-          const { content, ...sig } = parseSignedData(bytes);
-          out.signature = sig;
-          out.plist = toJsonSafe(parsePlist(content));
-          const signer = sig.signers[0];
-          const cert = signer?.certificate !== undefined ? sig.certificates[signer.certificate] : undefined;
-          out.note = `signed profile (CMS SignedData, ${signer?.digestAlgorithm ?? "no signer"})` +
-            (cert ? `; signer ${certLine(cert)}` : signer?.issuer ? `; signer issued by ${signer.issuer}` : "") +
-            (signer?.signingTime ? `; signed ${signer.signingTime}` : "") +
-            "; signature not verified";
-          break;
-        }
-        const head = td.decode(bytes.subarray(0, 8));
-        if (head.startsWith("bplist") || /^\s*<(\?xml|!DOCTYPE|plist)/.test(head)) {
-          out.plist = toJsonSafe(parsePlist(bytes));
-          break;
-        }
-        // A few OTA `overrides_*.pri` are the DER form under the plain name.
-        if (kind === "pri-plain" && bytes[0] === 0x31) {
-          out.pri = decodePri(bytes, relPath.endsWith(".gri") ? "der.gri" : "der.pri");
-          break;
-        }
-        const text = maybeText(bytes) ?? (isMostlyText(bytes) ? td.decode(bytes) : undefined);
-        if (text !== undefined) {
-          out.text = text;
-        } else {
-          // Not a plist and not text: say so instead of returning replacement
-          // characters that look like a successful decode.
-          out.note = `not a plist and not text; showing raw bytes`;
-          out.hex = bytesToHex(bytes.subarray(0, 8192));
-        }
-        break;
-      }
-      case "pri-der":
-        out.pri = decodePri(bytes, relPath.endsWith(".der.gri") ? "der.gri" : "der.pri");
-        break;
-      case "xml":
-        out.text = td.decode(bytes);
-        break;
-      case "metadata": {
-        // Base64-encoded JSON written by Apple's packaging tool.
-        try {
-          const json = atob(td.decode(bytes).replace(/\s+/g, ""));
-          out.plist = JSON.parse(json) as unknown;
-        } catch {
-          out.text = td.decode(bytes);
-          out.note = "expected base64-encoded JSON";
-        }
-        break;
-      }
-      case "certificate": {
-        if (bytes[0] === 0x30) {
-          out.hex = bytesToHex(bytes);
-          try {
-            out.certificates = [parseCertificate(bytes)];
-            out.note = `DER-encoded X.509 certificate: ${certLine(out.certificates[0])}`;
-          } catch (e) {
-            out.note = `DER-encoded X.509 certificate; could not parse: ${(e as Error).message}`;
-          }
-          break;
-        }
-        const text = td.decode(bytes);
-        out.text = text;
-        const certs: CertInfo[] = [];
-        for (const der of pemBlocks(text)) {
-          try { certs.push(parseCertificate(der)); } catch { /* listed in the text regardless */ }
-        }
-        if (certs.length) out.certificates = certs;
-        // corpus: some CarrierCA.crt files are `openssl x509 -subject -issuer` output wrapping the PEM
-        const form = text.startsWith("-----BEGIN") ? "PEM-encoded" : "PEM with OpenSSL subject/issuer lines,";
-        out.note = certs.length === 1
-          ? `${form} X.509 certificate: ${certLine(certs[0])}`
-          : `${form} ${certs.length} X.509 certificates`;
-        break;
-      }
-      case "prl":
-        out.hex = bytesToHex(bytes.subarray(0, 8192));
-        try {
-          out.prl = decodePrl(bytes);
-          out.note = describePrl(out.prl);
-        } catch (e) {
-          out.note = `${KIND_NOTES[".prl"]}; could not decode: ${(e as Error).message}`;
-        }
-        break;
-      case "dmu":
-        out.hex = bytesToHex(bytes.subarray(0, 8192));
-        try {
-          const k = (out.dmu = decodeDmu(bytes));
-          out.note = `DMU public key: ${k.algorithm}, exponent ${k.exponent}, PKOID 0x${k.pkoid.toString(16).padStart(2, "0")}` +
-            (k.pkoidName ? ` (${k.pkoidName})` : "") + `, PKOI ${k.pkoi}`;
-        } catch (e) {
-          out.note = `${KIND_NOTES[".dmu"]}; could not decode: ${(e as Error).message}`;
-        }
-        break;
-      case "audio": {
-        if (!isCaf(bytes)) { out.note = "audio"; break; }
-        const a = (out.audio = decodeCaf(bytes));
-        out.note = `Core Audio file: ${a.format.trim()}${a.encoding ? ` (${a.bitsPerChannel}-bit ${a.encoding})` : ""}, ` +
-          `${a.sampleRate} Hz, ${a.channels} channel${a.channels === 1 ? "" : "s"}` +
-          (a.duration !== undefined ? `, ${a.duration} s` : "");
-        break;
-      }
-      case "image": {
-        // The raw bytes are served by /api/raw; only the shape is useful here.
-        const dim = pngDimensions(bytes);
-        out.note = dim
-          ? `PNG, ${dim.width} by ${dim.height} pixels` +
-            (isCgBI(bytes) ? "; Apple CgBI form, converted to standard PNG when served" : "")
-          : "image";
-        break;
-      }
-      default: {
-        const t = maybeText(bytes) ?? wholeText(bytes);
-        const ext = "." + (relPath.split("/").pop() ?? "").split(".").slice(1).join(".");
-        const known = KIND_NOTES[ext] ?? KIND_NOTES["." + ext.split(".").pop()];
-        if (t) {
-          out.text = t;
-          if (known) out.note = known;
-        } else {
-          out.hex = bytesToHex(bytes.subarray(0, 8192));
-          out.note = [known, bytes.length > 8192 ? `showing the first 8 KiB of ${bytes.length} bytes` : null]
-            .filter(Boolean)
-            .join("; ") || undefined;
-        }
+    return decodeBytes(base, kind, bytes);
+  } catch (e) {
+    const fallback = { ...base, error: failed(e), hex: bytesToHex(bytes.subarray(0, HEX_PREVIEW)) };
+    return isPlistKind(kind) ? { ...fallback, kind } : { ...fallback, kind: "binary" };
+  }
+}
+
+function decodeBytes(base: DecodedCommon, kind: FileKind, bytes: Uint8Array): DecodedFile {
+  const preview = () => bytesToHex(bytes.subarray(0, HEX_PREVIEW));
+  const priKind = base.path.endsWith(".gri") ? "der.gri" : "der.pri";
+  if (kind === "pri-der") return { ...base, kind, pri: decodePri(bytes, priKind) };
+  if (isPlistKind(kind)) {
+    if (kind === "metadata") {
+      // Base64-encoded JSON written by Apple's packaging tool.
+      try {
+        return { ...base, kind, plist: JSON.parse(atob(td.decode(bytes).replace(/\s+/g, ""))) as unknown };
+      } catch {
+        return { ...base, kind, text: td.decode(bytes), error: { reason: "unrecognised", message: "expected base64-encoded JSON" } };
       }
     }
-  } catch (e) {
-    out.note = `decode failed: ${(e as Error).message}`;
-    out.hex = bytesToHex(bytes.subarray(0, 2048));
+    // Some `.pri` files are plists, a few are raw XML; legacy `.strings` are plain text; signed profiles are CMS-wrapped plists.
+    if (isCmsSignedData(bytes)) {
+      const { content, ...signature } = parseSignedData(bytes);
+      return { ...base, kind, signature, plist: toJsonSafe(parsePlist(content)) };
+    }
+    if (asciiAt(bytes, 0, "bplist") || /^\s*<(\?xml|!DOCTYPE|plist)/.test(td.decode(bytes.subarray(0, 8)))) {
+      return { ...base, kind, plist: toJsonSafe(parsePlist(bytes)) };
+    }
+    // A few OTA `overrides_*.pri` are the DER form under the plain name.
+    if (kind === "pri-plain" && bytes[0] === 0x31) return { ...base, kind: "pri-der", pri: decodePri(bytes, priKind) };
+    const text = maybeText(bytes) ?? (isMostlyText(bytes) ? td.decode(bytes) : undefined);
+    return text !== undefined ? { ...base, kind, text } : { ...base, kind, hex: preview(), error: { reason: "unrecognised" } };
   }
-  return out;
+  switch (kind) {
+    case "xml":
+      return { ...base, kind, text: td.decode(bytes) };
+    case "certificate": {
+      if (bytes[0] === 0x30) {
+        const hex = bytesToHex(bytes);
+        try {
+          return { ...base, kind, hex, certificates: [parseCertificate(bytes)] };
+        } catch (e) {
+          return { ...base, kind, hex, certificates: [], error: failed(e) };
+        }
+      }
+      const text = td.decode(bytes);
+      const certificates: CertInfo[] = [];
+      for (const der of pemBlocks(text)) {
+        try { certificates.push(parseCertificate(der)); } catch { /* listed in the text regardless */ }
+      }
+      // corpus: some CarrierCA.crt files are `openssl x509 -subject -issuer` output wrapping the PEM
+      return { ...base, kind, text, certificates, ...(text.startsWith("-----BEGIN") ? {} : { note: "PEM with OpenSSL subject/issuer lines" }) };
+    }
+    case "prl":
+      try {
+        return { ...base, kind, hex: preview(), prl: decodePrl(bytes) };
+      } catch (e) {
+        return { ...base, kind, hex: preview(), note: KIND_NOTES[".prl"], error: failed(e) };
+      }
+    case "dmu":
+      try {
+        return { ...base, kind, hex: preview(), dmu: decodeDmu(bytes) };
+      } catch (e) {
+        return { ...base, kind, hex: preview(), note: KIND_NOTES[".dmu"], error: failed(e) };
+      }
+    case "audio":
+      return isCaf(bytes) ? { ...base, kind, audio: decodeCaf(bytes) } : { ...base, kind, error: { reason: "unrecognised" } };
+    case "image": {
+      // The raw bytes are served by /api/raw; only the shape is useful here.
+      const dim = pngDimensions(bytes);
+      return { ...base, kind, ...(dim ? { image: { ...dim, cgbi: isCgBI(bytes) } } : {}) };
+    }
+    default: {
+      const ext = "." + (base.path.split("/").pop() ?? "").split(".").slice(1).join(".");
+      const known = KIND_NOTES[ext] ?? KIND_NOTES["." + ext.split(".").pop()];
+      const text = maybeText(bytes) ?? wholeText(bytes);
+      return { ...base, kind: "binary", ...(known ? { note: known } : {}), ...(text ? { text } : { hex: preview() }) };
+    }
+  }
 }
 
 /**
@@ -366,9 +331,8 @@ export function decodeFile(b: OpenedBundle, relPath: string): DecodedFile {
  */
 export async function contentId(b: OpenedBundle): Promise<string> {
   const enc = new TextEncoder();
-  const hex = async (bytes: Uint8Array) =>
-    [...new Uint8Array(await crypto.subtle.digest("SHA-256", bytes as unknown as ArrayBuffer))]
-      .map((x) => x.toString(16).padStart(2, "0")).join("");
+  // WebCrypto's BufferSource wants an ArrayBuffer-backed view; zip entries are.
+  const hex = async (bytes: Uint8Array) => bytesToHex(new Uint8Array(await crypto.subtle.digest("SHA-256", bytes as Uint8Array<ArrayBuffer>)));
   const byBytes = (x: Uint8Array, y: Uint8Array) => {
     for (let i = 0; i < Math.min(x.length, y.length); i++) if (x[i] !== y[i]) return x[i] - y[i];
     return x.length - y.length;
@@ -377,19 +341,12 @@ export async function contentId(b: OpenedBundle): Promise<string> {
     .filter((f) => !f.path.endsWith(".DS_Store"))
     .map((f) => ({ path: enc.encode(f.path), bytes: b.entries[b.prefix + f.path] }))
     .sort((x, y) => byBytes(x.path, y.path));
-  const lines: Uint8Array[] = [];
-  for (const f of files) lines.push(f.path, enc.encode("\0" + (await hex(f.bytes)) + "\n"));
+  const digests = await Promise.all(files.map((f) => hex(f.bytes)));
+  const lines = files.flatMap((f, i) => [f.path, enc.encode("\0" + digests[i] + "\n")]);
   const all = new Uint8Array(lines.reduce((n, l) => n + l.length, 0));
   let at = 0;
   for (const l of lines) { all.set(l, at); at += l.length; }
   return hex(all);
 }
 
-export function base64Of(bytes: Uint8Array): string {
-  let s = "";
-  const chunk = 0x8000;
-  for (let i = 0; i < bytes.length; i += chunk) {
-    s += String.fromCharCode(...bytes.subarray(i, i + chunk));
-  }
-  return btoa(s);
-}
+export const base64Of = (bytes: Uint8Array): string => btoa(latin1(bytes));

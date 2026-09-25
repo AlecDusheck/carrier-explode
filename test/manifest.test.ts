@@ -17,9 +17,9 @@ import {
 } from "../src/lib/server/manifest.ts";
 import type { CountrySummary, ManifestIndex } from "../src/lib/server/manifest.ts";
 import type { PlistValue } from "../src/lib/decode/plist.ts";
-import { openIpcc, decodeFile, base64Of, contentTypeOf } from "../src/lib/decode/bundle.ts";
+import { openIpcc, decodeFile, base64Of, contentTypeOf, decodedPlist, decodedPri } from "../src/lib/decode/bundle.ts";
 import type { OpenedBundle } from "../src/lib/decode/bundle.ts";
-import { buildCbsRow, buildCbsMatrix, latestPerCountry } from "../src/lib/server/cbs.ts";
+import { buildCbsRow, buildMergedCbsMatrix, latestPerCountry } from "../src/lib/server/cbs.ts";
 import { diffValues, summariseDiff } from "../src/lib/decode/compare.ts";
 import { normalizeApplePng, isPng, isCgBI, pngDimensions } from "../src/lib/decode/png.ts";
 
@@ -810,7 +810,7 @@ describe("openIpcc", () => {
     expect(b.prefix).toBe("");
     expect(b.info.bundleName).toBe("bundle");
     expect(b.info.files.map((f) => f.path)).toEqual(["carrier.plist", "nested/a.txt"]);
-    expect(decodeFile(b, "carrier.plist").plist).toEqual({ k: "v" });
+    expect(decodedPlist(decodeFile(b, "carrier.plist"))).toEqual({ k: "v" });
   });
 
   it("classifies every file kind found in the real bundles", () => {
@@ -944,20 +944,20 @@ describe("decodeFile", () => {
     expect(d.kind).toBe("plist");
     expect(d.size).toBe(2389);
     expect(d.note).toBeUndefined();
-    expect((d.plist as Dict).CountryName).toBe("United States of America");
+    expect((decodedPlist(d) as Dict).CountryName).toBe("United States of America");
   });
 
   it("decodes .strings files that are really binary plists", () => {
     const b = openIpcc(fixture("ATT_US.ipcc"));
     const d = decodeFile(b, "de.lproj/carrier.strings");
     expect(d.kind).toBe("strings");
-    expect(d.plist).toBeTruthy();
+    expect(decodedPlist(d)).toBeTruthy();
     expect(d.text).toBeUndefined();
-    expect(Object.keys(d.plist as Dict).length).toBeGreaterThan(0);
+    expect(Object.keys(decodedPlist(d) as Dict).length).toBeGreaterThan(0);
     // The 2009 bundle's .strings are binary plists too.
     const ls = decodeFile(openIpcc(fixture("legacy_ATT_2009.ipcc")), "English.lproj/carrier.strings");
     expect(ls.kind).toBe("strings");
-    expect((ls.plist as Dict)["Pay My Bill_SERVICE_NAME"]).toBe("Pay My Bill");
+    expect((decodedPlist(ls) as Dict)["Pay My Bill_SERVICE_NAME"]).toBe("Pay My Bill");
   });
 
   it("falls back to text for an old-style text .strings file", () => {
@@ -965,7 +965,7 @@ describe("decodeFile", () => {
     b.entries[b.prefix + "en.lproj/plain.strings"] = enc.encode('"a" = "b";\n');
     const d = decodeFile(b, "en.lproj/plain.strings");
     expect(d.kind).toBe("strings");
-    expect(d.plist).toBeUndefined();
+    expect(decodedPlist(d)).toBeUndefined();
     expect(d.text).toBe('"a" = "b";\n');
     expect(d.note).toBeUndefined();
   });
@@ -975,8 +975,8 @@ describe("decodeFile", () => {
       const d = decodeFile(openIpcc(fixture(name)), "profile.mobileconfig");
       expect(d.kind).toBe("mobileconfig");
       expect(d.note).toBeUndefined();
-      expect(Object.keys(d.plist as Dict)).toContain("PayloadType");
-      expect(Object.keys(d.plist as Dict)).toContain("PayloadContent");
+      expect(Object.keys(decodedPlist(d) as Dict)).toContain("PayloadType");
+      expect(Object.keys(decodedPlist(d) as Dict)).toContain("PayloadContent");
     }
   });
 
@@ -985,7 +985,7 @@ describe("decodeFile", () => {
     expect(d.kind).toBe("xml");
     expect(d.text!.startsWith("<?xml")).toBe(true);
     expect(d.text).toContain("<QIMF>");
-    expect(d.plist).toBeUndefined();
+    expect(decodedPlist(d)).toBeUndefined();
     expect(d.hex).toBeUndefined();
     expect(d.note).toBeUndefined();
   });
@@ -994,8 +994,8 @@ describe("decodeFile", () => {
     const b = openIpcc(fixture("Verizon_LTE_US.ipcc"));
     const d = decodeFile(b, "overrides_D63_D64_D16_D17.der.pri");
     expect(d.kind).toBe("pri-der");
-    expect(d.pri).toBeTruthy();
-    expect(d.pri!.leafCount).toBeGreaterThan(0);
+    expect(decodedPri(d)).toBeTruthy();
+    expect(decodedPri(d)!.leafCount).toBeGreaterThan(0);
     expect(d.devices!.map((x) => x.code)).toEqual(["D63", "D64", "D16", "D17"]);
     expect(d.note).toBeUndefined();
   });
@@ -1003,8 +1003,8 @@ describe("decodeFile", () => {
   it("decodes a .der.gri global settings blob into a PRI structure", () => {
     const d = decodeFile(openIpcc(fixture("CW_wi.ipcc")), "global_setting_C.der.gri");
     expect(d.kind).toBe("pri-der");
-    expect(d.pri).toBeTruthy();
-    expect(d.pri!.leafCount).toBeGreaterThan(0);
+    expect(decodedPri(d)).toBeTruthy();
+    expect(decodedPri(d)!.leafCount).toBeGreaterThan(0);
     expect(d.devices).toBeUndefined();
   });
 
@@ -1012,8 +1012,8 @@ describe("decodeFile", () => {
     const d = decodeFile(openIpcc(fixture("BhartiAirtel_in.ipcc")), "overrides_N69.pri");
     expect(d.kind).toBe("pri-plain");
     // The file starts with <?xml, so the plist parser claims it.
-    expect(d.plist).toBeTruthy();
-    expect(d.pri).toBeUndefined();
+    expect(decodedPlist(d)).toBeTruthy();
+    expect(decodedPri(d)).toBeUndefined();
     expect(d.note).toBeUndefined();
   });
 
@@ -1024,8 +1024,9 @@ describe("decodeFile", () => {
     expect(d.hex).toHaveLength(520);
     expect(d.hex!.startsWith("0a02ff10")).toBe(true);
     expect(d.text).toBeUndefined();
-    expect(d.dmu).toMatchObject({ pkoid: 0x0a, algorithm: "RSA-1024", exponent: "17", modulusBits: 1024 });
-    expect(d.note).toBe("DMU public key: RSA-1024, exponent 17, PKOID 0x0a (Verizon Wireless), PKOI 2");
+    if (d.kind !== "dmu") throw new Error(d.kind);
+    expect(d.dmu).toMatchObject({ pkoid: 0x0a, algorithm: "RSA-1024", exponent: "17", modulusBits: 1024, pkoi: 2, pkoidName: "Verizon Wireless" });
+    expect(d.note).toBeUndefined();
   });
 
   it("truncates a large opaque blob to 8 KiB and says so", () => {
@@ -1034,7 +1035,7 @@ describe("decodeFile", () => {
     const d = decodeFile(b, "blob.bin");
     expect(d.kind).toBe("binary");
     expect(d.hex).toHaveLength(8192 * 2);
-    expect(d.note).toBe("showing the first 8 KiB of 20000 bytes");
+    expect(d.size).toBe(20000);
   });
 
   it("promotes a small printable binary member to text", () => {
@@ -1049,10 +1050,8 @@ describe("decodeFile", () => {
   it("reports the 2009 bundle's PNG status-bar logos without inlining them", () => {
     const lg = openIpcc(fixture("legacy_ATT_2009.ipcc"));
     const d = decodeFile(lg, "Default_CARRIER_ATT.png");
-    expect(d.kind).toBe("image");
-    expect(d.note).toBe(
-      "PNG, 31 by 20 pixels; Apple CgBI form, converted to standard PNG when served",
-    );
+    if (d.kind !== "image") throw new Error(d.kind);
+    expect(d.image).toEqual({ width: 31, height: 20, cgbi: true });
     expect(d.hex).toBeUndefined();
     expect(d.text).toBeUndefined();
     expect(lg.info.files.filter((f) => f.kind === "image").map((f) => f.path)).toEqual([
@@ -1067,24 +1066,24 @@ describe("decodeFile", () => {
 
   it("decodes the 2009 bundle's carrier.plist, Info.plist and locversion.plist", () => {
     const lg = openIpcc(fixture("legacy_ATT_2009.ipcc"));
-    const carrier = decodeFile(lg, "carrier.plist").plist as Dict;
+    const carrier = decodedPlist(decodeFile(lg, "carrier.plist")) as Dict;
     expect(carrier.CarrierName).toBe("AT&T");
     expect(Array.isArray(carrier.StatusBarImages)).toBe(true);
-    const info = decodeFile(lg, "Info.plist").plist as Dict;
+    const info = decodedPlist(decodeFile(lg, "Info.plist")) as Dict;
     expect(info.CFBundleIdentifier).toBe("com.apple.ATT_US");
     expect(info.CFBundleVersion).toBe("3.1");
-    const loc = decodeFile(lg, "English.lproj/locversion.plist").plist as Dict;
+    const loc = decodedPlist(decodeFile(lg, "English.lproj/locversion.plist")) as Dict;
     expect(loc.LprojLocale).toBe("en");
   });
 
   it("decodes Verizon's CDMA-era ERI.plist and supported_devices.plist", () => {
     const b = openIpcc(fixture("Verizon_LTE_US.ipcc"));
-    expect(Object.keys(decodeFile(b, "ERI.plist").plist as Dict)).toEqual([
+    expect(Object.keys(decodedPlist(decodeFile(b, "ERI.plist")) as Dict)).toEqual([
       "name",
       "version",
       "roaming_indicator_table",
     ]);
-    expect(Object.keys(decodeFile(b, "supported_devices.plist").plist as Dict)).toEqual([
+    expect(Object.keys(decodedPlist(decodeFile(b, "supported_devices.plist")) as Dict)).toEqual([
       "SupportedDevicesExactMatch",
       "SupportedSIMOverrides",
     ]);
@@ -1107,8 +1106,8 @@ describe("decodeFile", () => {
         expect(d.size).toBe(f.size);
         // Images carry no payload here: their bytes are served by /api/raw.
         const populated =
-          d.plist !== undefined ||
-          d.pri !== undefined ||
+          decodedPlist(d) !== undefined ||
+          decodedPri(d) !== undefined ||
           d.text !== undefined ||
           d.hex !== undefined ||
           d.kind === "image";
@@ -1148,8 +1147,9 @@ describe("decodeFile", () => {
     const b = openIpcc(fixture("Verizon_LTE_US.ipcc"));
     b.entries[b.prefix + "der.crt"] = new Uint8Array([0x30, 0x82, 0x01, 0x0a, 0x02, 0x01]);
     const d = decodeFile(b, "der.crt");
-    expect(d.kind).toBe("certificate");
-    expect(d.note).toMatch(/^DER-encoded X\.509 certificate; could not parse: /);
+    if (d.kind !== "certificate") throw new Error(d.kind);
+    expect(d.certificates).toEqual([]);
+    expect(d.error).toMatchObject({ reason: "failed", message: expect.any(String) });
     expect(d.hex).toBe("3082010a0201");
     // The bytes really are PEM.
     expect(
@@ -1169,7 +1169,7 @@ describe("decodeFile error handling", () => {
   it("falls back to the raw zip key when the path already carries the prefix", () => {
     const b = openIpcc(fixture("Verizon_LTE_US.ipcc"));
     const d = decodeFile(b, "Payload/Verizon_LTE_US.bundle/carrier.plist");
-    expect((d.plist as Dict).CarrierName).toBe("Verizon");
+    expect((decodedPlist(d) as Dict).CarrierName).toBe("Verizon");
     // The reported path is whatever was asked for, not the bundle-relative one.
     expect(d.path).toBe("Payload/Verizon_LTE_US.bundle/carrier.plist");
   });
@@ -1185,8 +1185,8 @@ describe("decodeFile error handling", () => {
     b.entries[b.prefix + "broken.plist"] = enc.encode("bplist00garbage");
     const d = decodeFile(b, "broken.plist");
     expect(d.kind).toBe("plist");
-    expect(d.plist).toBeUndefined();
-    expect(d.note).toMatch(/^decode failed: /);
+    expect(decodedPlist(d)).toBeUndefined();
+    expect(d.error).toMatchObject({ reason: "failed", message: expect.any(String) });
     expect(d.hex).toHaveLength(30);
     expect(d.hex!.startsWith("62706c6973743030")).toBe(true);
   });
@@ -1195,7 +1195,8 @@ describe("decodeFile error handling", () => {
     const b = openIpcc(fixture("ATT_US.ipcc"));
     b.entries[b.prefix + "en.lproj/broken.strings"] = enc.encode("bplist00truncated");
     const d = decodeFile(b, "en.lproj/broken.strings");
-    expect(d.note).toMatch(/^decode failed: /);
+    expect(d.kind).toBe("strings");
+    expect(d.error?.reason).toBe("failed");
     expect(d.hex).toBeDefined();
   });
 
@@ -1203,7 +1204,7 @@ describe("decodeFile error handling", () => {
     const b = openIpcc(fixture("ATT_US.ipcc"));
     b.entries[b.prefix + "junk.der.pri"] = new Uint8Array([1, 2, 3, 4, 5]);
     expect(() => decodeFile(b, "junk.der.pri")).not.toThrow();
-    expect(decodeFile(b, "junk.der.pri").pri).toBeTruthy();
+    expect(decodedPri(decodeFile(b, "junk.der.pri"))).toBeTruthy();
   });
 
   // BUG: a .plist / .mobileconfig member whose bytes are neither "bplist" nor
@@ -1215,7 +1216,7 @@ describe("decodeFile error handling", () => {
     const b = openIpcc(fixture("ATT_US.ipcc"));
     b.entries[b.prefix + "notaplist.plist"] = new Uint8Array([0, 1, 2, 3, 250, 251]);
     const d = decodeFile(b, "notaplist.plist");
-    expect(d.note).toBeDefined();
+    expect(d.error).toEqual({ reason: "unrecognised" });
     expect(d.hex).toBeDefined();
   });
 
@@ -1669,53 +1670,47 @@ describe("latestPerCountry", () => {
   });
 });
 
-describe("buildCbsMatrix", () => {
-  it("builds one row per country and keeps failures as error rows", async () => {
-    const matrix = await buildCbsMatrix(index.countries, countryFetcher, "iPhone");
+describe("buildMergedCbsMatrix", () => {
+  const usPlist = async () => {
+    const opened = openIpcc(await countryFetcher(index.countries.find((c) => c.id === "UnitedStates" && c.family === "iPhone")!.url));
+    return decodedPlist(decodeFile(opened, "carrier.plist")) as Record<string, unknown>;
+  };
+
+  it("builds one row per country whose bundle opens, in country-name order", async () => {
+    const matrix = await buildMergedCbsMatrix(null, index.countries, countryFetcher);
     expect(matrix.family).toBe("iPhone");
+    expect(matrix.image).toBeNull();
     expect(Date.parse(matrix.generatedAt)).toBeGreaterThan(0);
-    expect(matrix.rows.map((r) => r.country)).toEqual([
-      "Australia",
-      "Germany",
-      "Netherlands",
-      "UnitedStates",
-    ]);
-    expect(matrix.rows.filter((r) => r.error).map((r) => r.country)).toEqual([
-      "Australia",
-      "Netherlands",
-    ]);
-    for (const r of matrix.rows.filter((r) => r.error)) {
-      expect(r.error).toMatch(/^no fixture for /);
-      expect(r.mappings).toEqual([]);
-    }
+    expect(matrix.rows.map((r) => r.country)).toEqual(["Germany", "UnitedStates"]);
+    expect(matrix.rows.every((r) => r.source === "cdn" && !r.error)).toBe(true);
   });
 
-  it("unions the mapped message ids across the successful rows", async () => {
-    const matrix = await buildCbsMatrix(index.countries, countryFetcher, "iPhone");
+  it("unions the mapped message ids across the rows", async () => {
+    const matrix = await buildMergedCbsMatrix(null, index.countries, countryFetcher);
     expect(matrix.messageIds).toEqual([
       4370, 4371, 4372, 4373, 4374, 4375, 4376, 4377, 4378, 4379,
       4383, 4384, 4385, 4386, 4387, 4388, 4389, 4390, 4391, 4392,
       4396, 4397, 4398, 4399, 4400,
     ]);
     expect(matrix.messageIds).not.toContain(4382);
-    expect(matrix.messageIds).toEqual([...matrix.messageIds].sort((a, b) => a - b));
-  });
-
-  it("builds the Watch matrix from the Watch family only", async () => {
-    const matrix = await buildCbsMatrix(index.countries, countryFetcher, "Watch");
-    expect(matrix.family).toBe("Watch");
-    expect(matrix.rows.map((r) => r.country)).toEqual(["Australia"]);
-    expect(matrix.rows[0].error).toBeUndefined();
-    expect(matrix.messageIds).toEqual([4370, 4371, 4381, 4383, 4384, 4394, 4398, 4399, 4400]);
   });
 
   it("never rejects even when every fetch fails", async () => {
-    const matrix = await buildCbsMatrix(index.countries, async () => {
+    const matrix = await buildMergedCbsMatrix(null, index.countries, async () => {
       throw new Error("offline");
     });
-    expect(matrix.rows).toHaveLength(4);
-    expect(matrix.rows.every((r) => r.error === "offline")).toBe(true);
+    expect(matrix.rows).toEqual([]);
     expect(matrix.messageIds).toEqual([]);
+  });
+
+  it("keeps the image's row unless the OTA bundle is newer", async () => {
+    const plists = { UnitedStates: await usPlist() };
+    const image = (build: string) => ({ version: "27.0", build: "24A437", builds: { UnitedStates: build }, plists });
+    const older = await buildMergedCbsMatrix(image("999.0"), index.countries, countryFetcher);
+    expect(older.image).toEqual({ version: "27.0", build: "24A437" });
+    expect(older.rows.find((r) => r.country === "UnitedStates")).toMatchObject({ source: "image", version: "999.0" });
+    const newer = await buildMergedCbsMatrix(image("1.0"), index.countries, countryFetcher);
+    expect(newer.rows.find((r) => r.country === "UnitedStates")?.source).toBe("cdn");
   });
 
   it("caps an absurdly wide mapping range when unioning ids", async () => {
@@ -1740,17 +1735,10 @@ describe("buildCbsMatrix", () => {
         countryIds: [],
       },
     ];
-    const matrix = await buildCbsMatrix(only, async () => zip);
+    const matrix = await buildMergedCbsMatrix(null, only, async () => zip);
     expect(matrix.messageIds).toHaveLength(64);
     expect(matrix.messageIds[0]).toBe(0);
     expect(matrix.messageIds[63]).toBe(63);
-  });
-
-  it("defaults to the iPhone family", async () => {
-    const a = await buildCbsMatrix(index.countries, countryFetcher);
-    const b = await buildCbsMatrix(index.countries, countryFetcher, "iPhone");
-    expect(a.family).toBe("iPhone");
-    expect(a.rows.map((r) => r.country)).toEqual(b.rows.map((r) => r.country));
   });
 });
 
@@ -1862,8 +1850,8 @@ describe("diffValues", () => {
   });
 
   it("diffs two real carrier bundles' carrier.plist", () => {
-    const a = decodeFile(openIpcc(fixture("ATT_US.ipcc")), "carrier.plist").plist;
-    const b = decodeFile(openIpcc(fixture("Verizon_LTE_US.ipcc")), "carrier.plist").plist;
+    const a = decodedPlist(decodeFile(openIpcc(fixture("ATT_US.ipcc")), "carrier.plist"));
+    const b = decodedPlist(decodeFile(openIpcc(fixture("Verizon_LTE_US.ipcc")), "carrier.plist"));
 
     const rows = diffValues(a, b);
     expect(summariseDiff(rows)).toEqual({ added: 61, removed: 67, changed: 56, same: 0 });
@@ -1880,7 +1868,7 @@ describe("diffValues", () => {
   });
 
   it("reports no differences for a bundle against itself", () => {
-    const p = decodeFile(openIpcc(fixture("Verizon_LTE_US.ipcc")), "carrier.plist").plist;
+    const p = decodedPlist(decodeFile(openIpcc(fixture("Verizon_LTE_US.ipcc")), "carrier.plist"));
     expect(diffValues(p, p)).toEqual([]);
     const same = diffValues(p, p, true);
     expect(same).toHaveLength(132);
@@ -1888,8 +1876,8 @@ describe("diffValues", () => {
   });
 
   it("diffs two country bundles' CellBroadcast schemas", () => {
-    const us = decodeFile(openIpcc(fixture("UnitedStates.ipcc")), "carrier.plist").plist as Dict;
-    const au = decodeFile(openIpcc(fixture("Australia_Watch.ipcc")), "carrier.plist").plist as Dict;
+    const us = decodedPlist(decodeFile(openIpcc(fixture("UnitedStates.ipcc")), "carrier.plist")) as Dict;
+    const au = decodedPlist(decodeFile(openIpcc(fixture("Australia_Watch.ipcc")), "carrier.plist")) as Dict;
     const rows = diffValues(us, au);
     expect(rows.find((r) => r.path === "CountryName")).toEqual({
       path: "CountryName",
@@ -1939,8 +1927,8 @@ describe("ipcc: assets and packaging leftovers", () => {
     expect(png).toBeTruthy();
     expect(png.path.endsWith(".png")).toBe(true);
     const d = decodeFile(b, png.path);
-    expect(d.kind).toBe("image");
-    expect(d.note).toMatch(/^PNG, \d+ by \d+ pixels/);
+    if (d.kind !== "image") throw new Error(d.kind);
+    expect(d.image?.width).toBeGreaterThan(0);
     // The bytes are served by /api/raw, not embedded in the JSON.
     expect(d.hex).toBeUndefined();
     expect(d.text).toBeUndefined();
@@ -1959,7 +1947,7 @@ describe("ipcc: assets and packaging leftovers", () => {
     const f = b.info.files.find((x) => x.path === "bundle.metadata")!;
     expect(f.kind).toBe("metadata");
     const d = decodeFile(b, "bundle.metadata");
-    const meta = d.plist as Record<string, unknown>;
+    const meta = decodedPlist(d) as Record<string, unknown>;
     expect(meta.bundleType).toBe("Carriers");
     expect(meta.device).toBe("Watch");
     expect(Array.isArray(meta.filesModified)).toBe(true);
@@ -1969,17 +1957,19 @@ describe("ipcc: assets and packaging leftovers", () => {
     const b = openIpcc(fixture("ATT_RedPocket_Watch.ipcc"));
     b.entries[b.prefix + "broken.metadata"] = enc.encode("plainly not base64 json");
     const d = decodeFile(b, "broken.metadata");
-    expect(d.plist).toBeUndefined();
+    expect(decodedPlist(d)).toBeUndefined();
     expect(d.text).toBe("plainly not base64 json");
-    expect(d.note).toBe("expected base64-encoded JSON");
+    expect(d.error).toEqual({ reason: "unrecognised", message: "expected base64-encoded JSON" });
   });
 
   it("annotates the opaque binary members it knows about", () => {
     const vz = openIpcc(fixture("Verizon_LTE_US.ipcc"));
-    expect(decodeFile(vz, "carrier.dmu").note).toMatch(/^DMU public key/);
+    expect(decodeFile(vz, "carrier.dmu").kind).toBe("dmu");
     const b = openIpcc(fixture("Verizon_LTE_US.ipcc"));
     b.entries[b.prefix + "carrier.prl"] = new Uint8Array([0, 0x57, 0, 3, 3, 0x80]);
-    expect(decodeFile(b, "carrier.prl").note).toMatch(/Preferred Roaming List.*; could not decode: PRL too short/);
+    const prl = decodeFile(b, "carrier.prl");
+    expect(prl.note).toMatch(/Preferred Roaming List/);
+    expect(prl.error?.message).toMatch(/PRL too short/);
     b.entries[b.prefix + "overrides_N1.mcfopota"] = new Uint8Array([4, 0, 1, 0, 0x38]);
     expect(decodeFile(b, "overrides_N1.mcfopota").note).toMatch(/OP-OTA/);
   });
