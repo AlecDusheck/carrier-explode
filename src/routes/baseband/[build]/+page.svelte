@@ -6,6 +6,8 @@
     getBaseband, getBasebandBuilds, getBasebandCombos, getBasebandDiff, getBasebandFile,
   } from "$lib/api/tables.remote";
   import type { Variant } from "$lib/decode/bbfw";
+  import type { ArfcnRange, MccScanEntry } from "$lib/decode/mdb";
+  import { SSGCCS_ACTIONS, SSGCCS_STATES } from "$lib/decode/ssgccs";
   import { bundleHref, humanBytes, link, withParams } from "$lib/format";
   import Pane from "$lib/components/Pane.svelte";
   import Variants from "$lib/components/Variants.svelte";
@@ -16,7 +18,10 @@
 
   let { params } = $props();
 
-  const SECTIONS = [["carriers", "Carriers"], ["policy", "Policy files"], ["power", "Power"], ["configs", "Configs"], ["diff", "Diff"]];
+  const SECTIONS = [
+    ["fbs", "Fake base stations"], ["carriers", "Carriers"], ["policy", "Policy files"], ["power", "Power"],
+    ["networks", "Network databases"], ["configs", "Configs"], ["diff", "Diff"],
+  ];
 
   const fileAt = $derived(page.url.searchParams.get("file"));
   const vs = $derived(page.url.searchParams.get("vs"));
@@ -42,6 +47,18 @@
     }
     return out;
   }
+  /** Rows that differ only by the database's second key share one row. */
+  function mergeScan(xs: MccScanEntry[]) {
+    const out: Array<MccScanEntry & { keys: number[] }> = [];
+    for (const e of xs) {
+      const hit = out.find((o) => o.mcc === e.mcc && JSON.stringify(o.ranges) === JSON.stringify(e.ranges));
+      if (hit) hit.keys.push(e.key);
+      else out.push({ ...e, keys: [e.key] });
+    }
+    return out;
+  }
+  const mhz = (r: ArfcnRange) => `${r.loMHz}–${r.hiMHz}`;
+  const dbName = (p: string) => p.split("/").pop();
   // Some defaults are whole tables; the name says what they are, the first bytes are enough.
   const short = (hex: string) => (hex.length > 64 ? hex.slice(0, 64) + "…" : hex);
 </script>
@@ -63,7 +80,8 @@
     <span class="grow"></span>
     <Pane quiet>
       {@const bb = await getBaseband(params.build)}
-      {#each SECTIONS.filter(([id]) => id !== "power" || bb.amprNs.length) as [id, label] (id)}<a class="btn" href="#{id}">{label}</a>{/each}
+      {@const has = { power: !!bb.amprNs.length, fbs: !!bb.ssgccs?.length, networks: !!bb.mdb } as Record<string, boolean>}
+      {#each SECTIONS.filter(([id]) => has[id] ?? true) as [id, label] (id)}<a class="btn" href="#{id}">{label}</a>{/each}
     </Pane>
   </div>
 
@@ -82,6 +100,61 @@
       <p class="lead dimtext order">
         Load order: the modem's built-in config, then the per-platform defaults in bbcfg.mbn, then the carrier bundle's .der.pri, which overwrites the same EFS paths.
       </p>
+
+      {#if bb.ssgccs?.length}
+        <fieldset class="hgroup" id="fbs">
+          <legend>Fake base station detection</legend>
+          {#each bb.ssgccs as g, gi (gi)}
+            {@const cfg = g.config}
+            {@const all = cfg.activePlmns?.includes("ALL")}
+            {@const custom = cfg.lines.find((l) => l.key === "CUSTOM")}
+            {@const rats = cfg.lines.filter((l) => l.key !== "CUSTOM" && l.key !== "ACTIVE_PLMN_LIST")}
+            {#if bb.ssgccs.length > 1}<div class="rowflex"><span class="dimtext">Serves</span> <Variants variants={g.variants} configs={g.configs} /></div>{/if}
+            <p class="prose">
+              The modem scores every cell it sees for signs of a fake base station (an IMSI catcher: a transmitter posing as the carrier
+              to identify or track phones). As a cell's score rises it moves through {SSGCCS_STATES.join(" → ")}, and past a threshold the
+              modem acts against it, for example by barring or deprioritising that cell.
+              {#if all}<b>This package turns it on for all networks.</b>{:else if cfg.activePlmns?.length}It is on for {cfg.activePlmns.join(", ")}.{:else}The files do not say which networks it runs on.{/if}
+            </p>
+            {#if custom}
+              <h4>{custom.title}</h4>
+              <div class="hscroll">
+                <table class="grid fit">
+                  <tbody>
+                    {#each custom.fields as f, i (i)}
+                      <tr><td class="k">{f.name}</td><td class="num mono">{f.value}</td><td><Confidence c={f.confidence} /></td></tr>
+                    {/each}
+                  </tbody>
+                </table>
+              </div>
+            {/if}
+            {#each rats as l (l.key)}
+              <h4>{l.title} <span class="dimtext mono">{l.key}</span></h4>
+              <div class="hscroll">
+                <table class="grid fit">
+                  <tbody>
+                    {#each l.fields as f, i (i)}
+                      <tr>
+                        <td class="k">{f.name}</td>
+                        <td class="mono">{f.value}{#if f.name === "Action" && SSGCCS_ACTIONS[f.value]}<span class="dimtext sp">({SSGCCS_ACTIONS[f.value]})</span>{/if}</td>
+                        <td><Confidence c={f.confidence} /></td>
+                      </tr>
+                    {/each}
+                  </tbody>
+                </table>
+              </div>
+            {/each}
+            <details class="more">
+              <summary>Raw text</summary>
+              {#each g.files as f (f.path)}
+                <div class="mono dimtext">{f.path}</div>
+                <pre class="code">{f.text}</pre>
+              {/each}
+            </details>
+          {/each}
+          <p class="dimtext note">Field names come from the modem image's key strings and log text; the parser itself is compressed.</p>
+        </fieldset>
+      {/if}
 
       <fieldset class="hgroup" id="carriers">
         <legend>Carriers with band combos ({tags.length})</legend>
@@ -260,6 +333,87 @@
       </fieldset>
       {/if}
 
+      {#if bb.mdb}
+        {@const scans = bb.mdb.databases.filter((d) => d.scan)}
+        {@const feats = bb.mdb.databases.filter((d) => d.features)}
+        <fieldset class="hgroup" id="networks">
+          <legend>Network databases</legend>
+          <p class="dimtext note">EFS databases (/mdb) and small settings in the modem's built-in configs.</p>
+          {#each scans as d (d.sha1)}
+            <h4>Where 5G looks, by country <span class="dimtext mono">{dbName(d.path)}</span></h4>
+            <p class="dimtext note">NR frequency ranges the modem scans or allows per country (NR-ARFCN, converted to MHz). The band is named only where a single band holds every range.</p>
+            <div class="hscroll">
+              <table class="grid">
+                <thead><tr><th>Country</th><th>Band</th><th>Range (MHz)</th><th>NR-ARFCN</th><th class="num">Key</th></tr></thead>
+                <tbody>
+                  {#each mergeScan(d.scan ?? []) as e, ei (ei)}
+                    {#each e.ranges as r, ri (ri)}
+                      <tr>
+                        {#if ri === 0}
+                          <td rowspan={e.ranges.length}>{#if e.mcc}{e.mcc} {bb.mccs[e.mcc]?.name ?? ""}{:else}Any country{/if}</td>
+                          <td rowspan={e.ranges.length} class="mono">{e.band ? "n" + e.band : ""}</td>
+                        {/if}
+                        <td class="mono">{mhz(r)}{#if r.uplink}<span class="dimtext sp">uplink</span>{/if}</td>
+                        <td class="mono dimtext">{r.lo}–{r.hi}</td>
+                        {#if ri === 0}<td rowspan={e.ranges.length} class="num mono dimtext">{e.keys.join(", ")}</td>{/if}
+                      </tr>
+                    {/each}
+                  {/each}
+                </tbody>
+              </table>
+            </div>
+            <div class="rowflex dimtext"><span>Key: meaning unknown, not a band number.</span><Confidence c="unknown" /> <span>Serves</span> <Variants variants={d.variants} configs={d.configs} /></div>
+          {/each}
+          {#if feats.length}
+            <h4>Features per network <Confidence c="unknown" /></h4>
+            <p class="dimtext note">plmn2features records: feature id = value pairs per network. The firmware does not name the ids (they are not band numbers).</p>
+            <div class="hscroll">
+              <table class="grid">
+                <thead><tr><th>Networks</th><th>Database</th><th>Features</th></tr></thead>
+                <tbody>
+                  {#each feats as d (d.sha1)}
+                    {#each d.features ?? [] as x, xi (xi)}
+                      {@const bundles = [...new Set(x.plmns.flatMap((p) => bb.mdb?.plmnBundles?.[p] ?? []))]}
+                      <tr>
+                        <td class="countries">
+                          {#each x.plmns as p (p)}<span class="chip mono">{p}</span>{/each}
+                          {#if bundles.length}<div>{#each bundles as n (n)}<a class="chip" href={bundleHref("carriers", n)}>{n}</a>{/each}</div>{/if}
+                        </td>
+                        <td class="mono">{dbName(d.path)}</td>
+                        <td class="mono wrap">
+                          {#if x.features}{#each x.features as [id, v], i (i)}<span class="pair">{id}={v}</span> {/each}
+                          {:else}<span class="dimtext">raw</span> {x.hex}{/if}
+                        </td>
+                      </tr>
+                    {/each}
+                  {/each}
+                </tbody>
+              </table>
+            </div>
+          {/if}
+          {#if bb.mdb.settings.length}
+            <h4>Modem settings</h4>
+            <div class="hscroll">
+              <table class="grid">
+                <thead><tr><th>Setting</th><th>Value</th><th>Serves</th></tr></thead>
+                <tbody>
+                  {#each bb.mdb.settings as x (x.sha1 + x.path)}
+                    <tr>
+                      <td class="wrap">{x.name} <Confidence c={x.confidence} /><div class="mono dimtext">{x.path}</div></td>
+                      <td class="wrap">{x.value} <span class="mono dimtext">0x{short(x.hex)}</span></td>
+                      <td><Variants variants={x.variants} configs={x.configs?.filter((c) => c !== x.path)} /></td>
+                    </tr>
+                  {/each}
+                </tbody>
+              </table>
+            </div>
+          {/if}
+          {#each bb.mdb.databases.filter((d) => d.error) as d (d.sha1)}
+            <div class="banner err">{d.path}: {d.error}</div>
+          {/each}
+        </fieldset>
+      {/if}
+
       <fieldset class="hgroup" id="configs">
         <legend>Modem configs and containers</legend>
         {#if bb.modemConfigs}
@@ -404,6 +558,10 @@
 
 <style>
   .order { margin: 6px 0 0; }
+  table.fit { width: auto; }
+  .pair { white-space: nowrap; }
+  .sp { margin-left: 0.6ch; }
+  .prose { margin: 0 0 6px; max-width: 70ch; line-height: 1.45; }
   .note { margin: 0 0 6px; }
   .carrier { border-top: 1px solid var(--shadow); padding: 6px 0; scroll-margin-top: 8px; }
   .carrier h3 { margin: 0 0 4px; font-size: 13px; }

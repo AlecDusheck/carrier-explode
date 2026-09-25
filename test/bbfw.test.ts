@@ -1,5 +1,5 @@
 /**
- * Tests for `src/lib/decode/bbfw.ts` (baseband package decoder) and
+ * Tests for `src/lib/decode/bbfw.ts` (baseband package decoder; mdb.ts and ssgccs.ts in modem.test.ts) and
  * `src/lib/decode/policy.ts` (policyman XML, band combos, A-MPR NS).
  *
  * Fixtures in test/fixtures/bbfw/ come from Mav25-2.10.01.Release.bbfw
@@ -359,6 +359,36 @@ describe("basebandSummary", () => {
       .toEqual([{ mccs: ["1", "2"], bands: [{ band: 42, nsWithCa: 8 }] }]);
   });
 
+  it("decodes the modem databases and small EFS settings", () => {
+    expect(s.mdb?.databases.map((d) => [d.path, d.header?.creator, d.scan?.length, d.features?.length, d.error])).toEqual([
+      ["/mdb/nr/mcc2arfcn.mdb", "Maverick", 6, undefined, undefined],
+      ["/mdb/nr/plmn2features.mdb", "Qualcomm", undefined, 3, undefined],
+      ["/mdb/lte/plmn2features_lte.mdb", "Maverick", undefined, 1, undefined],
+    ]);
+    expect(s.mdb?.databases[0].configs).toEqual(["DSDS-MN-Sariska", "MSSS-MN-Sariska"]);
+    expect(s.mdb?.settings.map((x) => [x.path, x.configs, x.value])).toEqual([
+      ["/mcfg_ftb", ["CUST_SW_DEFAULT", "CUST_HW_DEFAULT", "DSDS-MN-Sariska", "MSSS-MN-Sariska"], "clear"],
+      ["/policyman/fullrat_timer", ["DSDS-MN-Sariska", "MSSS-MN-Sariska"], expect.stringMatching(/^300 s/)],
+      ["/nv/item_files/modem/mmode/device_mode", ["DSDS-MN-Sariska"], expect.stringMatching(/DSDS/)],
+      ["/nv/item_files/modem/mmode/device_mode", ["MSSS-MN-Sariska"], "single SIM"],
+    ]);
+    // no manifest given, so no bundles
+    expect(s.mdb?.plmnBundles).toBeUndefined();
+  });
+
+  it("maps plmn2features networks to bundles when given the manifest routing", () => {
+    const t = basebandSummary({ "qdsp6sw.mbn": modem }, { mccMnc: { "44020": { BundleName: "Softbank_jp" }, "310260": { BundleName: "TMobile_US" } } });
+    expect(t.mdb?.plmnBundles).toEqual({ "440-20": ["Softbank_jp"], "310-260": ["TMobile_US"] });
+  });
+
+  it("pairs the SSGCCS files that serve the same platforms", () => {
+    expect(s.ssgccs).toHaveLength(1);
+    expect(s.ssgccs![0].files.map((f) => f.path)).toEqual(["/SSGCCS/ssgccs_config.txt", "/SSGCCS/ssgccs_int_config.txt"]);
+    expect(s.ssgccs![0].variants).toEqual([{ platform: 5, sku: 0, hwRev: 0 }]);
+    expect(s.ssgccs![0].config.activePlmns).toEqual(["ALL"]);
+    expect(s.ssgccs![0].config.lines.map((l) => l.key)).toEqual(["CUSTOM", "ACTIVE_PLMN_LIST", "GERAN"]);
+  });
+
   it("summarises the modem configs", () => {
     expect(s.modemConfigs?.map((m) => [m.label, m.container, m.cfgType, m.trailer?.capability])).toEqual([
       ["CUST_SW_DEFAULT", "plain", "SW", undefined], ["CUST_HW_DEFAULT", "plain", "HW", undefined], [undefined, "plain", "SW", undefined],
@@ -383,6 +413,9 @@ describe.skipIf(!BBFW || !existsSync(BBFW))("whole Mav25-2.10.01 package", () =>
     expect(s.files).toHaveLength(46);
     expect(s.containers.map((c) => [c.member, c.records, c.blobs])).toEqual([["bbcfg.mbn", 932, 344], ["pt.mbn", 218, 40]]);
     expect(s.nv).toHaveLength(11);
+    expect(s.mdb?.databases.map((d) => d.path)).toEqual(["/mdb/nr/mcc2arfcn.mdb", "/mdb/nr/plmn2features.mdb", "/mdb/lte/plmn2features_lte.mdb"]);
+    expect(s.mdb?.settings.filter((x) => x.path === "/protected/mcfg/active_int_carrier_info").map((x) => x.value)).toEqual(["SW_DEF", "HW_DEF"]);
+    expect(s.ssgccs?.map((g) => g.config.activePlmns)).toEqual([["ALL"]]);
     expect(s.bandCombos).toHaveLength(4);
     for (const set of s.bandCombos) expect(set.carriers).toHaveLength(11);
     expect(s.modemConfigs?.map((m) => m.label)).toEqual([

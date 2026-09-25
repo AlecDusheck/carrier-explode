@@ -13,6 +13,8 @@ import { leUint, sha1Hex } from "./bytes";
 import { bytesToHex, parsePlist } from "./plist";
 import { annotateNv } from "./nv";
 import { comboStats, parseAmprNs, parseBandCombos, xmlRefs, type AmprGroup, type ComboStats, type XmlRefs } from "./policy";
+import { decodeModemEfs, parseMcc2Arfcn, parsePlmnFeatures, readMdb, type MccScanEntry, type MdbConfidence, type MdbHeader, type PlmnFeatures } from "./mdb";
+import { parseSsgccs, type SsgccsConfig } from "./ssgccs";
 
 const td = new TextDecoder();
 const latin1 = (b: Uint8Array) => { let s = ""; for (let i = 0; i < b.length; i++) s += String.fromCharCode(b[i]); return s; };
@@ -580,6 +582,40 @@ export interface ModemConfigSummary {
   files: string[];
 }
 
+export interface BasebandMdb {
+  member: string;
+  path: string;
+  sha1: string;
+  variants?: Variant[];
+  configs?: string[];
+  header?: MdbHeader;
+  /** mcc2arfcn: NR frequency ranges per country. */
+  scan?: MccScanEntry[];
+  /** plmn2features: feature id/value pairs per network. */
+  features?: PlmnFeatures[];
+  error?: string;
+}
+
+export interface BasebandModemEfs {
+  member: string;
+  path: string;
+  sha1: string;
+  variants?: Variant[];
+  configs?: string[];
+  hex: string;
+  name: string;
+  value: string;
+  confidence: MdbConfidence;
+}
+
+export interface BasebandSsgccs {
+  variants?: Variant[];
+  configs?: string[];
+  /** The files it was read from, with their text. */
+  files: Array<{ path: string; sha1: string; text: string }>;
+  config: SsgccsConfig;
+}
+
 export interface BasebandSummary {
   schema: 1;
   package: {
@@ -601,6 +637,15 @@ export interface BasebandSummary {
   amprNs: Array<{ sha1: string; variants: Variant[]; groups: AmprGroup[] }>;
   /** Built-in configs of the modem image; undefined when qdsp6sw.mbn was not given. */
   modemConfigs?: ModemConfigSummary[];
+  /** /mdb/*.mdb databases and small EFS settings, decoded; undefined when there are none. */
+  mdb?: {
+    databases: BasebandMdb[];
+    settings: BasebandModemEfs[];
+    /** plmn2features PLMN -> default carrier bundles, from the OTA manifest. */
+    plmnBundles?: Record<string, string[]>;
+  };
+  /** Fake base station detection (SSGCCS), one entry per distinct pair of config files. */
+  ssgccs?: BasebandSsgccs[];
 }
 
 export interface BasebandSummaryOptions {
@@ -690,6 +735,8 @@ export function basebandSummary(members: Record<string, Uint8Array>, opts: Baseb
   }
 
   const byKey = new Map<string, BasebandFile>();
+  // bytes of the files decoded below, by summary entry
+  const raw = new Map<BasebandFile, Uint8Array>();
   const add = (member: string, path: string, data: Uint8Array, where: { blob?: number; variants?: Variant[]; config?: string }) => {
     const sha1 = sha1Hex(data);
     const key = `${member}\0${path}\0${sha1}`;
@@ -705,6 +752,7 @@ export function basebandSummary(members: Record<string, Uint8Array>, opts: Baseb
       }
       byKey.set(key, f);
       out.files.push(f);
+      if (format === "mdb" || decodeModemEfs(path, data)) raw.set(f, data);
     }
     if (where.blob !== undefined && !(f.blobs ??= []).includes(where.blob)) f.blobs.push(where.blob);
     if (where.variants) addVariants((f.variants ??= []), where.variants);
@@ -812,5 +860,67 @@ export function basebandSummary(members: Record<string, Uint8Array>, opts: Baseb
   if (opts.mccMnc !== undefined && out.bandCombos.length) {
     out.carrierMap = mapComboCarriers(out.bandCombos.flatMap((s) => s.carriers), opts.mccMnc);
   }
+  const mdb = modemDatabases(out.files, raw, opts.mccMnc);
+  if (mdb) out.mdb = mdb;
+  const ss = ssgccsConfigs(out.files);
+  if (ss.length) out.ssgccs = ss;
+  return out;
+}
+
+const where = ({ member, path, sha1, variants, configs }: BasebandFile) =>
+  ({ member, path, sha1, ...(variants ? { variants } : {}), ...(configs ? { configs } : {}) });
+
+/** The .mdb databases and small EFS settings among `files`, decoded from their bytes. */
+function modemDatabases(files: BasebandFile[], raw: Map<BasebandFile, Uint8Array>, mccMnc: unknown): BasebandSummary["mdb"] {
+  const databases: BasebandMdb[] = [], settings: BasebandModemEfs[] = [];
+  for (const [f, data] of raw) {
+    if (f.format !== "mdb") {
+      const v = decodeModemEfs(f.path, data);
+      if (v) settings.push({ ...where(f), hex: bytesToHex(data), ...v });
+      continue;
+    }
+    const d: BasebandMdb = where(f);
+    try {
+      const m = readMdb(data);
+      d.header = m.header;
+      if (f.path.endsWith("/mcc2arfcn.mdb") && m.blob) d.scan = parseMcc2Arfcn(m.blob);
+      else if (/\/plmn2features\w*\.mdb$/.test(f.path)) d.features = parsePlmnFeatures(m);
+    } catch (e) {
+      d.error = (e as Error).message;
+    }
+    databases.push(d);
+  }
+  if (!databases.length && !settings.length) return undefined;
+  const order = new Map(files.map((f, i) => [f.sha1 + f.path, i]));
+  const byFile = (a: { sha1: string; path: string }, b: { sha1: string; path: string }) => order.get(a.sha1 + a.path)! - order.get(b.sha1 + b.path)!;
+  const out: NonNullable<BasebandSummary["mdb"]> = { databases: databases.sort(byFile), settings: settings.sort(byFile) };
+  const plmns = [...new Set(databases.flatMap((d) => d.features?.flatMap((x) => x.plmns) ?? []))];
+  if (mccMnc !== undefined && plmns.length) {
+    const m = mapComboCarriers(plmns.map((p) => ({ tag: p, plmns: [p] })), mccMnc);
+    out.plmnBundles = Object.fromEntries(Object.entries(m).filter(([, x]) => x.bundles.length).map(([p, x]) => [p, x.bundles]));
+  }
+  return out;
+}
+
+/** ssgccs_config.txt paired with the ssgccs_int_config.txt the same blobs or configs carry. */
+function ssgccsConfigs(files: BasebandFile[]): BasebandSsgccs[] {
+  const main = files.filter((f) => f.text !== undefined && f.path.endsWith("/ssgccs_config.txt"));
+  const int = files.filter((f) => f.text !== undefined && f.path.endsWith("/ssgccs_int_config.txt"));
+  const overlap = (a: BasebandFile, b: BasebandFile) =>
+    a.member === b.member && ((a.blobs ?? []).some((x) => b.blobs?.includes(x)) || (a.configs ?? []).some((x) => b.configs?.includes(x)));
+  const used = new Set<BasebandFile>();
+  const out: BasebandSsgccs[] = [];
+  const entry = (fs: BasebandFile[]): BasebandSsgccs => ({
+    ...(fs[0].variants ? { variants: fs[0].variants } : {}),
+    ...(fs[0].configs ? { configs: fs[0].configs } : {}),
+    files: fs.map((f) => ({ path: f.path, sha1: f.sha1, text: f.text! })),
+    config: parseSsgccs(...fs.map((f) => f.text!)),
+  });
+  for (const f of main) {
+    const pair = int.find((x) => overlap(f, x));
+    if (pair) used.add(pair);
+    out.push(entry(pair ? [f, pair] : [f]));
+  }
+  for (const f of int) if (!used.has(f)) out.push(entry([f]));
   return out;
 }
