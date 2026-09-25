@@ -3,9 +3,20 @@
  * Written from scratch so it runs unmodified on the Workers runtime.
  */
 
+/** A bplist UID (NSKeyedArchiver object reference), kept apart from integers. */
+export class PlistUid {
+  constructor(readonly uid: number) {}
+}
+
+/**
+ * Integers are numbers while exactly representable and bigints beyond 2^53
+ * (64-bit and 128-bit bplist ints, long XML <integer> values).
+ */
 export type PlistValue =
   | string
   | number
+  | bigint
+  | PlistUid
   | boolean
   | null
   | Date
@@ -30,6 +41,13 @@ export function parsePlist(buf: Uint8Array): PlistValue {
 }
 
 /* ------------------------------------------------------------------ binary */
+
+/** A bigint as a number when that is exact. */
+const SAFE_MIN = BigInt(Number.MIN_SAFE_INTEGER);
+const SAFE_MAX = BigInt(Number.MAX_SAFE_INTEGER);
+function exact(v: bigint): number | bigint {
+  return v >= SAFE_MIN && v <= SAFE_MAX ? Number(v) : v;
+}
 
 function readUInt(dv: DataView, off: number, size: number): number {
   let v = 0;
@@ -84,11 +102,10 @@ export function parseBinaryPlist(buf: Uint8Array): PlistValue {
       case 0x1: {
         const size = 1 << len;
         if (size === 8) {
-          const big = dv.getBigInt64(off);
-          out = Number(big);
+          out = exact(dv.getBigInt64(off)); // signed; 1, 2 and 4 byte ints are unsigned
         } else if (size === 16) {
-          // 128-bit ints appear as huge values; keep the low 64 bits.
-          out = Number(dv.getBigUint64(off + 8));
+          // CF writes UInt64 values above INT64_MAX this way; read as signed 128-bit
+          out = exact(BigInt.asIntN(128, (dv.getBigUint64(off) << 64n) | dv.getBigUint64(off + 8)));
         } else {
           out = readUInt(dv, off, size);
         }
@@ -121,7 +138,7 @@ export function parseBinaryPlist(buf: Uint8Array): PlistValue {
         break;
       }
       case 0x8:
-        out = readUInt(dv, off, len + 1); // UID
+        out = new PlistUid(readUInt(dv, off, len + 1));
         break;
       case 0xa:
       case 0xc: {
@@ -314,8 +331,7 @@ export function parseXmlPlist(xml: string): PlistValue {
       }
       case "integer": {
         skipTo(name);
-        const v = parseInt(text.trim(), 10);
-        return Number.isNaN(v) ? 0 : v;
+        return xmlInteger(text);
       }
       case "real": {
         skipTo(name);
@@ -346,8 +362,21 @@ export function parseXmlPlist(xml: string): PlistValue {
   return element(0);
 }
 
-/** Serialise a parsed plist to JSON-safe values, tagging binary + dates. */
+/** Decimal or 0x-hex <integer> text, exact; 0 for anything unparseable. */ // CFPropertyList.c parseIntegerTag
+function xmlInteger(text: string): number | bigint {
+  const m = /^([+-]?)(0[xX][0-9a-fA-F]+|[0-9]+)/.exec(text.trim());
+  if (!m) return 0;
+  const v = BigInt(m[2]);
+  return exact(m[1] === "-" ? -v : v);
+}
+
+/**
+ * Serialise a parsed plist to JSON-safe values, tagging binary and dates.
+ * Integers beyond 2^53 become `{ __int: "<decimal>" }` and UIDs `{ __uid: n }`.
+ */
 export function toJsonSafe(v: PlistValue): unknown {
+  if (typeof v === "bigint") return { __int: v.toString() };
+  if (v instanceof PlistUid) return { __uid: v.uid };
   if (v instanceof Uint8Array) {
     return { __data: bytesToHex(v), __len: v.length, __text: maybeText(v) };
   }

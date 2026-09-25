@@ -10,9 +10,10 @@ import {
   toJsonSafe,
   bytesToHex,
   maybeText,
+  PlistUid,
   type PlistValue,
-} from "../src/lib/server/plist.ts";
-import { openIpcc } from "../src/lib/server/ipcc.ts";
+} from "../src/lib/decode/plist.ts";
+import { openIpcc } from "../src/lib/decode/bundle.ts";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const fixture = (n: string) => new Uint8Array(readFileSync(join(here, "fixtures", n)));
@@ -128,11 +129,13 @@ describe("binary plist: primitive object types", () => {
     expect(bp([[0x13, ...i64(9007199254740991n)]])).toBe(9007199254740991);
   });
 
-  it("decodes 16 byte integers by keeping the low 64 bits", () => {
+  it("decodes 16 byte integers as exact signed 128-bit values", () => {
     expect(bp([[0x14, ...new Array(8).fill(0), 0, 0, 0, 0, 0, 0, 0, 5]])).toBe(5);
     expect(bp([[0x14, ...new Array(8).fill(0), 0, 0, 0, 0, 0x7f, 0xff, 0xff, 0xff]])).toBe(2147483647);
-    // High 64 bits are discarded by design; the low half is read unsigned.
-    expect(bp([[0x14, ...new Array(16).fill(0xff)]])).toBe(Number(0xffffffffffffffffn));
+    // CF's encoding of a UInt64 above INT64_MAX: high half zero.
+    expect(bp([[0x14, ...new Array(8).fill(0), ...new Array(8).fill(0xff)]])).toBe(0xffffffffffffffffn);
+    expect(bp([[0x14, ...new Array(16).fill(0xff)]])).toBe(-1);
+    expect(bp([[0x14, 0, 0, 0, 0, 0, 0, 0, 1, ...new Array(8).fill(0)]])).toBe(1n << 64n);
   });
 
   it("decodes float32 and float64 reals", () => {
@@ -176,11 +179,13 @@ describe("binary plist: primitive object types", () => {
     expect(bp([[0x60]])).toBe("");
   });
 
-  it("decodes UIDs as plain numbers sized by the low nibble plus one", () => {
-    expect(bp([[0x80, 0x2a]])).toBe(42);
-    expect(bp([[0x81, 0x01, 0x00]])).toBe(256);
-    expect(bp([[0x83, 0x00, 0x00, 0x01, 0x00]])).toBe(256);
-    expect(bp([[0x87, 0, 0, 0, 0, 0, 0, 0, 1]])).toBe(1);
+  it("decodes UIDs as PlistUid, sized by the low nibble plus one", () => {
+    expect(bp([[0x80, 0x2a]])).toEqual(new PlistUid(42));
+    expect(bp([[0x80, 0x2a]])).toBeInstanceOf(PlistUid);
+    expect(bp([[0x81, 0x01, 0x00]])).toEqual(new PlistUid(256));
+    expect(bp([[0x83, 0x00, 0x00, 0x01, 0x00]])).toEqual(new PlistUid(256));
+    expect(bp([[0x87, 0, 0, 0, 0, 0, 0, 0, 1]])).toEqual(new PlistUid(1));
+    expect(toJsonSafe(bp([[0x80, 0x2a]]))).toEqual({ __uid: 42 });
   });
 
   it("rejects markers that the format does not define", () => {
@@ -559,7 +564,7 @@ describe("XML plist: lexical features", () => {
     expect(parseXmlPlist("<plist><date>not-a-date</date></plist>")).toBe("not-a-date");
   });
 
-  it("parses <integer> with radix 10 and falls back to 0 on garbage", () => {
+  it("parses decimal and 0x-hex <integer> and falls back to 0 on garbage", () => {
     expect(
       parseXmlPlist(
         "<plist><array>" +
@@ -570,7 +575,7 @@ describe("XML plist: lexical features", () => {
           "<integer></integer>" +
           "</array></plist>",
       ),
-    ).toEqual([12, -7, 0, 0, 0]);
+    ).toEqual([12, -7, 0, 16, 0]);
   });
 
   it("parses <real> and falls back to 0 on garbage", () => {
@@ -972,6 +977,47 @@ describe("cross-format equivalence: manifest-trimmed.xml vs manifest-trimmed.bpl
 });
 
 /* ====================================================================== */
+
+describe("integer precision", () => {
+  it("keeps 64-bit ints beyond 2^53 exact as bigint", () => {
+    expect(bp([[0x13, ...i64(9007199254740992n)]])).toBe(9007199254740992n);
+    expect(bp([[0x13, ...i64(9223372036854775807n)]])).toBe(9223372036854775807n);
+    expect(bp([[0x13, ...i64(-9223372036854775808n)]])).toBe(-9223372036854775808n);
+    expect(bp([[0x13, ...i64(-9007199254740991n)]])).toBe(-9007199254740991);
+    expect(bp([[0x13, ...i64(-9007199254740992n)]])).toBe(-9007199254740992n);
+  });
+
+  it("keeps XML <integer> values beyond 2^53 exact, in decimal and hex", () => {
+    expect(
+      parseXmlPlist(
+        "<plist><array>" +
+          "<integer>9007199254740991</integer>" +
+          "<integer>9007199254740993</integer>" +
+          "<integer>-18446744073709551615</integer>" +
+          "<integer>0xFFFFFFFFFFFFFFFF</integer>" +
+          "<integer>+5</integer>" +
+          "</array></plist>",
+      ),
+    ).toEqual([9007199254740991, 9007199254740993n, -18446744073709551615n, 18446744073709551615n, 5]);
+  });
+
+  it("serialises big ints as { __int } strings and leaves safe ints as numbers", () => {
+    const v = { big: 12345678901234567890n, small: 7, uid: new PlistUid(3), list: [1n << 70n] } as PlistValue;
+    const out = toJsonSafe(v);
+    expect(out).toEqual({
+      big: { __int: "12345678901234567890" },
+      small: 7,
+      uid: { __uid: 3 },
+      list: [{ __int: "1180591620717411303424" }],
+    });
+    expect(() => JSON.stringify(out)).not.toThrow();
+  });
+
+  it("round-trips a bigint through a hand-built bplist dict", () => {
+    const d = bp([[0xd1, 1, 2], [0x51, 0x6b], [0x13, ...i64(-(1n << 60n))]]) as Record<string, PlistValue>;
+    expect(d.k).toBe(-(1n << 60n));
+  });
+});
 
 describe("toJsonSafe", () => {
   it("tags Uint8Array as __data/__len/__text", () => {

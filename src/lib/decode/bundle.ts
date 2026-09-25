@@ -8,8 +8,25 @@ import { parsePlist, toJsonSafe, bytesToHex, maybeText } from "./plist";
 import { decodePri, type PriDecoded } from "./pri";
 import { describeDevices } from "./devices";
 import { pngDimensions, isCgBI } from "./png";
+import { decodePrl, describePrl, type PrlDecoded } from "./prl";
+import { isCmsSignedData, parseSignedData, type CmsSignedData } from "./cms";
+import { parseCertificate, pemBlocks, type CertInfo } from "./der";
+import { decodeDmu, type DmuKey } from "./dmu";
+import { decodeCaf, isCaf, type CafInfo } from "./caf";
 
 const td = new TextDecoder();
+const strictUtf8 = new TextDecoder("utf-8", { fatal: true });
+
+/** Whole-file UTF-8 text with no control bytes beyond tab and line breaks, else undefined. */
+function wholeText(b: Uint8Array): string | undefined {
+  if (!isMostlyText(b)) return undefined;
+  try {
+    const t = strictUtf8.decode(b);
+    return /[\x00-\x08\x0b\x0c\x0e-\x1f]/.test(t) ? undefined : t;
+  } catch {
+    return undefined;
+  }
+}
 
 /** True when the bytes are overwhelmingly printable, allowing UTF-8 sequences. */
 function isMostlyText(b: Uint8Array): boolean {
@@ -33,6 +50,9 @@ export type FileKind =
   | "certificate"
   | "image"
   | "metadata"
+  | "prl"
+  | "dmu"
+  | "audio"
   | "binary";
 
 /** Media type for serving a member as-is. */
@@ -45,14 +65,16 @@ export function contentTypeOf(path: string): string {
   if (b.endsWith(".svg")) return "image/svg+xml";
   if (b.endsWith(".xml") || b.endsWith(".ims") || b.endsWith(".mobileconfig")) return "application/xml";
   if (b.endsWith(".crt") || b.endsWith(".cer") || b.endsWith(".pem")) return "application/x-x509-ca-cert";
-  if (b.endsWith(".plist") || b.endsWith(".strings")) return "application/x-plist";
+  if (b.endsWith(".plist") || b.endsWith(".strings") || b.endsWith(".loctable")) return "application/x-plist";
+  if (b.endsWith(".caf")) return "audio/x-caf";
+  if (b.endsWith(".txt")) return "text/plain; charset=utf-8";
   return "application/octet-stream";
 }
 
 /** Short explanation of what a member is, shown next to the file list. */
 export const KIND_NOTES: Record<string, string> = {
   ".prl": "CDMA Preferred Roaming List, a binary system-selection table",
-  ".dmu": "signed device-management update blob",
+  ".dmu": "Dynamic Mobile IP Key Update (DMU) RSA public key",
   ".mcfopota": "OP-OTA modem configuration blob",
   ".metadata": "base64-encoded JSON left behind by Apple's bundle packager",
   ".ims": "Qualcomm IMS stack configuration (QIMF XML)",
@@ -89,7 +111,20 @@ export interface DecodedFile {
   hex?: string;
   note?: string;
   devices?: Array<{ code: string; name?: string; ids?: string }>;
+  /** CDMA Preferred Roaming List, for kind "prl". */
+  prl?: PrlDecoded;
+  /** CMS SignedData envelope of a signed profile; `plist` holds the content. */
+  signature?: Omit<CmsSignedData, "content">;
+  /** X.509 certificates found in the file. */
+  certificates?: CertInfo[];
+  /** DMU public key, for kind "dmu". */
+  dmu?: DmuKey;
+  /** Audio format, for kind "audio". */
+  audio?: CafInfo;
 }
+
+const certLine = (c: CertInfo) =>
+  `${c.subject}${c.selfIssued ? " (self-issued)" : `, issued by ${c.issuer}`}, valid ${c.notBefore.slice(0, 10)} to ${c.notAfter.slice(0, 10)}`;
 
 function classify(path: string): FileKind {
   const base = path.split("/").pop() ?? path;
@@ -97,7 +132,10 @@ function classify(path: string): FileKind {
   if (base.endsWith(".pri") || base.endsWith(".gri")) return "pri-plain";
   if (base.endsWith(".strings")) return "strings";
   if (base.endsWith(".mobileconfig")) return "mobileconfig";
-  if (base.endsWith(".plist")) return "plist";
+  if (base.endsWith(".plist") || base.endsWith(".loctable")) return "plist";
+  if (base.endsWith(".prl")) return "prl";
+  if (base.endsWith(".dmu")) return "dmu";
+  if (base.endsWith(".caf")) return "audio";
   if (base.endsWith(".xml") || base.endsWith(".ims")) return "xml";
   if (base.endsWith(".crt") || base.endsWith(".cer") || base.endsWith(".pem")) return "certificate";
   if (/\.(png|jpe?g|gif|tiff?|svg)$/.test(base.toLowerCase())) return "image";
@@ -187,10 +225,27 @@ export function decodeFile(b: OpenedBundle, relPath: string): DecodedFile {
       case "mobileconfig":
       case "pri-plain": {
         // Some `.pri` files are plists; a few are raw XML documents; the legacy
-        // `.strings` format is plain text.
+        // `.strings` format is plain text. Signed profiles are CMS-wrapped plists.
+        if (isCmsSignedData(bytes)) {
+          const { content, ...sig } = parseSignedData(bytes);
+          out.signature = sig;
+          out.plist = toJsonSafe(parsePlist(content));
+          const signer = sig.signers[0];
+          const cert = signer?.certificate !== undefined ? sig.certificates[signer.certificate] : undefined;
+          out.note = `signed profile (CMS SignedData, ${signer?.digestAlgorithm ?? "no signer"})` +
+            (cert ? `; signer ${certLine(cert)}` : signer?.issuer ? `; signer issued by ${signer.issuer}` : "") +
+            (signer?.signingTime ? `; signed ${signer.signingTime}` : "") +
+            "; signature not verified";
+          break;
+        }
         const head = td.decode(bytes.subarray(0, 8));
         if (head.startsWith("bplist") || /^\s*<(\?xml|!DOCTYPE|plist)/.test(head)) {
           out.plist = toJsonSafe(parsePlist(bytes));
+          break;
+        }
+        // A few OTA `overrides_*.pri` are the DER form under the plain name.
+        if (kind === "pri-plain" && bytes[0] === 0x31) {
+          out.pri = decodePri(bytes, relPath.endsWith(".gri") ? "der.gri" : "der.pri");
           break;
         }
         const text = maybeText(bytes) ?? (isMostlyText(bytes) ? td.decode(bytes) : undefined);
@@ -222,14 +277,55 @@ export function decodeFile(b: OpenedBundle, relPath: string): DecodedFile {
         break;
       }
       case "certificate": {
-        const head = td.decode(bytes.subarray(0, 11));
-        if (head.startsWith("-----BEGIN")) {
-          out.text = td.decode(bytes);
-          out.note = "PEM-encoded X.509 certificate";
-        } else {
+        if (bytes[0] === 0x30) {
           out.hex = bytesToHex(bytes);
-          out.note = "DER-encoded X.509 certificate";
+          try {
+            out.certificates = [parseCertificate(bytes)];
+            out.note = `DER-encoded X.509 certificate: ${certLine(out.certificates[0])}`;
+          } catch (e) {
+            out.note = `DER-encoded X.509 certificate; could not parse: ${(e as Error).message}`;
+          }
+          break;
         }
+        const text = td.decode(bytes);
+        out.text = text;
+        const certs: CertInfo[] = [];
+        for (const der of pemBlocks(text)) {
+          try { certs.push(parseCertificate(der)); } catch { /* listed in the text regardless */ }
+        }
+        if (certs.length) out.certificates = certs;
+        // corpus: some CarrierCA.crt files are `openssl x509 -subject -issuer` output wrapping the PEM
+        const form = text.startsWith("-----BEGIN") ? "PEM-encoded" : "PEM with OpenSSL subject/issuer lines,";
+        out.note = certs.length === 1
+          ? `${form} X.509 certificate: ${certLine(certs[0])}`
+          : `${form} ${certs.length} X.509 certificates`;
+        break;
+      }
+      case "prl":
+        out.hex = bytesToHex(bytes.subarray(0, 8192));
+        try {
+          out.prl = decodePrl(bytes);
+          out.note = describePrl(out.prl);
+        } catch (e) {
+          out.note = `${KIND_NOTES[".prl"]}; could not decode: ${(e as Error).message}`;
+        }
+        break;
+      case "dmu":
+        out.hex = bytesToHex(bytes.subarray(0, 8192));
+        try {
+          const k = (out.dmu = decodeDmu(bytes));
+          out.note = `DMU public key: ${k.algorithm}, exponent ${k.exponent}, PKOID 0x${k.pkoid.toString(16).padStart(2, "0")}` +
+            (k.pkoidName ? ` (${k.pkoidName})` : "") + `, PKOI ${k.pkoi}`;
+        } catch (e) {
+          out.note = `${KIND_NOTES[".dmu"]}; could not decode: ${(e as Error).message}`;
+        }
+        break;
+      case "audio": {
+        if (!isCaf(bytes)) { out.note = "audio"; break; }
+        const a = (out.audio = decodeCaf(bytes));
+        out.note = `Core Audio file: ${a.format.trim()}${a.encoding ? ` (${a.bitsPerChannel}-bit ${a.encoding})` : ""}, ` +
+          `${a.sampleRate} Hz, ${a.channels} channel${a.channels === 1 ? "" : "s"}` +
+          (a.duration !== undefined ? `, ${a.duration} s` : "");
         break;
       }
       case "image": {
@@ -242,7 +338,7 @@ export function decodeFile(b: OpenedBundle, relPath: string): DecodedFile {
         break;
       }
       default: {
-        const t = maybeText(bytes);
+        const t = maybeText(bytes) ?? wholeText(bytes);
         const ext = "." + (relPath.split("/").pop() ?? "").split(".").slice(1).join(".");
         const known = KIND_NOTES[ext] ?? KIND_NOTES["." + ext.split(".").pop()];
         if (t) {

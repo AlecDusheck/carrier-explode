@@ -3,13 +3,13 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 
-import { parsePlist, parseXmlPlist, parseBinaryPlist, toJsonSafe } from "../src/lib/server/plist.ts";
-import { openIpcc, decodeFile } from "../src/lib/server/ipcc.ts";
-import { decodePri, flattenDer } from "../src/lib/server/pri.ts";
-import { describeDevices } from "../src/lib/server/devices.ts";
-import { diffValues } from "../src/lib/server/diff.ts";
+import { parsePlist, parseXmlPlist, parseBinaryPlist, toJsonSafe } from "../src/lib/decode/plist.ts";
+import { openIpcc, decodeFile } from "../src/lib/decode/bundle.ts";
+import { decodePri, flattenDer } from "../src/lib/decode/pri.ts";
+import { describeDevices } from "../src/lib/decode/devices.ts";
+import { diffValues } from "../src/lib/decode/compare.ts";
 import { splitName, compareVersions } from "../src/lib/server/manifest.ts";
-import { decodeBits, describeMessageId } from "../src/lib/knowledge.ts";
+import { decodeBits, describeMessageId } from "../src/lib/decode/fields.ts";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const fixture = (n: string) => new Uint8Array(readFileSync(join(here, "fixtures", n)));
