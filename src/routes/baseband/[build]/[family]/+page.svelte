@@ -3,12 +3,15 @@
   import { page } from "$app/state";
   import { SvelteSet } from "svelte/reactivity";
   import {
-    getBaseband, getBasebandBuilds, getBasebandCombos, getBasebandDiff, getBasebandFile,
+    getBaseband, getBasebandBuilds, getBasebandCombos, getBasebandDiff, getBasebandFile, getModemPackage, getModems,
   } from "$lib/api/tables.remote";
   import type { Variant } from "$lib/decode/bbfw";
   import type { ArfcnRange, MccScanEntry } from "$lib/decode/mdb";
+  import { modemLabel, modemVendor } from "$lib/decode/modem";
   import { SSGCCS_ACTIONS, SSGCCS_STATES } from "$lib/decode/ssgccs";
-  import { bundleHref, humanBytes, link, withParams } from "$lib/format";
+  import { bundleHref, fileHref, humanBytes, link, withParams } from "$lib/format";
+  import { imageSlug } from "$lib/names";
+  import { phoneList } from "$lib/phones";
   import Pane from "$lib/components/Pane.svelte";
   import Variants from "$lib/components/Variants.svelte";
   import Confidence from "$lib/components/Confidence.svelte";
@@ -24,7 +27,8 @@
   ];
 
   const fileAt = $derived(page.url.searchParams.get("file"));
-  const family = $derived(page.url.searchParams.get("family") ?? undefined);
+  const family = $derived(params.family);
+  const vendor = $derived(modemVendor(params.family));
   const vs = $derived(page.url.searchParams.get("vs"));
   const combos = new SvelteSet<string>();
   let raw = $state(false);
@@ -64,13 +68,30 @@
   const short = (hex: string) => (hex.length > 64 ? hex.slice(0, 64) + "…" : hex);
 </script>
 
+{#snippet elsewhere(what: string)}
+  {@const all = (await getBasebandBuilds()).filter((b) => b.families.includes(family) && b.build !== params.build)}
+  {#if all.length}
+    <div class="rowflex elsewhere">
+      <span class="dimtext">{what}</span>
+      {#each all as b (b.build)}<a class="chip" href={link(`/baseband/${b.build}/${family}`)}>iOS {b.version}</a>{/each}
+    </div>
+  {/if}
+{/snippet}
+
 <div class="view">
   <div class="toolbar">
     <Pane quiet>
       {@const all = await getBasebandBuilds()}
       <label class="lbl">
         Image
-        <select name="build" value={params.build} onchange={(e) => goto(link("/baseband/" + e.currentTarget.value))}>
+        <select
+          name="build"
+          value={params.build}
+          onchange={(e) => {
+            const b = all.find((x) => x.build === e.currentTarget.value);
+            goto(link(`/baseband/${b?.build}` + (b?.families.includes(family) ? `/${family}` : "")));
+          }}
+        >
           {#if !all.some((b) => b.build === params.build)}<option value={params.build}>{params.build}</option>{/if}
           {#each all as b (b.build)}
             <option value={b.build} disabled={!b.families.length && b.build !== params.build}>iOS {b.version} ({b.build}){b.families.length ? "" : " - not extracted"}</option>
@@ -79,25 +100,44 @@
       </label>
     </Pane>
     <span class="grow"></span>
-    <Pane quiet>
-      {@const bb = await getBaseband({ build: params.build, family })}
-      {@const has = { power: !!bb.amprNs.length, fbs: !!bb.ssgccs?.length, networks: !!bb.mdb } as Record<string, boolean>}
-      {#each SECTIONS.filter(([id]) => has[id] ?? true) as [id, label] (id)}<a class="btn" href="#{id}">{label}</a>{/each}
-    </Pane>
+    {#if vendor === "qualcomm"}
+      <Pane quiet>
+        {@const bb = await getBaseband({ build: params.build, family })}
+        {@const has = { power: !!bb.amprNs.length, fbs: !!bb.ssgccs?.length, networks: !!bb.mdb } as Record<string, boolean>}
+        {#each SECTIONS.filter(([id]) => has[id] ?? true) as [id, label] (id)}<a class="btn" href="#{id}">{label}</a>{/each}
+      </Pane>
+    {/if}
   </div>
 
   <div class="scroll pad">
+    <Pane>
+      {@const mods = await getModems(params.build)}
+      {@const m = mods.modems.find((x) => x.family === family)}
+      <nav class="modems" aria-label="Modem packages in iOS {mods.version}">
+        {#each mods.modems as x (x.family)}
+          <a class="btn" href={link(`/baseband/${params.build}/${x.family}`)} aria-current={x.family === family ? "page" : undefined}>
+            <b>{modemLabel(x.family)}</b>
+            <span class="phones">{phoneList(x.devices)}</span>
+          </a>
+        {/each}
+      </nav>
+      <div class="which">
+        <h2>{modemLabel(family)} <span class="dimtext">for {m ? phoneList(m.devices) : "no phone in this image"}</span></h2>
+        <p class="dimtext note">
+          <a href={link("/releases/" + params.build)}>iOS {mods.version} ({params.build})</a> ships {mods.modems.length} modem packages, one per modem;
+          this page is the one in <span class="mono">{m?.package.name ?? family}</span>. The phones above each run their own.
+        </p>
+      </div>
+    </Pane>
+
+    {#if vendor === "qualcomm"}
     <Pane>
       {@const bb = await getBaseband({ build: params.build, family })}
       {@const tags = [...new Set(bb.bandCombos.flatMap((s) => s.carriers.map((c) => c.tag)))]}
       {@const readable = bb.files.filter((f) => f.readable)}
       {@const others = (await getBasebandBuilds()).filter((b) => b.families.includes(bb.family) && b.build !== params.build)}
 
-      <div class="rowflex">
-        <a class="btn" href={link("/releases/" + params.build)}>iOS {bb.version}</a>
-        <b>{bb.package.name ?? bb.family}</b>
-        {#if bb.package.version}<span class="dimtext">version {bb.package.version}</span>{/if}
-      </div>
+      {#if bb.package.version}<div class="rowflex"><span class="dimtext">Package version</span> <b class="mono">{bb.package.version}</b></div>{/if}
       <p class="lead dimtext order">
         Load order: the modem's built-in config, then the per-platform defaults in bbcfg.mbn, then the carrier bundle's .der.pri, which overwrites the same EFS paths.
       </p>
@@ -530,7 +570,7 @@
       </fieldset>
 
       <fieldset class="hgroup" id="diff">
-        <legend>Diff against another image</legend>
+        <legend>Diff: {bb.family} in another image</legend>
         {#if others.length}
           <label class="lbl">
             Before
@@ -554,10 +594,57 @@
         {/if}
       </fieldset>
     </Pane>
+    {:else}
+    <Pane>
+      {@const mods = await getModems(params.build)}
+      {@const m = mods.modems.find((x) => x.family === family)}
+      {#if m}
+        {@const s = await getModemPackage(m.package.id)}
+        {@const v = s.package.version}
+        <fieldset class="hgroup">
+          <legend>Firmware</legend>
+          <div class="hscroll">
+            <table class="grid fit">
+              <tbody>
+                {#if v}<tr><td class="k">Version</td><td class="mono">{v}</td></tr>{/if}
+                {#if s.kind === "ftab"}
+                  {#if s.package.date}<tr><td class="k">Built</td><td class="mono">{s.package.date}</td></tr>{/if}
+                  {#if s.package.chip}<tr><td class="k">Chip</td><td class="mono">{s.package.chip}{#if s.package.chipRevision}<span class="dimtext sp">revision {s.package.chipRevision}</span>{/if}</td></tr>{/if}
+                  {#if s.package.build}<tr><td class="k">Build</td><td class="mono wrap">{s.package.build}</td></tr>{/if}
+                  <tr><td class="k">Entries</td><td>{s.entries.length} in the ftab container</td></tr>
+                {:else if s.package.chipId}
+                  <tr><td class="k">Chip ID</td><td class="mono">{s.package.chipId}</td></tr>
+                {/if}
+                <tr><td class="k">Package</td><td class="mono wrap">{m.package.name} <span class="dimtext size">{humanBytes(m.package.size)}</span></td></tr>
+              </tbody>
+            </table>
+          </div>
+          {#if vendor === "apple"}
+            <p class="prose">
+              {family} phones carry no carrier config in the modem package. Their carrier settings arrive entirely through the
+              carrier bundles' Intel-dialect <span class="mono">.der.pri</span> and <span class="mono">.der.gri</span> files; the regional
+              band tables are in Default.bundle's
+              <a class="mono" href={fileHref("carriers", "Default", imageSlug(mods.version), "global_setting_G.der.gri")}>global_setting_G.der.gri</a>.
+            </p>
+          {:else}
+            <p class="prose">The {family} package has no plaintext config; its carrier settings come from the bundles' <span class="mono">.der.pri</span> files.</p>
+          {/if}
+          {@render elsewhere(`${family} in`)}
+        </fieldset>
+      {/if}
+    </Pane>
+    {/if}
   </div>
 </div>
 
 <style>
+  .modems { display: flex; flex-wrap: wrap; gap: 4px; }
+  .modems .btn { flex-direction: column; align-items: flex-start; gap: 0; max-width: 100%; text-align: left; }
+  .modems .phones { font-size: 10.5px; color: var(--text-dim); }
+  .size { white-space: nowrap; }
+  .elsewhere { margin-top: 6px; }
+  .which h2 { font-size: 14px; margin: 10px 0 2px; }
+  .which h2 .dimtext { font-weight: normal; font-size: 12px; }
   .order { margin: 6px 0 0; }
   table.fit { width: auto; }
   .pair { white-space: nowrap; }
@@ -579,6 +666,9 @@
   td.bands { min-width: 14em; }
   td.plat { white-space: nowrap; }
   @media (max-width: 760px) {
+    .modems .phones { display: none; }
+    .modems .btn { min-height: 40px; justify-content: center; }
+    .elsewhere .chip { padding: 6px 8px; }
     .taglinks .chip { padding: 5px 8px; }
     td.countries { min-width: 12em; }
   }

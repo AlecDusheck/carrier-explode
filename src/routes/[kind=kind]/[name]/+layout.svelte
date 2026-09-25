@@ -48,7 +48,7 @@
   {@const items = [
     ["", "Summary"],
     ...("carrier.plist" in bundle.quick ? [["plist", "carrier.plist"]] : []),
-    ...(pri ? [["baseband", `Baseband (${pri})`]] : []),
+    ...(pri ? [["baseband", `Baseband (${pri})`]] : bundle.kind === "carriers" ? [["baseband", "Baseband"]] : []),
     ["files", `Files (${files.length})`],
     ...(images ? [["assets", `Assets (${images})`]] : []),
     ...(bundle.info.locales.length ? [["strings", `Strings (${bundle.info.locales.length})`]] : []),

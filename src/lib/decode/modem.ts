@@ -40,3 +40,23 @@ export function modemVendor(family: string): ModemVendor | undefined {
   if (Object.values(APPLE_MODEM_CHIPS).includes(family) || /^c\d{4}$/.test(family)) return "apple";
   return undefined;
 }
+
+const VENDOR_NAMES: Record<ModemVendor, string> = { qualcomm: "Qualcomm", intel: "Intel", apple: "Apple" };
+
+/** Marketing names, only where the family is known for certain to be that modem. */
+const MODEM_NAMES: Record<string, string> = { Mav25: "X80", Mav24: "X75" };
+
+/** "Qualcomm X80", "Apple C1", "Intel": the modem as sold, as far as it is known. */
+export function modemName(family: string): string | undefined {
+  const v = modemVendor(family);
+  if (!v) return undefined;
+  if (v === "apple" && Object.values(APPLE_MODEM_CHIPS).includes(family)) return `Apple ${family}`;
+  return Object.hasOwn(MODEM_NAMES, family) ? `${VENDOR_NAMES[v]} ${MODEM_NAMES[family]}` : VENDOR_NAMES[v];
+}
+
+/** "Qualcomm X80 · Mav25", "Apple C1", "Intel · ICE19", "Apple · c4020". */
+export function modemLabel(family: string): string {
+  const name = modemName(family);
+  if (!name) return family;
+  return name.endsWith(" " + family) ? name : `${name} · ${family}`;
+}

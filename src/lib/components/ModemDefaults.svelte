@@ -2,31 +2,32 @@
   import { page } from "$app/state";
   import { getBasebandDefaults, getBasebandOverride } from "$lib/api/tables.remote";
   import type { Kind } from "$lib/server/data";
+  import { modemLabel } from "$lib/decode/modem";
   import { link, shortValue, withParams } from "$lib/format";
   import Pane from "./Pane.svelte";
   import Variants from "./Variants.svelte";
 
-  let { kind, name, slug }: { kind: Kind; name: string; slug?: string } = $props();
+  let { kind, name, slug, device, phone }: { kind: Kind; name: string; slug?: string; device: string; phone: string } = $props();
 
   const efs = $derived(page.url.searchParams.get("efs"));
   const base = $derived(page.url.searchParams.get("base"));
   const bands = (xs: number[], p: string) => xs.map((b) => p + b).join(" ");
   const compareHref = (pri: string, path: string, i: number) =>
-    withParams(page.url, { file: pri, efs: path, base: String(i) }) + "#override";
+    withParams(page.url, { pri, efs: path, base: String(i) }) + "#override";
 </script>
 
 <fieldset class="hgroup" id="modem">
   <legend>Modem defaults</legend>
   <Pane>
-    {@const d = await getBasebandDefaults({ kind, name, slug })}
+    {@const d = await getBasebandDefaults({ kind, name, slug, device })}
     {#if d.missing}
       <p class="dimtext note">
-        {d.build ? `No .bbfw modem package of ${d.build} is stored yet.` : "No image to read a baseband package from."}
+        {d.build ? `No .bbfw modem package for ${phone} in ${d.build} is stored yet.` : "No image to read a baseband package from."}
       </p>
     {:else}
-      {@const pkg = link("/baseband/" + d.build) + "?family=" + encodeURIComponent(d.family)}
+      {@const pkg = link(`/baseband/${d.build}/${d.family}`)}
       <p class="dimtext note">
-        What the modem holds before this bundle's .der.pri arrives, from the <a href={pkg}>iOS {d.version} {d.family} baseband package</a>.
+        What {phone}'s modem holds before this bundle's .der.pri arrives, from the <a href={pkg}>iOS {d.version} {modemLabel(d.family)} package</a>.
         The .der.pri then overwrites the same EFS paths.
       </p>
 
@@ -67,7 +68,7 @@
             <tbody>
               {#each d.overrides as o, oi (oi)}
                 {#each o.baseline as b (b.i)}
-                  <tr class:sel={efs === o.efs && base === String(b.i) && page.url.searchParams.get("file") === o.pri}>
+                  <tr class:sel={efs === o.efs && base === String(b.i) && page.url.searchParams.get("pri") === o.pri}>
                     <td class="mono wrap">{o.efs}</td>
                     {#if several}<td class="mono wrap">{o.pri}</td>{/if}
                     <td><span class="mono">{b.member}</span> <Variants variants={b.variants} configs={b.configs} /></td>
@@ -82,12 +83,12 @@
           </table>
         </div>
       {:else}
-        <p class="dimtext note">None of this bundle's .der.pri values land on a path the package also writes.</p>
+        <p class="dimtext note">No .der.pri here for {phone} sets a path the package also writes.</p>
       {/if}
       {#if d.otherXml}<p class="dimtext note">{d.otherXml} other XML values go to paths the package leaves unset.</p>{/if}
 
       {#if efs && base !== null}
-        {@const pri = page.url.searchParams.get("file") ?? ""}
+        {@const pri = page.url.searchParams.get("pri") ?? ""}
         <div id="override" class="override">
           <Pane>
             {@const o = await getBasebandOverride({ kind, name, slug, id: d.id, pri, efs, i: Number(base) })}
@@ -95,7 +96,7 @@
               <b class="mono wrap">{o.efs}</b>
               <span class="dimtext">{o.counts.changed + o.counts.added + o.counts.removed} lines differ</span>
               <span class="grow"></span>
-              <a class="btn" href={withParams(page.url, { efs: null, base: null })} data-sveltekit-noscroll data-sveltekit-replacestate>Close</a>
+              <a class="btn" href={withParams(page.url, { pri: null, efs: null, base: null })} data-sveltekit-noscroll data-sveltekit-replacestate>Close</a>
             </div>
             <div class="sides">
               <div>

@@ -11,11 +11,12 @@
  * VoLTE, 5G, Wi-Fi Calling, RCS, hotspot, MCC/MNC.
  */
 
+import { modemLabel, modemName, modemVendor } from "./decode/modem";
 import { buildLabel, carrierName, countryDisplay, versionLabel } from "./names";
 
 export const SITE = "carrier-explode";
 
-type Params = { kind?: string; name?: string; version?: string; path?: string; build?: string; country?: string };
+type Params = { kind?: string; name?: string; version?: string; path?: string; build?: string; family?: string; country?: string };
 type Meta = { title: string; description: string };
 
 // Google shows about 60 characters of title and 155 of description, and
@@ -61,7 +62,7 @@ function who(p: Params) {
 const TABS: Record<string, { title: string; what: string; terms?: string[] }> = {
   plist: { title: "carrier.plist", what: "carrier.plist, every key decoded" },
   baseband: {
-    title: "baseband .pri overrides", what: "Qualcomm baseband overrides (.pri, .der.pri) decoded into ",
+    title: "baseband .pri overrides", what: "modem overrides (.der.pri) per iPhone decoded into ",
     terms: ["NV items", "EFS paths", "carrier configuration bitfields"],
   },
   assets: { title: "status bar logos", what: "status bar logos and images, as PNG" },
@@ -112,11 +113,27 @@ function bundle(id: string, p: Params): Meta {
 export function seo(id: string | null, p: Params): Meta {
   if (p.name) return bundle(id ?? "", p);
 
+  if (p.build && p.family && id?.startsWith("/baseband")) {
+    const ios = buildLabel(p.build);
+    const f = p.family;
+    const named = modemName(f);
+    const short = named && !named.endsWith(" " + f) ? `${named} (${f})` : modemLabel(f);
+    const vendor = modemVendor(f);
+    return {
+      title: fit(TITLE_MAX, `${ios} ${short} modem firmware (${p.build})`, `${ios} ${short} modem firmware`, `${ios} ${short} (${p.build})`, `${p.build} ${f} modem`),
+      description: vendor === "qualcomm"
+        ? listing(`The ${short} baseband package in ${ios} build ${p.build}, for the iPhones it serves, decoded: `,
+            ["band combos per carrier", "policyman rules", "A-MPR power tables", "modem configs", "what changed"])
+        : vendor === "apple"
+          ? `The ${short} modem firmware in ${ios} build ${p.build}: version, build date and chip, and where its carrier settings come from instead.`
+          : `The ${short} modem package in ${ios} build ${p.build}: its version, the iPhones it serves, and why it holds no plaintext config.`,
+    };
+  }
   if (p.build && id?.startsWith("/baseband")) {
     const ios = buildLabel(p.build);
     return {
       title: fit(TITLE_MAX, `${ios} (${p.build}) baseband modem config`, `${ios} baseband modem config`, `${p.build} baseband`),
-      description: listing(`The Qualcomm baseband package in ${ios} build ${p.build}, decoded: `,
+      description: listing(`Every modem package in ${ios} build ${p.build}, one per iPhone modem, decoded: `,
         ["band combos per carrier", "policyman rules", "A-MPR power tables", "modem configs", "what changed"]),
     };
   }
