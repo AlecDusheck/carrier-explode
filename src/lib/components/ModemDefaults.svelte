@@ -21,12 +21,12 @@
     {@const d = await getBasebandDefaults({ kind, name, slug })}
     {#if d.missing}
       <p class="dimtext note">
-        {d.build ? `The baseband package of ${d.build} has not been extracted yet.` : "No image to read a baseband package from."}
+        {d.build ? `No .bbfw modem package of ${d.build} is stored yet.` : "No image to read a baseband package from."}
       </p>
     {:else}
-      {@const pkg = link("/baseband/" + d.build)}
+      {@const pkg = link("/baseband/" + d.build) + "?family=" + encodeURIComponent(d.family)}
       <p class="dimtext note">
-        What the modem holds before this bundle's .der.pri arrives, from the <a href={pkg}>iOS {d.version ?? d.build} baseband package</a>.
+        What the modem holds before this bundle's .der.pri arrives, from the <a href={pkg}>iOS {d.version} {d.family} baseband package</a>.
         The .der.pri then overwrites the same EFS paths.
       </p>
 
@@ -90,7 +90,7 @@
         {@const pri = page.url.searchParams.get("file") ?? ""}
         <div id="override" class="override">
           <Pane>
-            {@const o = await getBasebandOverride({ kind, name, slug, pri, efs, i: Number(base) })}
+            {@const o = await getBasebandOverride({ kind, name, slug, id: d.id, pri, efs, i: Number(base) })}
             <div class="rowflex">
               <b class="mono wrap">{o.efs}</b>
               <span class="dimtext">{o.counts.changed + o.counts.added + o.counts.removed} lines differ</span>

@@ -1,20 +1,27 @@
-# Baseband packages for images already in the bucket. New images get theirs
-# from the extract job in system-bundles.yml; this is for the ones held before
-# that, and for re-decoding after the decoder changes.
+# Modem packages for every held image, for every iPhone that received it.
 #
-# Default: every held image whose index.json has no baseband entry gets one.
-# It resolves the IPSW URL (scripts/plan_system_bundles.py --baseband-have:
-# ipsw.me, else AppleDB for betas), pulls only Firmware/*.bbfw with HTTP range
-# requests (about 140 MB, not the whole IPSW), and stores it the way the extract
-# job does (scripts/attach_baseband.py): blobs/<id>.bbfw, the index entry, and
-# system/<build>/baseband.json.
+# `plan` reads each held image's IPSW directories (every iPhone model's, over HTTP
+# ranges; ipsw.me, else AppleDB for betas) and lists the packages no index points
+# at yet, grouped by (name, size, CRC32): Firmware/*.bbfw (Qualcomm, Intel) and
+# Firmware/c*/Release/**/ftab.bin (Apple C1). `fetch` legs range-extract just those
+# members, store blobs/<sha256>.<bbfw|ftab>, and decode each into
+# baseband/<sha256>.json (scripts/baseband.ts). `index` then sets `modems` in each
+# system/<build>/index.json, for builds whose packages are all stored.
+# Scripts: scripts/modems.py (plan, fetch, write), scripts/modems.sh (storage).
+# New images get theirs from the extract job in system-bundles.yml, the same way.
 #
-# rebuild: re-decodes every stored package from its blob and rewrites only
-# system/<build>/baseband.json. Nothing is fetched from Apple, and bundles and
-# indexes are not touched.
+# rebuild: re-decodes every stored package from its blob into baseband/<id>.json.
+# Nothing is fetched from Apple and no index is touched.
 #
-# Either way, pages rendered from baseband.json are purged at the end (the
+# Either way, pages rendered from package summaries are purged at the end (the
 # "baseband" cache tag).
+#
+# Migration from one package per build (index `baseband`, system/<build>/baseband.json),
+# in two passes so the live site never reads a missing key:
+#   1. a normal run adds `modems` to every index and leaves `baseband` in place;
+#   2. once the site that reads `modems` is deployed, a `contract` run drops the
+#      `baseband` field and deletes each old system/<build>/baseband.json.
+# Remove the `contract` input and job after that run.
 #
 # Needs: secrets CLOUDFLARE_API_TOKEN (R2 edit) and CLOUDFLARE_ACCOUNT_ID.
 # Optional: secret PURGE_TOKEN, as in system-bundles.yml.
@@ -27,6 +34,14 @@ on:
         description: Re-decode every stored package instead of adding missing ones
         type: boolean
         default: false
+      contract:
+        description: "Migration, second pass: drop the one-package `baseband` index field and its old summaries"
+        type: boolean
+        default: false
+
+concurrency:
+  group: modems
+  cancel-in-progress: false
 
 env:
   BUCKET: carrier-explode
@@ -35,106 +50,100 @@ env:
 
 jobs:
   plan:
+    if: ${{ !inputs.contract }}
     runs-on: ubuntu-24.04
     outputs:
-      matrix: ${{ steps.plan.outputs.matrix }}
+      legs: ${{ steps.plan.outputs.legs }}
     steps:
       - uses: actions/checkout@v4
       - id: plan
         env:
           REBUILD: ${{ inputs.rebuild }}
         run: |
+          python3 -m unittest discover -s scripts -p 'test_*.py' -q
           npm install --no-save --silent wrangler
-          W=node_modules/.bin/wrangler
-          "$W" r2 object get "$BUCKET/system/builds.json" --remote --pipe > /tmp/builds.json
-          : > /tmp/have.txt
-          echo '[]' > /tmp/stored.json
-          for b in $(jq -r '.[].build' /tmp/builds.json); do
-            "$W" r2 object get "$BUCKET/system/$b/index.json" --remote --pipe > /tmp/index.json 2>/dev/null || continue
-            if jq -e '.baseband.id' /tmp/index.json > /dev/null; then
-              echo "$b" >> /tmp/have.txt
-              jq --slurpfile i /tmp/index.json '. + [{version: $i[0].version, build: $i[0].build, blob: $i[0].baseband.id}]' \
-                /tmp/stored.json > /tmp/next.json && mv /tmp/next.json /tmp/stored.json
-            fi
-          done
-          if [ "$REBUILD" = "true" ]; then
-            MATRIX=$(jq -c . /tmp/stored.json)
-          else
-            MATRIX=$(python3 scripts/plan_system_bundles.py --builds /tmp/builds.json --baseband-have /tmp/have.txt)
-          fi
-          echo "to process: $MATRIX"
-          echo "matrix=$MATRIX" >> "$GITHUB_OUTPUT"
+          W="$PWD/node_modules/.bin/wrangler" scripts/modems.sh indexes /tmp/idx
+          python3 scripts/modems.py plan --indexes /tmp/idx --legs 6 $([ "$REBUILD" = true ] && echo --rebuild) > /tmp/plan.json
+          echo "legs=$(jq -c '[range(.legs | length)]' /tmp/plan.json)" >> "$GITHUB_OUTPUT"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: plan
+          path: |
+            /tmp/plan.json
+            /tmp/idx
 
-  baseband:
+  fetch:
     needs: plan
-    if: needs.plan.outputs.matrix != '[]'
+    if: needs.plan.outputs.legs != '[]'
     runs-on: ubuntu-24.04-arm
     strategy:
       fail-fast: false
       # Keeps Apple's CDN and the R2 API comfortable.
       max-parallel: 3
       matrix:
-        image: ${{ fromJson(needs.plan.outputs.matrix) }}
-    name: iOS ${{ matrix.image.version }} (${{ matrix.image.build }})
+        leg: ${{ fromJson(needs.plan.outputs.legs) }}
+    name: packages ${{ matrix.leg }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 22
       - run: corepack enable && pnpm install --frozen-lockfile
+      - uses: actions/download-artifact@v4
+        with:
+          name: plan
+          path: /tmp/plan
+      - run: scripts/modems.sh fetch /tmp/plan/plan.json ${{ matrix.leg }} /tmp/meta/${{ matrix.leg }}.jsonl
+      - if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: meta-${{ matrix.leg }}
+          path: /tmp/meta
+          if-no-files-found: ignore
 
-      - name: Install blacktop/ipsw
-        if: ${{ !matrix.image.blob }}
+  # One job for every index: they are small, and R2 prefers them in sequence.
+  index:
+    needs: fetch
+    if: ${{ !cancelled() && !inputs.rebuild && !inputs.contract }}
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: plan
+          path: /tmp/plan
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: meta-*
+          path: /tmp/meta
+          merge-multiple: true
+      - name: Write the indexes, last
         run: |
-          URL=$(curl -s https://api.github.com/repos/blacktop/ipsw/releases/latest |
-            jq -r '.assets[].browser_download_url | select(contains("arm64.deb")) | select(contains("ipsw_"))')
-          curl -sL -o /tmp/ipsw.deb "$URL"
-          sudo dpkg -i /tmp/ipsw.deb
+          npm install --no-save --silent wrangler
+          export W="$PWD/node_modules/.bin/wrangler"
+          python3 scripts/modems.py write --plan /tmp/plan/plan.json --indexes /tmp/plan/idx --meta /tmp/meta --out /tmp/out
+          scripts/modems.sh publish /tmp/out
 
-      - name: Get the package
-        env:
-          URL: ${{ matrix.image.url }}
-          BLOB: ${{ matrix.image.blob }}
+  contract:
+    if: ${{ inputs.contract }}
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Drop `baseband` from every index, then its old summary
         run: |
-          mkdir -p /tmp/bb
-          if [ -n "$BLOB" ]; then
-            node_modules/.bin/wrangler r2 object get "$BUCKET/blobs/$BLOB.bbfw" --remote --file /tmp/bb/package.bbfw
-          else
-            ipsw extract --remote --pattern '.*\.bbfw$' --output /tmp/bb "$URL"
-          fi
-          BBFW=$(find /tmp/bb -name '*.bbfw' | sort | head -1)
-          if [ -z "$BBFW" ]; then echo "no .bbfw for this image"; exit 1; fi
-          echo "BBFW=$BBFW" >> "$GITHUB_ENV"
-
-      - name: Decode
-        run: |
-          npx vite-node scripts/baseband.ts "$BBFW" --out /tmp/baseband.json
-          if [ -z "${{ matrix.image.blob }}" ]; then
-            node_modules/.bin/wrangler r2 object get "$BUCKET/system/${{ matrix.image.build }}/index.json" --remote --pipe > /tmp/index.json
-            python3 scripts/attach_baseband.py --index /tmp/index.json --bbfw "$BBFW" --baseband /tmp/baseband.json --out /tmp/out
-          fi
-
-      - name: Upload to R2
-        run: |
-          W="$GITHUB_WORKSPACE/node_modules/.bin/wrangler"
-          if [ -n "${{ matrix.image.blob }}" ]; then
-            "$W" r2 object put "$BUCKET/system/${{ matrix.image.build }}/baseband.json" \
-              --file /tmp/baseband.json --content-type application/json --remote
-            exit 0
-          fi
-          cd /tmp/out
-          for attempt in 1 2 3 4 5; do
-            "$W" r2 bulk put "$BUCKET" --filename upload.json --remote --force --concurrency 3 && break
-            [ "$attempt" = 5 ] && exit 1
-            sleep $(( 20 * 2 ** (attempt - 1) + RANDOM % 20 ))
-          done
-          # The index goes last, so it never points at a package that is not uploaded.
-          "$W" r2 object put "$BUCKET/system/${{ matrix.image.build }}/index.json" \
-            --file "system/${{ matrix.image.build }}/index.json" --content-type application/json --remote
+          npm install --no-save --silent wrangler
+          export W="$PWD/node_modules/.bin/wrangler"
+          scripts/modems.sh indexes /tmp/idx
+          python3 scripts/modems.py contract --indexes /tmp/idx --out /tmp/out > /tmp/contracted.txt
+          scripts/modems.sh publish /tmp/out
+          while read -r b; do
+            "$W" r2 object delete "$BUCKET/system/$b/baseband.json" --remote
+          done < /tmp/contracted.txt
+          echo "$(wc -l < /tmp/contracted.txt) indexes contracted"
 
   purge:
-    needs: baseband
-    if: ${{ !cancelled() && needs.baseband.result != 'skipped' }}
+    needs: [fetch, index, contract]
+    if: ${{ !cancelled() && (needs.fetch.result == 'success' || needs.index.result == 'success' || needs.contract.result == 'success') }}
     runs-on: ubuntu-24.04
     steps:
       - env:

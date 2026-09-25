@@ -4,6 +4,7 @@
  */
 
 import { compareVersions, imageSlug, isPrerelease } from "$lib/names";
+import type { ModemKind } from "$lib/decode/modem";
 import type { BundleRef, CountrySummary } from "./manifest";
 
 export interface ImageBuild { build: string; version: string; device: string; product?: string; extractedAt: string; scheme?: number }
@@ -12,9 +13,13 @@ export interface ImageBundle { id: string; size: number; build: string }
 export interface ImageIndex extends ImageBuild {
   carriers: Record<string, ImageBundle>;
   countries: Record<string, ImageBundle>;
-  /** The image's Firmware/*.bbfw, stored as blobs/<id>.bbfw; decoded in baseband.json. */
-  baseband?: { id: string; size: number; name: string };
+  /** One per distinct modem package in the build, across every iPhone that received it (scripts/modems.py). */
+  modems: ImageModem[];
 }
+
+/** Stored as blobs/<id>.<kind>, decoded in baseband/<id>.json. `name` is the path under Firmware/. */
+export interface ModemPackage { id: string; size: number; name: string; crc32: string; kind: ModemKind }
+export interface ImageModem { family: string; package: ModemPackage; devices: string[] }
 
 export interface TimelineEntry {
   /** URL segment: ios-27.0, ios-27.2-beta-3, ota-58.1, ota-58.1-iPad, ota-legacy. */

@@ -19,7 +19,8 @@ import {
 } from "./manifest";
 import {
   BBCFG_FILE_TYPES, compareBundles, contentId, decodeFile, diffValues, openIpcc, parseBandCombos, summariseDiff,
-  type BasebandFile, type BasebandSummary, type ComboStats, type DiffKind, type FileDiff, type Variant,
+  type BasebandFile, type BasebandSummary, type ComboStats, type DiffKind, type FileDiff, type ModemKind,
+  type ModemSummary, type Variant,
 } from "$lib/decode";
 import { buildMergedCbsMatrix } from "./cbs";
 import { guessCarrierQuery } from "./guess";
@@ -27,6 +28,7 @@ import {
   POINTER_KEY, bundlesKey, fileDataKey, fileIndexKey, keyScan, topKey,
   type ScanFileIndex, type ScanPointer, type ScanShard, type ScanTarget, type TargetRow,
 } from "./keyscan";
+import { modemView, pickModem } from "./modems";
 import { carriersOf, homeCountry, isoIndex, type CountryPlists } from "./related";
 import { buildTimeline, headIndex, type ImageBuild, type ImageIndex, type TimelineEntry } from "./timeline";
 import { imageSlug, isPrerelease } from "$lib/names";
@@ -64,9 +66,9 @@ export const builds = () =>
  */
 export const release = (all: ImageBuild[]) => all.find((b) => !isPrerelease(b.version)) ?? all[0];
 
-/** An image's index never changes once written. */
+/** Only baseband.yml rewrites an index, to fill in its modems, and it purges the "baseband" tag; so an hour. */
 const imageIndex = (build: string) =>
-  memo(`image:${build}`, 24 * 3600_000, () => r2json<ImageIndex>(`system/${build}/index.json`));
+  memo(`image:${build}`, 3600_000, () => r2json<ImageIndex>(`system/${build}/index.json`));
 
 async function imageIndexes(): Promise<ImageIndex[]> {
   const all = await Promise.all((await builds()).map((b) => imageIndex(b.build)));
@@ -310,29 +312,47 @@ export async function getRelease(build: string) {
 
 /* ---------------------------------------------------------------- baseband */
 
-const basebandKey = (build: string) => `system/${build}/baseband.json`;
-
 /**
- * Written by the workflows, never here. baseband.yml can rewrite it after a
- * decoder change and purges the "baseband" page tag when it does; an isolate's
- * copy cannot be purged, so it is kept only an hour.
+ * Package summaries, keyed by package (baseband/<id>.json). Written by the
+ * workflows, never here; baseband.yml can rewrite one after a decoder change and
+ * purges the "baseband" page tag when it does. An isolate's copy cannot be
+ * purged, so it is kept only an hour.
  */
-const baseband = (build: string) =>
-  memo(`baseband:${build}`, 3600_000, () => r2json<BasebandSummary>(basebandKey(build)));
+const modemSummary = (id: string) =>
+  memo(`modem:${id}`, 3600_000, () => r2json<ModemSummary>(`baseband/${id}.json`));
 
-async function mustBaseband(build: string) {
-  const s = await baseband(build);
-  if (!s) error(404, `No baseband summary for ${build} yet: it has not been extracted.`);
+async function mustSummary(id: string) {
+  const s = await modemSummary(id);
+  if (!s) error(404, `No summary for modem package ${id}.`);
   return s;
 }
 
-/** Every image, and whether its baseband.json is there yet. */
-export const basebandBuilds = async () => {
-  const all = await builds();
-  const has = await memo(`baseband:has:${all.map((b) => b.build).join(",")}`, 10 * 60_000, async () =>
-    Object.fromEntries(await Promise.all(all.map(async (b) => [b.build, !!(await bucket().head(basebandKey(b.build)))] as const))));
-  return all.map((b) => ({ build: b.build, version: b.version, has: has[b.build] }));
-};
+async function mustBbfw(id: string) {
+  const s = await mustSummary(id);
+  if (s.kind !== "bbfw") error(404, `${id} is not a .bbfw package`);
+  return s;
+}
+
+async function mustIndex(build: string) {
+  const idx = await imageIndex(build);
+  if (!idx) error(404, `no image ${build}`);
+  return idx;
+}
+
+/** The image's package of `family`, else the one serving `device` (the image's own phone by default); see pickModem. */
+async function imageModem(build: string, o: { family?: string; device?: string; kind?: ModemKind } = {}) {
+  const idx = await mustIndex(build);
+  const m = pickModem(idx.modems, { ...o, device: o.device ?? idx.product });
+  if (!m) error(404, o.family ? `iOS ${idx.version} (${build}) has no ${o.family} modem package.` : `No modem packages for ${build} yet.`);
+  return { idx, m };
+}
+
+/** A build's modem packages, one per distinct package, with the phones each serves. */
+export const getModems = async (build: string) => (await mustIndex(build)).modems.map(modemView);
+
+/** Every image, and the modem families it holds. */
+export const basebandBuilds = async () =>
+  (await imageIndexes()).map((i) => ({ build: i.build, version: i.version, families: i.modems.map((m) => m.family) }));
 
 const where = (f: Pick<BasebandFile, "variants" | "configs">) =>
   f.configs?.length ? f.configs.join(", ") : (f.variants ?? []).map((v) => `${v.platform}/${v.sku}/${v.hwRev}`).join(" ");
@@ -355,16 +375,14 @@ async function mccCountries(mccs: Iterable<string>) {
   return out;
 }
 
-/** The page's view of a package: everything but file contents and NV values. */
-export async function getBaseband(build: string) {
-  const [s, all] = await Promise.all([mustBaseband(build), builds()]);
+/** The page's view of a .bbfw package: everything but file contents and NV values. */
+async function bbfwView(s: BasebandSummary) {
   const mccs = new Set([
     ...s.amprNs.flatMap((a) => a.groups.flatMap((g) => g.mccs)),
     ...(s.mdb?.databases ?? []).flatMap((d) => d.scan?.flatMap((e) => (e.mcc ? [e.mcc] : [])) ?? []),
   ]);
   return {
-    build,
-    version: all.find((b) => b.build === build)?.version,
+    kind: s.kind,
     package: s.package,
     members: s.members,
     // The header metadata is build-system placeholders apart from the version the page already names.
@@ -388,15 +406,28 @@ export async function getBaseband(build: string) {
   };
 }
 
-export async function getBasebandFile(build: string, i: number) {
-  const f = (await mustBaseband(build)).files[i];
-  if (!f) error(404, `no file ${i} in the ${build} baseband summary`);
+/** One package, by id: the .bbfw page view, or an ftab summary as stored. */
+export async function getModemPackage(id: string) {
+  const s = await mustSummary(id);
+  return s.kind === "ftab" ? s : bbfwView(s);
+}
+
+/** An image's .bbfw package of `family`, by default the one serving the image's own phone. */
+export async function getBaseband(build: string, family?: string) {
+  const { idx, m } = await imageModem(build, { family, kind: "bbfw" });
+  const view = await bbfwView(await mustBbfw(m.package.id));
+  return { build, version: idx.version, family: m.family, id: m.package.id, modems: idx.modems.map(modemView), ...view };
+}
+
+export async function getBasebandFile(id: string, i: number) {
+  const f = (await mustBbfw(id)).files[i];
+  if (!f) error(404, `no file ${i} in modem package ${id}`);
   return { ...f, i };
 }
 
 /** One carrier's combo strings from one band_combos_per_plmn.xml variant. */
-export async function getBasebandCombos(build: string, sha1: string, tag: string) {
-  const f = (await mustBaseband(build)).files.find((x) => x.sha1 === sha1 && x.path.endsWith("/band_combos_per_plmn.xml"));
+export async function getBasebandCombos(id: string, sha1: string, tag: string) {
+  const f = (await mustBbfw(id)).files.find((x) => x.sha1 === sha1 && x.path.endsWith("/band_combos_per_plmn.xml"));
   if (!f?.text) error(404, `no band combo file ${sha1}`);
   const c = parseBandCombos(f.text).find((x) => x.tag === tag);
   if (!c) error(404, `no ${tag} in ${sha1}`);
@@ -428,14 +459,14 @@ function basebandComparable(s: BasebandSummary) {
 
 export interface BasebandDiffPart extends FileDiff { section: string }
 
-/** `b` against `a`, part by part. Summaries never change under a build, so a pair is cached for a month. */
-export async function getBasebandDiff(a: string, b: string) {
-  const all = await builds();
-  const side = (build: string) => ({ build, version: all.find((x) => x.build === build)?.version });
-  return cached(`bbdiff:v1:${a}|${b}`, 30 * 86400, async () => {
-    const [A, B] = await Promise.all([mustBaseband(a), mustBaseband(b)]);
-    const ca = basebandComparable(A) as Record<string, Record<string, unknown>>;
-    const cb = basebandComparable(B) as Record<string, Record<string, unknown>>;
+/** One family's package in build `b` against build `a`, part by part. A package pair is cached for a month. */
+export async function getBasebandDiff(a: string, b: string, family: string) {
+  const [A, B] = await Promise.all([imageModem(a, { family, kind: "bbfw" }), imageModem(b, { family, kind: "bbfw" })]);
+  const side = (x: typeof A) => ({ build: x.idx.build, version: x.idx.version, id: x.m.package.id });
+  const diff = await cached(`bbdiff:v2:${A.m.package.id}|${B.m.package.id}`, 30 * 86400, async () => {
+    const [sa, sb] = await Promise.all([mustBbfw(A.m.package.id), mustBbfw(B.m.package.id)]);
+    const ca = basebandComparable(sa) as Record<string, Record<string, unknown>>;
+    const cb = basebandComparable(sb) as Record<string, Record<string, unknown>>;
     const parts: BasebandDiffPart[] = [];
     const MAX = 300;
     for (const section of Object.keys(cb)) {
@@ -447,14 +478,23 @@ export async function getBasebandDiff(a: string, b: string) {
         parts.push({ section, path, kind, rows: rows.slice(0, MAX), counts: summariseDiff(rows), truncated: rows.length > MAX });
       }
     }
-    return { a: side(a), b: side(b), parts, counts: summariseDiff(parts.map((p) => ({ path: p.path, kind: p.kind }))) };
+    return { parts, counts: summariseDiff(parts.map((p) => ({ path: p.path, kind: p.kind }))) };
   });
+  return { family, a: side(A), b: side(B), ...diff };
 }
 
-/** The image a bundle version belongs to: its own for an image entry, the current release for OTA. */
-async function bundleImage(kind: Kind, name: string, slug?: string) {
+/**
+ * The .bbfw package a bundle version meets: from its own image for an image
+ * entry, the current release for OTA; `family` when named, else the one serving
+ * the entry's phone (a per-model OTA file's, or the image's own).
+ */
+async function bundleModem(kind: Kind, name: string, slug?: string, family?: string) {
   const { entry } = await resolve(kind, name, slug);
-  return { entry, build: entry.image ?? release(await builds())?.build };
+  const build = entry.image ?? release(await builds())?.build;
+  const idx = build ? await imageIndex(build) : null;
+  const device = entry.productType?.includes(",") ? entry.productType : idx?.product;
+  const m = idx ? pickModem(idx.modems, { family, device, kind: "bbfw" }) : undefined;
+  return { entry, build: build ?? null, idx, m };
 }
 
 /**
@@ -462,19 +502,19 @@ async function bundleImage(kind: Kind, name: string, slug?: string) {
  * band-combo carrier tags whose PLMNs route here, and the package files each
  * .der.pri replaces by EFS path.
  */
-export async function getBasebandDefaults(kind: Kind, name: string, slug?: string) {
-  const { entry, build } = await bundleImage(kind, name, slug);
-  const s = build ? await baseband(build) : null;
-  if (!build || !s) return { build: build ?? null, missing: true as const };
+export async function getBasebandDefaults(kind: Kind, name: string, slug?: string, family?: string) {
+  const { entry, build, idx, m } = await bundleModem(kind, name, slug, family);
+  const s = m ? await modemSummary(m.package.id) : null;
+  if (!build || !idx || !m || s?.kind !== "bbfw") return { build, missing: true as const };
   const tags = Object.entries(s.carrierMap ?? {})
-    .filter(([, m]) => m.bundles.includes(name) || m.mvnoBundles.includes(name))
-    .map(([tag, m]) => ({
-      tag, plmns: m.plmns, primary: m.bundles.includes(name),
+    .filter(([, c]) => c.bundles.includes(name) || c.mvnoBundles.includes(name))
+    .map(([tag, c]) => ({
+      tag, plmns: c.plmns, primary: c.bundles.includes(name),
       // Platforms whose numbers match share one row.
       sets: s.bandCombos.reduce<Array<{ sha1: string; variants: Variant[]; key: string } & ComboStats>>((out, set) => {
-        const c = set.carriers.find((x) => x.tag === tag);
-        if (!c) return out;
-        const { tag: _t, plmns: _p, ...stats } = c;
+        const row = set.carriers.find((x) => x.tag === tag);
+        if (!row) return out;
+        const { tag: _t, plmns: _p, ...stats } = row;
         const key = JSON.stringify(stats);
         const hit = out.find((o) => o.key === key);
         if (hit) hit.variants = [...hit.variants, ...set.variants].sort((a, b) => a.platform - b.platform || a.sku - b.sku);
@@ -503,20 +543,23 @@ export async function getBasebandDefaults(kind: Kind, name: string, slug?: strin
       });
     }
   }
-  return { build, missing: false as const, version: (await builds()).find((b) => b.build === build)?.version, tags, overrides, otherXml };
+  return {
+    build, missing: false as const, version: idx.version, family: m.family, id: m.package.id,
+    modems: idx.modems.map(modemView), tags, overrides, otherXml,
+  };
 }
 
-/** A package file next to the .der.pri value that replaces it, with the lines that differ. */
-export async function getBasebandOverride(kind: Kind, name: string, slug: string | undefined, pri: string, efs: string, i: number) {
-  const { entry, build } = await bundleImage(kind, name, slug);
-  const base = build ? (await mustBaseband(build)).files[i] : undefined;
+/** File `i` of modem package `id` next to the .der.pri value that replaces it, with the lines that differ. */
+export async function getBasebandOverride(kind: Kind, name: string, slug: string | undefined, id: string, pri: string, efs: string, i: number) {
+  const { entry } = await resolve(kind, name, slug);
+  const base = (await mustBbfw(id)).files[i];
   if (!base?.text || base.path !== efs) error(404, `no package file ${i} at ${efs}`);
   const { opened } = await open(entry.src);
   const v = decodeFile(opened, pri).pri?.efs.find((e) => e.path === efs)?.value;
   const text = v?.xml ?? v?.text;
   if (text === undefined) error(404, `${pri} does not set ${efs}`);
   const rows = diffValues(base.text.split("\n"), text.split("\n"));
-  return { build, efs, pri, where: where(base), member: base.member, baseline: base.text, override: text, rows, counts: summariseDiff(rows) };
+  return { id, efs, pri, where: where(base), member: base.member, baseline: base.text, override: text, rows, counts: summariseDiff(rows) };
 }
 
 /* ------------------------------------------------------------ cross-cutting */

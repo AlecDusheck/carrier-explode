@@ -15,6 +15,7 @@ import { annotateNv } from "./nv";
 import { comboStats, parseAmprNs, parseBandCombos, xmlRefs, type AmprGroup, type ComboStats, type XmlRefs } from "./policy";
 import { decodeModemEfs, parseMcc2Arfcn, parsePlmnFeatures, readMdb, type MccScanEntry, type MdbConfidence, type MdbHeader, type PlmnFeatures } from "./mdb";
 import { parseSsgccs, type SsgccsConfig } from "./ssgccs";
+import { modemFamily } from "./modem";
 
 const td = new TextDecoder();
 const latin1 = (b: Uint8Array) => { let s = ""; for (let i = 0; i < b.length; i++) s += String.fromCharCode(b[i]); return s; };
@@ -618,8 +619,11 @@ export interface BasebandSsgccs {
 
 export interface BasebandSummary {
   schema: 1;
+  kind: "bbfw";
   package: {
     name?: string;
+    /** "Mav25", from the name (modem.ts). */
+    family?: string;
     version?: string;
     chipId?: string;
     sblVersion?: string;
@@ -710,9 +714,11 @@ const trailerOf = (t?: McfgTrailer) => {
  * any may be missing.
  */
 export function basebandSummary(members: Record<string, Uint8Array>, opts: BasebandSummaryOptions = {}): BasebandSummary {
+  const family = opts.name && modemFamily(opts.name);
   const out: BasebandSummary = {
     schema: 1,
-    package: { ...(opts.name ? { name: opts.name } : {}) },
+    kind: "bbfw",
+    package: { ...(opts.name ? { name: opts.name } : {}), ...(family ? { family } : {}) },
     members: opts.listing ?? Object.entries(members).map(([name, b]) => ({ name, size: b.length })),
     containers: [],
     files: [],

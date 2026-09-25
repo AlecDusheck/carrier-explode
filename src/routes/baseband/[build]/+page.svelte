@@ -24,6 +24,7 @@
   ];
 
   const fileAt = $derived(page.url.searchParams.get("file"));
+  const family = $derived(page.url.searchParams.get("family") ?? undefined);
   const vs = $derived(page.url.searchParams.get("vs"));
   const combos = new SvelteSet<string>();
   let raw = $state(false);
@@ -72,14 +73,14 @@
         <select name="build" value={params.build} onchange={(e) => goto(link("/baseband/" + e.currentTarget.value))}>
           {#if !all.some((b) => b.build === params.build)}<option value={params.build}>{params.build}</option>{/if}
           {#each all as b (b.build)}
-            <option value={b.build} disabled={!b.has && b.build !== params.build}>iOS {b.version} ({b.build}){b.has ? "" : " - not extracted"}</option>
+            <option value={b.build} disabled={!b.families.length && b.build !== params.build}>iOS {b.version} ({b.build}){b.families.length ? "" : " - not extracted"}</option>
           {/each}
         </select>
       </label>
     </Pane>
     <span class="grow"></span>
     <Pane quiet>
-      {@const bb = await getBaseband(params.build)}
+      {@const bb = await getBaseband({ build: params.build, family })}
       {@const has = { power: !!bb.amprNs.length, fbs: !!bb.ssgccs?.length, networks: !!bb.mdb } as Record<string, boolean>}
       {#each SECTIONS.filter(([id]) => has[id] ?? true) as [id, label] (id)}<a class="btn" href="#{id}">{label}</a>{/each}
     </Pane>
@@ -87,14 +88,14 @@
 
   <div class="scroll pad">
     <Pane>
-      {@const bb = await getBaseband(params.build)}
+      {@const bb = await getBaseband({ build: params.build, family })}
       {@const tags = [...new Set(bb.bandCombos.flatMap((s) => s.carriers.map((c) => c.tag)))]}
       {@const readable = bb.files.filter((f) => f.readable)}
-      {@const others = (await getBasebandBuilds()).filter((b) => b.has && b.build !== params.build)}
+      {@const others = (await getBasebandBuilds()).filter((b) => b.families.includes(bb.family) && b.build !== params.build)}
 
       <div class="rowflex">
-        <a class="btn" href={link("/releases/" + params.build)}>{bb.version ? `iOS ${bb.version}` : params.build}</a>
-        <b>{bb.package.name ?? "Baseband package"}</b>
+        <a class="btn" href={link("/releases/" + params.build)}>iOS {bb.version}</a>
+        <b>{bb.package.name ?? bb.family}</b>
         {#if bb.package.version}<span class="dimtext">version {bb.package.version}</span>{/if}
       </div>
       <p class="lead dimtext order">
@@ -213,7 +214,7 @@
             {#each sets as set (set.sha1)}
               {#if combos.has(tag + set.sha1)}
                 <Pane>
-                  <ComboTable combos={await getBasebandCombos({ build: params.build, sha1: set.sha1, tag })} />
+                  <ComboTable combos={await getBasebandCombos({ id: bb.id, sha1: set.sha1, tag })} />
                 </Pane>
               {/if}
             {/each}
@@ -247,7 +248,7 @@
         {#if fileAt !== null}
           <div id="file" class="viewer">
             <Pane>
-              {@const f = await getBasebandFile({ build: params.build, i: Number(fileAt) })}
+              {@const f = await getBasebandFile({ id: bb.id, i: Number(fileAt) })}
               <div class="rowflex">
                 <b class="mono wrap">{f.path}</b>
                 <span class="dimtext">{f.format}, {f.member}, {humanBytes(f.length)}</span>
@@ -540,16 +541,16 @@
           </label>
           {#if vs}
             <Pane>
-              {@const d = await getBasebandDiff({ a: vs, b: params.build })}
+              {@const d = await getBasebandDiff({ a: vs, b: params.build, family: bb.family })}
               <p class="dimtext note">
-                iOS {d.a.version ?? d.a.build} ({d.a.build}) to iOS {d.b.version ?? d.b.build} ({d.b.build}):
+                iOS {d.a.version} ({d.a.build}) to iOS {d.b.version} ({d.b.build}):
                 {d.counts.changed} changed, {d.counts.added} added, {d.counts.removed} removed.
               </p>
               <BasebandDiff parts={d.parts} />
             </Pane>
           {/if}
         {:else}
-          <p class="dimtext">No other image has a baseband summary yet.</p>
+          <p class="dimtext">No other image has a {bb.family} package yet.</p>
         {/if}
       </fieldset>
     </Pane>

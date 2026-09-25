@@ -9,7 +9,7 @@ A web explorer for iOS carrier and country bundles, and the baseband config that
 - Decoded plists, `.der.pri`/`.der.gri` baseband overrides, PRLs, signed profiles, certificates, CgBI logos and more. Each field is explained where it's understood, marked by confidence.
 - Diffs between any two bundles or versions, and a per-version Changes tab.
 - "What does everyone else put here?": right-click any setting to see its value across every bundle.
-- The baseband package per iOS build: carrier policies, band combos, power tables, and what each bundle overrides.
+- The modem packages of every iOS build, one per modem family (Qualcomm, Intel, Apple C1) with the iPhones each serves: carrier policies, band combos, power tables, and what each bundle overrides.
 - Cell broadcast IDs by country, MCC/MNC lookup, and a page for each iOS release.
 
 ## Layout
@@ -20,9 +20,9 @@ A web explorer for iOS carrier and country bundles, and the baseband config that
 - `tools/`: standalone research tools for firmware formats, each with its own README (see `tools/README.md`).
 
 ## Workflows
-- `system-bundles.yml` (daily): extracts new iOS images, betas included, into R2, including each image's `baseband.json`.
+- `system-bundles.yml` (daily): extracts new iOS images, betas included, into R2, with the modem packages of every iPhone that received each build.
 - `scan-index.yml` (after every system-bundles run, or on demand): builds the cross-bundle scan index from what's already stored.
-- `baseband.yml` (manual): adds the baseband package to images held from before it was kept, pulling only the `.bbfw` over range requests; with `rebuild`, re-decodes every stored package after a decoder change.
+- `baseband.yml` (manual): adds the modem packages no index names yet, for every held image and iPhone, pulling only those IPSW members over range requests; with `rebuild`, re-decodes every stored package after a decoder change.
 
 They need `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`. An optional `PURGE_TOKEN`, set both as a repository secret and as a Worker secret, makes new images appear immediately rather than when cached pages expire.
 

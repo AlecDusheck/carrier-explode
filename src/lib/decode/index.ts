@@ -20,6 +20,8 @@ export * from "./dmu";
 export * from "./caf";
 export * from "./bytes";
 export * from "./bbfw";
+export * from "./ftab";
+export * from "./modem";
 export * from "./policy";
 export * from "./ims";
 export * from "./policyman";

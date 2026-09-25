@@ -120,7 +120,7 @@ export function cachePolicy(
 
   const tags = [event.params.version ? "pinned" : "latest"];
   if (event.params.name) tags.push(`b-${event.params.name}`);
-  // Rendered from baseband.json, which baseband.yml can rewrite; it purges this tag when it does.
+  // Rendered from modem package summaries, which baseband.yml can rewrite; it purges this tag when it does.
   if (event.route.id?.startsWith("/baseband") || event.route.id?.endsWith("/baseband")) tags.push("baseband");
 
   if (status === 404) return { browser: REVALIDATE, edge: MISSING_EDGE, tags };

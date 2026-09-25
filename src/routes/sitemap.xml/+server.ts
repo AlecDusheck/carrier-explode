@@ -8,7 +8,7 @@ export async function GET({ url }) {
     ...(["carriers", "countries", "watch"] as const).flatMap((kind) =>
       idx[kind].map((e) => `/${kind}/${encodeURIComponent(e.name)}`)),
     ...idx.builds.map((b) => `/releases/${encodeURIComponent(b.build)}`),
-    ...bb.filter((b) => b.has).map((b) => `/baseband/${encodeURIComponent(b.build)}`),
+    ...bb.filter((b) => b.families.length).map((b) => `/baseband/${encodeURIComponent(b.build)}`),
   ];
   const body = `<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
