@@ -9,20 +9,19 @@
 
 import { Unzlib, unzlibSync } from "fflate";
 import { readTlv, type Tlv } from "./der";
-import { leUint, sha1Hex } from "./bytes";
-import { bytesToHex, parsePlist } from "./plist";
+import { asciiAt, beBigInt, bytesToHex, latin1, leUint, sha1Hex, u16le, u32le } from "./bytes";
+import { isPlistDict, isRecord, parsePlist } from "./plist";
 import { annotateNv } from "./nv";
+import type { PriDecoded } from "./pri";
 import { comboStats, parseAmprNs, parseBandCombos, xmlRefs, type AmprGroup, type ComboStats, type XmlRefs } from "./policy";
-import { decodeModemEfs, parseMcc2Arfcn, parsePlmnFeatures, readMdb, type MccScanEntry, type MdbConfidence, type MdbHeader, type PlmnFeatures } from "./mdb";
+import { decodeModemEfs, parseMcc2Arfcn, parsePlmnFeatures, readMdb, type MccScanEntry, type MdbHeader, type PlmnFeatures } from "./mdb";
 import { parseSsgccs, type SsgccsConfig } from "./ssgccs";
-import { modemFamily } from "./modem";
+import { MODEM_SUMMARY_SCHEMA, modemFamily } from "./modem";
+import type { Confidence } from "./confidence";
 
 const td = new TextDecoder();
-const latin1 = (b: Uint8Array) => { let s = ""; for (let i = 0; i < b.length; i++) s += String.fromCharCode(b[i]); return s; };
-const u16 = (b: Uint8Array, o: number) => b[o] | (b[o + 1] << 8);
-const u32 = (b: Uint8Array, o: number) => (b[o] | (b[o + 1] << 8) | (b[o + 2] << 16) | (b[o + 3] << 24)) >>> 0;
-const uint = (b: Uint8Array) => { let v = 0; for (let i = 0; i < b.length; i++) v = v * 256 + b[i]; return v; };
-const ascii = (b: Uint8Array, o: number, s: string) => { for (let i = 0; i < s.length; i++) if (b[o + i] !== s.charCodeAt(i)) return false; return true; };
+const uint = (b: Uint8Array) => Number(beBigInt(b));
+const trimNul = (s: string) => s.replace(/\0+$/, "");
 
 function* kids(b: Uint8Array, t: Tlv): Generator<Tlv> {
   for (let p = t.contentStart; p < t.contentEnd; ) {
@@ -53,7 +52,7 @@ export interface BbcfgMeta {
 // bbcfg.mbn: header tags 80..87 (82..87 are build-system placeholders)
 const META_KEYS = ["project", "versionHex", "buildHost", "buildUser", "field84", "field85", "buildTime", "sourceRevision"] as const;
 
-export interface FileTypeInfo { name: string; confidence: "high" | "med" | "low"; note: string }
+export interface FileTypeInfo { name: string; confidence: Confidence; note: string }
 
 // qdsp6sw.mbn: log table "DFLT_CAL STAT_NV PA_CHAR STAT_CFG RFFE_DEV RFFE_LUT RFC_MMW PROT_NV PROT_PRI PROT SKU", matched by content
 export const BBCFG_FILE_TYPES: Record<number, FileTypeInfo> = {
@@ -87,7 +86,7 @@ export type BlobFormat = "der" | "mavz" | "bin";
 
 export interface BbcfgBlobRef {
   index: number;
-  /** 40 hex chars; not a hash of the payload (the modem copies it into /mav/bbcfg_file_hash_*). */
+  /** Stored as 40 ASCII hex chars; not a hash of the payload (the modem copies it, as bytes, into /mav/bbcfg_file_hash_*). */
   digest: string;
   offset: number;
   length: number;
@@ -105,7 +104,7 @@ export interface BbcfgContainer {
   blobs: BbcfgBlobRef[];
 }
 
-export const isBbcfg = (b: Uint8Array) => b.length > 0x32 && ascii(b, 0x28, "BBCFGMBN");
+export const isBbcfg = (b: Uint8Array) => b.length > 0x32 && asciiAt(b, 0x28, "BBCFGMBN");
 
 /** Header, metadata, index and blob table; payloads are left in place. */ // bbcfg.mbn / pt.mbn
 export function readBbcfg(b: Uint8Array): BbcfgContainer {
@@ -132,7 +131,7 @@ export function readBbcfg(b: Uint8Array): BbcfgContainer {
         }
         if (!p) continue;
         const head = b.subarray(p.contentStart, p.contentStart + 4);
-        const format: BlobFormat = ascii(head, 0, "MAVZ") ? "mavz" : head[0] === 0x30 ? "der" : "bin";
+        const format: BlobFormat = asciiAt(head, 0, "MAVZ") ? "mavz" : head[0] === 0x30 ? "der" : "bin";
         blobs.push({ index: blobs.length, digest, offset: p.contentStart, length: p.contentEnd - p.contentStart, format });
       }
     } else if (t.cls === 2 && !t.constructed && t.num < META_KEYS.length) {
@@ -145,8 +144,8 @@ export function readBbcfg(b: Uint8Array): BbcfgContainer {
   }
   return {
     magic: latin1(b.subarray(0, 4)).split("").reverse().join("").replace(/\0/g, ""),
-    headerVersion: u32(b, 4),
-    sizes: [u32(b, 0x10), u32(b, 0x14)],
+    headerVersion: u32le(b, 4),
+    sizes: [u32le(b, 0x10), u32le(b, 0x14)],
     meta,
     index,
     blobs,
@@ -155,8 +154,8 @@ export function readBbcfg(b: Uint8Array): BbcfgContainer {
 
 /** "MAVZ" + u32le inflated length + zlib stream. */ // bbcfg.mbn
 export function inflateMavz(p: Uint8Array): Uint8Array {
-  if (!ascii(p, 0, "MAVZ")) throw new Error("not MAVZ");
-  const n = u32(p, 4);
+  if (!asciiAt(p, 0, "MAVZ")) throw new Error("not MAVZ");
+  const n = u32le(p, 4);
   if (n > 256 << 20) throw new Error(`MAVZ length ${n} too large`);
   const out = unzlibSync(p.subarray(8), { out: new Uint8Array(n) });
   if (out.length !== n) throw new Error(`MAVZ inflated to ${out.length}, header says ${n}`);
@@ -187,6 +186,7 @@ export interface BbcfgBlob extends BbcfgBlobRef {
   mcfg?: McfgImage;
 }
 
+/** Small integer fields; wider ones are not integers. */
 const small = (b: Uint8Array) => (b.length <= 6 ? uint(b) : undefined);
 
 /** DER blob payload: SEQUENCE { bf8458 NV records, bf8459 EFS records }. */ // bbcfg.mbn: blob tag 9f65
@@ -213,7 +213,7 @@ export function readBlobRecords(p: Uint8Array): { nv: NvRecord[]; files: EfsReco
         const r: EfsRecord = { path: "", data: new Uint8Array(0) };
         for (const x of kids(p, rec)) {
           const v = val(p, x);
-          if (ctx(x, 500)) r.path = latin1(v).replace(/\0+$/, "");
+          if (ctx(x, 500)) r.path = trimNul(latin1(v));
           else if (ctx(x, 502)) r.data = v;
           else if (ctx(x, 503)) r.f77 = small(v);
           else if (ctx(x, 504)) r.f78 = small(v);
@@ -255,16 +255,16 @@ const TRL_KEYS: Record<number, keyof Omit<McfgTrailer, "tlvs">> = { 0: "trailerV
 
 /** Trailer item body: u8, u8, u16 length, "MCFG_TRL", then TLVs (u8 type, u16le length, value). */ // MCFG item type 10
 export function parseMcfgTrailer(body: Uint8Array): McfgTrailer | undefined {
-  if (!ascii(body, 4, "MCFG_TRL")) return undefined;
+  if (!asciiAt(body, 4, "MCFG_TRL")) return undefined;
   const out: McfgTrailer = { tlvs: {} };
   for (let o = 12; o + 3 <= body.length; ) {
-    const t = body[o], n = u16(body, o + 1);
+    const t = body[o], n = u16le(body, o + 1);
     if ((t === 0 && n === 0) || o + 3 + n > body.length) break;
     const v = body.subarray(o + 3, o + 3 + n);
     o += 3 + n;
     out.tlvs[t] = bytesToHex(v);
     const k = TRL_KEYS[t];
-    if (k) out[k] = t === 3 || t === 8 ? latin1(v).replace(/\0+$/, "") : bytesToHex(v);
+    if (k) out[k] = t === 3 || t === 8 ? trimNul(latin1(v)) : bytesToHex(v);
     if (t === 9) break;
   }
   return out;
@@ -299,12 +299,12 @@ export interface McfgImage {
 
 /** The PT_LOAD segment that starts with "MCFG", or `img` itself for a bare segment. */ // ELF32 program headers
 function mcfgSegment(img: Uint8Array): number | undefined {
-  if (ascii(img, 0, "MCFG")) return 0;
-  if (!(img[0] === 0x7f && ascii(img, 1, "ELF")) || img[4] !== 1) return undefined;
-  const phoff = u32(img, 28), phnum = u16(img, 44);
+  if (asciiAt(img, 0, "MCFG")) return 0;
+  if (!(img[0] === 0x7f && asciiAt(img, 1, "ELF")) || img[4] !== 1) return undefined;
+  const phoff = u32le(img, 28), phnum = u16le(img, 44);
   for (let i = 0; i < phnum; i++) {
-    const off = u32(img, phoff + 32 * i + 4);
-    if (off + 4 <= img.length && ascii(img, off, "MCFG")) return off;
+    const off = u32le(img, phoff + 32 * i + 4);
+    if (off + 4 <= img.length && asciiAt(img, off, "MCFG")) return off;
   }
   return undefined;
 }
@@ -318,16 +318,16 @@ function mcfgSegment(img: Uint8Array): number | undefined {
 export function parseMcfg(img: Uint8Array, maxItems = 4096): McfgImage | undefined {
   const s = mcfgSegment(img);
   if (s === undefined || s + 20 > img.length) return undefined;
-  const ct = u16(img, s + 6);
-  const vlen = u16(img, s + 18);
+  const ct = u16le(img, s + 6);
+  const vlen = u16le(img, s + 18);
   const out: McfgImage = {
     segmentOffset: s,
-    format: u16(img, s + 4),
+    format: u16le(img, s + 4),
     cfgType: ct,
     cfgTypeName: ct === 0 ? "HW" : ct === 1 ? "SW" : String(ct),
-    numItems: u32(img, s + 8),
-    muxdCarrierIndex: u16(img, s + 12),
-    versionId: u16(img, s + 16),
+    numItems: u32le(img, s + 8),
+    muxdCarrierIndex: u16le(img, s + 12),
+    versionId: u16le(img, s + 16),
     version: bytesToHex(img.subarray(s + 20, s + 20 + vlen).slice().reverse()),
     items: [],
     length: 0,
@@ -335,24 +335,24 @@ export function parseMcfg(img: Uint8Array, maxItems = 4096): McfgImage | undefin
   const count = Math.min(out.numItems || maxItems, maxItems);
   let o = s + 20 + vlen;
   while (o + 8 <= img.length && out.items.length < count) {
-    const ln = u32(img, o);
+    const ln = u32le(img, o);
     if (ln < 8 || o + ln > img.length) break;
     const it: McfgItem = { type: img[o + 4], attr: img[o + 5], length: ln };
     const body = img.subarray(o + 8, o + ln);
     if (it.type === 10) {
       out.trailer = parseMcfgTrailer(body);
     } else if (it.type === 1 && body.length >= 4) {
-      it.nv = u16(body, 0);
+      it.nv = u16le(body, 0);
       it.dataOffset = o + 12;
-      it.dataLength = Math.min(u16(body, 2), body.length - 4);
+      it.dataLength = Math.min(u16le(body, 2), body.length - 4);
     } else if (body[0] === 1 && body[1] === 0 && body.length >= 4) {
       // u16 1, u16 path length, path, u16 2, u16 (u32 for type 16) data length, data
-      const pl = u16(body, 2);
-      it.path = latin1(body.subarray(4, 4 + pl)).replace(/\0+$/, "");
+      const pl = u16le(body, 2);
+      it.path = trimNul(latin1(body.subarray(4, 4 + pl)));
       const q = 4 + pl;
       if (body[q] === 2 && body[q + 1] === 0) {
         const w = it.type === 16 ? 4 : 2;
-        const dl = w === 4 ? u32(body, q + 2) : u16(body, q + 2);
+        const dl = w === 4 ? u32le(body, q + 2) : u16le(body, q + 2);
         it.dataOffset = o + 8 + q + 2 + w;
         it.dataLength = Math.min(dl, img.length - it.dataOffset);
       }
@@ -388,7 +388,7 @@ export interface ModemConfig {
 const isZlibStart = (b: Uint8Array, o: number) =>
   b[o] === 0x78 && (b[o + 1] === 0x01 || b[o + 1] === 0x5e || b[o + 1] === 0x9c || b[o + 1] === 0xda);
 
-const isImage = (d: Uint8Array) => (d[0] === 0x7f && ascii(d, 1, "ELF")) || ascii(d, 0, "MCFG");
+const isImage = (d: Uint8Array) => (d[0] === 0x7f && asciiAt(d, 1, "ELF")) || asciiAt(d, 0, "MCFG");
 
 /** Streams at most `cap` bytes out of a zlib stream at the start of `src`; trailing bytes are ignored. */
 function inflateCapped(src: Uint8Array, cap: number): Uint8Array {
@@ -418,8 +418,11 @@ function probeZlib(b: Uint8Array, o: number): Uint8Array | undefined {
   return head;
 }
 
+/** Paths of an image's file items, in order. */
+const itemPaths = (m: McfgImage): string[] => m.items.flatMap((it) => (it.path ? [it.path] : []));
+
 function modemFiles(img: Uint8Array, m: McfgImage): ModemConfig["files"] {
-  return m.items.filter((it) => it.path).map((it) => ({ path: it.path!, data: mcfgItemData(img, it) }));
+  return m.items.flatMap((it) => (it.path ? [{ path: it.path, data: mcfgItemData(img, it) }] : []));
 }
 
 /**
@@ -430,7 +433,7 @@ export function scanModemConfigs(b: Uint8Array): ModemConfig[] {
   const out: ModemConfig[] = [];
   for (let o = 0; o + 20 <= b.length; o++) {
     const c = b[o];
-    if (c === 0x4d && ascii(b, o, "MCFG") && u16(b, o + 16) === 0x1383 && u16(b, o + 6) <= 1) {
+    if (c === 0x4d && asciiAt(b, o, "MCFG") && u16le(b, o + 16) === 0x1383 && u16le(b, o + 6) <= 1) {
       // plain segment: header + version record id 0x1383
       const m = parseMcfg(b.subarray(o, Math.min(b.length, o + (16 << 20))), 256);
       if (m?.trailer) {
@@ -463,7 +466,7 @@ export type ContentFormat = "xml" | "text" | "mdb" | "bin";
 export function contentFormat(d: Uint8Array, path = ""): ContentFormat {
   let i = 0;
   while (i < d.length && i < 64 && (d[i] === 0x20 || (d[i] >= 9 && d[i] <= 13))) i++;
-  if (d[i] === 0x3c && (ascii(d, i, "<?xml") || /[A-Za-z_]/.test(String.fromCharCode(d[i + 1] ?? 0)))) return "xml";
+  if (d[i] === 0x3c && (asciiAt(d, i, "<?xml") || /[A-Za-z_]/.test(String.fromCharCode(d[i + 1] ?? 0)))) return "xml";
   if (path.endsWith(".mdb")) return "mdb";
   if (path.endsWith(".txt")) return "text";
   if (d.length >= 8) {
@@ -519,7 +522,7 @@ export interface BasebandNvRecord {
   meaning?: string;
   /** What the value means, for scalar values the tables describe. */
   label?: string;
-  confidence?: "high" | "med" | "low";
+  confidence?: Confidence;
 }
 
 export interface BasebandNvBlob {
@@ -551,7 +554,8 @@ export interface BasebandContainer {
   meta: BbcfgMeta;
   records: number;
   blobs: number;
-  fileTypes: Array<{ type: number; name: string; blobs: number; records: number }>;
+  /** Per file type: its name and, for known types, how sure the name is and what the type holds. */
+  fileTypes: Array<{ type: number; name: string; confidence?: Confidence; note?: string; blobs: number; records: number }>;
   /** Blobs that failed to decode. */
   errors?: Array<{ blob: number; error: string }>;
 }
@@ -606,7 +610,7 @@ export interface BasebandModemEfs {
   hex: string;
   name: string;
   value: string;
-  confidence: MdbConfidence;
+  confidence: Confidence;
 }
 
 export interface BasebandSsgccs {
@@ -618,7 +622,7 @@ export interface BasebandSsgccs {
 }
 
 export interface BasebandSummary {
-  schema: 1;
+  schema: typeof MODEM_SUMMARY_SCHEMA;
   kind: "bbfw";
   package: {
     name?: string;
@@ -664,11 +668,9 @@ export interface BasebandSummaryOptions {
 // ft 15/17/20 hold the protocol/carrier settings worth listing record by record
 const NV_TYPES = new Set([15, 17, 20]);
 
-const isDict = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null && !Array.isArray(v) && !(v instanceof Uint8Array);
-
 /** Bundles for each band-combo tag, derived from its PLMN list. */ // reference extractor: map_bundles
 export function mapComboCarriers(carriers: Array<{ tag: string; plmns: string[] }>, mccMnc: unknown): Record<string, CarrierMapping> {
-  const byPlmn = isDict(mccMnc) ? mccMnc : {};
+  const byPlmn = isRecord(mccMnc) ? mccMnc : {};
   const out: Record<string, CarrierMapping> = {};
   for (const { tag, plmns } of carriers) {
     const m = (out[tag] ??= { plmns: [], bundles: [], mvnoBundles: [] });
@@ -676,8 +678,8 @@ export function mapComboCarriers(carriers: Array<{ tag: string; plmns: string[] 
     for (const p of plmns) {
       ps.add(p);
       const r = byPlmn[p.replace("-", "")];
-      if (!isDict(r)) continue;
-      const mvnos = (Array.isArray(r.MVNOs) ? r.MVNOs : []).filter(isDict);
+      if (!isRecord(r)) continue;
+      const mvnos = (Array.isArray(r.MVNOs) ? r.MVNOs : []).filter(isRecord);
       const names: string[] = typeof r.BundleName === "string" ? [r.BundleName] : [];
       for (const x of mvnos) {
         const gid = `${x.GID1 ?? ""}${x.GID2 ?? ""}`.toUpperCase();
@@ -693,7 +695,8 @@ export function mapComboCarriers(carriers: Array<{ tag: string; plmns: string[] 
   return out;
 }
 
-const variantKey = (v: Variant) => `${v.platform}/${v.sku}/${v.hwRev}`;
+/** "platform/sku/hwRev". */
+export const variantKey = (v: Variant) => `${v.platform}/${v.sku}/${v.hwRev}`;
 const byVariant = (a: Variant, b: Variant) => a.platform - b.platform || a.sku - b.sku || a.hwRev - b.hwRev;
 
 function addVariants(into: Variant[], add: Variant[]) {
@@ -716,7 +719,7 @@ const trailerOf = (t?: McfgTrailer) => {
 export function basebandSummary(members: Record<string, Uint8Array>, opts: BasebandSummaryOptions = {}): BasebandSummary {
   const family = opts.name && modemFamily(opts.name);
   const out: BasebandSummary = {
-    schema: 1,
+    schema: MODEM_SUMMARY_SCHEMA,
     kind: "bbfw",
     package: { ...(opts.name ? { name: opts.name } : {}), ...(family ? { family } : {}) },
     members: opts.listing ?? Object.entries(members).map(([name, b]) => ({ name, size: b.length })),
@@ -732,10 +735,17 @@ export function basebandSummary(members: Record<string, Uint8Array>, opts: Baseb
   if (info) {
     try {
       const p = parsePlist(info);
-      if (isDict(p)) {
-        const k = (s: string) => (typeof p[`com.apple.EmbeddedSoftwareRestore.Baseband.${s}`] === "string" ? (p[`com.apple.EmbeddedSoftwareRestore.Baseband.${s}`] as string) : undefined);
-        const pk = { version: k("Version"), chipId: k("ChipId"), sblVersion: k("SBLVersion"), restoreSblVersion: k("RestoreSBLVersion") };
-        for (const [key, v] of Object.entries(pk)) if (v) (out.package as Record<string, string>)[key] = v;
+      if (isPlistDict(p)) {
+        const k = (s: string) => {
+          const v = p[`com.apple.EmbeddedSoftwareRestore.Baseband.${s}`];
+          return typeof v === "string" && v ? v : undefined;
+        };
+        const version = k("Version"), chipId = k("ChipId"), sblVersion = k("SBLVersion"), restoreSblVersion = k("RestoreSBLVersion");
+        out.package = {
+          ...out.package,
+          ...(version ? { version } : {}), ...(chipId ? { chipId } : {}),
+          ...(sblVersion ? { sblVersion } : {}), ...(restoreSblVersion ? { restoreSblVersion } : {}),
+        };
       }
     } catch { /* Info.plist is optional */ }
   }
@@ -750,11 +760,13 @@ export function basebandSummary(members: Record<string, Uint8Array>, opts: Baseb
     if (!f) {
       const format = contentFormat(data, path);
       f = { member, path, format, length: data.length, sha1 };
-      if (format === "xml" || format === "text") f.text = td.decode(data);
-      else f.hex = bytesToHex(data);
-      if (format === "xml") {
-        const refs = xmlRefs(f.text!);
+      if (format === "xml" || format === "text") {
+        const text = td.decode(data);
+        f.text = text;
+        const refs = format === "xml" ? xmlRefs(text) : {};
         if (Object.keys(refs).length) f.refs = refs;
+      } else {
+        f.hex = bytesToHex(data);
       }
       byKey.set(key, f);
       out.files.push(f);
@@ -777,12 +789,13 @@ export function basebandSummary(members: Record<string, Uint8Array>, opts: Baseb
       if (!types.has(r.blob)) types.set(r.blob, r.fileType);
     }
     const ft = new Map<number, { blobs: number; records: number }>();
-    for (const r of c.index) {
-      const e = ft.get(r.fileType) ?? { blobs: 0, records: 0 };
-      e.records++;
-      ft.set(r.fileType, e);
-    }
-    for (const t of types.values()) ft.get(t)!.blobs++;
+    const tally = (t: number) => {
+      let e = ft.get(t);
+      if (!e) ft.set(t, (e = { blobs: 0, records: 0 }));
+      return e;
+    };
+    for (const r of c.index) tally(r.fileType).records++;
+    for (const t of types.values()) tally(t).blobs++;
     const summary: BasebandContainer = {
       member,
       magic: c.magic,
@@ -790,7 +803,10 @@ export function basebandSummary(members: Record<string, Uint8Array>, opts: Baseb
       meta: c.meta,
       records: c.index.length,
       blobs: c.blobs.length,
-      fileTypes: [...ft].sort((a, b) => a[0] - b[0]).map(([type, e]) => ({ type, name: fileTypeName(type), ...e })),
+      fileTypes: [...ft].sort((a, b) => a[0] - b[0]).map(([type, e]) => {
+        const known = BBCFG_FILE_TYPES[type];
+        return { type, name: fileTypeName(type), ...(known ? { confidence: known.confidence, note: known.note } : {}), ...e };
+      }),
     };
     out.containers.push(summary);
 
@@ -814,7 +830,7 @@ export function basebandSummary(members: Record<string, Uint8Array>, opts: Baseb
         out.images.push({
           member, blob: i, fileType: type, fileTypeName: fileTypeName(type), variants,
           cfgType: blob.mcfg.cfgTypeName, version: blob.mcfg.version, trailer: trailerOf(blob.mcfg.trailer),
-          files: blob.mcfg.items.filter((it) => it.path).map((it) => it.path!),
+          files: itemPaths(blob.mcfg),
         });
         continue;
       }
@@ -898,7 +914,8 @@ function modemDatabases(files: BasebandFile[], raw: Map<BasebandFile, Uint8Array
   }
   if (!databases.length && !settings.length) return undefined;
   const order = new Map(files.map((f, i) => [f.sha1 + f.path, i]));
-  const byFile = (a: { sha1: string; path: string }, b: { sha1: string; path: string }) => order.get(a.sha1 + a.path)! - order.get(b.sha1 + b.path)!;
+  const at = (x: { sha1: string; path: string }) => order.get(x.sha1 + x.path) ?? order.size;
+  const byFile = (a: { sha1: string; path: string }, b: { sha1: string; path: string }) => at(a) - at(b);
   const out: NonNullable<BasebandSummary["mdb"]> = { databases: databases.sort(byFile), settings: settings.sort(byFile) };
   const plmns = [...new Set(databases.flatMap((d) => d.features?.flatMap((x) => x.plmns) ?? []))];
   if (mccMnc !== undefined && plmns.length) {
@@ -910,17 +927,19 @@ function modemDatabases(files: BasebandFile[], raw: Map<BasebandFile, Uint8Array
 
 /** ssgccs_config.txt paired with the ssgccs_int_config.txt the same blobs or configs carry. */
 function ssgccsConfigs(files: BasebandFile[]): BasebandSsgccs[] {
-  const main = files.filter((f) => f.text !== undefined && f.path.endsWith("/ssgccs_config.txt"));
-  const int = files.filter((f) => f.text !== undefined && f.path.endsWith("/ssgccs_int_config.txt"));
+  type TextFile = BasebandFile & { text: string };
+  const texts = files.filter((f): f is TextFile => f.text !== undefined);
+  const main = texts.filter((f) => f.path.endsWith("/ssgccs_config.txt"));
+  const int = texts.filter((f) => f.path.endsWith("/ssgccs_int_config.txt"));
   const overlap = (a: BasebandFile, b: BasebandFile) =>
     a.member === b.member && ((a.blobs ?? []).some((x) => b.blobs?.includes(x)) || (a.configs ?? []).some((x) => b.configs?.includes(x)));
   const used = new Set<BasebandFile>();
   const out: BasebandSsgccs[] = [];
-  const entry = (fs: BasebandFile[]): BasebandSsgccs => ({
+  const entry = (fs: TextFile[]): BasebandSsgccs => ({
     ...(fs[0].variants ? { variants: fs[0].variants } : {}),
     ...(fs[0].configs ? { configs: fs[0].configs } : {}),
-    files: fs.map((f) => ({ path: f.path, sha1: f.sha1, text: f.text! })),
-    config: parseSsgccs(...fs.map((f) => f.text!)),
+    files: fs.map((f) => ({ path: f.path, sha1: f.sha1, text: f.text })),
+    config: parseSsgccs(...fs.map((f) => f.text)),
   });
   for (const f of main) {
     const pair = int.find((x) => overlap(f, x));
@@ -929,4 +948,88 @@ function ssgccsConfigs(files: BasebandFile[]): BasebandSsgccs[] {
   }
   for (const f of int) if (!used.has(f)) out.push(entry([f]));
   return out;
+}
+
+/* ------------------------------------------------------------ views */
+
+/** Where a package entry applies: its modem configs, else its platform variants ("5/0/0 5/1/0"). */
+export const carriedBy = (f: { variants?: Variant[]; configs?: string[] }): string =>
+  f.configs?.length ? f.configs.join(", ") : (f.variants ?? []).map(variantKey).join(" ");
+
+export interface ComboSetRow extends ComboStats {
+  /** The first band_combos_per_plmn.xml variant with these numbers. */
+  sha1: string;
+  /** Every platform whose numbers match. */
+  variants: Variant[];
+}
+
+/** One carrier tag's stats across combo sets; platforms with identical stats share a row. */
+export function mergeComboSets(sets: BandComboSet[], tag: string): ComboSetRow[] {
+  const rows = new Map<string, ComboSetRow>();
+  for (const set of sets) {
+    const hit = set.carriers.find((x) => x.tag === tag);
+    if (!hit) continue;
+    const { tag: _tag, plmns: _plmns, ...stats } = hit;
+    const key = JSON.stringify(stats);
+    const row = rows.get(key);
+    if (row) addVariants(row.variants, set.variants);
+    else rows.set(key, { sha1: set.sha1, variants: [...set.variants].sort(byVariant), ...stats });
+  }
+  return [...rows.values()];
+}
+
+/** Section -> keyed parts of a package, so a keyed diff lines two packages up by what each part is. */
+export function basebandComparable(s: BasebandSummary): Record<string, Record<string, unknown>> {
+  const files: Record<string, unknown> = {};
+  for (const f of s.files) files[`${f.member} ${f.path} [${carriedBy(f)}]`] = f.text !== undefined ? f.text.split("\n") : f.sha1;
+  const combos: Record<string, unknown> = {};
+  for (const set of s.bandCombos) {
+    const text = s.files.find((f) => f.sha1 === set.sha1)?.text;
+    const lists = new Map(text ? parseBandCombos(text).map((c) => [c.tag, c.combos]) : []);
+    const at = carriedBy(set);
+    for (const { tag, ...stats } of set.carriers) combos[`${tag} [${at}]`] = { ...stats, list: [...(lists.get(tag) ?? [])].sort() };
+  }
+  return {
+    Package: { package: s.package },
+    "Band combos": combos,
+    Carriers: { ...s.carrierMap },
+    Files: files,
+    Power: Object.fromEntries(s.amprNs.map((a) => [`A-MPR NS [${carriedBy(a)}]`, a.groups])),
+    "Network databases": Object.fromEntries((s.mdb?.databases ?? []).map((d) => [`${d.path} [${carriedBy(d)}]`, d.scan ?? d.features ?? d.error ?? d.sha1])),
+    "Modem configs": Object.fromEntries((s.modemConfigs ?? []).map((m) => [`${m.label ?? "@" + m.offset} ${m.cfgType}`, { version: m.version, trailer: m.trailer, files: m.files }])),
+    Containers: Object.fromEntries(s.containers.map((c) => [c.member, { meta: c.meta, records: c.records, blobs: c.blobs, fileTypes: c.fileTypes }])),
+  };
+}
+
+export interface PriReplacement {
+  efs: string;
+  /** Bytes the .der.pri writes. */
+  length: number;
+  /** The package files at that path, by index into `files`, and whether the .der.pri writes the same text. */
+  baseline: Array<{ i: number; member: string; variants?: Variant[]; configs?: string[]; same: boolean }>;
+}
+
+/** The text a PRI EFS entry writes, when it is text. */
+export const priText = (v: PriDecoded["efs"][number]["value"]): string | undefined => v.xml ?? (v.kind === "string" ? v.text : undefined);
+
+/** Package text files a decoded .der.pri overwrites by EFS path; `otherXml` counts its XML at paths the package does not ship. */
+export function priReplacements(pri: PriDecoded, s: BasebandSummary): { replaced: PriReplacement[]; otherXml: number } {
+  const byPath = new Map<string, Array<{ f: BasebandFile & { text: string }; i: number }>>();
+  s.files.forEach((f, i) => {
+    const text = f.text;
+    if (text !== undefined) byPath.set(f.path, [...(byPath.get(f.path) ?? []), { f: { ...f, text }, i }]);
+  });
+  const replaced: PriReplacement[] = [];
+  let otherXml = 0;
+  for (const e of pri.efs) {
+    const text = priText(e.value);
+    if (text === undefined) continue;
+    const base = byPath.get(e.path);
+    if (!base) { if (e.value.xml) otherXml++; continue; }
+    replaced.push({
+      efs: e.path, length: e.value.len,
+      baseline: base.map(({ f, i }) => ({ i, member: f.member, variants: f.variants, configs: f.configs, same: f.text === text })),
+    });
+  }
+  return { replaced, otherXml };
 }

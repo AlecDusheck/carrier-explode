@@ -3,6 +3,7 @@
  * imports; `fflate` is the only dependency. Safe to run in a browser.
  */
 
+export * from "./confidence";
 export * from "./plist";
 export * from "./pri";
 export * from "./intel";
@@ -10,6 +11,7 @@ export * from "./bundle";
 export * from "./png";
 export * from "./devices";
 export * from "./fields";
+export * from "./cbs";
 export * from "./compare";
 export * from "./flatten";
 export * from "./nv";

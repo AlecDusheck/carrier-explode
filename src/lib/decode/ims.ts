@@ -679,7 +679,7 @@ const SECTIONS: Readonly<Record<string, readonly Row[]>> = {
 };
 
 /** Registry section names, in registration order. */
-export const IMS_SECTIONS: readonly string[] = Object.keys(SECTIONS);
+export const IMS_SECTIONS: readonly string[] = /* @__PURE__ */ Object.keys(SECTIONS);
 
 let index: Map<string, ImsSetting[]> | undefined;
 

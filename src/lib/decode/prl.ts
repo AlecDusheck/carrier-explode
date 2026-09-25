@@ -3,8 +3,7 @@
  * Extended PRL (SSPR_P_REV 3). Field layout per 3GPP2 C.S0016-D v1.0 §3.5.5.
  */
 
-import { BitReader, crc16Ccitt } from "./bytes";
-import { bytesToHex } from "./plist";
+import { BitReader, bytesToHex, crc16Ccitt } from "./bytes";
 
 export interface PrlChannel {
   /** CDMA band class; absent for records that imply one (cellular, PCS). */

@@ -65,13 +65,90 @@ export function beBigInt(b: Uint8Array): bigint {
   return v;
 }
 
+/** Little-endian unsigned integer of any width, exact. */
+export function leBigInt(b: Uint8Array): bigint {
+  let v = 0n;
+  for (let i = b.length - 1; i >= 0; i--) v = (v << 8n) | BigInt(b[i]);
+  return v;
+}
+
 /** Little-endian unsigned integer of 1 to 8 bytes; undefined when empty, wider, or past 2^53. */
 export function leUint(b: Uint8Array): number | undefined {
   if (!b.length || b.length > 8) return undefined;
-  let v = 0n;
-  for (let i = b.length - 1; i >= 0; i--) v = (v << 8n) | BigInt(b[i]);
-  const n = Number(v);
+  const n = Number(leBigInt(b));
   return Number.isSafeInteger(n) ? n : undefined;
+}
+
+/** Little-endian u16 at `o`. */
+export const u16le = (b: Uint8Array, o: number): number => b[o] | (b[o + 1] << 8);
+
+/** Little-endian u32 at `o`. */
+export const u32le = (b: Uint8Array, o: number): number => (b[o] | (b[o + 1] << 8) | (b[o + 2] << 16) | (b[o + 3] << 24)) >>> 0;
+
+/** Set-bit indices, lowest first. Exact for any safe integer or bigint; negative values are read as 64-bit two's complement. */
+export function maskBits(value: number | bigint): number[] {
+  let v: bigint;
+  if (typeof value === "bigint") v = value;
+  else if (Number.isSafeInteger(value)) v = BigInt(value);
+  else return [];
+  if (v < 0n) v = BigInt.asUintN(64, v);
+  const bits: number[] = [];
+  for (let i = 0; v > 0n; i++, v >>= 1n) if (v & 1n) bits.push(i);
+  return bits;
+}
+
+/** True when `b` holds the ASCII string `s` at `offset`. */
+export function asciiAt(b: Uint8Array, offset: number, s: string): boolean {
+  if (offset < 0 || offset + s.length > b.length) return false;
+  for (let i = 0; i < s.length; i++) if (b[offset + i] !== s.charCodeAt(i)) return false;
+  return true;
+}
+
+/** ISO-8859-1: one character per byte. */
+export function latin1(b: Uint8Array): string {
+  let s = "";
+  for (let i = 0; i < b.length; i += 0x8000) s += String.fromCharCode(...b.subarray(i, i + 0x8000));
+  return s;
+}
+
+/** Lower-case hex, no separators. */
+export function bytesToHex(b: Uint8Array): string {
+  let s = "";
+  for (let i = 0; i < b.length; i++) s += b[i].toString(16).padStart(2, "0");
+  return s;
+}
+
+const utf8 = new TextDecoder();
+
+/** Printable ASCII (tabs and line breaks allowed) before any NUL padding, else undefined; longer than `max` bytes is never text. */
+export function maybeText(b: Uint8Array, max = 4096): string | undefined {
+  if (b.length === 0 || b.length > max) return undefined;
+  let end = b.length;
+  while (end > 0 && b[end - 1] === 0) end--;
+  if (end === 0) return undefined;
+  for (let i = 0; i < end; i++) {
+    const c = b[i];
+    if (!(c === 9 || c === 10 || c === 13 || (c >= 0x20 && c < 0x7f))) return undefined;
+  }
+  return utf8.decode(b.subarray(0, end));
+}
+
+/** Lenient base64: whitespace and junk are dropped, a ragged tail decodes as far as it goes; empty when undecodable. */
+export function b64ToBytes(s: string): Uint8Array {
+  let clean = s.replace(/[^A-Za-z0-9+/]/g, "");
+  // atob rejects a length that is not a multiple of 4; a lone trailing character carries no whole byte
+  const rem = clean.length % 4;
+  if (rem === 1) clean = clean.slice(0, -1);
+  else if (rem) clean += "=".repeat(4 - rem);
+  let bin: string;
+  try {
+    bin = atob(clean);
+  } catch {
+    return new Uint8Array();
+  }
+  const out = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+  return out;
 }
 
 /** Bytes as upper-case colon-separated hex, the way certificate tools print serials and digests. */

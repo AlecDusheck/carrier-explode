@@ -1,12 +1,13 @@
 /**
  * Lookup of the Qualcomm EFS paths and legacy NV item numbers that Apple baseband
- * override files (`*.der.pri` / `*.der.gri`) assign. Self-contained, no dependencies.
+ * override files (`*.der.pri` / `*.der.gri`) assign.
  *
  * `describeNv(pathOrItem)` resolves an exact path, then a path family, then a legacy
  * NV number. `decodeNvValue(pathOrItem, n)` turns a scalar into its enum/bit label.
  */
 
-export type NvConfidence = "high" | "med" | "low";
+import { maskBits } from "./bytes";
+import type { Confidence } from "./confidence";
 
 export type NvType =
   | "bool" | "uint8" | "int8" | "uint16" | "uint32" | "uint64"
@@ -24,7 +25,7 @@ export interface NvInfo {
   values?: Record<number, string>;
   /** Bitmask labels by bit index (LSB = 0). */
   bits?: Record<number, string>;
-  confidence: NvConfidence;
+  confidence: Confidence;
   /** Where the finding comes from. */
   source: string;
   /** Set when matched by a path family rather than the exact path. */
@@ -34,7 +35,7 @@ export interface NvInfo {
 type Entry = Omit<NvInfo, "key" | "item" | "family"> & { format?: (n: number) => string };
 
 const e = (
-  name: string, meaning: string, type: NvType, confidence: NvConfidence, source: string,
+  name: string, meaning: string, type: NvType, confidence: Confidence, source: string,
   extra: Partial<Entry> = {},
 ): Entry => ({ name, meaning, type, confidence, source, ...extra });
 
@@ -392,7 +393,7 @@ export interface NvAnnotation {
   meaning?: string;
   /** What the scalar value means (enum name, set bits, version), when known. */
   label?: string;
-  confidence: NvConfidence;
+  confidence: Confidence;
 }
 
 /** What an NV item or EFS path is and, given its scalar value, what that value means. */
@@ -417,10 +418,8 @@ export function decodeNvValue(pathOrItem: string | number, n: number): string | 
   if (fmt) return fmt(n);
   if (info.values && n in info.values) return info.values[n];
   if (info.bits) {
-    const set: string[] = [];
-    for (let b = 0; b < 53 && 2 ** b <= n; b++) {
-      if (Math.floor(n / 2 ** b) % 2) set.push(info.bits[b] ?? `bit ${b}`);
-    }
+    const bits = info.bits;
+    const set = maskBits(n).map((b) => bits[b] ?? `bit ${b}`);
     return set.length ? set.join(", ") : "none";
   }
   return undefined;

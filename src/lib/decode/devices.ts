@@ -158,7 +158,8 @@ export function describeDevices(stem: string): Array<{ code: string; name?: stri
   });
 }
 
-const BY_PRODUCT = new Map(Object.values(DEVICE_CODENAMES).filter((d) => d.ids).map((d) => [d.ids, d.name]));
+let byProduct: Map<string, string> | undefined;
 
 /** Marketing name of a product type ("iPhone18,1" -> "iPhone 17 Pro"), when the table has it. */
-export const productName = (productType: string) => BY_PRODUCT.get(productType);
+export const productName = (productType: string): string | undefined =>
+  (byProduct ??= new Map(Object.values(DEVICE_CODENAMES).filter((d) => d.ids).map((d) => [d.ids, d.name]))).get(productType);

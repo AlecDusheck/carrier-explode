@@ -1,5 +1,7 @@
 /** Core Audio Format header summary, per Apple's CAF File Specification. */
 
+import { asciiAt, latin1 } from "./bytes";
+
 export interface CafInfo {
   sampleRate: number;
   /** Four-character format ID, e.g. "lpcm", "aac ". */
@@ -12,11 +14,10 @@ export interface CafInfo {
   duration?: number;
 }
 
-const fourcc = (dv: DataView, off: number) =>
-  String.fromCharCode(dv.getUint8(off), dv.getUint8(off + 1), dv.getUint8(off + 2), dv.getUint8(off + 3));
+const fourcc = (b: Uint8Array, off: number) => latin1(b.subarray(off, off + 4));
 
 export function isCaf(b: Uint8Array): boolean {
-  return b.length >= 8 && b[0] === 0x63 && b[1] === 0x61 && b[2] === 0x66 && b[3] === 0x66;
+  return b.length >= 8 && asciiAt(b, 0, "caff");
 }
 
 export function decodeCaf(b: Uint8Array): CafInfo {
@@ -26,11 +27,11 @@ export function decodeCaf(b: Uint8Array): CafInfo {
   let bytesPerPacket = 0, framesPerPacket = 0, dataBytes = -1, validFrames = -1;
   // CAF spec: 8-byte file header, then chunks of type(4) + size(int64)
   for (let off = 8; off + 12 <= b.length; ) {
-    const type = fourcc(dv, off);
+    const type = fourcc(b, off);
     const size = Number(dv.getBigInt64(off + 4));
     const body = off + 12;
     if (type === "desc" && body + 32 <= b.length) {
-      const format = fourcc(dv, body + 8);
+      const format = fourcc(b, body + 8);
       const flags = dv.getUint32(body + 12);
       bytesPerPacket = dv.getUint32(body + 16);
       framesPerPacket = dv.getUint32(body + 20);

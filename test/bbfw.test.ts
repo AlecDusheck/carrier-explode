@@ -23,21 +23,28 @@ import { dirname, join } from "node:path";
 import { unzipSync, zlibSync } from "fflate";
 
 import {
+  BBCFG_FILE_TYPES,
+  basebandComparable,
   basebandSummary,
+  carriedBy,
   contentFormat,
   decodeBbcfgBlob,
   inflateMavz,
   mapComboCarriers,
   mcfgItemData,
+  mergeComboSets,
   parseMcfg,
+  priReplacements,
   parseMcfgTrailer,
   readBbcfg,
   readBlobRecords,
   scanModemConfigs,
+  variantKey,
+  type BandComboSet,
 } from "../src/lib/decode/bbfw.ts";
-import { comboStats, parseAmprNs, parseBandCombos, parseCombo, parsePolicyXml, walkPolicy, xmlRefs } from "../src/lib/decode/policy.ts";
-import { bytesToHex } from "../src/lib/decode/plist.ts";
-import { sha1Hex } from "../src/lib/decode/bytes.ts";
+import type { PriDecoded } from "../src/lib/decode/pri.ts";
+import { bandList, comboStats, parseAmprNs, parseBandCombos, parseCombo, parsePolicyXml, walkPolicy, xmlRefs } from "../src/lib/decode/policy.ts";
+import { bytesToHex, sha1Hex } from "../src/lib/decode/bytes.ts";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const fx = (name: string) => new Uint8Array(readFileSync(join(here, "fixtures", "bbfw", name)));
@@ -256,7 +263,10 @@ describe("band_combos_per_plmn.xml", () => {
       { rat: "nr", band: 41, dl: "A[4:30]", ul: "A[1:30]" },
     ]);
     expect(parseCombo("n66AA-n258HH-n258G-dc")).toMatchObject({ nrdc: true, swul: false });
-    expect(parseCombo("n2AA-n5A-n66A-n77AA-n77A-swul")).toMatchObject({ nrdc: false, swul: true });
+    expect(parseCombo("n2AA-n5A-n66A-n77AA-n77A-swul")).toMatchObject({ type: "nr", nrdc: false, swul: true });
+    expect([parseCombo("b66A-n77A").type, parseCombo("b2A").type, parseCombo("junk").type]).toEqual(["endc", "lte", undefined]);
+    expect(bandList([2, 66], "lte")).toBe("B2 B66");
+    expect(bandList([77], "nr")).toBe("n77");
   });
 
   it("summarises each carrier", () => {
@@ -264,7 +274,7 @@ describe("band_combos_per_plmn.xml", () => {
       combos: 459, endc: 206, nr: 253, lte: 0, nrdc: 26, swul: 43, maxComponents: 5,
       nrBands: [2, 5, 66, 77, 258, 260],
       singleBands: [1, 3, 7, 8, 12, 14, 20, 25, 26, 28, 29, 30, 38, 40, 41, 48, 53, 70, 71, 78, 79],
-      fr2Bands: [258, 260], lteAnchors: [2, 5, 12, 14, 29, 30, 66], sulBands: [],
+      fr1Bands: [2, 5, 66, 77], fr2Bands: [258, 260], lteAnchors: [2, 5, 12, 14, 29, 30, 66], sulBands: [],
     });
     const kddi = comboStats(carriers[3].combos);
     expect([kddi.endc, kddi.nr, kddi.lteAnchors]).toEqual([25, 0, [1, 3, 11, 18, 41, 42]]);
@@ -307,10 +317,11 @@ describe("basebandSummary", () => {
     expect(s.containers.map((c) => [c.member, c.magic, c.records, c.blobs, c.errors])).toEqual([
       ["bbcfg.mbn", "CFG", 6, 4, undefined], ["pt.mbn", "POW", 3, 1, undefined],
     ]);
-    expect(s.containers[0].fileTypes).toEqual([
-      { type: 10, name: "RFC_MMW", blobs: 1, records: 1 }, { type: 13, name: "PROT_SKU?", blobs: 1, records: 3 },
-      { type: 15, name: "PROT_NV", blobs: 1, records: 1 }, { type: 17, name: "PROT_PRI", blobs: 1, records: 1 },
+    expect(s.containers[0].fileTypes.map(({ type, name, confidence, blobs, records }) => ({ type, name, confidence, blobs, records }))).toEqual([
+      { type: 10, name: "RFC_MMW", confidence: "high", blobs: 1, records: 1 }, { type: 13, name: "PROT_SKU?", confidence: "low", blobs: 1, records: 3 },
+      { type: 15, name: "PROT_NV", confidence: "high", blobs: 1, records: 1 }, { type: 17, name: "PROT_PRI", confidence: "high", blobs: 1, records: 1 },
     ]);
+    expect(s.containers[0].fileTypes[0].note).toBe(BBCFG_FILE_TYPES[10].note);
   });
 
   it("dedups files by content and records who carries them", () => {
@@ -385,8 +396,9 @@ describe("basebandSummary", () => {
     expect(s.ssgccs).toHaveLength(1);
     expect(s.ssgccs![0].files.map((f) => f.path)).toEqual(["/SSGCCS/ssgccs_config.txt", "/SSGCCS/ssgccs_int_config.txt"]);
     expect(s.ssgccs![0].variants).toEqual([{ platform: 5, sku: 0, hwRev: 0 }]);
-    expect(s.ssgccs![0].config.activePlmns).toEqual(["ALL"]);
-    expect(s.ssgccs![0].config.lines.map((l) => l.key)).toEqual(["CUSTOM", "ACTIVE_PLMN_LIST", "GERAN"]);
+    expect(s.ssgccs![0].config.allNetworks).toBe(true);
+    expect(s.ssgccs![0].config.custom?.key).toBe("CUSTOM");
+    expect(s.ssgccs![0].config.rats.map((l) => l.key)).toEqual(["GERAN"]);
   });
 
   it("summarises the modem configs", () => {
@@ -415,7 +427,7 @@ describe.skipIf(!BBFW || !existsSync(BBFW))("whole Mav25-2.10.01 package", () =>
     expect(s.nv).toHaveLength(11);
     expect(s.mdb?.databases.map((d) => d.path)).toEqual(["/mdb/nr/mcc2arfcn.mdb", "/mdb/nr/plmn2features.mdb", "/mdb/lte/plmn2features_lte.mdb"]);
     expect(s.mdb?.settings.filter((x) => x.path === "/protected/mcfg/active_int_carrier_info").map((x) => x.value)).toEqual(["SW_DEF", "HW_DEF"]);
-    expect(s.ssgccs?.map((g) => g.config.activePlmns)).toEqual([["ALL"]]);
+    expect(s.ssgccs?.map((g) => g.config.allNetworks)).toEqual([true]);
     expect(s.bandCombos).toHaveLength(4);
     for (const set of s.bandCombos) expect(set.carriers).toHaveLength(11);
     expect(s.modemConfigs?.map((m) => m.label)).toEqual([
@@ -432,5 +444,44 @@ describe.skipIf(!BBFW || !existsSync(BBFW))("whole Mav25-2.10.01 package", () =>
         .map((m) => [m[1], m[2].split(";").filter((c) => c.trim()).length]));
       expect(Object.fromEntries(set.carriers.map((c) => [c.tag, c.combos]))).toEqual(counts);
     }
+  });
+});
+
+describe("summary views", () => {
+  const s = basebandSummary({ "bbcfg.mbn": bbcfg, "pt.mbn": pt }, { name: "Mav25-2.10.01.Release.bbfw" });
+
+  it("labels where an entry applies", () => {
+    expect(variantKey({ platform: 5, sku: 1, hwRev: 6 })).toBe("5/1/6");
+    expect(carriedBy({ variants: [{ platform: 5, sku: 0, hwRev: 0 }, { platform: 5, sku: 1, hwRev: 0 }] })).toBe("5/0/0 5/1/0");
+    expect(carriedBy({ variants: [{ platform: 5, sku: 0, hwRev: 0 }], configs: ["SW_DEF"] })).toBe("SW_DEF");
+  });
+
+  it("merges platforms whose combo stats match", () => {
+    const [set] = s.bandCombos;
+    const tag = set.carriers[0].tag;
+    const twin: BandComboSet = { ...set, sha1: "other", variants: [{ platform: 9, sku: 0, hwRev: 0 }] };
+    const rows = mergeComboSets([set, twin, set], tag);
+    expect(rows).toHaveLength(1);
+    expect(rows[0].sha1).toBe(set.sha1);
+    expect(rows[0].variants.map(variantKey)).toEqual([...set.variants.map(variantKey), "9/0/0"]);
+    expect(mergeComboSets([set], "NO-SUCH-TAG")).toEqual([]);
+  });
+
+  it("keys a package by section for a keyed diff", () => {
+    const c = basebandComparable(s);
+    expect(Object.keys(c)).toEqual(["Package", "Band combos", "Carriers", "Files", "Power", "Network databases", "Modem configs", "Containers"]);
+    expect(Object.keys(c.Files)).toContain(`bbcfg.mbn /policyman/band_combos_per_plmn.xml [5/0/0]`);
+  });
+
+  it("finds the package files a .der.pri overwrites", () => {
+    const f = s.files.find((x) => x.path === "/policyman/band_combos_per_plmn.xml")!;
+    const value = (text: string) => ({ kind: "xml" as const, text, xml: text, hex: "", len: text.length });
+    const pri = { efs: [
+      { path: f.path, tag: "9fa70c", value: value(f.text!) },
+      { path: "/policyman/elsewhere.xml", tag: "9fa70c", value: value("<?xml version=\"1.0\"?><x/>") },
+    ] } as PriDecoded;
+    const r = priReplacements(pri, s);
+    expect(r.otherXml).toBe(1);
+    expect(r.replaced).toEqual([{ efs: f.path, length: f.text!.length, baseline: [{ i: s.files.indexOf(f), member: "bbcfg.mbn", variants: f.variants, configs: undefined, same: true }] }]);
   });
 });

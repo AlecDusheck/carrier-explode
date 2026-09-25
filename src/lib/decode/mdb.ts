@@ -7,13 +7,11 @@
  */
 
 import { unzlibSync } from "fflate";
-import { bytesToHex } from "./plist";
+import { bytesToHex, latin1, u16le, u32le } from "./bytes";
+import type { Confidence } from "./confidence";
 
-export type MdbConfidence = "high" | "med" | "low";
-
-const u16 = (b: Uint8Array, o: number) => b[o] | (b[o + 1] << 8);
-const u32 = (b: Uint8Array, o: number) => (b[o] | (b[o + 1] << 8) | (b[o + 2] << 16) | (b[o + 3] << 24)) >>> 0;
-const cstr = (b: Uint8Array) => { let s = ""; for (let i = 0; i < b.length && b[i]; i++) s += String.fromCharCode(b[i]); return s; };
+/** Text up to the first NUL. */
+const cstr = (b: Uint8Array) => { const end = b.indexOf(0); return latin1(end < 0 ? b : b.subarray(0, end)); };
 const inflate = (b: Uint8Array, n: number) => {
   if (n > 16 << 20) throw new Error(`mdb: ${n} bytes is too large`);
   const out = unzlibSync(b, { out: new Uint8Array(n) });
@@ -55,27 +53,27 @@ export interface MdbFile {
  */ // qdsp6sw.mbn: /mdb/nr/mcc2arfcn.mdb, /mdb/nr/plmn2features.mdb samples
 export function readMdb(b: Uint8Array): MdbFile {
   if (b.length < 0x34) throw new Error("mdb: too short");
-  const t = u32(b, 0x28);
+  const t = u32le(b, 0x28);
   const header: MdbHeader = { version: b[0], layout: b[1], creator: cstr(b.subarray(2, 0x1d)), ...(t ? { built: new Date(t * 1000).toISOString() } : {}) };
-  if (header.layout === 3) return { header, blob: inflate(b.subarray(0x34), u32(b, 0x30)) };
+  if (header.layout === 3) return { header, blob: inflate(b.subarray(0x34), u32le(b, 0x30)) };
   if (header.layout !== 1) throw new Error(`mdb: unknown layout ${header.layout}`);
-  const zlen = u32(b, 0x30);
-  const idx = inflate(b.subarray(0x38, 0x38 + zlen), u32(b, 0x34));
-  const keySize = u32(idx, 0), entrySize = u32(idx, 16);
+  const zlen = u32le(b, 0x30);
+  const idx = inflate(b.subarray(0x38, 0x38 + zlen), u32le(b, 0x34));
+  const keySize = u32le(idx, 0), entrySize = u32le(idx, 16);
   if (keySize !== 4 || entrySize !== 8) throw new Error(`mdb: index entries of ${entrySize} bytes, keys of ${keySize}`);
   const base = 0x38 + zlen;
   const byOffset = new Map<number, number[]>();
   for (let o = 24; o + 8 <= idx.length; o += 8) {
-    const off = u32(idx, o + 4);
+    const off = u32le(idx, o + 4);
     const keys = byOffset.get(off) ?? [];
-    keys.push(u32(idx, o));
+    keys.push(u32le(idx, o));
     byOffset.set(off, keys);
   }
   const records: MdbRecord[] = [];
   for (const [off, keys] of [...byOffset].sort((x, y) => x[0] - y[0])) {
     const o = base + off;
     if (o + 4 > b.length) throw new Error(`mdb: record at ${off} is past the end`);
-    records.push({ keys, data: inflate(b.subarray(o + 4, o + 4 + u16(b, o + 2)), u16(b, o)) });
+    records.push({ keys, data: inflate(b.subarray(o + 4, o + 4 + u16le(b, o + 2)), u16le(b, o)) });
   }
   return { header, records };
 }
@@ -157,23 +155,23 @@ export interface MccScanEntry {
  * u32 hi, u32 x, u32 uplink}}, NR-ARFCN.
  */ // qdsp6sw.mbn: /mdb/nr/mcc2arfcn.mdb
 export function parseMcc2Arfcn(blob: Uint8Array): MccScanEntry[] {
-  const dataBytes = u32(blob, 8), size = u32(blob, 20);
+  const dataBytes = u32le(blob, 8), size = u32le(blob, 20);
   if (size < 16 || 28 + dataBytes > blob.length) throw new Error("mcc2arfcn: bad blob header");
   const out: MccScanEntry[] = [];
   for (let r = 28; r + size <= 28 + dataBytes; r += size) {
-    const mcc = u32(blob, r), n = Math.min(u32(blob, r + 8), (size - 16) >> 4);
+    const mcc = u32le(blob, r), n = Math.min(u32le(blob, r + 8), (size - 16) >> 4);
     const ranges: ArfcnRange[] = [];
     for (let k = 0; k < n; k++) {
       const q = r + 16 + k * 16;
-      const lo = u32(blob, q), hi = u32(blob, q + 4);
-      ranges.push({ lo, hi, loMHz: nrArfcnToMHz(lo), hiMHz: nrArfcnToMHz(hi), uplink: u32(blob, q + 12) === 1, x: u32(blob, q + 8) });
+      const lo = u32le(blob, q), hi = u32le(blob, q + 4);
+      ranges.push({ lo, hi, loMHz: nrArfcnToMHz(lo), hiMHz: nrArfcnToMHz(hi), uplink: u32le(blob, q + 12) === 1, x: u32le(blob, q + 8) });
     }
     let common: number[] | undefined;
     for (const g of ranges) {
       const hold = bandsHolding(g.loMHz, g.hiMHz, g.uplink);
       common = common ? common.filter((b) => hold.includes(b)) : hold;
     }
-    out.push({ ...(mcc === 4095 ? {} : { mcc: String(mcc).padStart(3, "0") }), key: u32(blob, r + 4), flags: u32(blob, r + 12), ranges, ...(common?.length === 1 ? { band: common[0] } : {}) });
+    out.push({ ...(mcc === 4095 ? {} : { mcc: String(mcc).padStart(3, "0") }), key: u32le(blob, r + 4), flags: u32le(blob, r + 12), ranges, ...(common?.length === 1 ? { band: common[0] } : {}) });
   }
   return out;
 }
@@ -195,12 +193,12 @@ const trimZeros = (b: Uint8Array) => { let n = b.length; while (n && !b[n - 1]) 
 /** NR record: u32 0x303, u32 ?, u32 0x102, u32 count, count x {u16 value, u16 id}; other shapes are kept as hex. */ // qdsp6sw.mbn: /mdb/nr/plmn2features.mdb, /mdb/lte/plmn2features_lte.mdb
 export function parsePlmnFeatures(f: MdbFile): PlmnFeatures[] {
   return (f.records ?? []).map((r) => {
-    const d = r.data, tag = u32(d, 0);
+    const d = r.data, tag = u32le(d, 0);
     const out: PlmnFeatures = { plmns: r.keys.map(plmnFromKey), tag };
-    const n = d.length >= 16 && u32(d, 8) === 0x102 ? u32(d, 12) : -1;
+    const n = d.length >= 16 && u32le(d, 8) === 0x102 ? u32le(d, 12) : -1;
     if (n >= 0 && 16 + 4 * n <= d.length) {
       out.features = [];
-      for (let i = 0; i < n; i++) out.features.push([u16(d, 16 + 4 * i + 2), u16(d, 16 + 4 * i)]);
+      for (let i = 0; i < n; i++) out.features.push([u16le(d, 16 + 4 * i + 2), u16le(d, 16 + 4 * i)]);
     } else {
       out.hex = bytesToHex(trimZeros(d.subarray(4)));
     }
@@ -214,7 +212,7 @@ export interface ModemEfsValue {
   name: string;
   /** Decoded value, in words. */
   value: string;
-  confidence: MdbConfidence;
+  confidence: Confidence;
 }
 
 // qdsp6sw.mbn: mmode device_mode enum (MSSS / DSDS / DSDA configs)
@@ -223,7 +221,7 @@ const DEVICE_MODES = ["single SIM", "dual SIM, dual standby (DSDS)", "dual SIM, 
 /** What a small modem EFS file holds, for the ones whose layout is known. */ // qdsp6sw.mbn: DSDS-MN-Sariska / MSSS-MN-Sariska configs
 export function decodeModemEfs(path: string, d: Uint8Array): ModemEfsValue | undefined {
   if (path === "/policyman/fullrat_timer" && d.length === 8) {
-    return { name: "Full-RAT fallback timer", value: `${u32(d, 0)} s before trying every technology; second value ${u32(d, 4)} (unknown)`, confidence: "med" };
+    return { name: "Full-RAT fallback timer", value: `${u32le(d, 0)} s before trying every technology; second value ${u32le(d, 4)} (unknown)`, confidence: "med" };
   }
   if (path === "/nv/item_files/modem/mmode/device_mode" && d.length === 1) {
     return { name: "Device mode", value: DEVICE_MODES[d[0]] ?? `mode ${d[0]}`, confidence: "med" };

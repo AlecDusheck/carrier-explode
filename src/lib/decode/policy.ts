@@ -135,7 +135,12 @@ export interface ComboComponent {
   ul?: string;
 }
 
+/** EN-DC (LTE + NR), NR only, or LTE only. */
+export type ComboType = "endc" | "nr" | "lte";
+
 export interface Combo {
+  /** Undefined when no component parsed. */
+  type?: ComboType;
   components: ComboComponent[];
   /** NR-DC (FR1 + FR2): the `-dc` suffix. */
   nrdc: boolean;
@@ -154,8 +159,13 @@ export function parseCombo(s: string): Combo {
     const cls = m[3].match(/[A-Z](?:\[[^\]]*\])?/g)!;
     out.components.push({ rat: m[1] === "b" ? "lte" : "nr", band: Number(m[2]), dl: cls[0], ...(cls[1] ? { ul: cls[1] } : {}) });
   }
+  const lte = out.components.some((x) => x.rat === "lte"), nr = out.components.some((x) => x.rat === "nr");
+  if (lte || nr) out.type = lte && nr ? "endc" : nr ? "nr" : "lte";
   return out;
 }
+
+/** "n77 n78" / "B2 B66": band numbers as 3GPP writes them (TS 36.101 / 38.101). */
+export const bandList = (bands: readonly number[], rat: "lte" | "nr"): string => bands.map((b) => (rat === "nr" ? "n" : "B") + b).join(" ");
 
 export interface BandComboCarrier {
   /** Element name, e.g. "ATT", "KDDI-LEGACY". */
@@ -194,7 +204,9 @@ export interface ComboStats {
   nrBands: number[];
   /** NR bands that only appear alone at class A: each tag's section ends with the same single-band list. */
   singleBands: number[];
-  /** NR bands >= n257 (FR2). */
+  /** Multi-carrier NR bands below n257 (FR1). */
+  fr1Bands: number[];
+  /** Multi-carrier NR bands from n257 up (FR2). */
   fr2Bands: number[];
   /** LTE bands that anchor an EN-DC combo. */
   lteAnchors: number[];
@@ -204,6 +216,8 @@ export interface ComboStats {
 
 // TS 38.101-1 Table 5.2-1: SUL operating bands
 const SUL = new Set([80, 81, 82, 83, 84, 86, 89, 95, 97, 98, 99]);
+// TS 38.101-2 Table 5.2-1: FR2 bands start at n257
+const FR2_FIRST = 257;
 
 const sorted = (s: Set<number>) => [...s].sort((a, b) => a - b);
 
@@ -212,14 +226,11 @@ export function comboStats(combos: string[]): ComboStats {
   const st = { combos: combos.length, endc: 0, nr: 0, lte: 0, nrdc: 0, swul: 0, maxComponents: 0 };
   for (const s of combos) {
     const c = parseCombo(s);
-    const lte = c.components.filter((x) => x.rat === "lte");
-    const nr = c.components.filter((x) => x.rat === "nr");
     // `n14AA` on its own says the band exists, not that this carrier combines it with anything.
     const multi = c.components.length > 1 || c.components.some((x) => !x.dl.startsWith("A"));
-    for (const x of nr) (multi ? nrBands : alone).add(x.band);
-    if (lte.length && nr.length) { st.endc++; for (const x of lte) anchors.add(x.band); }
-    else if (nr.length) st.nr++;
-    else if (lte.length) st.lte++;
+    for (const x of c.components) if (x.rat === "nr") (multi ? nrBands : alone).add(x.band);
+    if (c.type) st[c.type]++;
+    if (c.type === "endc") for (const x of c.components) if (x.rat === "lte") anchors.add(x.band);
     if (c.nrdc) st.nrdc++;
     if (c.swul) st.swul++;
     st.maxComponents = Math.max(st.maxComponents, c.components.length);
@@ -227,7 +238,7 @@ export function comboStats(combos: string[]): ComboStats {
   const nrs = sorted(nrBands);
   return {
     ...st, nrBands: nrs, singleBands: sorted(alone).filter((b) => !nrBands.has(b)),
-    fr2Bands: nrs.filter((b) => b >= 257), lteAnchors: sorted(anchors), sulBands: nrs.filter((b) => SUL.has(b)),
+    fr1Bands: nrs.filter((b) => b < FR2_FIRST), fr2Bands: nrs.filter((b) => b >= FR2_FIRST), lteAnchors: sorted(anchors), sulBands: nrs.filter((b) => SUL.has(b)),
   };
 }
 

@@ -5,9 +5,10 @@
  */
 // Key grammar: `%u:` uint, `%qu[N]:` N-byte "label:value" string, `%s[N]:` N-byte string, then a dotted path (corpus: KDDI D23/V59/V159, ATT D321, Default global_setting B/G/L).
 
-import type { NvConfidence } from "./nv";
+import { maskBits } from "./bytes";
+import type { Confidence } from "./confidence";
 import type { PriValue } from "./pri";
-import { parseCombo, type ComboComponent } from "./policy";
+import { bandList, parseCombo, type ComboComponent } from "./policy";
 
 /* ------------------------------------------------------------------- keys */
 
@@ -37,17 +38,22 @@ export function parseIntelKey(key: string): IntelKey | null {
   return { type: m[1] as IntelType, ...(m[2] ? { size: Number(m[2]) } : {}), path: m[3].trim(), segs };
 }
 
-/** Fixed-size arrays are zero-filled past their last entry; one trailing zero can be a real value, a run of them is padding. */
+/** Trailing zeros it takes to read as padding: one can be a real value. */
+const PADDING_RUN = 2;
+
+/** Fixed-size arrays are zero-filled past their last entry. */
 function usedSlots(items: Array<{ value: { raw: string } }>): number {
   let n = items.length;
   while (n > 0 && items[n - 1].value.raw === "0") n--;
-  return items.length - n >= 2 ? n : items.length;
+  return items.length - n >= PADDING_RUN ? n : items.length;
 }
 
 /** GRI regulatory tables are split by region; the key names them by these prefixes (Default.bundle global_setting B/G/L). */
 export const INTEL_REGIONS: Record<string, string> = {
   na: "North America", la: "Latin America", eu: "Europe", africa: "Africa", asia: "Asia", ocean: "Oceania", ww: "Worldwide",
 };
+
+const regionName = (prefix: string) => (Object.hasOwn(INTEL_REGIONS, prefix) ? INTEL_REGIONS[prefix] : prefix);
 
 /* ----------------------------------------------------------------- values */
 
@@ -63,11 +69,11 @@ export interface IntelCombo {
 }
 
 export type IntelDecoded =
-  | { kind: "bands"; rat: "lte" | "nr"; bands: number[]; confidence: NvConfidence }
-  | { kind: "bits"; bits: number[]; note: string; confidence: NvConfidence }
-  | { kind: "band"; rat: "lte" | "nr"; band: number; confidence: NvConfidence }
-  | { kind: "combos"; combos: IntelCombo[]; confidence: NvConfidence }
-  | { kind: "mccBands"; mcc: string; rat: "nr"; bands: number[]; confidence: NvConfidence };
+  | { kind: "bands"; rat: "lte" | "nr"; bands: number[]; confidence: Confidence }
+  | { kind: "bits"; bits: number[]; note: string; confidence: Confidence }
+  | { kind: "band"; rat: "lte" | "nr"; band: number; confidence: Confidence }
+  | { kind: "combos"; combos: IntelCombo[]; confidence: Confidence }
+  | { kind: "mccBands"; mcc: string; rat: "nr"; bands: number[]; confidence: Confidence };
 
 export interface IntelValue {
   /** The value as stored (decimal for integers). */
@@ -80,11 +86,10 @@ export interface IntelValue {
   decoded?: IntelDecoded;
 }
 
-const bitsOf = (n: number, offset = 0): number[] => {
-  const out: number[] = [];
-  for (let b = 0; b < 32; b++) if (Math.floor(n / 2 ** b) % 2) out.push(offset + b);
-  return out;
-};
+/** Band bitmaps are stored as u32 words. */
+const WORD_BITS = 32;
+
+const bitsOf = (n: number, offset = 0): number[] => maskBits(n).map((b) => offset + b);
 
 const intOf = (s: string): number | undefined => {
   const t = s.trim();
@@ -100,6 +105,8 @@ const LTE_WORDS = /lte\w*band_bitmap$/;
 // `allowed_(n)sa_band_bitmap[w]`: KDDI D23 sets bits 2 14 21 / 36; as band numbers that is n3 n15 n22 n37, not KDDI's bands, so the bits index a modem band table.
 const NR_WORDS = /allowed_n?sa_band_bitmap$/;
 const COMBO_TOKEN = /^n?\d+[A-Z]+$/;
+// GRI NR regulatory rows: `302:2-5-7-12-…` = MCC 302, NR bands n2 n5 n7 n12 …
+const MCC_BANDS = /^(\d{3}):(\d+(?:-\d+)*)$/;
 
 function ratOf(name: string, path: string): "lte" | "nr" | undefined {
   if (/^lte_|_lte_|errc|lte_caps/.test(name) || /\blte|errc|eutra/.test(path)) return "lte";
@@ -157,8 +164,7 @@ export function intelValue(key: IntelKey, name: string, raw: string, int?: numbe
     v.decoded = { kind: "bands", rat, bands: bitsOf(v.int, Number(r[2])), confidence: /band_mask/.test(field) ? "high" : "med" };
     return v;
   }
-  // GRI NR regulatory rows: `302:2-5-7-12-…` = MCC 302, NR bands n2 n5 n7 n12 …
-  const mb = /^(\d{3}):(\d+(?:-\d+)*)$/.exec(raw);
+  const mb = MCC_BANDS.exec(raw);
   if (mb) {
     v.label = mb[1];
     v.text = mb[2];
@@ -179,7 +185,7 @@ export function intelValue(key: IntelKey, name: string, raw: string, int?: numbe
 
 /* ------------------------------------------------------------------ tree */
 
-export interface IntelNote { text: string; confidence: NvConfidence }
+export interface IntelNote { text: string; confidence: Confidence }
 
 export interface IntelLeaf { kind: "leaf"; name: string; path: string; key: string; value: IntelValue }
 
@@ -192,8 +198,8 @@ export interface IntelList {
   items: IntelListItem[];
   /** Items before a run of trailing zeros: the slots of a fixed-size array that are in use. */
   used: number;
-  /** The whole list read as one value (a multi-word band bitmap). */
-  decoded?: IntelDecoded;
+  /** The whole list read as one value (a multi-word band bitmap); `raw` joins the items. */
+  value?: IntelValue;
 }
 
 export type IntelCell = IntelValue | IntelTable | IntelList;
@@ -235,6 +241,8 @@ export const isIntelNode = (c: IntelCell): c is IntelTable | IntelList => "kind"
 export interface IntelRegMcc {
   /** Region table the row came from: na, eu, asia, africa, la, ocean, ww. */
   region: string;
+  /** "North America", or the prefix itself when it is not a known region. */
+  regionName: string;
   mcc: string;
   lte: number[];
   nrSa?: number[];
@@ -350,7 +358,7 @@ function arrNode(name: string, path: string, r: Raw): IntelList | IntelTable {
     const rows = new Map<number, IntelRow>();
     for (const [[i], v] of leaves) {
       const row = rows.get(i) ?? { index: [i], cells: {} };
-      row.cells[v.value.label!] = v.value;
+      row.cells[v.value.label ?? v.name] = v.value;
       rows.set(i, row);
     }
     return table(name, path, [...rows.values()].map((row) => ({ ...row, cells: mergeCells(row.cells) })));
@@ -358,8 +366,11 @@ function arrNode(name: string, path: string, r: Raw): IntelList | IntelTable {
   if (leaves.length === els.length) {
     const items = leaves.map(([index, v]) => ({ index, key: v.full, value: v.value }));
     const list: IntelList = { kind: "list", name, path, items, used: usedSlots(items) };
-    const d = wordBitmap(name, path, list.items);
-    if (d) list.decoded = d;
+    const decoded = wordBitmap(name, path, items);
+    if (decoded) {
+      const raw = items.map((x) => x.value.raw).join(", ");
+      list.value = { raw, text: raw, decoded };
+    }
     return list;
   }
   // Array of records: one row per element, nested arrays stay nodes inside the cell.
@@ -388,8 +399,11 @@ function table(name: string, path: string, rows: IntelRow[]): IntelTable {
 }
 
 function wordBitmap(name: string, path: string, items: IntelListItem[]): IntelDecoded | undefined {
-  if (!items.every((x) => x.index.length === 1 && x.value.int !== undefined)) return undefined;
-  const words = items.flatMap((x) => bitsOf(x.value.int!, 32 * x.index[0]));
+  const words: number[] = [];
+  for (const { index, value } of items) {
+    if (index.length !== 1 || value.int === undefined) return undefined;
+    words.push(...bitsOf(value.int, WORD_BITS * index[0]));
+  }
   if (LTE_WORDS.test(name)) return { kind: "bands", rat: "lte", bands: words.map((b) => b + 1), confidence: "high" };
   if (NR_WORDS.test(name) || (/band_bitmap$/.test(name) && ratOf(name, path) === "nr"))
     return { kind: "bits", bits: words, note: "Bit positions; they index a modem NR band table, not band numbers.", confidence: "low" };
@@ -414,8 +428,8 @@ function mergeCells(cells: Record<string, IntelCell>): Record<string, IntelCell>
   const out: Record<string, IntelCell> = {};
   for (const [k, c] of Object.entries(cells)) {
     const b = baseOf(k, c);
-    const parts = b ? groups.get(b)! : [];
-    if (parts.length > 1) { if (parts[0][0] === k) out[b!] = mergeValues(parts); }
+    const parts = b ? (groups.get(b) ?? []) : [];
+    if (b && parts.length > 1) { if (parts[0][0] === k) out[b] = mergeValues(parts); }
     else out[k] = c;
   }
   return out;
@@ -426,7 +440,10 @@ function mergeValues(parts: Array<[string, IntelValue]>): IntelValue {
   const first = parts[0][1].decoded as Extract<IntelDecoded, { kind: "bands" }>;
   // Zero words say nothing; the flat key list keeps every one.
   const shown = parts.filter(([, v]) => v.int !== 0);
-  const raw = (shown.length ? shown : parts.slice(0, 1)).map(([k, v]) => `${rangeKey(k)![2]}_${rangeKey(k)![3]}=${v.text}`).join(" ");
+  const raw = (shown.length ? shown : parts.slice(0, 1)).map(([k, v]) => {
+    const r = rangeKey(k);
+    return r ? `${r[2]}_${r[3]}=${v.text}` : v.text;
+  }).join(" ");
   return { raw, text: raw, decoded: { kind: "bands", rat: first.rat, bands: bands.sort((a, b) => a - b), confidence: first.confidence } };
 }
 
@@ -533,7 +550,7 @@ function regulatory(entries: IntelEntry[]): IntelTree["regulatory"] | undefined 
       continue;
     }
     const n = /(?:^|\.)nr_(sa|nsa)_regulatory_info\.(\w+)_table\[\d+\]$/.exec(k.path);
-    const mb = n && /^(\d{3}):(\d+(?:-\d+)*)$/.exec(raw);
+    const mb = n && MCC_BANDS.exec(raw);
     if (n && mb) {
       nr[n[1] as "sa" | "nsa"].set(mb[1], mb[2].split("-").map(Number));
       if (!nrRegion.has(mb[1])) nrRegion.set(mb[1], n[2]);
@@ -547,11 +564,14 @@ function regulatory(entries: IntelEntry[]): IntelTree["regulatory"] | undefined 
     for (const r of rows.values()) {
       if (!r.mcc) continue;
       if (r.mnc !== undefined) { plmn.push({ table, plmn: `${pad(r.mcc, 3)}-${pad(r.mnc, 2)}`, lte: sort(r.bands) }); continue; }
-      byMcc.push({ region: table, mcc: r.mcc, lte: sort(r.bands) });
+      byMcc.push({ region: table, regionName: regionName(table), mcc: r.mcc, lte: sort(r.bands) });
     }
   }
   const seen = new Set(byMcc.map((r) => r.mcc));
-  for (const mcc of new Set([...nr.sa.keys(), ...nr.nsa.keys()])) if (!seen.has(mcc)) byMcc.push({ region: nrRegion.get(mcc) ?? "", mcc, lte: [] });
+  for (const mcc of new Set([...nr.sa.keys(), ...nr.nsa.keys()])) if (!seen.has(mcc)) {
+    const region = nrRegion.get(mcc) ?? "";
+    byMcc.push({ region, regionName: regionName(region), mcc, lte: [] });
+  }
   for (const r of byMcc) {
     const sa = nr.sa.get(r.mcc), nsa = nr.nsa.get(r.mcc);
     if (sa) r.nrSa = sa;
@@ -564,8 +584,8 @@ function regulatory(entries: IntelEntry[]): IntelTree["regulatory"] | undefined 
 
 const valueText = (v: IntelValue): string => {
   const d = v.decoded;
-  const extra = !d ? "" : d.kind === "bands" || d.kind === "mccBands" ? d.bands.map((b) => (d.rat === "nr" ? "n" : "b") + b).join(" ")
-    : d.kind === "band" ? (d.rat === "nr" ? "n" : "b") + d.band : d.kind === "combos" ? "" : d.bits.join(" ");
+  const extra = !d ? "" : d.kind === "bands" || d.kind === "mccBands" ? bandList(d.bands, d.rat)
+    : d.kind === "band" ? bandList([d.band], d.rat) : d.kind === "combos" ? "" : d.bits.join(" ");
   return `${v.raw} ${v.label ?? ""} ${extra}`.toLowerCase();
 };
 

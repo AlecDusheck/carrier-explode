@@ -3,8 +3,7 @@
  * Public Key Identifier is per RFC 4784; the key layout after it is inferred.
  */
 
-import { bytesToHex } from "./plist";
-import { beBigInt } from "./bytes";
+import { beBigInt, bytesToHex } from "./bytes";
 
 export interface DmuKey {
   /** Public Key Organization Identifier. */

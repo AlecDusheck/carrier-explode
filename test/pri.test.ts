@@ -27,7 +27,7 @@ import {
 import { CCM_ITEMS, annotateNv, decodeNvValue, describeNv, NV_FAMILIES, NV_PATHS } from "../src/lib/decode/nv.ts";
 import { leUint } from "../src/lib/decode/bytes.ts";
 import { describeDevices, DEVICE_CODENAMES } from "../src/lib/decode/devices.ts";
-import { openIpcc, decodeFile, type OpenedBundle } from "../src/lib/decode/bundle.ts";
+import { openIpcc, decodeFile, type OpenedBundle, decodedPri } from "../src/lib/decode/bundle.ts";
 import { parsePlist } from "../src/lib/decode/plist.ts";
 
 /* ------------------------------------------------------------------ helpers */
@@ -526,10 +526,10 @@ describe("decodePri over the whole fixture corpus", () => {
   it("reaches the same result through decodeFile as through decodePri directly", () => {
     const d = decodeFile(bundle("CW_pa.ipcc"), "overrides_D10_D11.der.pri");
     expect(d.kind).toBe("pri-der");
-    expect(d.pri).toBeDefined();
-    expect(d.pri).toEqual(pri("CW_pa.ipcc", "overrides_D10_D11.der.pri"));
+    expect(decodedPri(d)).toBeDefined();
+    expect(decodedPri(d)).toEqual(pri("CW_pa.ipcc", "overrides_D10_D11.der.pri"));
     const g = decodeFile(bundle("CW_wi.ipcc"), "global_setting_C.der.gri");
-    expect(g.pri!.kind).toBe("der.gri");
+    expect(decodedPri(g)!.kind).toBe("der.gri");
   });
 });
 

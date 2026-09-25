@@ -9,6 +9,7 @@
  */
 
 import { inflateSync, zlibSync } from "fflate";
+import { latin1 } from "./bytes";
 
 const SIG = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
 
@@ -39,7 +40,7 @@ function readChunks(b: Uint8Array): Chunk[] {
   let i = 8;
   while (i + 8 <= b.length) {
     const len = dv.getUint32(i);
-    const type = String.fromCharCode(b[i + 4], b[i + 5], b[i + 6], b[i + 7]);
+    const type = latin1(b.subarray(i + 4, i + 8));
     const start = i + 8;
     if (start + len > b.length) break;
     out.push({ type, data: b.subarray(start, start + len) });

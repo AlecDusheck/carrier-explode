@@ -128,28 +128,27 @@ describe("parseSsgccs", () => {
   const c = parseSsgccs(text("ssgccs_config.txt"), text("ssgccs_int_config.txt"));
 
   it("names the thresholds", () => {
-    expect(c.activePlmns).toEqual(["ALL"]);
-    const custom = c.lines.find((l) => l.key === "CUSTOM")!;
-    expect(custom.fields.map((f) => [f.name, f.value, f.confidence])).toEqual([
+    expect(c.allNetworks).toBe(true);
+    expect(c.plmns).toEqual([]);
+    expect(c.custom?.fields.map((f) => [f.name, f.value, f.confidence])).toEqual([
       ["Mode", "2", "med"], ["Countermeasure threshold", "500", "med"], ["Alert threshold", "200", "med"],
       ["Hostile threshold", "500", "med"], ["Filter", "0", "med"],
     ]);
   });
 
   it("reads the per-RAT line: enable, five numbers, an action word", () => {
-    const g = c.lines.find((l) => l.key === "GERAN")!;
+    const g = c.rats.find((l) => l.key === "GERAN")!;
     expect(g).toMatchObject({ title: "GSM settings", confidence: "low", raw: "GERAN: 1, 500, 5, 10, 50, 80, DEFAULT" });
     expect(g.fields.map((f) => f.name)).toEqual(["Enabled", "Parameter 1", "Parameter 2", "Parameter 3", "Parameter 4", "Parameter 5", "Action"]);
-    expect(g.fields.at(-1)).toEqual({ name: "Action", value: "DEFAULT", confidence: "low" });
+    expect(g.fields.at(-1)).toEqual({ name: "Action", value: "DEFAULT", meaning: SSGCCS_ACTIONS.DEFAULT, confidence: "low" });
     expect(SSGCCS_ACTIONS.DEFAULT).toBeTruthy();
   });
 
   it("keeps unknown keys and a PLMN list", () => {
     const x = parseSsgccs("ACTIVE_PLMN_LIST: 310-260, 311-490\r\nLTE_JAMMING: 1, 2\nnot a line\0\0");
-    expect(x.activePlmns).toEqual(["310-260", "311-490"]);
-    expect(x.lines.map((l) => [l.key, l.confidence, l.fields.map((f) => f.name)])).toEqual([
-      ["ACTIVE_PLMN_LIST", "high", ["Networks"]], ["LTE_JAMMING", "unknown", ["Field 1", "Field 2"]],
-    ]);
+    expect(x).toMatchObject({ allNetworks: false, plmns: ["310-260", "311-490"], rats: [] });
+    expect(x.custom).toBeUndefined();
+    expect(x.other.map((l) => [l.key, l.confidence, l.fields.map((f) => f.name)])).toEqual([["LTE_JAMMING", "unknown", ["Field 1", "Field 2"]]]);
   });
 });
 
