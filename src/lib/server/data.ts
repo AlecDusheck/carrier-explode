@@ -366,7 +366,10 @@ export async function getBaseband(build: string) {
       fileTypes: c.fileTypes.map((t) => ({ ...t, confidence: BBCFG_FILE_TYPES[t.type]?.confidence, note: BBCFG_FILE_TYPES[t.type]?.note })),
     })),
     files: s.files.map(({ text, hex: _h, ...f }, i) => ({ ...f, i, readable: text !== undefined })),
-    nv: s.nv.map(({ records, ...n }) => ({ ...n, records: records.length })),
+    nv: s.nv.map(({ records, ...n }) => ({
+      ...n,
+      records: records.map(({ nv, efs, hex, name, meaning, label, confidence }) => ({ nv, efs, hex, name, meaning, label, confidence })),
+    })),
     images: s.images,
     bandCombos: s.bandCombos,
     amprNs: s.amprNs,

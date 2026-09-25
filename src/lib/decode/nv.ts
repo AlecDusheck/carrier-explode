@@ -137,6 +137,8 @@ export const NV_FAMILIES: Family[] = [
   f("plmn_list", /\/nas\/(ehplmn|iplmn|iPLMN|pri_fplmn|mav_epplmn)/i, e("PLMN list", "Packed BCD MCC/MNC list (TS 31.102)", "bytes", "med", `${EFST}; 3GPP TS 31.102`)),
   f("mav_override", /__mav_override$/, e("Apple override", "Apple override of the Qualcomm item of the same name", "int", "low", CORPUS)),
   f("satellite", /\/nas\/(mav_pssi_reg_gfnh_|mav_gfnh_)/, e("Satellite PLMN rule", "Apple satellite (GFNH) PLMN / geofence rule", "bytes", "low", CORPUS)),
+  // bbcfg.mbn: each blob's 9f64 digest, written to this path with the blob
+  f("bbcfg_hash", /^\/mav\/bbcfg_file_hash_/, e("Baseband defaults digest", "Digest of the bbcfg.mbn blob these defaults came from, kept in EFS so the modem knows which set it holds", "bytes", "med", "bbcfg.mbn: blob tag 9f64")),
   f("drs", /\/mav\/drs_/, e("Dynamic RAT selection", "Apple Smart Data mode (DRS) tuning", "int", "low", CORPUS)),
   f("mav", /(^\/mav\/|\/mav\/|\/maverick\/|\/mav_[^/]*$)/, e("Apple modem option", "Apple-only (Maverick) modem option; undocumented", "int", "low", CORPUS)),
   f("policyman_xml", /^\/policyman\/.*\.xml$/, e("PolicyMan policy", "PolicyMan XML rules (RAT capability, bands, 5G/SA gating)", "xml", "med", "tech.ssut.me")),
@@ -287,6 +289,28 @@ export function describeNv(pathOrItem: string | number): NvInfo | undefined {
 function formatter(pathOrItem: string | number): Entry["format"] {
   if (typeof pathOrItem === "number") return NV_DETAIL[pathOrItem]?.format;
   return NV_PATHS[pathOrItem]?.format;
+}
+
+export interface NvAnnotation {
+  name: string;
+  /** Omitted when it would only repeat the name. */
+  meaning?: string;
+  /** What the scalar value means (enum name, set bits, version), when known. */
+  label?: string;
+  confidence: NvConfidence;
+}
+
+/** What an NV item or EFS path is and, given its scalar value, what that value means. */
+export function annotateNv(key: string | number, n?: number): NvAnnotation | undefined {
+  const d = describeNv(key);
+  if (!d) return undefined;
+  const label = n !== undefined ? decodeNvValue(key, n) : undefined;
+  return {
+    name: d.name,
+    ...(d.meaning !== d.name && { meaning: d.meaning }),
+    ...(label !== undefined && { label }),
+    confidence: d.confidence,
+  };
 }
 
 /** Label a scalar value: enum name, set-bit names, or a formatted version. Undefined when unknown. */

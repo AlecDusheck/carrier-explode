@@ -42,6 +42,8 @@
     }
     return out;
   }
+  // Some defaults are whole tables; the name says what they are, the first bytes are enough.
+  const short = (hex: string) => (hex.length > 64 ? hex.slice(0, 64) + "…" : hex);
 </script>
 
 <div class="view">
@@ -334,22 +336,26 @@
 
         {#if bb.nv.length}
           <details class="more">
-            <summary>Protocol NV/EFS blobs ({bb.nv.length})</summary>
-            <div class="hscroll">
-              <table class="grid">
-                <thead><tr><th>Blob</th><th>Type</th><th>Serves</th><th class="num">Records</th></tr></thead>
-                <tbody>
-                  {#each bb.nv as n (n.member + n.blob)}
-                    <tr>
-                      <td class="mono">{n.member} #{n.blob}</td>
-                      <td class="mono">{n.fileTypeName}</td>
-                      <td><Variants variants={n.variants} /></td>
-                      <td class="num">{n.records}</td>
-                    </tr>
-                  {/each}
-                </tbody>
-              </table>
-            </div>
+            <summary>NV/EFS defaults ({bb.nv.length} sets)</summary>
+            {#each bb.nv as n (n.member + n.blob)}
+              <details class="more">
+                <summary class="mono">{n.fileTypeName} · {n.records.length} items <Variants variants={n.variants} /></summary>
+                <div class="hscroll">
+                  <table class="grid">
+                    <thead><tr><th>Item</th><th>What it is</th><th>Value</th></tr></thead>
+                    <tbody>
+                      {#each n.records as r, i (i)}
+                        <tr>
+                          <td class="mono wrap">{r.efs ?? "NV " + r.nv}</td>
+                          <td class="wrap">{#if r.name}{r.name} <Confidence c={r.confidence} />{#if r.meaning}<div class="dimtext">{r.meaning}</div>{/if}{/if}</td>
+                          <td class="mono wrap">{#if r.label}{r.label} <span class="dimtext">0x{short(r.hex)}</span>{:else}0x{short(r.hex)}{/if}</td>
+                        </tr>
+                      {/each}
+                    </tbody>
+                  </table>
+                </div>
+              </details>
+            {/each}
           </details>
         {/if}
 

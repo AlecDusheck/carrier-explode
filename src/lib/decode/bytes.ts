@@ -65,6 +65,15 @@ export function beBigInt(b: Uint8Array): bigint {
   return v;
 }
 
+/** Little-endian unsigned integer of 1 to 8 bytes; undefined when empty, wider, or past 2^53. */
+export function leUint(b: Uint8Array): number | undefined {
+  if (!b.length || b.length > 8) return undefined;
+  let v = 0n;
+  for (let i = b.length - 1; i >= 0; i--) v = (v << 8n) | BigInt(b[i]);
+  const n = Number(v);
+  return Number.isSafeInteger(n) ? n : undefined;
+}
+
 /** Bytes as upper-case colon-separated hex, the way certificate tools print serials and digests. */
 export function colonHex(b: Uint8Array): string {
   return Array.from(b, (x) => x.toString(16).padStart(2, "0").toUpperCase()).join(":");

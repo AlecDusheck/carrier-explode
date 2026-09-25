@@ -2,7 +2,7 @@
 """
 Adds a baseband package to an image already in the bucket, exactly as
 package_system_bundles.py does for a new one: blobs/<id>.bbfw, the index
-entry, and system/<build>/baseband.json. Used by backfill-baseband.yml.
+entry, and system/<build>/baseband.json. Used by baseband.yml.
 
     attach_baseband.py --index system/<build>/index.json --bbfw Mav*.bbfw --baseband baseband.json --out DIR
 """

@@ -24,7 +24,8 @@ import {
   type PriDecoded,
   type PriLeaf,
 } from "../src/lib/decode/pri.ts";
-import { CCM_ITEMS, decodeNvValue, describeNv, NV_FAMILIES, NV_PATHS } from "../src/lib/decode/nv.ts";
+import { CCM_ITEMS, annotateNv, decodeNvValue, describeNv, NV_FAMILIES, NV_PATHS } from "../src/lib/decode/nv.ts";
+import { leUint } from "../src/lib/decode/bytes.ts";
 import { describeDevices, DEVICE_CODENAMES } from "../src/lib/decode/devices.ts";
 import { openIpcc, decodeFile, type OpenedBundle } from "../src/lib/decode/bundle.ts";
 import { parsePlist } from "../src/lib/decode/plist.ts";
@@ -1404,6 +1405,28 @@ describe("PRI_TAGS", () => {
 });
 
 /* =============================================================== NV lookup */
+
+describe("annotateNv", () => {
+  it("names an item and labels its value", () => {
+    expect(annotateNv("/nv/item_files/modem/mmode/voice_domain_pref", 1)).toMatchObject({ label: decodeNvValue("/nv/item_files/modem/mmode/voice_domain_pref", 1) });
+    expect(annotateNv("/nv/item_files/modem/mmode/voice_domain_pref")).not.toHaveProperty("label");
+    expect(annotateNv("/no/such/item")).toBeUndefined();
+  });
+
+  it("recognises the modem's own record of which defaults it holds", () => {
+    expect(annotateNv("/mav/bbcfg_file_hash_protocol_static_nv")?.meaning).toMatch(/^Baseband defaults digest:/);
+  });
+});
+
+describe("leUint", () => {
+  it("reads little-endian scalars up to 8 bytes", () => {
+    expect(leUint(new Uint8Array([0x5f, 0, 0, 0]))).toBe(0x5f);
+    expect(leUint(new Uint8Array([1, 2]))).toBe(0x0201);
+    expect(leUint(new Uint8Array(0))).toBeUndefined();
+    expect(leUint(new Uint8Array(9))).toBeUndefined();
+    expect(leUint(new Uint8Array(8).fill(0xff))).toBeUndefined();
+  });
+});
 
 describe("describeNv / decodeNvValue", () => {
   it("resolves exact EFS paths with enum labels", () => {
