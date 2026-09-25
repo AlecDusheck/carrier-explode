@@ -112,6 +112,14 @@ function bundle(id: string, p: Params): Meta {
 export function seo(id: string | null, p: Params): Meta {
   if (p.name) return bundle(id ?? "", p);
 
+  if (p.build && id?.startsWith("/baseband")) {
+    const ios = buildLabel(p.build);
+    return {
+      title: fit(TITLE_MAX, `${ios} (${p.build}) baseband modem config`, `${ios} baseband modem config`, `${p.build} baseband`),
+      description: listing(`The Qualcomm baseband package in ${ios} build ${p.build}, decoded: `,
+        ["band combos per carrier", "policyman rules", "A-MPR power tables", "modem configs", "what changed"]),
+    };
+  }
   if (p.build) {
     const ios = buildLabel(p.build);
     return {

@@ -1,6 +1,6 @@
 import { getRaw } from "$lib/server/data";
-import { contentTypeOf } from "$lib/server/ipcc";
-import { normalizeApplePng } from "$lib/server/png";
+import { contentTypeOf } from "$lib/decode";
+import { normalizeApplePng } from "$lib/decode";
 
 /** One member of a bundle, as-is. Carrier logos are Apple CgBI PNGs, which no browser renders, so those are converted. */
 export async function GET({ params, url }) {

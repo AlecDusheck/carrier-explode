@@ -1,6 +1,6 @@
 <script lang="ts">
   import { getCbs } from "$lib/api/tables.remote";
-  import { describeMessageId } from "$lib/knowledge";
+  import { describeMessageId } from "$lib/decode";
   import { bundleHref, link } from "$lib/format";
   import Pane from "$lib/components/Pane.svelte";
 
@@ -36,7 +36,7 @@
                   &middot; build {row.version}
                 </td>
               </tr>
-              <tr><td class="k">ISO codes</td><td>{#each row.iso as code, i (i)}<span class="chip">{code}</span>{/each}</td></tr>
+              <tr><td class="k">ISO codes</td><td class="mono">{row.iso.join(", ")}</td></tr>
               <tr><td class="k">Country IDs</td><td class="mono wrap">{row.countryIds.join(", ")}</td></tr>
               <tr><td class="k">Settings section</td><td>{row.switchGroupTitle ?? ""}</td></tr>
               <tr><td class="k">Languages</td><td class="mono">{row.languages.join(", ")}</td></tr>
@@ -51,9 +51,11 @@
               <tr>
                 <td class="k">Duplicate suppression</td>
                 <td>
-                  {row.duplicateWindowMinutes !== undefined ? row.duplicateWindowMinutes + " min window" : ""}
-                  {#if row.interSimDuplicateDetection !== undefined}<span class="chip">inter-SIM {row.interSimDuplicateDetection}</span>{/if}
-                  {#if row.intraSimDuplicateDetection !== undefined}<span class="chip">intra-SIM {row.intraSimDuplicateDetection}</span>{/if}
+                  {[
+                    row.duplicateWindowMinutes !== undefined ? row.duplicateWindowMinutes + " min window" : "",
+                    row.interSimDuplicateDetection !== undefined ? "inter-SIM " + row.interSimDuplicateDetection : "",
+                    row.intraSimDuplicateDetection !== undefined ? "intra-SIM " + row.intraSimDuplicateDetection : "",
+                  ].filter(Boolean).join(", ")}
                 </td>
               </tr>
               <tr><td class="k">Emergency numbers</td><td class="mono">{row.emergencyNumbers.join(", ")}</td></tr>
@@ -82,8 +84,7 @@
             </table>
             {#if row.appleSafetyAlertRanges.length}
               <p class="dimtext" style="margin-bottom:0">
-                Apple safety alerts:
-                {#each row.appleSafetyAlertRanges as r, i (i)}<span class="chip">{range(r)}</span>{/each}
+                Apple safety alerts: <span class="mono">{row.appleSafetyAlertRanges.map(range).join(", ")}</span>
               </p>
             {/if}
           </fieldset>

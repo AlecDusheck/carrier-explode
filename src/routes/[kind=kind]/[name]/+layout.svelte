@@ -21,11 +21,12 @@
 {/snippet}
 
 {#snippet ident(bundle: Bundle)}
-  {#if bundle.cc}<span class="chip">{bundle.cc.toUpperCase()}</span>{/if}
   {#if bundle.related.country}
     <a href={bundleHref("countries", bundle.related.country)}>{bundle.related.country} country bundle</a>
   {:else if bundle.countryName}
     <span class="dimtext">{bundle.countryName}</span>
+  {:else if bundle.cc}
+    <span class="dimtext">{bundle.cc.toUpperCase()}</span>
   {/if}
   {#if bundle.related.carriers.length}
     <a href="#carriers">{bundle.related.carriers.length} carriers</a>

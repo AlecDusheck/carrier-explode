@@ -22,12 +22,11 @@
       />
     {:else}
       <table class="grid">
-        <thead><tr><th>Path</th><th>Kind</th><th class="num">Size</th><th>Devices</th></tr></thead>
+        <thead><tr><th>Path</th><th class="num">Size</th><th>Devices</th></tr></thead>
         <tbody>
           {#each bundle.info.files as f (f.path)}
             <tr>
               <td class="mono wrap"><a href={fileHref(params.kind, params.name, params.version, f.path)}>{f.path}</a></td>
-              <td>{f.kind}</td>
               <td class="num">{humanBytes(f.size)}</td>
               <td class="dimtext">{f.devices?.map((d) => d.name ?? d.code).join(", ") ?? ""}</td>
             </tr>

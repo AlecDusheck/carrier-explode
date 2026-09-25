@@ -16,6 +16,8 @@ const CASES: Array<[string, Parameters<typeof seo>[1]]> = [
   ["/compare", {}],
   ["/releases", {}],
   ["/releases/[build]", { build: "24A437" }],
+  ["/baseband/[build]", { build: "24A437" }],
+  ["/baseband/[build]", { build: "24B5089g" }],
   ["/[kind=kind]/[name]", { kind: "watch", name: "Verizon_LTE_US" }],
   ["/[kind=kind]/[name]", { kind: "carriers", name: "Verizon_Core_Visible_LTE_US" }],
   ["/[kind=kind]/[name]", { kind: "countries", name: "SaintHelenaAscensionAndTristanDaCunha" }],

@@ -45,8 +45,13 @@
   <legend>Package</legend>
   <table class="grid">
     <tbody>
-      <tr><td class="k">Bundle</td><td class="mono">{bundle.info.bundleName}</td></tr>
-      <tr><td class="k">Build</td><td class="mono">{bundle.entry.build || String(infoPlist?.CFBundleVersion ?? "")}</td></tr>
+      <!-- Name and build are in the header and the From row; these rows only appear when they say something else. -->
+      {#if bundle.info.bundleName !== bundle.name}
+        <tr><td class="k">Bundle</td><td class="mono">{bundle.info.bundleName}</td></tr>
+      {/if}
+      {#if !bundle.entry.build && infoPlist?.CFBundleVersion !== undefined}
+        <tr><td class="k">Build</td><td class="mono">{String(infoPlist.CFBundleVersion)}</td></tr>
+      {/if}
       {#if versionPlist}
         <tr>
           <td class="k">version.plist</td>

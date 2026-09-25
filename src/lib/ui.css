@@ -244,6 +244,8 @@ a { color: #123a6d; }
 .rowflex { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
 .grow { flex: 1; min-width: 0; }
 p.lead { max-width: 74ch; }
+/* Wide tables scroll inside their own box, never the page. */
+.hscroll { overflow-x: auto; max-width: 100%; -webkit-overflow-scrolling: touch; }
 
 /* ------------------------------------------------------------------- panes */
 
@@ -263,7 +265,6 @@ p.lead { max-width: 74ch; }
 .timeline a:hover { background: #eef2f7; }
 .timeline a[aria-current="true"] { background: var(--sel); color: var(--sel-text); }
 .timeline .flag { margin-left: auto; font-size: 10.5px; color: var(--text-dim); }
-.timeline a[aria-current="true"] .flag { color: #cfe0f5; }
 
 /* ------------------------------------------------------------ context menu */
 

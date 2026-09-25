@@ -5,11 +5,13 @@
   import { bundleArgs, rawHref, withParams } from "$lib/format";
   import Pane from "$lib/components/Pane.svelte";
   import FileBody from "$lib/components/FileBody.svelte";
+  import ModemDefaults from "$lib/components/ModemDefaults.svelte";
 
   let { params } = $props();
 
   const wanted = $derived(page.url.searchParams.get("file"));
-  const pick = (file: string) => goto(withParams(page.url, { file }), { replaceState: true, keepFocus: true, noScroll: true });
+  const pick = (file: string) =>
+    goto(withParams(page.url, { file, efs: null, base: null }), { replaceState: true, keepFocus: true, noScroll: true });
 </script>
 
 <div class="scroll pad">
@@ -36,9 +38,11 @@
         file={await getFile({ ...params, slug: params.version, path })}
         cc={bundle.cc}
         raw={rawHref(params.kind, params.name, params.version, path)}
+        devices={false}
       />
     {:else}
       <p class="dimtext" style="margin:0">No baseband files.</p>
     {/if}
   </Pane>
+  {#if params.kind === "carriers"}<ModemDefaults kind={params.kind} name={params.name} slug={params.version} />{/if}
 </div>
