@@ -16,12 +16,12 @@ import {
   versionKey,
 } from "../src/lib/server/manifest.ts";
 import type { CountrySummary, ManifestIndex } from "../src/lib/server/manifest.ts";
-import type { PlistValue } from "../src/lib/server/plist.ts";
-import { openIpcc, decodeFile, base64Of, contentTypeOf } from "../src/lib/server/ipcc.ts";
-import type { OpenedBundle } from "../src/lib/server/ipcc.ts";
+import type { PlistValue } from "../src/lib/decode/plist.ts";
+import { openIpcc, decodeFile, base64Of, contentTypeOf } from "../src/lib/decode/bundle.ts";
+import type { OpenedBundle } from "../src/lib/decode/bundle.ts";
 import { buildCbsRow, buildCbsMatrix, latestPerCountry } from "../src/lib/server/cbs.ts";
-import { diffValues, summariseDiff } from "../src/lib/server/diff.ts";
-import { normalizeApplePng, isPng, isCgBI, pngDimensions } from "../src/lib/server/png.ts";
+import { diffValues, summariseDiff } from "../src/lib/decode/compare.ts";
+import { normalizeApplePng, isPng, isCgBI, pngDimensions } from "../src/lib/decode/png.ts";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const fixture = (n: string) => new Uint8Array(readFileSync(join(here, "fixtures", n)));
@@ -821,7 +821,7 @@ describe("openIpcc", () => {
     };
     expect(kinds("ATT_US.ipcc")).toEqual({ strings: 42, plist: 60, "pri-der": 7, mobileconfig: 1 });
     expect(kinds("Verizon_LTE_US.ipcc")).toEqual({
-      binary: 1,
+      dmu: 1,
       xml: 1,
       plist: 28,
       certificate: 1,
@@ -1017,14 +1017,15 @@ describe("decodeFile", () => {
     expect(d.note).toBeUndefined();
   });
 
-  it("renders carrier.dmu as opaque hex with an explanatory note", () => {
+  it("decodes carrier.dmu as a DMU public key and keeps the hex", () => {
     const d = decodeFile(openIpcc(fixture("Verizon_LTE_US.ipcc")), "carrier.dmu");
-    expect(d.kind).toBe("binary");
+    expect(d.kind).toBe("dmu");
     expect(d.size).toBe(260);
     expect(d.hex).toHaveLength(520);
     expect(d.hex!.startsWith("0a02ff10")).toBe(true);
     expect(d.text).toBeUndefined();
-    expect(d.note).toBe("signed device-management update blob");
+    expect(d.dmu).toMatchObject({ pkoid: 0x0a, algorithm: "RSA-1024", exponent: "17", modulusBits: 1024 });
+    expect(d.note).toBe("DMU public key: RSA-1024, exponent 17, PKOID 0x0a (Verizon Wireless), PKOI 2");
   });
 
   it("truncates a large opaque blob to 8 KiB and says so", () => {
@@ -1148,7 +1149,7 @@ describe("decodeFile", () => {
     b.entries[b.prefix + "der.crt"] = new Uint8Array([0x30, 0x82, 0x01, 0x0a, 0x02, 0x01]);
     const d = decodeFile(b, "der.crt");
     expect(d.kind).toBe("certificate");
-    expect(d.note).toBe("DER-encoded X.509 certificate");
+    expect(d.note).toMatch(/^DER-encoded X\.509 certificate; could not parse: /);
     expect(d.hex).toBe("3082010a0201");
     // The bytes really are PEM.
     expect(
@@ -1975,10 +1976,10 @@ describe("ipcc: assets and packaging leftovers", () => {
 
   it("annotates the opaque binary members it knows about", () => {
     const vz = openIpcc(fixture("Verizon_LTE_US.ipcc"));
-    expect(decodeFile(vz, "carrier.dmu").note).toMatch(/device-management/);
+    expect(decodeFile(vz, "carrier.dmu").note).toMatch(/^DMU public key/);
     const b = openIpcc(fixture("Verizon_LTE_US.ipcc"));
     b.entries[b.prefix + "carrier.prl"] = new Uint8Array([0, 0x57, 0, 3, 3, 0x80]);
-    expect(decodeFile(b, "carrier.prl").note).toMatch(/Preferred Roaming List/);
+    expect(decodeFile(b, "carrier.prl").note).toMatch(/Preferred Roaming List.*; could not decode: PRL too short/);
     b.entries[b.prefix + "overrides_N1.mcfopota"] = new Uint8Array([4, 0, 1, 0, 0x38]);
     expect(decodeFile(b, "overrides_N1.mcfopota").note).toMatch(/OP-OTA/);
   });
