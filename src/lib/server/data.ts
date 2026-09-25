@@ -20,7 +20,7 @@ import {
 import {
   BBCFG_FILE_TYPES, compareBundles, contentId, decodeFile, diffValues, openIpcc, parseBandCombos, summariseDiff,
   type BasebandFile, type BasebandSummary, type ComboStats, type DiffKind, type FileDiff, type ModemKind,
-  type ModemSummary, type Variant,
+  type ModemSummary, type Variant, productName,
 } from "$lib/decode";
 import { buildMergedCbsMatrix } from "./cbs";
 import { guessCarrierQuery } from "./guess";
@@ -28,7 +28,8 @@ import {
   POINTER_KEY, bundlesKey, fileDataKey, fileIndexKey, keyScan, topKey,
   type ScanFileIndex, type ScanPointer, type ScanShard, type ScanTarget, type TargetRow,
 } from "./keyscan";
-import { modemView, pickModem } from "./modems";
+import { modemView } from "./modems";
+import { byNewest, overridesFor, sharedPri } from "$lib/phones";
 import { carriersOf, homeCountry, isoIndex, type CountryPlists } from "./related";
 import { buildTimeline, headIndex, type ImageBuild, type ImageIndex, type TimelineEntry } from "./timeline";
 import { imageSlug, isPrerelease } from "$lib/names";
@@ -339,16 +340,19 @@ async function mustIndex(build: string) {
   return idx;
 }
 
-/** The image's package of `family`, else the one serving `device` (the image's own phone by default); see pickModem. */
-async function imageModem(build: string, o: { family?: string; device?: string; kind?: ModemKind } = {}) {
+/** The image's package of `family`. */
+async function imageModem(build: string, family: string, kind: ModemKind) {
   const idx = await mustIndex(build);
-  const m = pickModem(idx.modems, { ...o, device: o.device ?? idx.product });
-  if (!m) error(404, o.family ? `iOS ${idx.version} (${build}) has no ${o.family} modem package.` : `No modem packages for ${build} yet.`);
+  const m = idx.modems.find((x) => x.family === family && x.package.kind === kind);
+  if (!m) error(404, `iOS ${idx.version} (${build}) has no ${family} ${kind === "bbfw" ? ".bbfw" : "ftab"} modem package.`);
   return { idx, m };
 }
 
-/** A build's modem packages, one per distinct package, with the phones each serves. */
-export const getModems = async (build: string) => (await mustIndex(build)).modems.map(modemView);
+/** A build's modem packages, one per distinct package, with the phones each serves; newest phones first. */
+export async function getModems(build: string) {
+  const idx = await mustIndex(build);
+  return { build, version: idx.version, modems: byNewest(idx.modems.map(modemView)) };
+}
 
 /** Every image, and the modem families it holds. */
 export const basebandBuilds = async () =>
@@ -412,11 +416,11 @@ export async function getModemPackage(id: string) {
   return s.kind === "ftab" ? s : bbfwView(s);
 }
 
-/** An image's .bbfw package of `family`, by default the one serving the image's own phone. */
-export async function getBaseband(build: string, family?: string) {
-  const { idx, m } = await imageModem(build, { family, kind: "bbfw" });
+/** An image's .bbfw package of `family`. */
+export async function getBaseband(build: string, family: string) {
+  const { idx, m } = await imageModem(build, family, "bbfw");
   const view = await bbfwView(await mustBbfw(m.package.id));
-  return { build, version: idx.version, family: m.family, id: m.package.id, modems: idx.modems.map(modemView), ...view };
+  return { build, version: idx.version, family: m.family, id: m.package.id, ...view };
 }
 
 export async function getBasebandFile(id: string, i: number) {
@@ -461,7 +465,7 @@ export interface BasebandDiffPart extends FileDiff { section: string }
 
 /** One family's package in build `b` against build `a`, part by part. A package pair is cached for a month. */
 export async function getBasebandDiff(a: string, b: string, family: string) {
-  const [A, B] = await Promise.all([imageModem(a, { family, kind: "bbfw" }), imageModem(b, { family, kind: "bbfw" })]);
+  const [A, B] = await Promise.all([imageModem(a, family, "bbfw"), imageModem(b, family, "bbfw")]);
   const side = (x: typeof A) => ({ build: x.idx.build, version: x.idx.version, id: x.m.package.id });
   const diff = await cached(`bbdiff:v2:${A.m.package.id}|${B.m.package.id}`, 30 * 86400, async () => {
     const [sa, sb] = await Promise.all([mustBbfw(A.m.package.id), mustBbfw(B.m.package.id)]);
@@ -484,28 +488,44 @@ export async function getBasebandDiff(a: string, b: string, family: string) {
 }
 
 /**
- * The .bbfw package a bundle version meets: from its own image for an image
- * entry, the current release for OTA; `family` when named, else the one serving
- * the entry's phone (a per-model OTA file's, or the image's own).
+ * The image a bundle version is read against: its own for an image entry, the
+ * current release for OTA.
  */
-async function bundleModem(kind: Kind, name: string, slug?: string, family?: string) {
+async function bundleImage(kind: Kind, name: string, slug?: string) {
   const { entry } = await resolve(kind, name, slug);
   const build = entry.image ?? release(await builds())?.build;
-  const idx = build ? await imageIndex(build) : null;
-  const device = entry.productType?.includes(",") ? entry.productType : idx?.product;
-  const m = idx ? pickModem(idx.modems, { family, device, kind: "bbfw" }) : undefined;
-  return { entry, build: build ?? null, idx, m };
+  return { entry, build: build ?? null, idx: build ? await imageIndex(build) : null };
 }
 
 /**
- * What the modem runs for this bundle before its own .der.pri lands: the
- * band-combo carrier tags whose PLMNs route here, and the package files each
- * .der.pri replaces by EFS path.
+ * The phones a bundle version can land on, by modem package. An image bundle
+ * holds only the override files of the phone the image was cut for and its
+ * family; `extractedFrom` names that phone.
  */
-export async function getBasebandDefaults(kind: Kind, name: string, slug?: string, family?: string) {
-  const { entry, build, idx, m } = await bundleModem(kind, name, slug, family);
+export async function getBundleModems(kind: Kind, name: string, slug?: string) {
+  const { entry, build, idx } = await bundleImage(kind, name, slug);
+  if (!build || !idx) return null;
+  return {
+    build, version: idx.version, source: entry.source,
+    extractedFrom: entry.source === "image" && idx.product ? { id: idx.product, name: productName(idx.product) ?? idx.device } : null,
+    // The phone a page means when none is named: a per-model OTA file's, else the image's own.
+    home: (entry.productType?.includes(",") ? entry.productType : idx.product) ?? idx.modems[0]?.devices[0],
+    modems: byNewest(idx.modems.map(modemView)),
+  };
+}
+
+/**
+ * What the modem of `device` runs for this bundle before the bundle's own
+ * .der.pri lands: the band-combo carrier tags whose PLMNs route here, and the
+ * package files that phone's .der.pri replaces by EFS path. Without `device`,
+ * the entry's phone (a per-model OTA file's, or the image's own).
+ */
+export async function getBasebandDefaults(kind: Kind, name: string, slug?: string, device?: string) {
+  const { entry, build, idx } = await bundleImage(kind, name, slug);
+  const phone = device ?? (entry.productType?.includes(",") ? entry.productType : idx?.product);
+  const m = idx && phone ? idx.modems.find((x) => x.devices.includes(phone) && x.package.kind === "bbfw") : undefined;
   const s = m ? await modemSummary(m.package.id) : null;
-  if (!build || !idx || !m || s?.kind !== "bbfw") return { build, missing: true as const };
+  if (!build || !idx || !m || !phone || s?.kind !== "bbfw") return { build, missing: true as const };
   const tags = Object.entries(s.carrierMap ?? {})
     .filter(([, c]) => c.bundles.includes(name) || c.mvnoBundles.includes(name))
     .map(([tag, c]) => ({
@@ -528,8 +548,9 @@ export async function getBasebandDefaults(kind: Kind, name: string, slug?: strin
   s.files.forEach((f, i) => { if (f.text !== undefined) byPath.set(f.path, [...(byPath.get(f.path) ?? []), { ...f, i }]); });
   const overrides: Array<{ pri: string; efs: string; length: number; baseline: Array<{ i: number; member: string; variants?: Variant[]; configs?: string[]; same: boolean }> }> = [];
   let otherXml = 0;
+  const own = new Set([...overridesFor(opened.info.files, phone), ...sharedPri(opened.info.files)].map((f) => f.path));
   for (const file of opened.info.files) {
-    if (file.kind !== "pri-der") continue;
+    if (file.kind !== "pri-der" || !own.has(file.path)) continue;
     let pri;
     try { pri = decodeFile(opened, file.path).pri; } catch { continue; }
     for (const e of pri?.efs ?? []) {
@@ -544,8 +565,7 @@ export async function getBasebandDefaults(kind: Kind, name: string, slug?: strin
     }
   }
   return {
-    build, missing: false as const, version: idx.version, family: m.family, id: m.package.id,
-    modems: idx.modems.map(modemView), tags, overrides, otherXml,
+    build, missing: false as const, version: idx.version, family: m.family, id: m.package.id, phone, tags, overrides, otherXml,
   };
 }
 

@@ -1,6 +1,6 @@
 import { basebandBuilds, getIndex } from "$lib/server/data";
 
-/** The lists, one page per bundle and one per iOS image and baseband package. Versions, tabs and files hang off those. */
+/** The lists, one page per bundle, per iOS image and per modem package in each image. Versions, tabs and files hang off those. */
 export async function GET({ url }) {
   const [idx, bb] = await Promise.all([getIndex(), basebandBuilds()]);
   const paths = [
@@ -8,7 +8,7 @@ export async function GET({ url }) {
     ...(["carriers", "countries", "watch"] as const).flatMap((kind) =>
       idx[kind].map((e) => `/${kind}/${encodeURIComponent(e.name)}`)),
     ...idx.builds.map((b) => `/releases/${encodeURIComponent(b.build)}`),
-    ...bb.filter((b) => b.families.length).map((b) => `/baseband/${encodeURIComponent(b.build)}`),
+    ...bb.flatMap((b) => b.families.map((f) => `/baseband/${encodeURIComponent(b.build)}/${encodeURIComponent(f)}`)),
   ];
   const body = `<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
