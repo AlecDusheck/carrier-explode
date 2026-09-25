@@ -70,7 +70,8 @@ jobs:
 
       - name: Upload, flip the pointer, drop the generation before last
         run: |
-          W=node_modules/.bin/wrangler
+          W="$GITHUB_WORKSPACE/node_modules/.bin/wrangler"
+          [ -x "$W" ] || { echo "wrangler missing at $W"; exit 1; }
           cd /tmp/scan
           for attempt in 1 2 3 4 5 6 7; do
             "$W" r2 bulk put "$BUCKET" --filename upload.json --remote --force --concurrency 6 && break
