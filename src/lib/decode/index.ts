@@ -5,6 +5,7 @@
 
 export * from "./plist";
 export * from "./pri";
+export * from "./intel";
 export * from "./bundle";
 export * from "./png";
 export * from "./devices";

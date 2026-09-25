@@ -11,6 +11,7 @@ import { inflateSync, unzlibSync } from "fflate";
 import { bytesToHex } from "./plist";
 import { readTlv, type Tlv } from "./der";
 import { CCM_ITEMS, annotateNv, describeNv, type NvConfidence } from "./nv";
+import { intelTree, type IntelTree } from "./intel";
 
 const td = new TextDecoder();
 
@@ -270,6 +271,8 @@ export interface PriDecoded {
   /** Every leaf not consumed as a pair, CCM group, list or schema, aggregated by tag. NV values stay here (with `nv`) for older consumers. */
   unknown: PriUnknown[];
   leafCount: number;
+  /** Intel-dialect keys (tag 9fae72) as groups, record tables and lists with decoded values; `efs` keeps them flat. */
+  intel?: IntelTree;
   error?: string;
 }
 
@@ -377,8 +380,8 @@ export function decodePri(buf: Uint8Array, kind: "der.pri" | "der.gri" = "der.pr
 
     if (info?.kind === "path") {
       const path = td.decode(value);
-      // "%qu[N]:" declares an N-byte NUL-padded string; without the hint an 8-byte one reads as an integer
-      const v = decodeValue(paired ?? new Uint8Array(), path.startsWith("%qu["));
+      // "%qu[N]:" / "%s[N]:" declare an N-byte NUL-padded string; without the hint an 8-byte one reads as an integer
+      const v = decodeValue(paired ?? new Uint8Array(), path.startsWith("%qu[") || path.startsWith("%s["));
       if (paired) i++;
       out.efs.push({ path, tag, value: v, ...annotate(path, v) });
       continue;
@@ -429,6 +432,8 @@ export function decodePri(buf: Uint8Array, kind: "der.pri" | "der.gri" = "der.pr
     }
   }
 
+  const cps = out.efs.filter((e) => e.tag === "9fae72");
+  if (cps.length) out.intel = intelTree(cps.map((e) => ({ key: e.path, value: e.value })));
   out.nvListed = out.nvItems.map((n) => ({ item: n, name: describeNv(n)?.name, set: seenNv.has(n) }));
   out.unknown = [...unknownAgg.values()].sort((a, b) => b.count - a.count);
   return out;
