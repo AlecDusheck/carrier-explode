@@ -1,0 +1,86 @@
+# The cross-bundle scan index behind "what does everyone else put here?"
+# (scripts/scan_index.ts, read by src/lib/server/keyscan.ts). Built from what is
+# already stored: image indexes and blobs in R2, head OTA bundles from Apple. It
+# never touches an IPSW; blobs and OTA files are cached across runs, so a run
+# only downloads what is new.
+#
+# Runs after every System bundles run (daily, and whenever a new image lands),
+# or by hand. Needs: secrets CLOUDFLARE_API_TOKEN (R2 edit) and CLOUDFLARE_ACCOUNT_ID.
+
+name: Scan index
+on:
+  workflow_dispatch:
+  workflow_run:
+    workflows: [System bundles]
+    types: [completed]
+
+concurrency:
+  group: scan-index
+  cancel-in-progress: false
+
+env:
+  BUCKET: carrier-explode
+  CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+  CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+
+jobs:
+  scan-index:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: corepack enable && pnpm install --frozen-lockfile
+
+      - name: Image indexes
+        run: |
+          W=node_modules/.bin/wrangler
+          "$W" r2 object get "$BUCKET/system/builds.json" --remote --pipe > /tmp/builds.json
+          for b in $(jq -r '.[].build' /tmp/builds.json); do
+            mkdir -p "/tmp/idx/$b"
+            "$W" r2 object get "$BUCKET/system/$b/index.json" --remote --pipe > "/tmp/idx/$b/index.json"
+          done
+
+      # Blobs are content-addressed and Apple URLs immutable, so the cache only grows.
+      - uses: actions/cache@v4
+        with:
+          path: |
+            /tmp/blobs
+            /tmp/ota
+          key: scan-bundles-${{ github.run_id }}
+          restore-keys: scan-bundles-
+
+      - name: Heads, and the blobs not cached yet
+        run: |
+          npx vite-node scripts/scan_index.ts plan --builds /tmp/builds.json --indexes /tmp/idx --out /tmp/heads.json |
+            sort -u > /tmp/need.txt
+          mkdir -p /tmp/blobs
+          comm -23 /tmp/need.txt <(ls /tmp/blobs | sed 's/\.ipcc$//' | sort) > /tmp/fetch.txt
+          echo "$(wc -l < /tmp/fetch.txt) of $(wc -l < /tmp/need.txt) blobs to fetch"
+          xargs -P 8 -I{} node_modules/.bin/wrangler r2 object get "$BUCKET/blobs/{}.ipcc" --remote --file "/tmp/blobs/{}.ipcc" \
+            < /tmp/fetch.txt > /dev/null
+
+      - name: Build
+        run: |
+          node_modules/.bin/wrangler r2 object get "$BUCKET/scan/current.json" --remote --pipe > /tmp/current.json 2>/dev/null || echo '{}' > /tmp/current.json
+          PREV=$(jq -r '.gen // empty' /tmp/current.json)
+          npx vite-node scripts/scan_index.ts build --heads /tmp/heads.json --blobs /tmp/blobs --cache /tmp/ota \
+            --out /tmp/scan ${PREV:+--previous "$PREV"}
+
+      - name: Upload, flip the pointer, drop the generation before last
+        run: |
+          W=node_modules/.bin/wrangler
+          cd /tmp/scan
+          for attempt in 1 2 3 4 5 6 7; do
+            "$W" r2 bulk put "$BUCKET" --filename upload.json --remote --force --concurrency 6 && break
+            [ "$attempt" = 7 ] && exit 1
+            sleep $(( 20 * 2 ** (attempt - 1) + RANDOM % 20 ))
+          done
+          "$W" r2 object put "$BUCKET/scan/current.json" --file pointer.json --remote
+          # The last generation stays: a warm worker may still hold its pointer for a few minutes.
+          OLD=$(jq -r '.previous // empty' /tmp/current.json)
+          if [ -n "$OLD" ]; then
+            "$W" r2 object get "$BUCKET/scan/$OLD/_keys.json" --remote --pipe 2>/dev/null | jq -r '.[]' |
+              xargs -P 8 -I{} "$W" r2 object delete "$BUCKET/{}" --remote > /dev/null || true
+          fi

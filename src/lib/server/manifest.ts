@@ -3,7 +3,7 @@
  * carrier and country bundle Apple publishes.
  */
 
-import { parsePlist, type PlistValue, bytesToHex } from "./plist";
+import { parsePlist, type PlistValue, bytesToHex } from "$lib/decode";
 import { compareVersions, countryName, splitName, versionKey } from "$lib/names";
 
 export { compareVersions, countryName, splitName, versionKey };

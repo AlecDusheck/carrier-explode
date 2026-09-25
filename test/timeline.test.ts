@@ -111,7 +111,7 @@ describe("buildTimeline: changed flags and slug uniqueness", () => {
 describe("contentId", () => {
   it("matches the id the Python packager computes for the same bundle", async () => {
     const { readFileSync } = await import("node:fs");
-    const { openIpcc, contentId } = await import("../src/lib/server/ipcc.ts");
+    const { openIpcc, contentId } = await import("../src/lib/decode/bundle.ts");
     const b = openIpcc(new Uint8Array(readFileSync(new URL("./fixtures/UnitedStates.ipcc", import.meta.url))));
     expect(await contentId(b)).toBe("f419f87a49c354ed92466f53157e4bd7b5fb2f44cbdf566baa48e281ada95e8e");
   });
@@ -119,7 +119,7 @@ describe("contentId", () => {
   it("ignores how the archive was built", async () => {
     const { zipSync, unzipSync } = await import("fflate");
     const { readFileSync } = await import("node:fs");
-    const { openIpcc, contentId } = await import("../src/lib/server/ipcc.ts");
+    const { openIpcc, contentId } = await import("../src/lib/decode/bundle.ts");
     const raw = new Uint8Array(readFileSync(new URL("./fixtures/Germany.ipcc", import.meta.url)));
     const files = unzipSync(raw);
     // Reverse the entry order and store instead of deflate.

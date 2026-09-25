@@ -13,6 +13,10 @@ IPSW links for them. A beta for a release that has already shipped is not
 fetched: the point is to see bundle changes before they reach phones.
 
     plan_system_bundles.py --builds builds.json [--device iPhone17,1] [--version 26.4] [--max 3]
+
+--baseband-have FILE instead lists every held build whose build id is not in
+FILE (one per line), as {version, build, device, url}, for backfilling
+system/<build>/baseband.json; the URL is ipsw.me's, else AppleDB's for betas.
 """
 
 import argparse
@@ -116,6 +120,25 @@ def plan_betas(entries: list[dict], device: str, cap: int) -> list[dict]:
     return out[:cap]
 
 
+def missing_baseband(held: list[dict], have: set[str]) -> list[dict]:
+    """Held images without a baseband.json, newest first (builds.json order), from the device they were taken from."""
+    return [{"version": b["version"], "build": b["build"], "device": b.get("product") or ""}
+            for b in held if b.get("build") and b["build"] not in have]
+
+
+def ipsw_url(device: str, build: str) -> str | None:
+    """Apple's IPSW link for this device and build: ipsw.me for releases, AppleDB for betas."""
+    try:
+        return api(f"/ipsw/{device}/{build}")["url"]
+    except Exception:  # noqa: BLE001
+        pass
+    try:
+        devices = appledb(f"iOS;{build}.json").get("devices") or {}
+        return (devices.get(device) or {}).get("ipsw")
+    except Exception:  # noqa: BLE001
+        return None
+
+
 def appledb(path: str):
     req = urllib.request.Request("https://api.appledb.dev/ios/" + path, headers={"User-Agent": "carrier-explode"})
     with urllib.request.urlopen(req, timeout=30) as r:
@@ -130,9 +153,21 @@ def main() -> None:
     ap.add_argument("--since", default="", help="extract everything from this version up (default: oldest held)")
     ap.add_argument("--max", type=int, default=3)
     ap.add_argument("--no-betas", dest="betas", action="store_false", help="releases only")
+    ap.add_argument("--baseband-have", type=Path, help="builds that already have baseband.json; list the rest")
     a = ap.parse_args()
 
     held = json.loads(a.builds.read_text() or "[]") if a.builds.exists() else []
+    if a.baseband_have:
+        have = set(a.baseband_have.read_text().split()) if a.baseband_have.exists() else set()
+        out = []
+        for b in missing_baseband(held, have):
+            url = ipsw_url(b["device"], b["build"])
+            if url:
+                out.append({**b, "url": url})
+            else:
+                print(f"no IPSW URL for {b['device']} {b['build']}", file=sys.stderr)
+        print(json.dumps(out))
+        return
     fws = lambda ident: [{**f, "identifier": ident} for f in api(f"/device/{ident}?type=ipsw")["firmwares"]]
     probe = newest_iphone()
     preferred, fallback = fws(a.device), (fws(probe) if probe != a.device else [])

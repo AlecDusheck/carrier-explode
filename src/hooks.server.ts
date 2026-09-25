@@ -28,13 +28,11 @@ import type { Handle, RequestEvent } from "@sveltejs/kit";
  * worker, so only the misses — the expensive ones — are counted.
  */
 const BUDGET = {
-  // One scan opens up to 120 bundles, and its cache key is built from
-  // client-supplied strings, so a miss costs nothing to manufacture. The dialog
-  // fires once when it opens and once per scope or limit change; ten a minute
-  // is a fidgety human and a tenth of what a script would want.
+  // A scan is one shard read from the precomputed index. Its cache key is
+  // built from client-supplied strings, so a miss costs nothing to manufacture;
+  // ten a minute is a fidgety human and a tenth of what a script would want.
   scan: "RL_SCAN",
-  // Two opens per call and nothing cached at the data layer, but one call per
-  // file the visitor picks.
+  // Two opens and a full-bundle diff per miss; results are cached per pair.
   diff: "RL_DIFF",
   // Everything that can pull and unzip an .ipcc: /raw, the bundle queries, and
   // a page pinned to a version. The assets gallery fires one /raw per image, so
@@ -54,8 +52,10 @@ export function rateClass(
     // name has to come off the request: /_app/remote/<hash>/<name>.
     const name = new URL(event.request.url).pathname.split("/remote/")[1]?.split("/")[1];
     if (name === "scanKey") return "scan";
-    if (name === "getDiff") return "diff";
-    return name === "getBundle" || name === "getFile" || name === "getChanges" ? "bundle" : "base";
+    if (name === "getComparison" || name === "getBasebandDiff") return "diff";
+    return name === "getBundle" || name === "getFile" || name === "getBasebandDefaults" || name === "getBasebandOverride"
+      ? "bundle"
+      : "base";
   }
   // /compare renders a diff, and every other bundle page is pinned to a version.
   if (event.route.id?.startsWith("/raw/") || event.route.id === "/compare") return "bundle";

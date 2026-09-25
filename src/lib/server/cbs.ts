@@ -6,7 +6,7 @@
  * user can switch it off is the interesting difference between bundles.
  */
 
-import { openIpcc, decodeFile } from "./ipcc";
+import { openIpcc, decodeFile } from "$lib/decode";
 import type { CountrySummary } from "./manifest";
 import { compareVersions } from "./manifest";
 

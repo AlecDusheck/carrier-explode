@@ -6,12 +6,15 @@ between iOS releases is stored once and "what changed" is a comparison of two
 indexes:
 
     blobs/<id>.ipcc                 same shape as Apple's OTA .ipcc files
-    system/<build>/index.json       name -> {id, size, build} per kind
+    blobs/<id>.bbfw                 the image's baseband package, as shipped
+    system/<build>/index.json       name -> {id, size, build} per kind, plus baseband {id, size, name}
     system/<build>/countries.json   every country carrier.plist, decoded
+    system/<build>/baseband.json    the baseband package, decoded (scripts/baseband.ts)
     system/builds.json              every image held, newest first
 
     package_system_bundles.py --carriers DIR --countries DIR --meta ipsw_metadata.json \
-        --out DIR [--builds existing-builds.json] [--have sha1-list.txt] [--version "27.2 beta 2"]
+        --out DIR [--builds existing-builds.json] [--have sha1-list.txt] [--version "27.2 beta 2"] \
+        [--bbfw Mav*.bbfw --baseband baseband.json]
 """
 
 import argparse
@@ -96,6 +99,33 @@ def package(src: Path, blobs: Path) -> dict:
     return out
 
 
+def attach_baseband(index: dict, bbfw: Path, summary: Path, out: Path) -> list[Path]:
+    """
+    Store the baseband package the way bundles are stored: the file itself under
+    blobs/, keyed by content, recorded in the image's index, with its decoded
+    form beside the index. Returns the files written. A .bbfw is Apple's own
+    signed zip, so its identity is simply the hash of its bytes.
+    """
+    data = bbfw.read_bytes()
+    bid = hashlib.sha256(data).hexdigest()
+    blob = out / "blobs" / f"{bid}.bbfw"
+    blob.parent.mkdir(parents=True, exist_ok=True)
+    if not blob.exists():
+        blob.write_bytes(data)
+    index["baseband"] = {"id": bid, "size": len(data), "name": bbfw.name}
+    sysdir = out / "system" / index["build"]
+    sysdir.mkdir(parents=True, exist_ok=True)
+    (sysdir / "baseband.json").write_bytes(summary.read_bytes())
+    (sysdir / "index.json").write_text(json.dumps(index, separators=(",", ":")))
+    return [blob, sysdir / "baseband.json", sysdir / "index.json"]
+
+
+def upload_list(out: Path, files: list[Path]) -> None:
+    """For `wrangler r2 bulk put`."""
+    (out / "upload.json").write_text(json.dumps(
+        [{"key": p.relative_to(out).as_posix(), "file": str(p.resolve())} for p in files]))
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--carriers", type=Path, required=True)
@@ -106,6 +136,8 @@ def main() -> None:
     ap.add_argument("--have", type=Path, help="content ids already in the bucket, one per line")
     ap.add_argument("--version", help="version to record instead of the image's own; a beta image "
                     "says 27.2, and only the planner knows it is 27.2 beta 2")
+    ap.add_argument("--bbfw", type=Path, help="the image's Firmware/*.bbfw")
+    ap.add_argument("--baseband", type=Path, help="scripts/baseband.ts output for --bbfw")
     a = ap.parse_args()
 
     meta = json.loads(a.meta.read_text())
@@ -124,6 +156,8 @@ def main() -> None:
     sysdir.mkdir(parents=True, exist_ok=True)
     (sysdir / "index.json").write_text(json.dumps(index, separators=(",", ":")))
     (sysdir / "countries.json").write_text(json.dumps(carrier_plists(a.countries), separators=(",", ":")))
+    if a.bbfw and a.baseband and a.bbfw.exists() and a.baseband.exists():
+        attach_baseband(index, a.bbfw, a.baseband, a.out)
 
     builds = json.loads(a.builds.read_text()) if a.builds and a.builds.exists() and a.builds.stat().st_size else []
     builds = merge([builds, [{k: index[k] for k in ("build", "version", "device", "product", "extractedAt", "scheme")}]])
@@ -133,8 +167,7 @@ def main() -> None:
     # app never lists a half-uploaded image.
     have = set(a.have.read_text().split()) if a.have and a.have.exists() else set()
     files = [p for p in sorted((a.out / "blobs").iterdir()) if p.stem not in have] + sorted(sysdir.iterdir())
-    (a.out / "upload.json").write_text(json.dumps(
-        [{"key": p.relative_to(a.out).as_posix(), "file": str(p.resolve())} for p in files]))
+    upload_list(a.out, files)
     print(f"iOS {index['version']} ({index['build']}): {len(index['carriers'])} carrier, "
           f"{len(index['countries'])} country bundles, {len(files)} objects to upload")
 

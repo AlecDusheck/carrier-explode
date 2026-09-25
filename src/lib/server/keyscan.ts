@@ -1,15 +1,109 @@
 /**
- * Cross-carrier lookup for a single setting.
+ * Cross-bundle lookup for a single setting: "what does everyone else put here?"
  *
- * Answers "what do other operators put here?" for a key path the reader is
- * already looking at. Bounded by design: a scan fans out to one bundle per
- * carrier, so the scope is capped and the result says when it was truncated.
+ * scripts/scan_index.ts (run by the workflow) flattens every head bundle and
+ * packs, per member file, one shard per top-level key into a single object with
+ * a small index beside it. A scan is one range read however many bundles the
+ * scope covers. The worker only reads; bundles newer than the last index run
+ * are reported as unindexed until the next one.
  */
 
-import { openIpcc, decodeFile } from "./ipcc";
-import { compareVersions, type CarrierSummary, type BundleRef, type CountrySummary } from "./manifest";
+import { lookupAll, type Flat } from "$lib/decode";
 
-export type Fetcher = (url: string) => Promise<Uint8Array>;
+/* ------------------------------------------------------------ storage layout */
+
+/** `scan/current.json`: which generation to read. Written last, after every shard. */
+export interface ScanPointer {
+  gen: string;
+  builtAt: string;
+  bundles: number;
+}
+
+/** `scan/<gen>/<file>.idx.json`. */
+export interface ScanFileIndex {
+  /** Every indexed bundle that has this file. */
+  srcs: string[];
+  /** Top-level key → [offset, length] of its shard in the `.dat` object. */
+  shards: Record<string, [number, number]>;
+}
+
+/** One shard inside `scan/<gen>/<file>.dat`: `rows[i]` belongs to `srcs[at[i]]`. */
+export interface ScanShard {
+  at: number[];
+  rows: Flat[];
+}
+
+export const POINTER_KEY = "scan/current.json";
+const fileStem = (gen: string, file: string) => `scan/${gen}/${encodeURIComponent(file)}`;
+export const bundlesKey = (gen: string) => `scan/${gen}/_bundles.json`;
+export const fileIndexKey = (gen: string, file: string) => `${fileStem(gen, file)}.idx.json`;
+export const fileDataKey = (gen: string, file: string) => `${fileStem(gen, file)}.dat`;
+
+/** First path segment: the shard a query reads. `apns[*].x` → `apns`. */
+export function topKey(path: string): string {
+  return /^[^.[]*/.exec(path)![0];
+}
+
+/** Pack flattened bundles into one `{index, data}` pair per member file. */
+export function packShards(bundles: Array<{ src: string; flat: Record<string, Flat> }>) {
+  const byFile = new Map<string, { srcs: string[]; tops: Map<string, ScanShard> }>();
+  for (const { src, flat } of bundles) {
+    for (const [file, leaves] of Object.entries(flat)) {
+      let f = byFile.get(file);
+      if (!f) byFile.set(file, (f = { srcs: [], tops: new Map() }));
+      const at = f.srcs.push(src) - 1;
+      const mine = new Map<string, Flat>();
+      for (const [k, v] of Object.entries(leaves)) {
+        const top = topKey(k);
+        let row = mine.get(top);
+        if (!row) mine.set(top, (row = {}));
+        row[k] = v;
+      }
+      for (const [top, row] of mine) {
+        let s = f.tops.get(top);
+        if (!s) f.tops.set(top, (s = { at: [], rows: [] }));
+        s.at.push(at);
+        s.rows.push(row);
+      }
+    }
+  }
+  const enc = new TextEncoder();
+  const out = new Map<string, { index: ScanFileIndex; data: Uint8Array }>();
+  for (const [file, { srcs, tops }] of byFile) {
+    const parts: Uint8Array[] = [];
+    const shards: ScanFileIndex["shards"] = {};
+    let offset = 0;
+    for (const top of [...tops.keys()].sort()) {
+      const bytes = enc.encode(JSON.stringify(tops.get(top)));
+      shards[top] = [offset, bytes.length];
+      parts.push(bytes);
+      offset += bytes.length;
+    }
+    const data = new Uint8Array(offset);
+    let at = 0;
+    for (const p of parts) { data.set(p, at); at += p.length; }
+    out.set(file, { index: { srcs, shards }, data });
+  }
+  return out;
+}
+
+/* ------------------------------------------------------------------- query */
+
+export interface ScanTarget {
+  name: string;
+  display: string;
+  cc?: string;
+  os: string;
+  build: string;
+  /** Storage location; never sent to the client. */
+  src: string;
+}
+
+/**
+ * A target's leaves under the queried top-level key. `null` = the bundle has no
+ * such file; `undefined` = not in the index yet.
+ */
+export type TargetRow = Flat | null | undefined;
 
 export interface ScanHit {
   name: string;
@@ -17,162 +111,80 @@ export interface ScanHit {
   cc?: string;
   os: string;
   build: string;
-  url: string;
-  /** undefined = the key is absent from this bundle. */
-  value?: unknown;
+  /** Every path the query matched in this bundle. Empty = absent. */
+  matches: Array<{ path: string; value: unknown }>;
+  missing?: boolean;
+  unindexed?: boolean;
+}
+
+export interface ScanBucket {
+  value: unknown;
   present: boolean;
-  error?: string;
+  /** Bundles holding this value at any matched path. */
+  count: number;
+  carriers: string[];
 }
 
 export interface ScanResult {
   path: string;
   file: string;
   scope: string;
+  /** Bundles that have the file. */
   scanned: number;
-  truncated: boolean;
-  candidates: number;
-  /** Distinct values, most common first. `present: false` is the absent bucket. */
-  buckets: Array<{ value: unknown; present: boolean; count: number; carriers: string[] }>;
+  /** Of those, how many set the key. */
+  set: number;
+  /** Bundles the index did not cover yet. */
+  unindexed: number;
+  buckets: ScanBucket[];
   hits: ScanHit[];
 }
 
-const MAX_SCAN = 120;
-
-const ABSENT = "<absent>";
-
-function readPath(root: unknown, path: string): unknown {
-  let cur = root;
-  // Accepts a.b[0].c as well as plain a.b.c
-  for (const part of path.split(".")) {
-    if (cur == null) return undefined;
-    const m = /^([^[\]]*)((?:\[\d+\])*)$/.exec(part);
-    if (!m) return undefined;
-    if (m[1]) {
-      if (typeof cur !== "object") return undefined;
-      cur = (cur as Record<string, unknown>)[m[1]];
-    }
-    for (const idx of m[2].match(/\d+/g) ?? []) {
-      if (!Array.isArray(cur)) return undefined;
-      cur = cur[Number(idx)];
-    }
-  }
-  return cur;
-}
-
 function stableKey(v: unknown): string {
-  if (v === undefined) return ABSENT;
-  const seen = new WeakSet<object>();
-  const walk = (x: unknown): unknown => {
-    if (x === null || typeof x !== "object") return x;
-    if (seen.has(x)) return "[circular]";
-    seen.add(x);
-    if (Array.isArray(x)) return x.map(walk);
-    const out: Record<string, unknown> = {};
-    for (const k of Object.keys(x as object).sort()) out[k] = walk((x as Record<string, unknown>)[k]);
-    return out;
-  };
-  try {
-    return JSON.stringify(walk(v));
-  } catch {
-    return String(v);
-  }
+  if (v === null || typeof v !== "object") return JSON.stringify(v) ?? "undefined";
+  if (Array.isArray(v)) return `[${v.map(stableKey).join(",")}]`;
+  const o = v as Record<string, unknown>;
+  return `{${Object.keys(o).sort().map((k) => `${JSON.stringify(k)}:${stableKey(o[k])}`).join(",")}}`;
 }
 
-export interface ScanTarget { name: string; display: string; cc?: string; ref: BundleRef }
+const BUCKET_NAMES = 60;
 
-/** Pick one bundle per carrier: the newest published within the scope. */
-export function scanTargets(
-  scope: string,
-  carriers: CarrierSummary[],
-  refs: Record<string, BundleRef[]>,
-  countries: CountrySummary[],
-): ScanTarget[] {
-  if (scope === "countries") {
-    const best = new Map<string, CountrySummary>();
-    for (const c of countries) {
-      if (c.family !== "iPhone") continue;
-      const prev = best.get(c.id);
-      if (!prev || compareVersions(c.version, prev.version) > 0) best.set(c.id, c);
-    }
-    return [...best.values()]
-      .sort((a, b) => a.id.localeCompare(b.id))
-      .map((c) => ({
-        name: c.id,
-        display: c.id,
-        ref: { os: c.minOS ?? "", build: c.version, url: c.url, productType: "iPhone" },
-      }));
-  }
+/**
+ * Answer a query. `rows[i]` pairs with `targets[i]`. Wildcards (`apns[*].type-mask`)
+ * match every index; a bundle counts once per distinct value it holds.
+ */
+export function keyScan(targets: ScanTarget[], rows: TargetRow[], file: string, path: string, scope: string): ScanResult {
+  const hits: ScanHit[] = targets.map((t, i) => {
+    const base = { name: t.name, display: t.display, cc: t.cc, os: t.os, build: t.build };
+    const row = rows[i];
+    if (row === undefined) return { ...base, matches: [], unindexed: true };
+    if (row === null) return { ...base, matches: [], missing: true };
+    return { ...base, matches: lookupAll(row, path) };
+  });
 
-  const cc = scope.startsWith("country:") ? scope.slice(8).toLowerCase() : null;
-  const picked: ScanTarget[] = [];
-  for (const c of carriers) {
-    if (cc && c.cc !== cc) continue;
-    const list = (refs[c.name] ?? []).filter(
-      (r) => r.os !== "legacy" && (!r.productType || r.productType === "iPhone"),
-    );
-    if (!list.length) continue;
-    // Merged lists are already ordered the way a phone would choose.
-    const newest = list.some((r) => r.source === "image")
-      ? list[0]
-      : list.reduce((a, b) => (compareVersions(b.os, a.os) > 0 ? b : a));
-    picked.push({ name: c.name, display: c.display, cc: c.cc, ref: newest });
-  }
-  // Prefer the most actively maintained bundles when the scope has to be cut.
-  picked.sort((a, b) => compareVersions(b.ref.os, a.ref.os) || a.name.localeCompare(b.name));
-  return picked;
-}
-
-export async function keyScan(
-  targets: ScanTarget[],
-  file: string,
-  path: string,
-  fetchUpstream: Fetcher,
-  scope: string,
-  limit = 40,
-): Promise<ScanResult> {
-  const capped = Math.min(Math.max(limit, 1), MAX_SCAN);
-  const use = targets.slice(0, capped);
-  const hits: ScanHit[] = [];
-  const CONCURRENCY = 8;
-
-  for (let i = 0; i < use.length; i += CONCURRENCY) {
-    const batch = use.slice(i, i + CONCURRENCY).map(async (t): Promise<ScanHit> => {
-      const base: ScanHit = {
-        name: t.name, display: t.display, cc: t.cc,
-        os: t.ref.os, build: t.ref.build, url: t.ref.url, present: false,
-      };
-      try {
-        const bundle = openIpcc(await fetchUpstream(t.ref.url));
-        if (!bundle.info.files.some((f) => f.path === file)) return { ...base, error: "no " + file };
-        const decoded = decodeFile(bundle, file);
-        const root = decoded.plist ?? decoded.pri ?? decoded.text;
-        const value = readPath(root, path);
-        return { ...base, value, present: value !== undefined };
-      } catch (e) {
-        return { ...base, error: (e as Error).message };
-      }
-    });
-    hits.push(...(await Promise.all(batch)));
-  }
-
-  const byValue = new Map<string, { value: unknown; present: boolean; count: number; carriers: string[] }>();
-  for (const h of hits) {
-    if (h.error) continue;
-    const k = stableKey(h.value);
-    const b = byValue.get(k) ?? { value: h.value ?? null, present: h.present, count: 0, carriers: [] };
+  const buckets = new Map<string, ScanBucket>();
+  const add = (k: string, value: unknown, present: boolean, name: string) => {
+    let b = buckets.get(k);
+    if (!b) buckets.set(k, (b = { value, present, count: 0, carriers: [] }));
     b.count++;
-    if (b.carriers.length < 40) b.carriers.push(h.name);
-    byValue.set(k, b);
+    if (b.carriers.length < BUCKET_NAMES) b.carriers.push(name);
+  };
+  for (const h of hits) {
+    if (h.missing || h.unindexed) continue;
+    if (!h.matches.length) { add("\0absent", null, false, h.name); continue; }
+    const seen = new Set<string>();
+    for (const m of h.matches) {
+      const k = stableKey(m.value);
+      if (!seen.has(k)) { seen.add(k); add(k, m.value, true, h.name); }
+    }
   }
 
+  const rank = (h: ScanHit) => (h.unindexed ? 3 : h.missing ? 2 : h.matches.length ? 0 : 1);
   return {
     path, file, scope,
-    scanned: hits.length,
-    truncated: targets.length > use.length,
-    candidates: targets.length,
-    buckets: [...byValue.values()].sort((a, b) => b.count - a.count),
-    hits: hits.sort((a, b) => Number(b.present) - Number(a.present) || a.name.localeCompare(b.name)),
+    scanned: hits.filter((h) => !h.missing && !h.unindexed).length,
+    set: hits.filter((h) => h.matches.length).length,
+    unindexed: hits.filter((h) => h.unindexed).length,
+    buckets: [...buckets.values()].sort((a, b) => b.count - a.count || Number(b.present) - Number(a.present)),
+    hits: hits.sort((a, b) => rank(a) - rank(b) || a.name.localeCompare(b.name)),
   };
 }
-
-export { readPath };

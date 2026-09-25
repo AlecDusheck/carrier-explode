@@ -68,13 +68,14 @@ const page = (id: RequestEvent["route"]["id"], version?: string) =>
 describe("rateClass", () => {
   it("puts the fan-out scan in its own budget", () => {
     expect(rateClass(remote("scanKey"))).toBe("scan");
-    expect(rateClass(remote("getDiff"))).toBe("diff");
+    expect(rateClass(remote("getComparison"))).toBe("diff");
+    expect(rateClass(remote("getBasebandDiff"))).toBe("diff");
   });
 
   it("counts anything that can open a bundle together", () => {
     expect(rateClass(remote("getBundle"))).toBe("bundle");
     expect(rateClass(remote("getFile"))).toBe("bundle");
-    expect(rateClass(remote("getChanges"))).toBe("bundle");
+    expect(rateClass(remote("getBasebandDefaults"))).toBe("bundle");
     expect(rateClass(page("/raw/[kind=kind]/[name]/[version]/[...path]", "ios-27.0"))).toBe("bundle");
     expect(rateClass(page("/compare"))).toBe("bundle");
     expect(rateClass(page("/[kind=kind]/[name]/[version]", "ios-27.0"))).toBe("bundle");
@@ -83,6 +84,7 @@ describe("rateClass", () => {
   it("leaves the memoised tables and the plain lists on the base budget", () => {
     expect(rateClass(remote("getIndex"))).toBe("base");
     expect(rateClass(remote("getRelease"))).toBe("base");
+    expect(rateClass(remote("getBaseband"))).toBe("base");
     expect(rateClass(remote("getPlmn"))).toBe("base");
     expect(rateClass(page("/[kind=kind]"))).toBe("base");
     expect(rateClass(page("/plmn"))).toBe("base");
