@@ -44,6 +44,8 @@ const EFST = "EfsTools Efs.cs";
 const MBNU = "mbn_utils nv_complete.txt";
 const PLAIN = "plaintext .pri in CW_pa / BhartiAirtel_in";
 const CORPUS = "corpus: iOS 27.0 overrides";
+const FW = "qdsp6sw.mbn rodata";
+const CLADE = "qdsp6sw.mbn CLADE2 region";
 
 const OFF_ON = { 0: "Off", 1: "On" };
 
@@ -55,6 +57,7 @@ const bytesVersion = (n: number) => `${n & 0xff}.${(n >>> 8) & 0xff}.${(n >>> 16
 const MMODE = "/nv/item_files/modem/mmode/";
 const NAS = "/nv/item_files/modem/nas/";
 const PS = "/nv/item_files/modem/data/3gpp/ps/";
+const MAV = "/nv/item_files/modem/mav/";
 
 export const NV_PATHS: Record<string, Entry> = {
   // plaintext .pri key "IMS Feature Enable" = this path; value 2 is shipped but its meaning is unpublished
@@ -92,7 +95,11 @@ export const NV_PATHS: Record<string, Entry> = {
   "/nv/item_files/modem/lte/rrc/efs/lte_feature_disable": e("LTE feature disable", "LTE RRC capability feature-disable bitmap", "bytes", "med", "cacombos.com"),
   "/nv/item_files/modem/lte/rrc/efs/band_priority_list_v2": e("LTE band priority list", "Prioritised band list for LFS/FFS scans (uint16 array)", "bytes", "med", XQCN),
   "/nv/item_files/modem/lte/rrc/efs/eps_fallback_control": e("EPS fallback control", "VoNR to EPS fallback control", "bytes", "low", "name only"),
-  "/nv/item_files/modem/lte/rrc/bbq/bbq_mitigation": e("BBQ mitigation", "LTE bad-band-quality mitigation", "bool", "low", "name only", { values: OFF_ON }),
+  // qdsp6sw.mbn rodata: path sits beside bbq/fake_enodeb_exception_plmn_list, then mav_lte_p2p.c
+  "/nv/item_files/modem/lte/rrc/bbq/bbq_mitigation": e("Fake eNodeB mitigation", "LTE false-base-station (fake eNodeB) mitigation", "bool", "med", FW, { values: OFF_ON }),
+  "/nv/item_files/modem/lte/rrc/bbq/fake_enodeb_exception_plmn_list": e("Fake eNodeB exception PLMNs", "PLMNs exempt from fake-eNodeB mitigation (count byte, then 3-byte BCD PLMNs)", "bytes", "med", FW),
+  // qdsp6sw.mbn CLADE2: listed beside grr/fake_bs_detection_enabled
+  "/nv/item_files/modem/geran/grr/fake_bts_cell_barring_enabled": e("Fake BTS cell barring", "Bar GSM cells that fake-base-station detection flags", "bool", "med", CLADE, { values: OFF_ON }),
   "/nv/item_files/modem/lte/rrc/PC2_WHITELIST.xml": e("PC2 whitelist", "Bands allowed Power Class 2 (26 dBm)", "xml", "low", "name only"),
   "/nv/item_files/modem/qmi/cat/qmi_cat_block_sms_pp_env_per_sub": e("Block SMS-PP envelope", "Block SIM Toolkit SMS-PP (data download) envelopes, per subscription", "bool", "med", "name only", { values: OFF_ON }),
   "/nv/item_files/modem/nr5g/RRC/cap_feature_band_nr": e("NR band capability", "NR band feature-capability list; proprietary layout", "bytes", "med", "name only"),
@@ -120,6 +127,63 @@ export const NV_PATHS: Record<string, Entry> = {
   "/policyman/carrier_policy.xml": e("Carrier policy", "PolicyMan rules keyed on MCC/PLMN: RAT capability, RF bands, UE mode", "xml", "med", `${EFST}; tech.ssut.me`),
   // plaintext .pri writes 28 here next to NV 10 = GWL; bit meanings unpublished
   "/mav/mav_police_pri_mode_pref_mask": e("Mode preference police mask", "Apple mask over the PRI mode preference", "bitmask", "low", PLAIN),
+
+  // qdsp6sw.mbn CLADE2: these six sit together after cmsds.c "cmsds_perform_plmn_blocking"
+  [`${MAV}mav_gsm_disable_mcc_list`]: e("GSM-disabled MCCs", "MCCs where GSM is not used (count byte, then uint16 MCCs; bbcfg ships 440, 441, 466, 525)", "bytes", "med", `${CLADE}; bbcfg.mbn`),
+  // bbcfg.mbn value 04 130051 130082 130083 130014 = 310-150/280/380/410
+  [`${MAV}mav_cm_cs_shutdown_plmn_list`]: e("CS shutdown PLMNs", "PLMNs whose 2G/3G circuit-switched network is shut down (count byte, then 3-byte BCD PLMNs)", "bytes", "med", `${CLADE}; bbcfg.mbn`),
+  [`${MAV}mav_ux_sys_sel_opti_mcc_list`]: e("System-selection optimisation MCCs", "MCCs that get Apple's system-selection UX optimisation (count byte, then uint16 MCCs; bbcfg ships 460, 404)", "bytes", "med", `${CLADE}; bbcfg.mbn`),
+  // qdsp6sw.mbn CLADE2: QMI handler "qmi_nasi_unblock_nr5g_plmn" and "ds_3gpp_pdn_cntxt_unblock_nr5g_plmn"
+  [`${MMODE}mav_unblock_nr_fplmn`]: e("Unblock NR on forbidden PLMN", "Allow lifting the NR5G PLMN block that CM applies after NR registration failures", "bool", "med", CLADE, { values: OFF_ON }),
+  [`${MMODE}mav_sa_only_carrier`]: e("SA-only carrier", "Carrier runs 5G standalone only (no NSA)", "bool", "med", CLADE, { values: OFF_ON }),
+  [`${MMODE}mav_rat_no_srv_update_hold_timer`]: e("No-service RAT update hold timer", "Hold time before reporting a RAT change to no service", "uint32", "low", CLADE),
+  // qdsp6sw.mbn CLADE2: path between "qmi_voice_cm_if_send_flash" and the incoming-call handlers
+  [`${MMODE}qmi/mav_pri_allow_auto_answer`]: e("Allow auto answer", "Allow automatic answering of incoming voice calls", "bool", "med", CLADE, { values: OFF_ON }),
+  // qdsp6sw.mbn CLADE2: NAS reg_sim.c strings, followed by the endc and nr_in_roam variants
+  [`${NAS}mav_lte_reject_smc_null_ciphering`]: e("Reject LTE null ciphering", "Reject an LTE NAS Security Mode Command that selects null ciphering (EEA0)", "bool", "med", CLADE, { values: OFF_ON }),
+  [`${NAS}mav_nr_reject_smc_null_ciphering`]: e("Reject NR null ciphering", "Reject a 5G NAS Security Mode Command that selects null ciphering (NEA0)", "bool", "med", CLADE, { values: OFF_ON }),
+  [`${NAS}mav_endc_reject_smc_null_ciphering`]: e("Reject EN-DC null ciphering", "Reject null ciphering while on EN-DC", "bool", "med", CLADE, { values: OFF_ON }),
+  [`${NAS}mav_nr_in_roam_reject_smc_null_ciphering`]: e("Reject NR null ciphering when roaming", "Reject 5G NAS null ciphering while roaming", "bool", "med", CLADE, { values: OFF_ON }),
+  [`${MAV}mav_disable_sa_no_ciph`]: e("Disable SA without ciphering", "Turn off 5G SA when the network does not cipher", "bool", "med", FW, { values: OFF_ON }),
+  // qdsp6sw.mbn rodata: read with mav_qmi_nas_assisted_scan / mav_sa_coverage_band_list
+  [`${MAV}mav_disable_sa_if_null_suci`]: e("Disable SA on null SUCI", "Turn off 5G SA when the SUCI uses the null protection scheme (SUPI sent unconcealed)", "bool", "med", FW, { values: OFF_ON }),
+  // corpus: T-Mobile bundles write 0x47 = n71
+  [`${MAV}mav_sa_coverage_band_list`]: e("SA coverage bands", "NR bands that count as 5G SA coverage (uint8 band numbers, zero-padded)", "bytes", "med", `${FW}; ${CORPUS}`),
+  [`${MAV}mav_skip_sms_only_ims_pref_ind_on_sa`]: e("Skip SMS-only indication on SA", "Do not send the SMS-only / IMS-preference indication while on 5G SA", "bool", "med", FW, { values: OFF_ON }),
+  // corpus: 04 00 | 01 03 07 4e | 0a 0a 0a 0a (uint16) = n1, n3, n7, n78 at 10 MHz
+  [`${MAV}uwb_nr_band_bw`]: e("5G UW bands", "NR bands that may show the 5G UW / 5G+ icon: uint16 count, 4 uint16 bands, 4 uint16 minimum bandwidths (MHz)", "bytes", "med", `${FW}; ${CORPUS}`),
+  // qdsp6sw.mbn rodata: follows /policyman/band_combos_per_plmn.xml and its CARRIER_LIST / PLMN-ID tags
+  [`${MAV}lte_ca_xml_generation`]: e("LTE CA combos per PLMN", "Prune the advertised LTE CA combos per PLMN from /policyman/band_combos_per_plmn.xml", "bool", "med", FW, { values: OFF_ON }),
+  [`${MAV}endc_ca_file_generation`]: e("EN-DC combos per PLMN", "Same per-PLMN capability pruning for EN-DC combos (next to cap_prune, skip_cap_prune)", "bool", "med", FW, { values: OFF_ON }),
+  [`${MAV}5g_allowed_ndds`]: e("5G on non-DDS SIM", "Allow 5G on the SIM that is not the default data subscription", "bool", "med", FW, { values: OFF_ON }),
+  // qdsp6sw.mbn rodata: "mav_pri: write efs file: %90s return %3d, errno %3d" precedes both revision paths
+  "/mav/product_pri_setting_revision": e("Product PRI revision", "Revision of the product PRI settings the modem last wrote to EFS", "version", "med", `${FW}; bbcfg.mbn`, { format: bytesVersion }),
+  "/mav/product_pri_setting_efidiag_revision": e("Product PRI EFI-diag revision", "Revision of the EFI-diag part of the product PRI settings", "version", "med", `${FW}; bbcfg.mbn`, { format: bytesVersion }),
+  // qdsp6sw.mbn rodata: mav_uim_card_prov_strategy_{proprietary,msisdn_based,3gpp_follower}.c
+  "/nv/item_files/modem/maverick/uim/apps/card_prov_strategy": e("SIM provisioning strategy", "How the modem provisions the SIM: proprietary, MSISDN-based or 3GPP follower; value order unconfirmed", "enum", "med", `${FW}; ${CORPUS}`),
+  // qdsp6sw.mbn rodata: mav_uim_sub_slot_mapping.c
+  "/nv/item_files/modem/maverick/uim/apps/sub_slot_mapping_override": e("Subscription-slot mapping override", "Overrides which SIM slot backs each subscription", "bytes", "med", FW),
+  // corpus: 12-byte records {MCC u16, MNC u16, NR-ARFCN u32, band u16, flag u16}, e.g. 460-15 504990 n41
+  // qdsp6sw.mbn rodata: next to dyn_sa_oos_timer_val, dyn_cap_hysis_timer_val, dyn_cap_lte_rsrp_thre
+  [`${MAV}enable_dyn_sa`]: e("Dynamic SA", "Turn 5G SA capability on and off with coverage (dyn_sa_* / dyn_cap_* timers and thresholds)", "bool", "med", FW, { values: OFF_ON }),
+  [`${MAV}enable_dyn_vonr`]: e("Dynamic VoNR", "Turn VoNR on and off dynamically, alongside dynamic SA", "bool", "med", FW, { values: OFF_ON }),
+  // qdsp6sw.mbn rodata: listed with disable_mmw_for_third_party_video
+  [`${MAV}disable_mmw_for_ftv`]: e("No mmWave for FaceTime video", "Drop mmWave (FR2) during FaceTime video calls", "bool", "med", FW, { values: OFF_ON }),
+  [`${MAV}drop_endc_call_hysteresis_tmr_val`]: e("Drop EN-DC in call hysteresis", "Hysteresis timer before dropping EN-DC during a call", "uint32", "med", FW),
+  [`${MAV}drop_endc_call_hysteresis_tmr_volte_val`]: e("Drop EN-DC in VoLTE hysteresis", "Hysteresis timer before dropping EN-DC during a VoLTE call", "uint32", "med", FW),
+  // qdsp6sw.mbn rodata: listed with bwp_switch_tmr_val_sl and sa_depri_sl_bw_val
+  [`${MAV}enable_bwp_switching_screen_lock`]: e("BWP switch on screen lock", "Move to a narrower NR bandwidth part while the screen is locked", "bool", "med", FW, { values: OFF_ON }),
+  [`${MAV}prune_fr1_fr2_due_to_volte_enable`]: e("Prune NR while VoLTE", "Prune NR FR1 / FR2 capability while VoLTE is enabled", "bool", "med", FW, { values: OFF_ON }),
+  // qdsp6sw.mbn rodata: QMI "sdm_uai_rel_pref_req", "sdm_r16_uai_rel_pref_metric_info"
+  [`${MAV}rel_pref_config`]: e("UAI release preference", "Rel-16 UE Assistance Information releasePreference settings", "bytes", "med", FW),
+  // qdsp6sw.mbn rodata: beside mav_avoid_attach_diff_geo_mcc and "mav_qmi_nas_update_geo_mcc_to_gfnh_database"
+  [`${MAV}mav_diff_geo_mcc_enable_list`]: e("Different-geo-MCC MCCs", "MCCs where attach is avoided when the geolocated MCC differs from the network's", "bytes", "med", FW),
+  [`${MAV}mav_diff_geo_mcc_exception_list`]: e("Different-geo-MCC exceptions", "MCCs exempt from the different-geo-MCC attach check", "bytes", "med", FW),
+  // qdsp6sw.mbn CLADE2: beside /nv/item_files/conf/thin_ui_config.conf, then mmoc.c
+  "/nv/item_files/Thin_UI/enable_thin_ui_cfg": e("Thin UI config", "Enable the Thin UI (headless) configuration read by MMOC", "bool", "low", CLADE, { values: OFF_ON }),
+  // qdsp6sw.mbn CLADE2: listed with cmcall/jcdma_call_throttle_*
+  "/mmode/cmcall/cdma_voice_call_collision": e("CDMA voice call collision", "Call-manager handling of colliding CDMA voice calls", "bytes", "low", CLADE),
+  [`${NAS}mav_nr_predef_narfcn`]: e("Predefined NR ARFCNs", "NR channels to try first per PLMN: uint16 count, then {MCC, MNC, NR-ARFCN, band, flag} records", "bytes", "med", `${FW}; ${CORPUS}`),
 };
 
 /* ------------------------------------------------------------ path families */
@@ -137,9 +201,31 @@ export const NV_FAMILIES: Family[] = [
   f("plmn_list", /\/nas\/(ehplmn|iplmn|iPLMN|pri_fplmn|mav_epplmn)/i, e("PLMN list", "Packed BCD MCC/MNC list (TS 31.102)", "bytes", "med", `${EFST}; 3GPP TS 31.102`)),
   f("mav_override", /__mav_override$/, e("Apple override", "Apple override of the Qualcomm item of the same name", "int", "low", CORPUS)),
   f("satellite", /\/nas\/(mav_pssi_reg_gfnh_|mav_gfnh_)/, e("Satellite PLMN rule", "Apple satellite (GFNH) PLMN / geofence rule", "bytes", "low", CORPUS)),
+  // qdsp6sw.mbn rodata: mav_pssi_reg.c, mav_pssi_reg_unblock_hplmn.c, mav_pssi_sd.c
+  f("pssi", /\/nas\/mav_pssi_/, e("PSSI registration rule", "Apple PLMN search / system-selection (PSSI) registration tuning", "int", "med", FW)),
+  // qdsp6sw.mbn rodata: mav_pssi_prio_sub_band_list.c, mav_pssi_facade_band_prio.c
+  f("band_per_plmn", /\/nas\/mav_(gw|lte|sa_lte|nr)_(prio_sub_)?band_per_plmn$/, e("Band priority per PLMN", "Per-PLMN band / sub-band (ARFCN range) scan priority", "bytes", "med", FW)),
   // bbcfg.mbn: each blob's 9f64 digest, written to this path with the blob
   f("bbcfg_hash", /^\/mav\/bbcfg_file_hash_/, e("Baseband defaults digest", "Digest of the bbcfg.mbn blob these defaults came from, kept in EFS so the modem knows which set it holds", "bytes", "med", "bbcfg.mbn: blob tag 9f64")),
-  f("drs", /\/mav\/drs_/, e("Dynamic RAT selection", "Apple Smart Data mode (DRS) tuning", "int", "low", CORPUS)),
+  // qdsp6sw.mbn rodata: AWD metric "DynamicRatSelection" with ul/dl_tput_before/after_switch
+  f("drs", /\/mav\/drs_/, e("Dynamic RAT selection", "Apple Dynamic RAT Selection (DRS): picks LTE, NSA or SA from measured throughput", "int", "med", FW)),
+  // qdsp6sw.mbn rodata: AWD metric "DataStallMitigation", QMI "sdm_ds_mit_*" messages
+  f("ds_mit", /\/mav\/.*ds_(mit|partial_mit)/, e("Data-stall mitigation", "Detects stalled data sessions and backs off NR / SA to recover", "int", "med", FW)),
+  // qdsp6sw.mbn rodata: mav_rlgs_plus.c, mav_rlgs_lte_ul.c; levels DlRlgsNO/Low/Med/High
+  f("rlgs", /\/mav\/.*rlgs/, e("RLGS congestion", "Radio-link congestion scoring (none / low / med / high, DL and UL)", "int", "med", FW)),
+  // qdsp6sw.mbn rodata: mav_sdm_host.c, QMI "sdm_*" messages (SA rat cap, BWP switch, icon override)
+  f("sdm", /\/mav\/(sdm_|disable_sdm|sa_depri|disable_sa_deprio|enable_sa_depri)/, e("Smart data mode", "Apple SDM: turns NR / SA off or deprioritises SA when it does not pay off", "int", "med", FW)),
+  // qdsp6sw.mbn rodata: mav_monitor_task, mav_monitor_nr5g_5GA_override.c
+  f("rat_icon", /\/mav\/(mav_monitor_|.*icon|.*uwb)/, e("5G icon rule", "Status-bar 5G / 5G UW / 5G UC / 5G+ icon override logic", "int", "med", FW)),
+  // qdsp6sw.mbn rodata: mav_hst_volte_cell_switch.c; NR5G_ML1_HST_* states
+  f("hst", /\/mav\/hst_/, e("High-speed train", "High-speed-train detection and VoLTE cell-switch handling", "int", "med", FW)),
+  // qdsp6sw.mbn rodata: mav_asm.c follows the mav_asm_* paths
+  f("asm", /\/mav\/mav_asm_/, e("ASM congestion", "Apple uplink-congestion and app-response credit tuning", "int", "med", FW)),
+  // qdsp6sw.mbn rodata: mav_wireless_qoe.c
+  f("qoe", /\/mav\/.*qoe/, e("Wireless QoE", "Throughput-estimate / QoE scoring", "int", "med", FW)),
+  // qdsp6sw.mbn rodata: mav_cpms_core.c, mav_cpms_peak_power_pi_controller.c, mav_cpms_qmi_ts_client.c
+  f("cpms", /^\/mav\/cpms_/, e("CPMS power control", "Modem peak-power / thermal controller", "int", "med", FW)),
+  f("mav_test", /\/maverick\/test\//, e("Apple test item", "Modem EFS test item (fixed pattern)", "bytes", "med", "path")),
   f("mav", /(^\/mav\/|\/mav\/|\/maverick\/|\/mav_[^/]*$)/, e("Apple modem option", "Apple-only (Maverick) modem option; undocumented", "int", "low", CORPUS)),
   f("policyman_xml", /^\/policyman\/.*\.xml$/, e("PolicyMan policy", "PolicyMan XML rules (RAT capability, bands, 5G/SA gating)", "xml", "med", "tech.ssut.me")),
   f("policyman", /^\/(mdb\/)?policyman\//, e("PolicyMan data", "PolicyMan database / flag", "bytes", "low", "name only")),
@@ -156,7 +242,15 @@ export const NV_FAMILIES: Family[] = [
   f("geran", /\/geran\//, e("GERAN setting", "GSM/GPRS radio resource", "int", "low", "path")),
   f("uim", /\/uim\//, e("SIM setting", "UIM / SIM manager / SIM Toolkit", "int", "low", "path")),
   f("data", /(\/modem\/data\/|^\/data\/|^\/ds\/|\/item_files\/data\/)/, e("Data services setting", "Data services (PDN, throttling, AT commands)", "int", "low", "path")),
-  f("gps", /\/gps\//, e("GNSS setting", "GNSS / location", "int", "low", "path")),
+  f("gps", /\/c?gps\//, e("GNSS setting", "GNSS / location", "int", "low", "path")),
+  // qdsp6sw.mbn CLADE2: LMTSMGR_PWR_EST, VPH_PWR and /therm/mitigate/* next to these paths
+  f("lmtsmgr", /\/mcs\/lmtsmgr\//, e("Limits manager", "Tx power limits for battery voltage, SAR, coexistence and power estimation", "bytes", "med", CLADE)),
+  // qdsp6sw.mbn CLADE2: "PA Thermal CFCM", cfcm_ddr_bw_cfg, /therm/mitigate/modem_tj
+  f("cfcm", /\/mcs\/cfcm\//, e("CFCM flow control", "Central flow control for thermal, CPU and DDR-bandwidth mitigation", "bytes", "med", CLADE)),
+  f("trm", /\/mcs\/trm\//, e("TRM setting", "RF chain arbitration and antenna switch diversity", "bytes", "low", "path")),
+  f("tcxomgr", /\/mcs\/tcxomgr\//, e("XO manager setting", "Crystal oscillator (TCXO / XO) calibration and type", "bytes", "low", "path")),
+  f("mcfg", /\/mcfg\//, e("MCFG setting", "Modem configuration (MBN) selection and refresh", "int", "low", "path")),
+  f("hdr", /\/modem\/hdr\//, e("EV-DO setting", "CDMA EV-DO (HDR) MAC / search", "int", "low", "path")),
 ];
 
 /* ------------------------------------------------------- legacy NV numbers */
