@@ -90,9 +90,9 @@
 <!-- With nothing selected, a phone shows the list as the page instead of hiding it in the drawer. -->
 <div class="split" class:browsing={!params.name}>
   <div class="pane-left" class:open={drawerOpen}>
-    <div style="padding:6px; display:flex; gap:6px">
+    <div class="find">
       <input class="grow" type="search" name="find" placeholder="find" aria-label="find in {params.kind}" bind:value={query} />
-      {#if fromIp}<span class="dimtext" style="align-self:center" title="Guessed from your IP address">from IP</span>{/if}
+      {#if fromIp}<span class="dimtext from-ip" title="Guessed from your IP address">from IP</span>{/if}
       <button class="btn drawer-btn" onclick={() => (drawerOpen = false)}>Close</button>
     </div>
     {#if showList}
@@ -100,7 +100,7 @@
       {@const all = (await getIndex())[params.kind]}
       {@const q = query.trim().toLowerCase()}
       {@const shown = q ? all.filter((c) => matches(c, q)) : all}
-      <div class="scroll" style="margin:0 6px 6px">
+      <div class="scroll list-box">
         <ul class="list" aria-label={params.kind}>
           {#each shown as c (c.name)}
             <li>
@@ -121,7 +121,7 @@
           {/each}
         </ul>
       </div>
-      <div class="statusbar" style="padding:2px 6px 6px">
+      <div class="statusbar list-status">
         <span class="cell grow">{shown.length} of {all.length}</span>
       </div>
     </Pane>
@@ -137,3 +137,10 @@
     {@render children()}
   </div>
 </div>
+
+<style>
+  .find { padding: 6px; display: flex; gap: 6px; }
+  .from-ip { align-self: center; }
+  .list-box { margin: 0 6px 6px; }
+  .list-status { padding: 2px 6px 6px; }
+</style>

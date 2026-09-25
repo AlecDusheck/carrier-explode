@@ -14,6 +14,29 @@
   --sel-text: #ffffff;
   --desktop: #4b6785;
   --field: #ffffff;
+  /* Selected table row, and decoded meanings next to raw values. */
+  --sel-row: #e3ebf5;
+  --meaning: #5b3d0c;
+  --key: #1b3d6b;
+  --doc-underline: #8a93a6;
+  /* Chip states: good, warn, bad. */
+  --good-bg: #dff0dd;
+  --good-border: #8ab98a;
+  --warn-bg: #fff0cf;
+  --warn-border: #d9b96a;
+  --bad-bg: #f6dede;
+  --bad-border: #c08a8a;
+  /* Confidence marks: "likely", and "unverified" / "unnamed". */
+  --conf-med: #7a5a14;
+  --conf-med-border: #d0b36a;
+  --conf-low: #8a3a2a;
+  --conf-low-border: #d19a8a;
+  /* Modem policy rules. */
+  --policy-condition: #1f3f8a;
+  --policy-action: #14632a;
+  --policy-define: #6a2f8a;
+  --policy-branch: #6a2f8a;
+  --policy-logic: #8a4a14;
   --ui: "Tahoma", "Verdana", "DejaVu Sans", "Segoe UI", system-ui, sans-serif;
   --mono: "DejaVu Sans Mono", "Menlo", "Consolas", ui-monospace, monospace;
 }
@@ -31,7 +54,7 @@ body {
 
 /* ------------------------------------------------------------------ window */
 
-.window { height: 100%; display: flex; flex-direction: column; padding: 6px; }
+.window { height: 100%; display: flex; flex-direction: column }
 .frame {
   flex: 1; min-height: 0; display: flex; flex-direction: column;
   border: 2px solid; border-color: var(--light) var(--dark) var(--dark) var(--light);
@@ -168,6 +191,9 @@ table.grid td.num, table.grid th.num { text-align: right; font-variant-numeric: 
 table.grid td.mono { font-family: var(--mono); font-size: 11px; }
 table.grid td.k { background: var(--face-hi); font-weight: bold; white-space: nowrap; }
 table.grid td.wrap { word-break: break-all; }
+table.grid tr.sel td { background: var(--sel-row); }
+/* Two-column key/value tables size to their content. */
+table.grid.fit { width: auto; }
 .sticky-col { position: sticky; left: 0; z-index: 1; background: var(--face); }
 th.sticky-col { z-index: 3; }
 
@@ -181,7 +207,7 @@ th.sticky-col { z-index: 3; }
   color: var(--text-dim); user-select: none;
   font: inherit; background: none; border: 0; padding: 0; line-height: inherit;
 }
-.tree .key { color: #1b3d6b; font-weight: bold; }
+.tree .key { color: var(--key); font-weight: bold; }
 .tree .val { color: #14442a; word-break: break-word; }
 .tree .val.str { color: #7a2f2f; }
 .tree .val.num { color: #1f3f8a; }
@@ -193,6 +219,8 @@ th.sticky-col { z-index: 3; }
   color: var(--text-dim); font-family: var(--ui); font-size: 10.5px;
   font-style: italic; display: block; padding-left: 18px;
 }
+.sep { margin: 0 0.5ch; }
+.meaning { font-family: var(--ui); font-size: 11px; color: var(--meaning); }
 .tag {
   font-family: var(--ui); font-size: 10.5px; background: #f2efe6;
   border: 1px solid #c4bda8; padding: 0 4px; margin-left: 6px; white-space: nowrap;
@@ -218,13 +246,18 @@ fieldset.hgroup {
   margin: 10px 0; padding: 6px 8px 8px; background: var(--face); min-width: 0;
 }
 fieldset.hgroup > legend { font-weight: bold; padding: 0 4px; }
+/* Sections linked from a page's toolbar. */
+fieldset.hgroup[id] { scroll-margin-top: 8px; }
+fieldset.hgroup h4 { margin: 8px 0 4px; }
+.prose { margin: 0 0 6px; max-width: 70ch; line-height: 1.45; }
+.sp { margin-left: 0.6ch; }
 .chip {
   display: inline-block; border: 1px solid var(--shadow); background: var(--face-hi);
   padding: 0 5px; margin: 1px 3px 1px 0; font-size: 11px; white-space: nowrap;
 }
-.chip.good { background: #dff0dd; border-color: #8ab98a; }
-.chip.bad { background: #f6dede; border-color: #c08a8a; }
-.chip.warn { background: #fff0cf; border-color: #d9b96a; }
+.chip.good { background: var(--good-bg); border-color: var(--good-border); }
+.chip.bad { background: var(--bad-bg); border-color: var(--bad-border); }
+.chip.warn { background: var(--warn-bg); border-color: var(--warn-border); }
 button.chip { cursor: pointer; font-family: inherit; }
 a.chip { color: inherit; text-decoration: none; }
 a.chip:hover { border-color: var(--dark); }
@@ -246,6 +279,25 @@ a { color: #123a6d; }
 p.lead { max-width: 74ch; }
 /* Wide tables scroll inside their own box, never the page. */
 .hscroll { overflow-x: auto; max-width: 100%; -webkit-overflow-scrolling: touch; }
+
+/* A name that explains itself: tap or click for its note; long-press stays the context menu. */
+button.doc {
+  font: inherit; font-weight: bold; color: inherit; background: none; border: 0; padding: 0;
+  text-decoration: underline dotted var(--doc-underline); text-underline-offset: 3px; cursor: help;
+}
+button.doc.on { text-decoration-style: solid; }
+.underline-doc { text-decoration: underline dotted var(--doc-underline); text-underline-offset: 3px; }
+
+/* Secondary detail folded behind a summary line. */
+details.more { margin-top: 8px; }
+details.more > summary { cursor: pointer; padding: 4px 0; }
+p.note { margin: 0 0 6px; }
+/* A filter box with its buttons, above the table or tree it filters. */
+.filters { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; margin-bottom: 6px; }
+.filters input[type="search"] { flex: 1; min-width: 120px; }
+.gap-above { margin-top: 8px; }
+.flush { margin: 0; }
+.breakall { word-break: break-all; }
 
 /* ------------------------------------------------------------------- panes */
 
@@ -335,6 +387,7 @@ button.drawer-btn { display: none; }
   input, select, textarea,
   input[type="text"], input[type="search"] { font-size: 16px; min-height: 32px; }
   .list li > a { padding: 8px; }
+  button.doc { padding: 6px 0; margin: -6px 0; }
   .statusbar { flex-wrap: wrap; }
   .ctxmenu button { padding: 8px 10px; }
   .dialog-back { padding: 0; }

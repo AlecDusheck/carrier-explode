@@ -66,10 +66,14 @@
         </Pane>
       </span>
       <a class="cell" href="https://github.com/AlecDusheck/carrier-explode" rel="noreferrer">GitHub</a>
-      <span class="cell" style="width:64px" aria-live="polite">{busy ? "Working…" : "Ready"}</span>
+      <span class="cell busy" aria-live="polite">{busy ? "Working…" : "Ready"}</span>
     </div>
   </div>
 </div>
 
 <ContextMenu />
 {#if scan.open}<ScanDialog />{/if}
+
+<style>
+  .busy { width: 64px; }
+</style>

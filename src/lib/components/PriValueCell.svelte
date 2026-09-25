@@ -24,5 +24,5 @@
 {/if}
 
 <style>
-  .label { font-family: var(--ui); color: #5b3d0c; }
+  .label { font-family: var(--ui); color: var(--meaning); }
 </style>

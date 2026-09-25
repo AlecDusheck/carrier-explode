@@ -62,7 +62,7 @@
     {:else}
       {@const older = notNewer(bundle.timeline, cmp.a.entry.slug, cmp.b.entry.slug)}
       {#if file}
-        <table class="grid" style="margin-top:8px">
+        <table class="grid gap-above">
           <tbody>
             <tr>
               <td class="k">File</td>

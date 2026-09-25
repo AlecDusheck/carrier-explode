@@ -79,7 +79,7 @@
 
 <fieldset class="hgroup">
   <legend>Acquisition table ({prl.acquisition.length})</legend>
-  <p class="dimtext" style="margin:0 0 6px">Where to look for a signal: band class and channels, in scan order. System records point here by index.</p>
+  <p class="dimtext note">Where to look for a signal: band class and channels, in scan order. System records point here by index.</p>
   <table class="grid">
     <thead><tr><th class="num">#</th><th>Type</th><th>Channels</th></tr></thead>
     <tbody>
@@ -97,17 +97,17 @@
 {#if prl.commonSubnets?.length}
   <fieldset class="hgroup">
     <legend>Common subnet table ({prl.commonSubnets.length})</legend>
-    <p class="mono" style="margin:0; word-break:break-all; font-size:11px">{prl.commonSubnets.join(", ")}</p>
+    <p class="mono subnets">{prl.commonSubnets.join(", ")}</p>
   </fieldset>
 {/if}
 
 <fieldset class="hgroup">
   <legend>System table ({prl.systems.length})</legend>
-  <p class="dimtext" style="margin:0 0 6px">
+  <p class="dimtext note">
     Networks by SID/NID, grouped into GEO regions; within a region, higher rows are preferred. Negative records are forbidden systems.
   </p>
-  <div class="rowflex" style="margin-bottom:6px">
-    <input class="grow" type="search" name="prl-filter" placeholder="filter SID, NID, roaming" aria-label="filter system records" bind:value={filter} />
+  <div class="filters">
+    <input type="search" name="prl-filter" placeholder="filter SID, NID, roaming" aria-label="filter system records" bind:value={filter} />
     <span class="dimtext">{systems.length} shown</span>
   </div>
   <div class="wide">
@@ -140,13 +140,14 @@
     </table>
   </div>
   {#if systems.length > LIMIT}
-    <button class="btn" style="margin-top:6px" onclick={() => (all = !all)}>
+    <button class="btn gap-above" onclick={() => (all = !all)}>
       {all ? "Show first " + LIMIT : "Show all " + systems.length}
     </button>
   {/if}
 </fieldset>
 
 <style>
+  .subnets { margin: 0; word-break: break-all; font-size: 11px; }
   @media (max-width: 760px) {
     .wide { overflow-x: auto; }
     .wide table { min-width: 560px; }

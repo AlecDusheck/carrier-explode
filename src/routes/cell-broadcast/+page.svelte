@@ -2,8 +2,8 @@
   import { page } from "$app/state";
   import { getCbs } from "$lib/api/tables.remote";
   import { describeMessageId } from "$lib/decode";
-  import type { CbsRow } from "$lib/server/cbs";
-  import { link } from "$lib/format";
+  import type { CbsRow } from "$lib/types";
+  import { cbsEntryLabel, link } from "$lib/format";
   import Pane from "$lib/components/Pane.svelte";
 
   const VIEWS = [["", "By country"], ["4382", "Operator-defined 4382"], ["matrix", "ID matrix"]] as const;
@@ -28,10 +28,6 @@
     const named = r.alertTypes.filter((a) => a.switchName);
     return named.length ? named : r.alertTypes;
   };
-
-  /** Where a bundle came from, said once for the common case. */
-  const from = (r: CbsRow, image?: { version: string } | null) =>
-    r.source === "image" && image ? `iOS ${image.version} image` : `OTA build ${r.version}`;
 </script>
 
 <div class="view">
@@ -46,13 +42,14 @@
       {@const data = await getCbs()}
       {@const configured = data.rows.filter((r) => r.mappings.length > 0)}
       {@const bare = data.rows.filter((r) => r.mappings.length === 0 && !r.error)}
-      {@const usual = configured.length ? from(configured[0], data.image) : ""}
+      <!-- Where the bundles came from is said once for the common source; rows from the other one say their own. -->
+      {@const usual = configured[0]?.source}
 
       {#if view === ""}
-        <p class="lead" style="margin-top:0">
+        <p class="lead top">
           The alert switches each country's bundle gives an iPhone. <span class="chip bad">no off switch</span> marks alerts the
           user cannot turn off; <span class="dimtext">off by default</span> marks ones that start disabled.
-          {#if usual}<span class="dimtext">From the {usual} unless noted.</span>{/if}
+          {#if usual}<span class="dimtext">From {usual === "image" && data.image ? `the iOS ${data.image.version} image` : "OTA bundles"} unless noted.</span>{/if}
         </p>
         <table class="grid">
           <thead><tr><th class="sticky-col">Country</th><th>Alerts</th><th>Settings section</th></tr></thead>
@@ -61,7 +58,7 @@
               <tr>
                 <td class="sticky-col k">
                   <a href={detail(r)}>{r.countryName ?? r.country}</a>
-                  {#if from(r, data.image) !== usual}<div class="dimtext">{from(r, data.image)}</div>{/if}
+                  {#if r.source !== usual}<div class="dimtext">{cbsEntryLabel(r, data.image)}</div>{/if}
                 </td>
                 <td>
                   {#each switches(r) as a (a.name)}
@@ -84,7 +81,7 @@
         {/if}
       {:else if view === "4382"}
         {@const mapped = configured.filter((r) => r.maps4382)}
-        <p class="lead" style="margin-top:0">
+        <p class="lead top">
           4382 is the operator-defined CMAS message ID. {mapped.length} of {configured.length} countries with alerts map it;
           the rest ignore it.
         </p>
@@ -105,14 +102,14 @@
           </tbody>
         </table>
       {:else}
-        <p class="dimtext" style="margin-top:0">Blank: unmapped, ignored by the phone. Locked: no off switch.</p>
+        <p class="dimtext top">Blank: unmapped, ignored by the phone. Locked: no off switch.</p>
         <table class="grid">
           <thead>
             <tr>
               <th class="sticky-col num">ID</th>
-              <th style="min-width:190px">3GPP TS 23.041</th>
+              <th class="spec">3GPP TS 23.041</th>
               {#each configured as r (r.country)}
-                <th title={r.countryName ?? r.country} style="writing-mode:vertical-rl; padding:6px 2px">
+                <th title={r.countryName ?? r.country} class="vertical">
                   <a href={detail(r)}>{r.country}</a>
                 </th>
               {/each}
@@ -125,7 +122,7 @@
                 <td class="dimtext">{describeMessageId(id) ?? ""}</td>
                 {#each configured as r (r.country)}
                   {@const a = alertFor(r, id)}
-                  <td style="white-space:nowrap; font-size:10px">
+                  <td class="cell">
                     {#if a}{shortType(a.type)}{#if a.locked}<span class="chip bad">locked</span>{/if}{/if}
                   </td>
                 {/each}
@@ -140,6 +137,8 @@
 
 <style>
   .alert { display: inline-block; margin: 0 10px 2px 0; }
-  .more { margin-top: 10px; }
-  .more > summary { cursor: pointer; padding: 4px 0; }
+  .top { margin-top: 0; }
+  th.spec { min-width: 190px; }
+  th.vertical { writing-mode: vertical-rl; padding: 6px 2px; }
+  td.cell { white-space: nowrap; font-size: 10px; }
 </style>

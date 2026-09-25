@@ -11,9 +11,9 @@
   <Pane>
     {@const bundle = await getBundle(bundleArgs(params))}
     {#if params.path}
-      <div class="rowflex" style="margin-bottom:6px">
+      <div class="filters">
         <a class="btn" href={bundleHref(params.kind, params.name, params.version, "files")}>All files</a>
-        <span class="mono" style="word-break:break-all">{params.path}</span>
+        <span class="mono breakall">{params.path}</span>
       </div>
       <FileBody
         file={await getFile({ kind: params.kind, name: params.name, slug: params.version, path: params.path })}

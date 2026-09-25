@@ -1,19 +1,24 @@
 <script lang="ts">
   import { page } from "$app/state";
   import { getBasebandDefaults, getBasebandOverride } from "$lib/api/tables.remote";
-  import type { Kind } from "$lib/server/data";
-  import { modemLabel } from "$lib/decode/modem";
-  import { link, shortValue, withParams } from "$lib/format";
+  import { modemLabel } from "$lib/decode";
+  import type { Kind } from "$lib/types";
+  import { link, withParams } from "$lib/format";
   import Pane from "./Pane.svelte";
   import Variants from "./Variants.svelte";
+  import ComboStatsTable from "./ComboStatsTable.svelte";
+  import DiffRows from "./DiffRows.svelte";
 
   let { kind, name, slug, device, phone }: { kind: Kind; name: string; slug?: string; device: string; phone: string } = $props();
 
-  const efs = $derived(page.url.searchParams.get("efs"));
-  const base = $derived(page.url.searchParams.get("base"));
-  const bands = (xs: number[], p: string) => xs.map((b) => p + b).join(" ");
-  const compareHref = (pri: string, path: string, i: number) =>
-    withParams(page.url, { pri, efs: path, base: String(i) }) + "#override";
+  /** The package file opened next to the .der.pri value that replaces it: ?pri=&efs=&base=. */
+  const selection = $derived.by(() => {
+    const sp = page.url.searchParams;
+    const pri = sp.get("pri"), efs = sp.get("efs"), base = sp.get("base");
+    return pri && efs && base ? { pri, efs, i: Number(base) } : null;
+  });
+  const compareHref = (pri: string, efs: string, i: number) => withParams(page.url, { pri, efs, base: String(i) }) + "#override";
+  const closeHref = $derived(withParams(page.url, { pri: null, efs: null, base: null }));
 </script>
 
 <fieldset class="hgroup" id="modem">
@@ -37,23 +42,7 @@
           <a class="chip" href="{pkg}#{t.tag}"><b>{t.tag}</b></a>
           <span class="dimtext">{t.primary ? "default bundle on" : "MVNO on"} {t.plmns.join(" ")}</span>
         </div>
-        <div class="hscroll">
-          <table class="grid">
-            <thead><tr><th>Platforms</th><th class="num">Combos</th><th class="num">EN-DC</th><th class="num">NR-DC</th><th>NR bands</th><th>LTE anchors</th></tr></thead>
-            <tbody>
-              {#each t.sets as s (s.sha1)}
-                <tr>
-                  <td class="plat"><Variants variants={s.variants} /></td>
-                  <td class="num">{s.combos}</td>
-                  <td class="num">{s.endc}</td>
-                  <td class="num">{s.nrdc}</td>
-                  <td class="mono bands">{bands(s.nrBands, "n")}</td>
-                  <td class="mono bands">{bands(s.lteAnchors, "B")}</td>
-                </tr>
-              {/each}
-            </tbody>
-          </table>
-        </div>
+        <ComboStatsTable rows={t.sets} />
       {:else}
         <p class="dimtext note">No carrier in band_combos_per_plmn.xml lists a PLMN that routes to {name}.</p>
       {/each}
@@ -68,7 +57,7 @@
             <tbody>
               {#each d.overrides as o, oi (oi)}
                 {#each o.baseline as b (b.i)}
-                  <tr class:sel={efs === o.efs && base === String(b.i) && page.url.searchParams.get("pri") === o.pri}>
+                  <tr class:sel={selection?.efs === o.efs && selection.i === b.i && selection.pri === o.pri}>
                     <td class="mono wrap">{o.efs}</td>
                     {#if several}<td class="mono wrap">{o.pri}</td>{/if}
                     <td><span class="mono">{b.member}</span> <Variants variants={b.variants} configs={b.configs} /></td>
@@ -87,16 +76,15 @@
       {/if}
       {#if d.otherXml}<p class="dimtext note">{d.otherXml} other XML values go to paths the package leaves unset.</p>{/if}
 
-      {#if efs && base !== null}
-        {@const pri = page.url.searchParams.get("pri") ?? ""}
+      {#if selection}
         <div id="override" class="override">
           <Pane>
-            {@const o = await getBasebandOverride({ kind, name, slug, id: d.id, pri, efs, i: Number(base) })}
+            {@const o = await getBasebandOverride({ kind, name, slug, id: d.id, ...selection })}
             <div class="rowflex">
               <b class="mono wrap">{o.efs}</b>
               <span class="dimtext">{o.counts.changed + o.counts.added + o.counts.removed} lines differ</span>
               <span class="grow"></span>
-              <a class="btn" href={withParams(page.url, { pri: null, efs: null, base: null })} data-sveltekit-noscroll data-sveltekit-replacestate>Close</a>
+              <a class="btn" href={closeHref} data-sveltekit-noscroll data-sveltekit-replacestate>Close</a>
             </div>
             <div class="sides">
               <div>
@@ -109,22 +97,9 @@
               </div>
             </div>
             {#if o.rows.length}
-              <details>
+              <details class="more">
                 <summary>Changed lines ({o.rows.length})</summary>
-                <div class="hscroll">
-                  <table class="grid">
-                    <thead><tr><th>Line</th><th>Package</th><th>Bundle</th></tr></thead>
-                    <tbody>
-                      {#each o.rows as r, i (i)}
-                        <tr>
-                          <td class="mono">{r.path}</td>
-                          <td class="mono wrap">{r.a === undefined ? "" : shortValue(r.a, 400)}</td>
-                          <td class="mono wrap">{r.b === undefined ? "" : shortValue(r.b, 400)}</td>
-                        </tr>
-                      {/each}
-                    </tbody>
-                  </table>
-                </div>
+                <DiffRows rows={o.rows} head="Line" left="Package" right="Bundle" lines />
               </details>
             {/if}
           </Pane>
@@ -135,12 +110,8 @@
 </fieldset>
 
 <style>
-  .note { margin: 0 0 6px; }
   h4 { margin: 8px 0 4px; }
   .rowflex { margin: 4px 0; }
-  tr.sel td { background: #e3ebf5; }
-  td.bands { min-width: 14em; }
-  td.plat { white-space: nowrap; }
   .override { margin-top: 8px; scroll-margin-top: 8px; }
   .sides { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 6px 0; }
   .sides > div { min-width: 0; }

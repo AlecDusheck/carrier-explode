@@ -1,5 +1,6 @@
 import { resolve } from "$app/paths";
-import type { Kind, PublicEntry } from "$lib/server/data";
+import { bandList, isBigInt, isRecord, isUid, type ComboComponent, type DiffKind } from "$lib/decode";
+import type { CbsRow, Kind, PublicEntry } from "$lib/types";
 
 export function humanBytes(n: number): string {
   if (n < 1024) return n + " B";
@@ -7,19 +8,31 @@ export function humanBytes(n: number): string {
   return (n / 1024 / 1024).toFixed(2) + " MiB";
 }
 
-export const isBigInt = (v: unknown): v is { __int: string } =>
-  !!v && typeof v === "object" && typeof (v as { __int?: unknown }).__int === "string";
-export const isUid = (v: unknown): v is { __uid: number } =>
-  !!v && typeof v === "object" && typeof (v as { __uid?: unknown }).__uid === "number";
-
 /** JSON with plist integers beyond 2^53 written as bare digits and UIDs as UID(n). */
 export function plainJson(v: unknown, indent?: number): string {
-  const s = JSON.stringify(
-    v,
-    (_, x) => (isBigInt(x) ? "\u0001" + x.__int + "\u0001" : isUid(x) ? "\u0001UID(" + x.__uid + ")\u0001" : x),
-    indent,
-  );
-  return s === undefined ? String(v) : s.replace(/"\\u0001(.*?)\\u0001"/g, "$1");
+  const step = indent ? " ".repeat(indent) : "";
+  const block = (open: string, close: string, items: string[], at: string) => {
+    if (!items.length) return open + close;
+    if (!step) return open + items.join(",") + close;
+    const inner = at + step;
+    return `${open}\n${inner}${items.join(",\n" + inner)}\n${at}${close}`;
+  };
+  const write = (x: unknown, at: string): string | undefined => {
+    if (isBigInt(x)) return x.__int;
+    if (isUid(x)) return `UID(${x.__uid})`;
+    if (Array.isArray(x)) return block("[", "]", x.map((y) => write(y, at + step) ?? "null"), at);
+    if (isRecord(x)) {
+      const items = Object.entries(x).flatMap(([k, y]) => {
+        const s = write(y, at + step);
+        return s === undefined ? [] : [JSON.stringify(k) + (step ? ": " : ":") + s];
+      });
+      return block("{", "}", items, at);
+    }
+    // undefined and functions have no JSON form, as with JSON.stringify.
+    const s: string | undefined = JSON.stringify(x);
+    return s;
+  };
+  return write(v, "") ?? String(v);
 }
 
 export function shortValue(v: unknown, max = 160): string {
@@ -39,6 +52,22 @@ export function entryLabel(e: Pick<PublicEntry, "source" | "ios" | "build" | "pr
   }
   return `OTA · ${e.ios.length ? `iOS ${e.ios[0]}+` : "legacy"} · build ${e.build}${model}`;
 }
+
+/** A cell-broadcast row's bundle in entryLabel's words: the current image's copy, or an OTA one. */
+export function cbsEntryLabel(r: Pick<CbsRow, "source" | "version" | "minOS">, image: { version: string } | null): string {
+  return entryLabel(
+    r.source === "image" && image
+      ? { source: "image", ios: [image.version], build: r.version }
+      : { source: "ota", ios: r.minOS ? [r.minOS] : [], build: r.version },
+  );
+}
+
+/** Chip class for each kind of difference. */
+export const DIFF_CHIP: Record<DiffKind, string> = { added: "good", removed: "bad", changed: "warn", same: "" };
+
+/** "n77A", "b66A↑A": one band-combo component, with its uplink class unless `uplink` is off. */
+export const comboPart = (c: ComboComponent, uplink = true) =>
+  bandList([c.band], c.rat) + c.dl + (uplink && c.ul ? "↑" + c.ul : "");
 
 const seg = encodeURIComponent;
 const segs = (path: string) => path.split("/").map(seg).join("/");
@@ -61,8 +90,9 @@ export const bundleArgs = (p: { kind: Kind; name: string; version?: string }) =>
   p.version ? { kind: p.kind, name: p.name, slug: p.version } : { kind: p.kind, name: p.name };
 
 export function errorMessage(e: unknown): string {
-  const x = e as { status?: number; body?: { message?: string }; message?: string } | null;
-  const said = x?.body?.message ?? x?.message;
+  const x = isRecord(e) ? e : {};
+  const body = isRecord(x.body) ? x.body : {};
+  const said = typeof body.message === "string" ? body.message : typeof x.message === "string" ? x.message : undefined;
   if (said) return said;
   // Anything that arrives in another shape still has to say something: String()
   // on a bare object renders "[object Object]", which tells nobody anything.
@@ -72,8 +102,11 @@ export function errorMessage(e: unknown): string {
   } catch {
     shape = String(e);
   }
-  return x?.status ? `HTTP ${x.status} · ${shape}` : `Unexpected error: ${shape}`;
+  return typeof x.status === "number" && x.status ? `HTTP ${x.status} · ${shape}` : `Unexpected error: ${shape}`;
 }
+
+/** The first 32 bytes of a hex string; some defaults are whole tables, and the name says what they are. */
+export const shortHex = (hex: string) => (hex.length > 64 ? hex.slice(0, 64) + "…" : hex);
 
 export function hexDump(hex: string, withOffsets = false): string {
   return (hex.match(/.{1,32}/g) ?? [])

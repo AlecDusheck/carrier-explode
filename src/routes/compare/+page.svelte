@@ -2,7 +2,7 @@
   import { goto } from "$app/navigation";
   import { page } from "$app/state";
   import { getBundle, getComparison, getIndex } from "$lib/api/bundles.remote";
-  import type { Kind } from "$lib/server/data";
+  import type { Kind } from "$lib/types";
   import { entryLabel, withParams } from "$lib/format";
   import Pane from "$lib/components/Pane.svelte";
   import BundleCompare from "$lib/components/BundleCompare.svelte";
@@ -81,7 +81,7 @@
             name="file"
             placeholder="whole bundle"
             value={file ?? ""}
-            style="min-width:220px"
+            class="path"
             onchange={(e) => set({ file: e.currentTarget.value.trim() })}
           />
         </label>
@@ -108,3 +108,7 @@
     </Pane>
   </div>
 </div>
+
+<style>
+  input.path { min-width: 220px; }
+</style>

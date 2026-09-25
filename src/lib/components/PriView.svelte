@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { PriDecoded } from "$lib/decode";
+  import { dialectLabel, type PriDecoded } from "$lib/decode";
   import PriValueCell from "./PriValueCell.svelte";
   import Confidence from "./Confidence.svelte";
   import IntelView from "./IntelView.svelte";
@@ -18,11 +18,10 @@
   const efs = $derived(pick(filter));
 
   // Empty header fields ("Carrier ID" on most files) say nothing.
-  const header = $derived((Object.entries(pri.header) as Array<[string, string]>).filter(([, v]) => v !== ""));
+  const header = $derived(Object.entries(pri.header).filter(([, v]) => v !== ""));
   const unknown = $derived(pri.unknown.filter((u) => u.nv === undefined));
-  const unnamed = (item: number, name?: string) => !name || name === "NV " + item;
-  const MODEM: Record<string, string> = { qualcomm: "Qualcomm", intel: "Intel or Apple C1", mixed: "Qualcomm and Intel / Apple C1" };
-  const modem = $derived(pri.dialect ? MODEM[pri.dialect] : undefined);
+  // Items the NV tables do not describe carry only a placeholder name.
+  const modem = $derived(dialectLabel(pri.dialect));
 </script>
 
 {#if pri.error}<div class="banner err">{pri.error}</div>{/if}
@@ -57,7 +56,7 @@
 
 {#snippet efsTable(rows: typeof pri.efs)}
   <table class="grid">
-    <thead><tr><th style="width:58%">Setting</th><th>Value</th></tr></thead>
+    <thead><tr><th class="setting">Setting</th><th>Value</th></tr></thead>
     <tbody>
       {#each rows as e, i (i)}
         <tr>
@@ -84,8 +83,8 @@
   {#if pri.intel}
     <IntelView tree={pri.intel} flat={keyList} />
   {:else}
-    <div class="rowflex" style="margin-bottom:6px">
-      <input class="grow" type="search" name="pri-filter" placeholder="filter" aria-label="filter overrides" bind:value={filter} />
+    <div class="filters">
+      <input type="search" name="pri-filter" placeholder="filter" aria-label="filter overrides" bind:value={filter} />
       {#if filter.trim()}<span class="dimtext">{efs.length} shown</span>{/if}
     </div>
     {@render efsTable(efs)}
@@ -102,7 +101,7 @@
           <tr>
             <td class="num mono">{n.item}</td>
             <td>
-              {#if unnamed(n.item, n.name)}<span class="dimtext">unnamed item</span>{:else}<b>{n.name}</b>{/if}<Confidence c={n.confidence} />
+              {#if n.name}<b>{n.name}</b>{:else}<span class="dimtext">unnamed item</span>{/if}<Confidence c={n.confidence} />
               {#if n.meaning}<div class="dimtext">{n.meaning}</div>{/if}
             </td>
             <td><PriValueCell v={n.value} label={n.label} /></td>
@@ -116,7 +115,7 @@
 {#if pri.featureGroups.length}
   <fieldset class="hgroup">
     <legend>Carrier Configuration Management feature groups</legend>
-    <p class="dimtext" style="margin:0 0 6px">25 one-byte flags per group. No public or on-device source names the individual flags.</p>
+    <p class="dimtext note">25 one-byte flags per group. No public or on-device source names the individual flags.</p>
     <table class="grid">
       <thead><tr><th>Group</th><th>Flags</th></tr></thead>
       <tbody>
@@ -151,25 +150,25 @@
 {#if pri.nvListed.length}
   <details class="more">
     <summary>Legacy NV item list ({pri.nvListed.length})</summary>
-    <p class="dimtext" style="margin:0 0 6px">Items this file declares; green ones carry a value above.</p>
+    <p class="dimtext note">Items this file declares; green ones carry a value above.</p>
     <div>
       {#each pri.nvListed as n, i (i)}
         <span class="chip" class:good={n.set} title={n.set ? "value present in this file" : "listed, no value in this file"}
-          ><span class="mono">{n.item}</span>{#if !unnamed(n.item, n.name)}{" "}{n.name}{/if}</span>
+          ><span class="mono">{n.item}</span>{#if n.name}{" "}{n.name}{/if}</span>
       {/each}
     </div>
   </details>
 {:else if pri.nvItems.length}
   <details class="more">
     <summary>Legacy NV item list ({pri.nvItems.length})</summary>
-    <p class="mono" style="margin:0; word-break:break-word; font-size:11px">{pri.nvItems.join(", ")}</p>
+    <p class="mono items">{pri.nvItems.join(", ")}</p>
   </details>
 {/if}
 
 {#if pri.schema.count}
   <details class="more">
     <summary>NV path schema index ({pri.schema.count} paths, {pri.schema.source})</summary>
-    <p class="dimtext" style="margin:0 0 6px">Paths the format knows about; no values.</p>
+    <p class="dimtext note">Paths the format knows about; no values.</p>
     <pre class="code">{pri.schema.paths.join("\n")}</pre>
   </details>
 {/if}
@@ -185,7 +184,7 @@
             <td class="mono k">{u.tag}</td>
             <td class="num">{u.count}</td>
             <td class="num">{u.len}</td>
-            <td class="mono wrap" style="font-size:10px">
+            <td class="mono wrap small">
               {u.ascii ? '"' + u.ascii + '"' : u.hex}{u.int !== undefined ? " (" + u.int + ")" : ""}
             </td>
             <td class="dimtext">{u.note ?? ""}</td>
@@ -197,14 +196,15 @@
 {/if}
 
 <style>
-  .more { margin: 8px 0 0; }
-  .more > summary { cursor: pointer; padding: 3px 0; }
+  .setting { width: 58%; }
+  .items { margin: 0; word-break: break-word; font-size: 11px; }
+  td.small { font-size: 10px; }
   .path { font-size: 10.5px; word-break: break-all; }
   .flags { display: flex; flex-wrap: wrap; gap: 2px; margin-bottom: 3px; }
   .flag {
     font: 10px/16px var(--mono); width: 20px; text-align: center; color: var(--text-dim);
     border: 1px solid #c9c5bd; background: var(--field);
   }
-  .flag.set { background: #dff0dd; border-color: #8ab98a; color: var(--text); font-weight: bold; }
-  .flag.odd { background: #fff0cf; border-color: #d9b96a; }
+  .flag.set { background: var(--good-bg); border-color: var(--good-border); color: var(--text); font-weight: bold; }
+  .flag.odd { background: var(--warn-bg); border-color: var(--warn-border); }
 </style>

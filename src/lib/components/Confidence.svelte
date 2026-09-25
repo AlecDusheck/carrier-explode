@@ -1,7 +1,9 @@
 <script lang="ts">
-  let { c }: { c?: string } = $props();
+  import type { ConfidenceOrUnknown } from "$lib/decode";
 
-  const TEXT: Record<string, [string, string]> = {
+  let { c }: { c?: ConfidenceOrUnknown } = $props();
+
+  const TEXT: Partial<Record<ConfidenceOrUnknown, [string, string]>> = {
     med: ["likely", "Read from code and a consistent value pattern; not confirmed by a spec."],
     low: ["unverified", "Inferred from the name and values only."],
     unknown: ["unnamed", "No public or on-device source names this."],
@@ -13,8 +15,8 @@
 
 <style>
   .conf {
-    font-family: var(--ui); font-size: 9.5px; font-style: italic; color: #7a5a14;
-    border: 1px dashed #d0b36a; padding: 0 3px; margin-left: 5px; white-space: nowrap;
+    font-family: var(--ui); font-size: 9.5px; font-style: italic; color: var(--conf-med);
+    border: 1px dashed var(--conf-med-border); padding: 0 3px; margin-left: 5px; white-space: nowrap;
   }
-  .conf.low, .conf.unknown { color: #8a3a2a; border-color: #d19a8a; }
+  .conf.low, .conf.unknown { color: var(--conf-low); border-color: var(--conf-low-border); }
 </style>

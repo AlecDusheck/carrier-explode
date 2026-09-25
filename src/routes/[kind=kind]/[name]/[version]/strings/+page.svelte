@@ -23,7 +23,7 @@
     {@const path = files.find((f) => f.path.split("/").pop() === wantedFile)?.path ?? files[0]?.path}
 
     {#if path}
-      <div class="rowflex" style="margin-bottom:8px">
+      <div class="filters">
         <label class="lbl">
           Locale
           <select name="locale" value={locale} onchange={(e) => set({ locale: e.currentTarget.value })}>
@@ -43,7 +43,7 @@
         raw={rawHref(params.kind, params.name, params.version, path)}
       />
     {:else}
-      <p class="dimtext" style="margin:0">No localised strings.</p>
+      <p class="dimtext flush">No localised strings.</p>
     {/if}
   </Pane>
 </div>

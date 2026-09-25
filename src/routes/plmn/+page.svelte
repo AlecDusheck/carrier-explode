@@ -63,7 +63,7 @@
             e.mvnos.some((m) => m.bundle.toLowerCase().includes(f) || (m.iccid ?? "").startsWith(f)))
         : table.entries}
       {#if f || hits.length > LIMIT}
-        <p class="dimtext" style="margin:0 0 6px">
+        <p class="dimtext note">
           {hits.length} of {table.entries.length} networks{hits.length > LIMIT ? `, first ${LIMIT} shown; search to narrow` : ""}
         </p>
       {/if}
@@ -98,7 +98,7 @@
 </div>
 
 <style>
-  .more { margin-bottom: 6px; }
-  .more > summary, td summary { cursor: pointer; padding: 2px 0; }
+  .more { margin: 0 0 6px; }
+  td summary { cursor: pointer; padding: 2px 0; }
   .mvnos .chip { white-space: normal; overflow-wrap: anywhere; }
 </style>
