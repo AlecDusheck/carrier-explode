@@ -1,9 +1,12 @@
 /**
- * Summarises a modem package into the baseband/<id>.json the site reads. Run
- * with vite-node (for `$lib`). The kind is read off the file: a .bbfw is a zip,
- * an Apple ftab has 'rkos' 'ftab' at 0x20.
+ * Summarises a modem package into the summary the site reads. Run with
+ * vite-node (for `$lib`). The kind is read off the file: a .bbfw is a zip, an
+ * Apple ftab has 'rkos' 'ftab' at 0x20.
  *
  *   baseband.ts <package> --name NAME --out summary.json [--manifest manifest.plist] [--no-modem]
+ *
+ * Prints the R2 key the summary belongs at (summaryKey of the package's
+ * SHA-256, src/lib/server/modems.ts), so callers never spell the layout out.
  *
  * NAME is the package name as the index records it (Mav25-2.10.01.Release.bbfw,
  * c4000v59/Release/patched/ftab.bin); the family is read off it. bbfw only:
@@ -11,6 +14,7 @@
  * bundles (without it the live one is fetched); --no-modem skips qdsp6sw.mbn.
  */
 
+import { createHash } from "node:crypto";
 import { readFileSync, writeFileSync } from "node:fs";
 import { basename } from "node:path";
 import { parseArgs } from "node:util";
@@ -18,6 +22,7 @@ import { unzipSync } from "fflate";
 
 import { basebandSummary, ftabSummary, type ModemSummary } from "$lib/decode";
 import { MANIFEST_URL, parseManifest } from "$lib/server/manifest";
+import { summaryKey } from "$lib/server/modems";
 
 const { positionals, values: arg } = parseArgs({
   allowPositionals: true,
@@ -40,7 +45,7 @@ async function manifestBytes(): Promise<Uint8Array | undefined> {
     if (res.ok) return new Uint8Array(await res.arrayBuffer());
     console.error(`manifest: HTTP ${res.status}, carrier map skipped`);
   } catch (e) {
-    console.error(`manifest: ${(e as Error).message}, carrier map skipped`);
+    console.error(`manifest: ${e instanceof Error ? e.message : e}, carrier map skipped`);
   }
   return undefined;
 }
@@ -81,4 +86,6 @@ if (!summary.package.family) {
 }
 const json = JSON.stringify(summary);
 writeFileSync(arg.out, json);
-console.error(`${summary.package.family} (${summary.kind}): ${json.length} bytes`);
+console.error(`${summary.package.family} (${summary.kind}, schema ${summary.schema}): ${json.length} bytes`);
+// stdout: where the summary goes.
+console.log(summaryKey(createHash("sha256").update(bytes).digest("hex")));

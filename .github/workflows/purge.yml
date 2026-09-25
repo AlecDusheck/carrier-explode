@@ -1,0 +1,30 @@
+# Purges cached pages by tag (src/hooks.server.ts sets them), so what a run stored
+# shows up now instead of when the pages age out. Called by the other workflows.
+#
+# Optional: secret PURGE_TOKEN, the same value as the worker's; without it the
+# purge is skipped.
+
+name: Purge
+on:
+  workflow_call:
+    inputs:
+      tags:
+        description: Comma-separated cache tags
+        type: string
+        required: true
+    secrets:
+      PURGE_TOKEN:
+        required: false
+
+jobs:
+  purge:
+    runs-on: ubuntu-24.04
+    steps:
+      - env:
+          TOKEN: ${{ secrets.PURGE_TOKEN }}
+          TAGS: ${{ inputs.tags }}
+        run: |
+          [ -n "$TOKEN" ] || { echo "PURGE_TOKEN not set, skipping"; exit 0; }
+          curl -fsS --retry 3 -X POST https://carrierexplode.com/internal/purge \
+            -H "authorization: Bearer $TOKEN" -H "content-type: application/json" \
+            -d "$(jq -cn --arg t "$TAGS" '{tags: ($t | split(","))}')"

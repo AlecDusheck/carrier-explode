@@ -6,10 +6,12 @@
  *   scan_index.ts plan  --builds builds.json --indexes DIR --out heads.json
  *       DIR holds <build>/index.json for every held image. Writes the
  *       head bundle of every carrier and country, and prints the blob ids needed.
- *   scan_index.ts build --heads heads.json --blobs DIR --cache DIR --out DIR [--gen G] [--previous G]
+ *   scan_index.ts build --heads heads.json --blobs DIR --cache DIR --out DIR [--gen G] [--previous G] [--heads-hash H]
  *       DIR/blobs holds <id>.ipcc; OTA bundles are fetched into --cache once.
- *       Writes scan/<gen>/… plus upload.json; scan/current.json is written
- *       separately so it can go up last.
+ *       Writes scan/<gen>/… plus upload.json, and pointer.json for the caller
+ *       to put at scan/current.json last. --heads-hash is recorded in the
+ *       pointer so an unchanged head set is not rebuilt, unless a bundle failed:
+ *       then the next run tries again.
  */
 
 import { createHash } from "node:crypto";
@@ -18,7 +20,7 @@ import { dirname, join, resolve } from "node:path";
 import { parseArgs } from "node:util";
 
 import { flattenBundle, openIpcc } from "$lib/decode";
-import { MANIFEST_URL, buildIndex, carrierRefs, parseManifest, type BundleRef } from "$lib/server/manifest";
+import { MANIFEST_URL, manifestTables, parseManifest } from "$lib/server/manifest";
 import { buildTimeline, headIndex, type ImageIndex } from "$lib/server/timeline";
 import { POINTER_KEY, bundlesKey, fileDataKey, fileIndexKey, packShards, type ScanPointer } from "$lib/server/keyscan";
 
@@ -29,8 +31,19 @@ const { positionals, values: arg } = parseArgs({
   options: {
     builds: { type: "string" }, indexes: { type: "string" }, heads: { type: "string" }, blobs: { type: "string" },
     cache: { type: "string" }, out: { type: "string" }, gen: { type: "string" }, previous: { type: "string" },
+    "heads-hash": { type: "string" },
   },
 });
+
+/** A required option's value; exits with a usage error when it is missing. */
+function required(name: keyof typeof arg): string {
+  const v = arg[name];
+  if (typeof v !== "string") {
+    console.error(`${positionals[0]}: --${name} is required`);
+    process.exit(2);
+  }
+  return v;
+}
 
 async function fetchBytes(url: string): Promise<Uint8Array> {
   // Old manifest entries are HTTP-only and some hosts have dropped HTTP; same fallback as the worker.
@@ -44,7 +57,7 @@ async function fetchBytes(url: string): Promise<Uint8Array> {
         last = `HTTP ${res.status}`;
         if (res.status < 500) break;
       } catch (e) {
-        last = (e as Error).message;
+        last = e instanceof Error ? e.message : String(e);
       }
     }
   }
@@ -57,15 +70,13 @@ function readIndexes(buildsFile: string, dir: string): ImageIndex[] {
   return order
     .map((b) => join(dir, b.build, "index.json"))
     .filter((p) => existsSync(p))
-    .map((p) => JSON.parse(readFileSync(p, "utf8")) as ImageIndex);
+    .map((p): ImageIndex => JSON.parse(readFileSync(p, "utf8")));
 }
 
 async function plan() {
-  const images = readIndexes(arg.builds!, arg.indexes!);
-  const root = parseManifest(await fetchBytes(MANIFEST_URL));
-  const index = buildIndex(root);
-  const refs = new Map<string, BundleRef[]>();
-  for (const c of index.carriers) refs.set(c.name, carrierRefs(root, c.name));
+  const opt = { builds: required("builds"), indexes: required("indexes"), out: required("out") };
+  const images = readIndexes(opt.builds, opt.indexes);
+  const { index, refs } = manifestTables(parseManifest(await fetchBytes(MANIFEST_URL)));
 
   const names = {
     carriers: new Set([...index.carriers.map((c) => c.name), ...images.flatMap((i) => Object.keys(i.carriers))]),
@@ -77,12 +88,12 @@ async function plan() {
   const heads: Head[] = [];
   for (const kind of ["carriers", "countries"] as const) {
     for (const name of [...names[kind]].sort()) {
-      const t = buildTimeline(kind, name, images, refs.get(name) ?? [], index.countries);
+      const t = buildTimeline(kind, name, images, Object.hasOwn(refs, name) ? refs[name] : [], index.countries);
       const head = t[headIndex(t)];
       if (head) heads.push({ kind, name, src: head.src });
     }
   }
-  writeFileSync(arg.out!, JSON.stringify(heads));
+  writeFileSync(opt.out, JSON.stringify(heads));
   // stdout: blob ids for the caller to fetch from R2.
   for (const h of heads) if (h.src.startsWith("blob:")) console.log(h.src.slice(5));
   console.error(`${heads.length} heads, ${heads.filter((h) => h.src.startsWith("blob:")).length} from images`);
@@ -93,15 +104,16 @@ const scannable = (flat: ReturnType<typeof flattenBundle>) =>
   Object.fromEntries(Object.entries(flat).filter(([f]) => !f.startsWith("signatures/") && !f.includes(".lproj/")));
 
 async function build() {
-  const heads: Head[] = JSON.parse(readFileSync(arg.heads!, "utf8"));
-  const out = resolve(arg.out!);
+  const opt = { heads: required("heads"), blobs: required("blobs"), cache: required("cache"), out: required("out") };
+  const heads: Head[] = JSON.parse(readFileSync(opt.heads, "utf8"));
+  const out = resolve(opt.out);
   const gen = arg.gen ?? new Date().toISOString().replace(/[-:]/g, "").slice(0, 13);
-  mkdirSync(arg.cache!, { recursive: true });
+  mkdirSync(opt.cache, { recursive: true });
 
   const load = async (src: string): Promise<Uint8Array> => {
-    if (src.startsWith("blob:")) return new Uint8Array(readFileSync(join(arg.blobs!, `${src.slice(5)}.ipcc`)));
+    if (src.startsWith("blob:")) return new Uint8Array(readFileSync(join(opt.blobs, `${src.slice(5)}.ipcc`)));
     // Apple URLs are immutable; keep each one across runs.
-    const cached = join(arg.cache!, createHash("sha1").update(src).digest("hex") + ".ipcc");
+    const cached = join(opt.cache, createHash("sha1").update(src).digest("hex") + ".ipcc");
     if (existsSync(cached)) return new Uint8Array(readFileSync(cached));
     const bytes = await fetchBytes(src);
     writeFileSync(cached, bytes);
@@ -117,7 +129,7 @@ async function build() {
         flats.push({ src, flat: scannable(flattenBundle(openIpcc(await load(src)))) });
       } catch (e) {
         failed.push(src);
-        console.error(`skip ${src}: ${(e as Error).message}`);
+        console.error(`skip ${src}: ${e instanceof Error ? e.message : e}`);
       }
     }
   }));
@@ -140,8 +152,12 @@ async function build() {
     writeFileSync(p, o.body);
   }
   writeFileSync(join(out, "upload.json"), JSON.stringify(objects.map((o) => ({ key: o.key, file: join(out, o.key) }))));
-  const pointer: ScanPointer & { previous?: string } = {
-    gen, builtAt: new Date().toISOString(), bundles: flats.length, ...(arg.previous ? { previous: arg.previous } : {}),
+  const headsHash = arg["heads-hash"];
+  const pointer: ScanPointer = {
+    gen, builtAt: new Date().toISOString(), bundles: flats.length,
+    ...(arg.previous ? { previous: arg.previous } : {}),
+    // A partial index must not look complete to the next run's change check.
+    ...(headsHash && !failed.length ? { heads: headsHash } : {}),
   };
   writeFileSync(join(out, "pointer.json"), JSON.stringify(pointer));
   console.error(`${gen}: ${flats.length} bundles, ${objects.length} objects, ${failed.length} failed; pointer → ${POINTER_KEY}`);
