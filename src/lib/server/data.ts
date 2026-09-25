@@ -17,11 +17,16 @@ import {
   MANIFEST_URL, buildIndex, buildMccMnc, carrierRefs, countryName, parseManifest, splitName,
   type BundleRef,
 } from "./manifest";
-import { contentId, decodeFile, openIpcc, type OpenedBundle } from "./ipcc";
+import {
+  BBCFG_FILE_TYPES, compareBundles, contentId, decodeFile, diffValues, openIpcc, parseBandCombos, summariseDiff,
+  type BasebandFile, type BasebandSummary, type ComboStats, type DiffKind, type FileDiff, type Variant,
+} from "$lib/decode";
 import { buildMergedCbsMatrix } from "./cbs";
-import { diffValues, summariseDiff } from "./diff";
 import { guessCarrierQuery } from "./guess";
-import { keyScan, type ScanTarget } from "./keyscan";
+import {
+  POINTER_KEY, bundlesKey, fileDataKey, fileIndexKey, keyScan, topKey,
+  type ScanFileIndex, type ScanPointer, type ScanShard, type ScanTarget, type TargetRow,
+} from "./keyscan";
 import { carriersOf, homeCountry, isoIndex, type CountryPlists } from "./related";
 import { buildTimeline, headIndex, type ImageBuild, type ImageIndex, type TimelineEntry } from "./timeline";
 import { imageSlug, isPrerelease } from "$lib/names";
@@ -180,6 +185,7 @@ async function resolve(kind: Kind, name: string, slug?: string) {
 
 /* ----------------------------------------------------------------- bundles */
 
+/** Bytes and zip index. Hashes are separate: only the bundle page shows them. */
 function open(src: string) {
   return memo(`ipcc:${src}`, 30 * 60_000, async () => {
     let bytes: Uint8Array;
@@ -190,14 +196,20 @@ function open(src: string) {
     } else {
       bytes = await fetchApple(src);
     }
-    const opened = openIpcc(bytes);
-    return { opened, bytes, size: bytes.length, id: await contentId(opened), sha1: await sha1Hex(bytes), sha384: await sha384Hex(bytes) };
+    return { opened: openIpcc(bytes), bytes, size: bytes.length };
   });
 }
 
+const digests = (src: string) =>
+  memo(`digest:${src}`, 30 * 60_000, async () => {
+    const b = await open(src);
+    const [id, sha1, sha384] = await Promise.all([contentId(b.opened), sha1Hex(b.bytes), sha384Hex(b.bytes)]);
+    return { id, sha1, sha384 };
+  });
+
 export async function getBundle(kind: Kind, name: string, slug?: string) {
   const { timeline, entry, previous } = await resolve(kind, name, slug);
-  const b = await open(entry.src);
+  const [b, d] = await Promise.all([open(entry.src), digests(entry.src)]);
   const quick: Record<string, unknown> = {};
   for (const f of ["carrier.plist", "Info.plist", "version.plist"]) {
     if (b.opened.info.files.some((x) => x.path === f)) {
@@ -218,11 +230,11 @@ export async function getBundle(kind: Kind, name: string, slug?: string) {
     timeline: timeline.map(publicEntry),
     info: b.opened.info,
     downloadSize: b.size,
-    contentId: b.id,
-    sha1: b.sha1,
-    sha384: b.sha384,
+    contentId: d.id,
+    sha1: d.sha1,
+    sha384: d.sha384,
     // Image bundles are checked against their content id; OTA ones against the digest Apple publishes.
-    verified: entry.id ? entry.id === b.id : entry.sha1 ? entry.sha1 === b.sha1 : entry.sha384 ? entry.sha384 === b.sha384 : null,
+    verified: entry.id ? entry.id === d.id : entry.sha1 ? entry.sha1 === d.sha1 : entry.sha384 ? entry.sha384 === d.sha384 : null,
     quick,
   };
 }
@@ -252,51 +264,27 @@ export async function getRaw(kind: Kind, name: string, slug: string, path: strin
   return { bytes, opened: b.opened };
 }
 
-/* ----------------------------------------------------------------- changes */
+/* ----------------------------------------------------------------- compare */
 
-async function memberHashes(o: OpenedBundle): Promise<Map<string, string>> {
-  const out = new Map<string, string>();
-  for (const f of o.info.files) out.set(f.path, await sha1Hex(o.entries[o.prefix + f.path]));
-  return out;
-}
+export interface Side { kind: Kind; name: string; slug?: string }
 
-const decoded = (o: OpenedBundle, path: string) => {
-  try {
-    const d = decodeFile(o, path);
-    return d.plist ?? d.pri ?? d.text ?? null;
-  } catch {
-    return null;
-  }
-};
-
-/** What changed between a version and the one before it, file by file. */
-export async function getChanges(kind: Kind, name: string, slug: string) {
-  const { entry, previous } = await resolve(kind, name, slug);
-  if (!previous) return { entry: publicEntry(entry), previous: null, files: [] };
-  return cached(`changes:v1:${entry.src}|${previous.src}`, 30 * 86400, async () => {
-    const [now, before] = await Promise.all([open(entry.src), open(previous.src)]);
-    const [h1, h0] = await Promise.all([memberHashes(now.opened), memberHashes(before.opened)]);
-    const files = [];
-    for (const path of [...new Set([...h1.keys(), ...h0.keys()])].sort()) {
-      const kindOf = !h0.has(path) ? "added" : !h1.has(path) ? "removed" : h0.get(path) !== h1.get(path) ? "changed" : null;
-      if (!kindOf) continue;
-      const rows = kindOf === "changed" ? diffValues(decoded(before.opened, path), decoded(now.opened, path)) : [];
-      files.push({ path, kind: kindOf, rows: rows.slice(0, 400), truncated: rows.length > 400 });
-    }
-    return { entry: publicEntry(entry), previous: publicEntry(previous), files };
+/**
+ * `b` against `a`, file by file; the one diff behind both /compare and a
+ * version's Changes tab. Without `a`, `b` is compared to the version before it.
+ * Content never changes under a src, so results are cached for a month.
+ */
+export async function getComparison(a: Side | null, b: Side, path?: string) {
+  const rb = await resolve(b.kind, b.name, b.slug);
+  const ra = a ? await resolve(a.kind, a.name, a.slug) : null;
+  const left = ra ? { ...a!, entry: ra.entry } : rb.previous ? { ...b, entry: rb.previous } : null;
+  const right = { ...b, entry: rb.entry };
+  const side = (s: typeof right) => ({ kind: s.kind, name: s.name, entry: publicEntry(s.entry) });
+  if (!left) return { a: null, b: side(right), diff: null };
+  return cached(`compare:v1:${left.entry.src}|${right.entry.src}|${path ?? ""}`, 30 * 86400, async () => {
+    const [A, B] = await Promise.all([open(left.entry.src), open(right.entry.src)]);
+    const diff = compareBundles(A.opened, B.opened, { path, maxRows: path ? 2000 : 400 });
+    return { a: side(left), b: side(right), diff };
   });
-}
-
-export async function getDiff(a: { kind: Kind; name: string; slug?: string }, b: typeof a, path: string) {
-  const [ra, rb] = await Promise.all([resolve(a.kind, a.name, a.slug), resolve(b.kind, b.name, b.slug)]);
-  const [A, B] = await Promise.all([open(ra.entry.src), open(rb.entry.src)]);
-  const rows = diffValues(decoded(A.opened, path), decoded(B.opened, path));
-  const bFiles = new Set(B.opened.info.files.map((f) => f.path));
-  return {
-    rows: rows.slice(0, 1000),
-    counts: summariseDiff(rows),
-    shared: A.opened.info.files.map((f) => f.path).filter((p) => bFiles.has(p)),
-  };
 }
 
 /** Bundles added, removed and changed between an image and the one before it. */
@@ -320,6 +308,203 @@ export async function getRelease(build: string) {
   return { image: all[i], previous: all[i + 1] ?? null, carriers: compare("carriers"), countries: compare("countries") };
 }
 
+/* ---------------------------------------------------------------- baseband */
+
+const basebandKey = (build: string) => `system/${build}/baseband.json`;
+
+/** Written by the workflow with the image, never here, and fixed once written. */
+const baseband = (build: string) =>
+  memo(`baseband:${build}`, 24 * 3600_000, () => r2json<BasebandSummary>(basebandKey(build)));
+
+async function mustBaseband(build: string) {
+  const s = await baseband(build);
+  if (!s) error(404, `No baseband summary for ${build} yet: it has not been extracted.`);
+  return s;
+}
+
+/** Every image, and whether its baseband.json is there yet. */
+export const basebandBuilds = async () => {
+  const all = await builds();
+  const has = await memo(`baseband:has:${all.map((b) => b.build).join(",")}`, 10 * 60_000, async () =>
+    Object.fromEntries(await Promise.all(all.map(async (b) => [b.build, !!(await bucket().head(basebandKey(b.build)))] as const))));
+  return all.map((b) => ({ build: b.build, version: b.version, has: has[b.build] }));
+};
+
+const where = (f: Pick<BasebandFile, "variants" | "configs">) =>
+  f.configs?.length ? f.configs.join(", ") : (f.variants ?? []).map((v) => `${v.platform}/${v.sku}/${v.hwRev}`).join(" ");
+
+/** MCC to country code, by the bundles the manifest routes each PLMN to. */
+async function mccCountries(mccs: Iterable<string>) {
+  const votes = new Map<string, Map<string, number>>();
+  for (const e of (await getPlmn()).entries) {
+    const cc = e.bundle && splitName(e.bundle).cc;
+    if (!cc || e.mcc === "901") continue; // 901 is international: satellite, roaming SIMs
+    const m = votes.get(e.mcc) ?? new Map<string, number>();
+    m.set(cc, (m.get(cc) ?? 0) + 1);
+    votes.set(e.mcc, m);
+  }
+  const out: Record<string, { cc: string; name?: string }> = {};
+  for (const mcc of mccs) {
+    const best = [...(votes.get(mcc) ?? [])].sort((a, b) => b[1] - a[1])[0]?.[0];
+    if (best) out[mcc] = { cc: best, name: countryName(best) };
+  }
+  return out;
+}
+
+/** The page's view of a package: everything but file contents and NV values. */
+export async function getBaseband(build: string) {
+  const [s, all] = await Promise.all([mustBaseband(build), builds()]);
+  const mccs = new Set(s.amprNs.flatMap((a) => a.groups.flatMap((g) => g.mccs)));
+  return {
+    build,
+    version: all.find((b) => b.build === build)?.version,
+    package: s.package,
+    members: s.members,
+    containers: s.containers.map((c) => ({
+      ...c,
+      fileTypes: c.fileTypes.map((t) => ({ ...t, confidence: BBCFG_FILE_TYPES[t.type]?.confidence, note: BBCFG_FILE_TYPES[t.type]?.note })),
+    })),
+    files: s.files.map(({ text, hex: _h, ...f }, i) => ({ ...f, i, readable: text !== undefined })),
+    nv: s.nv.map(({ records, ...n }) => ({ ...n, records: records.length })),
+    images: s.images,
+    bandCombos: s.bandCombos,
+    amprNs: s.amprNs,
+    mccs: await mccCountries(mccs).catch(() => ({}) as Awaited<ReturnType<typeof mccCountries>>),
+    modemConfigs: s.modemConfigs ?? null,
+    carrierMap: s.carrierMap ?? null,
+  };
+}
+
+export async function getBasebandFile(build: string, i: number) {
+  const f = (await mustBaseband(build)).files[i];
+  if (!f) error(404, `no file ${i} in the ${build} baseband summary`);
+  return { ...f, i };
+}
+
+/** One carrier's combo strings from one band_combos_per_plmn.xml variant. */
+export async function getBasebandCombos(build: string, sha1: string, tag: string) {
+  const f = (await mustBaseband(build)).files.find((x) => x.sha1 === sha1 && x.path.endsWith("/band_combos_per_plmn.xml"));
+  if (!f?.text) error(404, `no band combo file ${sha1}`);
+  const c = parseBandCombos(f.text).find((x) => x.tag === tag);
+  if (!c) error(404, `no ${tag} in ${sha1}`);
+  return c.combos;
+}
+
+/** A package flattened into keyed parts, so one diff lines them up by what they are. */
+function basebandComparable(s: BasebandSummary) {
+  const files: Record<string, unknown> = {};
+  for (const f of s.files) files[`${f.member} ${f.path} [${where(f)}]`] = f.text !== undefined ? f.text.split("\n") : f.sha1;
+  const combos: Record<string, unknown> = {};
+  for (const set of s.bandCombos) {
+    const text = s.files.find((f) => f.sha1 === set.sha1)?.text;
+    const lists = text ? new Map(parseBandCombos(text).map((c) => [c.tag, c.combos])) : new Map<string, string[]>();
+    const at = where(set);
+    for (const { tag, ...stats } of set.carriers) combos[`${tag} [${at}]`] = { ...stats, list: [...(lists.get(tag) ?? [])].sort() };
+  }
+  return {
+    Package: { package: s.package },
+    "Band combos": combos,
+    Carriers: s.carrierMap ?? {},
+    Files: files,
+    Power: Object.fromEntries(s.amprNs.map((a) => [`A-MPR NS [${where(a)}]`, a.groups])),
+    "Modem configs": Object.fromEntries((s.modemConfigs ?? []).map((m) => [`${m.label ?? "@" + m.offset} ${m.cfgType}`, { version: m.version, trailer: m.trailer, files: m.files }])),
+    Containers: Object.fromEntries(s.containers.map((c) => [c.member, { meta: c.meta, records: c.records, blobs: c.blobs, fileTypes: c.fileTypes }])),
+  };
+}
+
+export interface BasebandDiffPart extends FileDiff { section: string }
+
+/** `b` against `a`, part by part. Summaries never change under a build, so a pair is cached for a month. */
+export async function getBasebandDiff(a: string, b: string) {
+  const all = await builds();
+  const side = (build: string) => ({ build, version: all.find((x) => x.build === build)?.version });
+  return cached(`bbdiff:v1:${a}|${b}`, 30 * 86400, async () => {
+    const [A, B] = await Promise.all([mustBaseband(a), mustBaseband(b)]);
+    const ca = basebandComparable(A) as Record<string, Record<string, unknown>>;
+    const cb = basebandComparable(B) as Record<string, Record<string, unknown>>;
+    const parts: BasebandDiffPart[] = [];
+    const MAX = 300;
+    for (const section of Object.keys(cb)) {
+      const x = ca[section] ?? {}, y = cb[section] ?? {};
+      for (const path of [...new Set([...Object.keys(x), ...Object.keys(y)])].sort()) {
+        const kind: DiffKind = !(path in x) ? "added" : !(path in y) ? "removed" : "changed";
+        const rows = kind === "changed" ? diffValues(x[path], y[path]) : [];
+        if (kind === "changed" && !rows.length) continue;
+        parts.push({ section, path, kind, rows: rows.slice(0, MAX), counts: summariseDiff(rows), truncated: rows.length > MAX });
+      }
+    }
+    return { a: side(a), b: side(b), parts, counts: summariseDiff(parts.map((p) => ({ path: p.path, kind: p.kind }))) };
+  });
+}
+
+/** The image a bundle version belongs to: its own for an image entry, the current release for OTA. */
+async function bundleImage(kind: Kind, name: string, slug?: string) {
+  const { entry } = await resolve(kind, name, slug);
+  return { entry, build: entry.image ?? release(await builds())?.build };
+}
+
+/**
+ * What the modem runs for this bundle before its own .der.pri lands: the
+ * band-combo carrier tags whose PLMNs route here, and the package files each
+ * .der.pri replaces by EFS path.
+ */
+export async function getBasebandDefaults(kind: Kind, name: string, slug?: string) {
+  const { entry, build } = await bundleImage(kind, name, slug);
+  const s = build ? await baseband(build) : null;
+  if (!build || !s) return { build: build ?? null, missing: true as const };
+  const tags = Object.entries(s.carrierMap ?? {})
+    .filter(([, m]) => m.bundles.includes(name) || m.mvnoBundles.includes(name))
+    .map(([tag, m]) => ({
+      tag, plmns: m.plmns, primary: m.bundles.includes(name),
+      // Platforms whose numbers match share one row.
+      sets: s.bandCombos.reduce<Array<{ sha1: string; variants: Variant[]; key: string } & ComboStats>>((out, set) => {
+        const c = set.carriers.find((x) => x.tag === tag);
+        if (!c) return out;
+        const { tag: _t, plmns: _p, ...stats } = c;
+        const key = JSON.stringify(stats);
+        const hit = out.find((o) => o.key === key);
+        if (hit) hit.variants = [...hit.variants, ...set.variants].sort((a, b) => a.platform - b.platform || a.sku - b.sku);
+        else out.push({ sha1: set.sha1, variants: [...set.variants], key, ...stats });
+        return out;
+      }, []),
+    }));
+
+  const { opened } = await open(entry.src);
+  const byPath = new Map<string, Array<BasebandFile & { i: number }>>();
+  s.files.forEach((f, i) => { if (f.text !== undefined) byPath.set(f.path, [...(byPath.get(f.path) ?? []), { ...f, i }]); });
+  const overrides: Array<{ pri: string; efs: string; length: number; baseline: Array<{ i: number; member: string; variants?: Variant[]; configs?: string[]; same: boolean }> }> = [];
+  let otherXml = 0;
+  for (const file of opened.info.files) {
+    if (file.kind !== "pri-der") continue;
+    let pri;
+    try { pri = decodeFile(opened, file.path).pri; } catch { continue; }
+    for (const e of pri?.efs ?? []) {
+      const text = e.value.xml ?? (e.value.kind === "string" ? e.value.text : undefined);
+      if (text === undefined) continue;
+      const base = byPath.get(e.path);
+      if (!base) { if (e.value.xml) otherXml++; continue; }
+      overrides.push({
+        pri: file.path, efs: e.path, length: e.value.len,
+        baseline: base.map((f) => ({ i: f.i, member: f.member, variants: f.variants, configs: f.configs, same: f.text === text })),
+      });
+    }
+  }
+  return { build, missing: false as const, version: (await builds()).find((b) => b.build === build)?.version, tags, overrides, otherXml };
+}
+
+/** A package file next to the .der.pri value that replaces it, with the lines that differ. */
+export async function getBasebandOverride(kind: Kind, name: string, slug: string | undefined, pri: string, efs: string, i: number) {
+  const { entry, build } = await bundleImage(kind, name, slug);
+  const base = build ? (await mustBaseband(build)).files[i] : undefined;
+  if (!base?.text || base.path !== efs) error(404, `no package file ${i} at ${efs}`);
+  const { opened } = await open(entry.src);
+  const v = decodeFile(opened, pri).pri?.efs.find((e) => e.path === efs)?.value;
+  const text = v?.xml ?? v?.text;
+  if (text === undefined) error(404, `${pri} does not set ${efs}`);
+  const rows = diffValues(base.text.split("\n"), text.split("\n"));
+  return { build, efs, pri, where: where(base), member: base.member, baseline: base.text, override: text, rows, counts: summariseDiff(rows) };
+}
+
 /* ------------------------------------------------------------ cross-cutting */
 
 export async function getCbs() {
@@ -338,25 +523,71 @@ export async function getCbs() {
 
 export const getPlmn = async () => (await manifest()).plmn;
 
-export async function scanKey(path: string, file: string, scope: string, limit: number) {
+/* -------------------------------------------------------------------- scan */
+
+/** Which scan index generation to read. Written by the workflow, never here. */
+const scanPointer = () =>
+  memo("scan:pointer", 10 * 60_000, async () => ({ p: await r2json<ScanPointer>(POINTER_KEY) })).then((x) => x.p);
+
+/** Every src the generation indexed, so "lacks the file" can be told from "not indexed". */
+const scanBundles = (gen: string) =>
+  memo(`scan:bundles:${gen}`, 3600_000, async () => new Set((await r2json<{ srcs: string[] }>(bundlesKey(gen)))?.srcs ?? []));
+
+const scanFileIndex = (gen: string, file: string) =>
+  memo(`scan:idx:${gen}|${file}`, 3600_000, async () => ({ i: await r2json<ScanFileIndex>(fileIndexKey(gen, file)) }))
+    .then((x) => x.i);
+
+/** One shard, by range read out of the file's packed data object. */
+const scanShard = (gen: string, file: string, top: string, [offset, length]: [number, number]) =>
+  memo(`scan:shard:${gen}|${file}|${top}`, 3600_000, async () => {
+    const obj = await bucket().get(fileDataKey(gen, file), { range: { offset, length } });
+    return obj ? (await obj.json<ScanShard>()) : null;
+  });
+
+/** Head bundle of every carrier (or country) in scope, in parallel. */
+async function scanTargets(scope: string): Promise<{ kind: Kind; targets: ScanTarget[] }> {
   const idx = await getIndex();
   const kind: Kind = scope === "countries" ? "countries" : "carriers";
   const cc = scope.startsWith("country:") ? scope.slice(8) : null;
   const names = idx[kind].filter((e) => !cc || e.cc === cc);
-  // Bundles that ship in the current image first: those are the live ones.
-  names.sort((a, b) => Number(!!b.image) - Number(!!a.image) || a.name.localeCompare(b.name));
-  return cached(`scan:v2:${scope}|${file}|${path}|${limit}|${release(idx.builds)?.build}`, 7 * 86400, async () => {
-    const targets: ScanTarget[] = [];
-    for (const e of names.slice(0, limit)) {
-      const t = await getTimeline(kind, e.name);
-      const head = t[headIndex(t)];
-      if (head) targets.push({ name: e.name, display: e.display, cc: e.cc, ref: { os: head.ios.at(-1) ?? "", build: head.build, url: head.src } });
+  const targets = await Promise.all(names.map(async (e): Promise<ScanTarget | null> => {
+    const t = await getTimeline(kind, e.name).catch(() => null);
+    const head = t?.[headIndex(t)];
+    return head ? { name: e.name, display: e.display, cc: e.cc, os: head.ios.at(-1) ?? "", build: head.build, src: head.src } : null;
+  }));
+  return { kind, targets: targets.filter((t): t is ScanTarget => !!t) };
+}
+
+/**
+ * Every bundle in scope's value at `path` in `file`. `path` may use `[*]` for
+ * any index and `*` for any key. Covers the whole scope: no limit.
+ */
+export async function scanKey(path: string, file: string, scope: string) {
+  const [{ targets }, pointer] = await Promise.all([scanTargets(scope), scanPointer()]);
+  const top = topKey(path);
+  const key = `scan:v3:${pointer?.gen ?? "none"}|${scope}|${file}|${path}|${fingerprint(targets.map((t) => t.src))}`;
+  return cached(key, 86400, async () => {
+    const rows: TargetRow[] = targets.map(() => undefined);
+    if (pointer) {
+      const [indexed, fi] = await Promise.all([scanBundles(pointer.gen), scanFileIndex(pointer.gen, file)]);
+      const bySrc = new Map(targets.map((t, i) => [t.src, i]));
+      targets.forEach((t, i) => { if (indexed.has(t.src)) rows[i] = null; });
+      for (const src of fi?.srcs ?? []) { const i = bySrc.get(src); if (i !== undefined) rows[i] = {}; }
+      const loc = fi?.shards[top];
+      const shard = loc && (await scanShard(pointer.gen, file, top, loc));
+      shard?.at.forEach((at, k) => { const i = bySrc.get(fi!.srcs[at]); if (i !== undefined) rows[i] = shard.rows[k]; });
     }
-    const result = await keyScan(targets, file, path, async (src) => (await open(src)).bytes, scope, limit);
-    return { ...result, candidates: names.length, truncated: names.length > limit,
-      hits: result.hits.map(({ url: _url, ...h }) => h) };
+    return keyScan(targets, rows, file, path, scope);
   });
 }
+
+/** FNV-1a over the target set: a new head bundle anywhere means a new scan. */
+function fingerprint(xs: string[]): string {
+  let h = 0x811c9dc5;
+  for (const x of xs) for (let i = 0; i < x.length; i++) h = Math.imul(h ^ x.charCodeAt(i), 0x01000193);
+  return (h >>> 0).toString(36) + xs.length;
+}
+
 
 /** A country search guessed from where the request came from. */
 export async function guessCountry(): Promise<string | null> {

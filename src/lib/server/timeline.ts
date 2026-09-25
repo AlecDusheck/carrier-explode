@@ -12,6 +12,8 @@ export interface ImageBundle { id: string; size: number; build: string }
 export interface ImageIndex extends ImageBuild {
   carriers: Record<string, ImageBundle>;
   countries: Record<string, ImageBundle>;
+  /** The image's Firmware/*.bbfw, stored as blobs/<id>.bbfw; decoded in baseband.json. */
+  baseband?: { id: string; size: number; name: string };
 }
 
 export interface TimelineEntry {

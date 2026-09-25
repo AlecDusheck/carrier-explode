@@ -1,0 +1,91 @@
+# One-off: adds the baseband package to images extracted before it was kept.
+# New images get it from the extract job in system-bundles.yml, so this should
+# not be needed again.
+#
+# For every held image whose index.json has no baseband entry, it resolves the
+# IPSW URL (scripts/plan_system_bundles.py --baseband-have: ipsw.me, else
+# AppleDB for betas), pulls only Firmware/*.bbfw out of it with HTTP range
+# requests (about 140 MB, not the whole IPSW), and stores it the same way the
+# extract job does (scripts/attach_baseband.py): blobs/<id>.bbfw, the index
+# entry, and system/<build>/baseband.json. Bundles are not touched.
+#
+# Needs: secrets CLOUDFLARE_API_TOKEN (R2 edit) and CLOUDFLARE_ACCOUNT_ID.
+
+name: Backfill baseband
+on:
+  workflow_dispatch:
+
+env:
+  BUCKET: carrier-explode
+  CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+  CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+
+jobs:
+  plan:
+    runs-on: ubuntu-24.04
+    outputs:
+      matrix: ${{ steps.plan.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: plan
+        run: |
+          npm install --no-save --silent wrangler
+          W=node_modules/.bin/wrangler
+          "$W" r2 object get "$BUCKET/system/builds.json" --remote --pipe > /tmp/builds.json
+          : > /tmp/have.txt
+          for b in $(jq -r '.[].build' /tmp/builds.json); do
+            "$W" r2 object get "$BUCKET/system/$b/index.json" --remote --pipe 2>/dev/null |
+              jq -e '.baseband.id' > /dev/null 2>&1 && echo "$b" >> /tmp/have.txt
+          done
+          MATRIX=$(python3 scripts/plan_system_bundles.py --builds /tmp/builds.json --baseband-have /tmp/have.txt)
+          echo "to backfill: $MATRIX"
+          echo "matrix=$MATRIX" >> "$GITHUB_OUTPUT"
+
+  baseband:
+    needs: plan
+    if: needs.plan.outputs.matrix != '[]'
+    runs-on: ubuntu-24.04-arm
+    strategy:
+      fail-fast: false
+      # Keeps Apple's CDN and the R2 API comfortable.
+      max-parallel: 3
+      matrix:
+        image: ${{ fromJson(needs.plan.outputs.matrix) }}
+    name: iOS ${{ matrix.image.version }} (${{ matrix.image.build }})
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: corepack enable && pnpm install --frozen-lockfile
+
+      - name: Install blacktop/ipsw
+        run: |
+          URL=$(curl -s https://api.github.com/repos/blacktop/ipsw/releases/latest |
+            jq -r '.assets[].browser_download_url | select(contains("arm64.deb")) | select(contains("ipsw_"))')
+          curl -sL -o /tmp/ipsw.deb "$URL"
+          sudo dpkg -i /tmp/ipsw.deb
+
+      - name: Pull and decode the baseband package
+        env:
+          URL: ${{ matrix.image.url }}
+        run: |
+          ipsw extract --remote --pattern '.*\.bbfw$' --output /tmp/bb "$URL"
+          BBFW=$(find /tmp/bb -name '*.bbfw' | sort | head -1)
+          if [ -z "$BBFW" ]; then echo "no .bbfw in this image"; exit 1; fi
+          npx vite-node scripts/baseband.ts "$BBFW" --out /tmp/baseband.json
+          node_modules/.bin/wrangler r2 object get "$BUCKET/system/${{ matrix.image.build }}/index.json" --remote --pipe > /tmp/index.json
+          python3 scripts/attach_baseband.py --index /tmp/index.json --bbfw "$BBFW" --baseband /tmp/baseband.json --out /tmp/out
+
+      - name: Upload to R2
+        run: |
+          W="$GITHUB_WORKSPACE/node_modules/.bin/wrangler"
+          cd /tmp/out
+          for attempt in 1 2 3 4 5; do
+            "$W" r2 bulk put "$BUCKET" --filename upload.json --remote --force --concurrency 3 && break
+            [ "$attempt" = 5 ] && exit 1
+            sleep $(( 20 * 2 ** (attempt - 1) + RANDOM % 20 ))
+          done
+          # The index goes last, so it never points at a package that is not uploaded.
+          "$W" r2 object put "$BUCKET/system/${{ matrix.image.build }}/index.json" \
+            --file "system/${{ matrix.image.build }}/index.json" --content-type application/json --remote
