@@ -1,22 +1,34 @@
 <script lang="ts">
-  import { parsePolicyXml } from "$lib/decode/policy";
-  import PolicyItem from "./PolicyItem.svelte";
+  import { parsePolicyXml, walkPolicy, type PolicyNode } from "$lib/decode/policy";
+  import PolicyItem, { type NoteFirsts } from "./PolicyItem.svelte";
 
   let { xml }: { xml: string } = $props();
 
   let comments = $state(false);
+  let notes = $state(false);
   const nodes = $derived(parsePolicyXml(xml));
+  // "Show notes" explains each element and attribute once, where it first appears.
+  const firsts = $derived.by((): NoteFirsts => {
+    const el: Record<string, PolicyNode> = {}, attr: Record<string, PolicyNode> = {};
+    for (const n of walkPolicy(nodes)) {
+      if (!Object.hasOwn(el, n.tag)) el[n.tag] = n;
+      for (const k of Object.keys(n.attrs)) if (!Object.hasOwn(attr, n.tag + "@" + k)) attr[n.tag + "@" + k] = n;
+    }
+    return { el, attr };
+  });
 </script>
 
 <div class="rowflex" style="margin-bottom:4px">
   <label class="lbl"><input type="checkbox" bind:checked={comments} /> Comments</label>
+  <button class="btn" class:on={notes} aria-pressed={notes} onclick={() => (notes = !notes)}>{notes ? "Hide notes" : "Show notes"}</button>
   <span class="dimtext legend">
     <span class="k cond">condition</span> <span class="k act">action</span> <span class="k def">definition</span>
+    · <span class="u">underlined</span> names explain themselves
   </span>
 </div>
 <div class="tree box">
   {#each nodes as n, i (i)}
-    {#if comments || n.kind !== "comment"}<PolicyItem node={n} {comments} />{/if}
+    {#if comments || n.kind !== "comment"}<PolicyItem node={n} {comments} {notes} {firsts} />{/if}
   {/each}
 </div>
 
@@ -29,4 +41,5 @@
   .cond { color: #1f3f8a; }
   .act { color: #14632a; }
   .def { color: #6a2f8a; }
+  .u { text-decoration: underline dotted #8a93a6; text-underline-offset: 3px; }
 </style>

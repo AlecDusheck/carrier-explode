@@ -358,7 +358,10 @@ async function mccCountries(mccs: Iterable<string>) {
 /** The page's view of a package: everything but file contents and NV values. */
 export async function getBaseband(build: string) {
   const [s, all] = await Promise.all([mustBaseband(build), builds()]);
-  const mccs = new Set(s.amprNs.flatMap((a) => a.groups.flatMap((g) => g.mccs)));
+  const mccs = new Set([
+    ...s.amprNs.flatMap((a) => a.groups.flatMap((g) => g.mccs)),
+    ...(s.mdb?.databases ?? []).flatMap((d) => d.scan?.flatMap((e) => (e.mcc ? [e.mcc] : [])) ?? []),
+  ]);
   return {
     build,
     version: all.find((b) => b.build === build)?.version,
@@ -380,6 +383,8 @@ export async function getBaseband(build: string) {
     mccs: await mccCountries(mccs).catch(() => ({}) as Awaited<ReturnType<typeof mccCountries>>),
     modemConfigs: s.modemConfigs ?? null,
     carrierMap: s.carrierMap ?? null,
+    mdb: s.mdb ?? null,
+    ssgccs: s.ssgccs ?? null,
   };
 }
 
@@ -415,6 +420,7 @@ function basebandComparable(s: BasebandSummary) {
     Carriers: s.carrierMap ?? {},
     Files: files,
     Power: Object.fromEntries(s.amprNs.map((a) => [`A-MPR NS [${where(a)}]`, a.groups])),
+    "Network databases": Object.fromEntries((s.mdb?.databases ?? []).map((d) => [`${d.path} [${where(d)}]`, d.scan ?? d.features ?? d.error ?? d.sha1])),
     "Modem configs": Object.fromEntries((s.modemConfigs ?? []).map((m) => [`${m.label ?? "@" + m.offset} ${m.cfgType}`, { version: m.version, trailer: m.trailer, files: m.files }])),
     Containers: Object.fromEntries(s.containers.map((c) => [c.member, { meta: c.meta, records: c.records, blobs: c.blobs, fileTypes: c.fileTypes }])),
   };
