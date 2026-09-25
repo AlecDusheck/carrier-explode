@@ -26,7 +26,7 @@ describe("cachePolicy", () => {
     expect(edge().edge).toContain("max-age=21600");
   });
 
-  it("tags pages rendered from baseband.json so a rebuild can purge them", () => {
+  it("tags pages rendered from modem package summaries so a rebuild can purge them", () => {
     const at = (id: RequestEvent["route"]["id"], version?: string) => cachePolicy({ ...event({ version }), route: { id } }, 200).tags;
     expect(at("/baseband/[build]")).toContain("baseband");
     expect(at("/[kind=kind]/[name]/[version]/baseband", "ios-27.0")).toEqual(["pinned", "baseband"]);

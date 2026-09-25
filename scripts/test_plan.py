@@ -1,5 +1,5 @@
 import unittest
-from plan_system_bundles import beta_candidates, missing_baseband, plan, plan_betas
+from plan_system_bundles import beta_candidates, plan, plan_betas
 from versions import merge, version_key
 
 fw = lambda v, b, d="iPhone17,1": {"version": v, "buildid": b, "identifier": d}
@@ -87,19 +87,6 @@ class Betas(unittest.TestCase):
 
     def test_ignores_records_that_are_not_betas(self):
         self.assertEqual(plan_betas([{**beta("27.2", "24B80"), "beta": False}], "iPhone17,1", 9), [])
-
-
-class Baseband(unittest.TestCase):
-    def test_lists_held_builds_without_baseband_newest_first_on_their_own_device(self):
-        held = [{"version": "27.0", "build": "24A437", "product": "iPhone18,1"},
-                {"version": "26.6.2", "build": "23G90", "product": "iPhone17,1"},
-                {"version": "26.4", "build": "23E246", "product": "iPhone17,1"}]
-        self.assertEqual(missing_baseband(held, {"24A437"}), [
-            {"version": "26.6.2", "build": "23G90", "device": "iPhone17,1"},
-            {"version": "26.4", "build": "23E246", "device": "iPhone17,1"}])
-
-    def test_nothing_missing(self):
-        self.assertEqual(missing_baseband([{"version": "27.0", "build": "24A437", "product": "iPhone18,1"}], {"24A437"}), [])
 
 
 class Versions(unittest.TestCase):

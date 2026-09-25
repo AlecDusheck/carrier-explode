@@ -3,7 +3,7 @@ import { buildTimeline, headIndex, type ImageIndex } from "../src/lib/server/tim
 import type { BundleRef, CountrySummary } from "../src/lib/server/manifest.ts";
 
 const image = (version: string, build: string, carriers: Record<string, [string, string]>, countries: Record<string, [string, string]> = {}): ImageIndex => ({
-  version, build, device: "iPhone", extractedAt: "",
+  version, build, device: "iPhone", extractedAt: "", modems: [],
   carriers: Object.fromEntries(Object.entries(carriers).map(([k, [id, b]]) => [k, { id, size: 1, build: b }])),
   countries: Object.fromEntries(Object.entries(countries).map(([k, [id, b]]) => [k, { id, size: 1, build: b }])),
 });
