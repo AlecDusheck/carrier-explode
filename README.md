@@ -21,7 +21,7 @@ A web explorer for iOS carrier and country bundles, and the baseband config that
 ## Workflows
 - `system-bundles.yml` (daily): extracts new iOS images, betas included, into R2, including each image's `baseband.json`.
 - `scan-index.yml` (after every system-bundles run, or on demand): builds the cross-bundle scan index from what's already stored.
-- `backfill-baseband.yml` (manual, one-off): adds `baseband.json` to images extracted before it existed, pulling only the `.bbfw` over range requests.
+- `baseband.yml` (manual): adds the baseband package to images held from before it was kept, pulling only the `.bbfw` over range requests; with `rebuild`, re-decodes every stored package after a decoder change.
 
 They need `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`. An optional `PURGE_TOKEN`, set both as a repository secret and as a Worker secret, makes new images appear immediately rather than when cached pages expire.
 

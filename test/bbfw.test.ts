@@ -262,11 +262,21 @@ describe("band_combos_per_plmn.xml", () => {
   it("summarises each carrier", () => {
     expect(comboStats(carriers[0].combos)).toEqual({
       combos: 459, endc: 206, nr: 253, lte: 0, nrdc: 26, swul: 43, maxComponents: 5,
-      nrBands: [1, 2, 3, 5, 7, 8, 12, 14, 20, 25, 26, 28, 29, 30, 38, 40, 41, 48, 53, 66, 70, 71, 77, 78, 79, 258, 260],
+      nrBands: [2, 5, 66, 77, 258, 260],
+      singleBands: [1, 3, 7, 8, 12, 14, 20, 25, 26, 28, 29, 30, 38, 40, 41, 48, 53, 70, 71, 78, 79],
       fr2Bands: [258, 260], lteAnchors: [2, 5, 12, 14, 29, 30, 66], sulBands: [],
     });
     const kddi = comboStats(carriers[3].combos);
     expect([kddi.endc, kddi.nr, kddi.lteAnchors]).toEqual([25, 0, [1, 3, 11, 18, 41, 42]]);
+  });
+
+  it("counts only bands a carrier combines, not the single-band list every tag ends with", () => {
+    const cu = comboStats(carriers.find((c) => c.tag === "UNICOM_CN")!.combos);
+    expect(cu.nrBands).toEqual([1, 8, 78]);
+    expect(cu.singleBands).toContain(66);
+    // Intra-band CA on one band (class C and up) is a combination.
+    expect(comboStats(["n78CA", "n1AA"]).nrBands).toEqual([78]);
+    expect(comboStats(["n78CA", "n1AA"]).singleBands).toEqual([1]);
   });
 
   it("maps tags to bundles through MobileDeviceCarriersByMccMnc", () => {
@@ -319,7 +329,10 @@ describe("basebandSummary", () => {
 
   it("keeps NV/EFS settings of protocol blobs, with known names", () => {
     expect(s.nv.map((n) => [n.blob, n.fileTypeName, n.records.length])).toEqual([[0, "PROT_NV", 22], [3, "PROT_PRI", 28]]);
-    expect(s.nv[1].records[0]).toEqual({ efs: "/mav/product_pri_setting_revision", hex: "01000d00", f77: 0, f78: 22 });
+    expect(s.nv[1].records[0]).toMatchObject({ efs: "/mav/product_pri_setting_revision", hex: "01000d00", f77: 0, f78: 22 });
+    // Records carry the NV tables' name and confidence, the same annotation a .der.pri gets.
+    expect(s.nv[1].records[0]).toHaveProperty("name");
+    expect(s.nv[1].records[0]).toHaveProperty("confidence");
     expect(s.nv[0].records.find((r) => r.nv === 1920)).toMatchObject({ hex: "29040000", f11: 2, f14: 94 });
   });
 

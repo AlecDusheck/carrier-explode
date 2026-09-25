@@ -10,7 +10,7 @@
 import { inflateSync, unzlibSync } from "fflate";
 import { bytesToHex } from "./plist";
 import { readTlv, type Tlv } from "./der";
-import { CCM_ITEMS, decodeNvValue, describeNv, type NvConfidence } from "./nv";
+import { CCM_ITEMS, annotateNv, describeNv, type NvConfidence } from "./nv";
 
 const td = new TextDecoder();
 
@@ -272,11 +272,12 @@ export interface PriDecoded {
 
 const HEADER_KEYS = new Set(["Carrier ID", "PRI Revision", "PRI Name", "GRI Revision"]);
 
+/** A decoded value's integer, when it is one that fits a double exactly. */
+const scalar = (v: PriValue) => (v.kind === "int" && v.exact === undefined ? v.int : undefined);
+
 function annotate(path: string, v: PriValue): Omit<PriPathEntry, "path" | "tag" | "value"> {
-  const d = describeNv(path);
-  if (!d) return {};
-  const label = v.kind === "int" && v.int !== undefined && v.exact === undefined ? decodeNvValue(path, v.int) : undefined;
-  return { name: d.name, meaning: d.meaning, confidence: d.confidence, ...(label !== undefined && { label }) };
+  const a = annotateNv(path, scalar(v));
+  return a ? { ...a, meaning: a.meaning ?? a.name } : {};
 }
 
 function decodeSchema(value: Uint8Array): PriDecoded["schema"] {
@@ -397,18 +398,9 @@ export function decodePri(buf: Uint8Array, kind: "der.pri" | "der.gri" = "der.pr
     const num = info ? info.nv : tagNumber(tag);
     const item = info?.kind === "nv" || (!info && num !== undefined && listed.has(num)) ? num : undefined;
     if (item !== undefined) {
-      const d = describeNv(item);
-      const v = decodeValue(value, d?.type === "string");
-      const label = v.kind === "int" && v.exact === undefined ? decodeNvValue(item, v.int!) : undefined;
-      out.nv.push({
-        item,
-        tag,
-        name: d?.name ?? `NV ${item}`,
-        value: v,
-        confidence: d?.confidence ?? "low",
-        ...(d && d.meaning !== d.name && { meaning: d.meaning }),
-        ...(label !== undefined && { label }),
-      });
+      const v = decodeValue(value, describeNv(item)?.type === "string");
+      const a = annotateNv(item, scalar(v));
+      out.nv.push({ item, tag, value: v, ...a, name: a?.name ?? `NV ${item}`, confidence: a?.confidence ?? "low" });
       seenNv.add(item);
     }
 

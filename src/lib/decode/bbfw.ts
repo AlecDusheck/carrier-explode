@@ -9,9 +9,9 @@
 
 import { Unzlib, unzlibSync } from "fflate";
 import { readTlv, type Tlv } from "./der";
-import { sha1Hex } from "./bytes";
+import { leUint, sha1Hex } from "./bytes";
 import { bytesToHex, parsePlist } from "./plist";
-import { describeNv } from "./nv";
+import { annotateNv } from "./nv";
 import { comboStats, parseAmprNs, parseBandCombos, xmlRefs, type AmprGroup, type ComboStats, type XmlRefs } from "./policy";
 
 const td = new TextDecoder();
@@ -511,8 +511,12 @@ export interface BasebandNvRecord {
   f14?: number;
   f77?: number;
   f78?: number;
-  /** From the NV/EFS lookup, when known. */
+  /** From the NV/EFS tables, when known (nv.ts). */
   name?: string;
+  meaning?: string;
+  /** What the value means, for scalar values the tables describe. */
+  label?: string;
+  confidence?: "high" | "med" | "low";
 }
 
 export interface BasebandNvBlob {
@@ -766,9 +770,7 @@ export function basebandSummary(members: Record<string, Uint8Array>, opts: Baseb
         const fmt = contentFormat(f.data, f.path);
         if ((fmt === "xml" || fmt === "text") && f.data.length > 1) add(member, f.path, f.data, { blob: i, variants });
         else if (keep) {
-          const info = describeNv(f.path);
-          const name = info && !info.family ? info.name : undefined; // a family match only repeats the leaf name
-          records.push({ efs: f.path, hex: bytesToHex(f.data), f77: f.f77, f78: f.f78, ...(name ? { name } : {}) });
+          records.push({ efs: f.path, hex: bytesToHex(f.data), f77: f.f77, f78: f.f78, ...annotateNv(f.path, leUint(f.data)) });
         }
       }
       for (const r of blob.nv) {
@@ -776,8 +778,7 @@ export function basebandSummary(members: Record<string, Uint8Array>, opts: Baseb
         if (z && contentFormat(z) === "xml") add(member, `/nv/rfnv/${r.id}.xml`, z, { blob: i, variants });
         else if (!z && contentFormat(r.value) === "xml") add(member, `/nv/rfnv/${r.id}.xml`, r.value, { blob: i, variants });
         if (keep) {
-          const name = describeNv(r.id)?.name;
-          records.push({ nv: r.id, hex: bytesToHex(r.value), f11: r.f11, f14: r.f14, ...(name ? { name } : {}) });
+          records.push({ nv: r.id, hex: bytesToHex(r.value), f11: r.f11, f14: r.f14, ...annotateNv(r.id, leUint(r.value)) });
         }
       }
       if (records.length) out.nv.push({ member, blob: i, fileType: type, fileTypeName: fileTypeName(type), digest: ref.digest, variants, records });

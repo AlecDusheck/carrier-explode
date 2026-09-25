@@ -8,7 +8,7 @@
 # `extract` also stores the image's baseband package (Firmware/*.bbfw) the way
 # it stores bundles: blobs/<id>.bbfw, an index entry, and its decoded form in
 # system/<build>/baseband.json (scripts/baseband.ts). Images held from before
-# that get theirs from backfill-baseband.yml.
+# that get theirs from baseband.yml.
 #
 # Needs: secrets CLOUDFLARE_API_TOKEN (R2 edit) and CLOUDFLARE_ACCOUNT_ID.
 # Optional: secret PURGE_TOKEN, the same value as the worker's, so new images
