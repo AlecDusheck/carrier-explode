@@ -1,121 +1,97 @@
 <script lang="ts">
-  import { goto } from "$app/navigation";
   import { page } from "$app/state";
   import { getBundle, getFile } from "$lib/api/bundles.remote";
-  import { getBundleModems, getPhoneOverrides } from "$lib/api/tables.remote";
+  import { getBundleOverrides } from "$lib/api/tables.remote";
   import { modemCapabilities, modemLabel } from "$lib/decode";
-  import { bundleArgs, bundleHref, link, rawHref, withParams } from "$lib/format";
+  import { bundleArgs, link, rawHref, withParams } from "$lib/format";
   import type { PublicEntry } from "$lib/types";
-  import { modemFor, overridesFor, phoneList, sharedPri } from "$lib/phones";
+  import { phoneList, sharedPri } from "$lib/phones";
   import Pane from "$lib/components/Pane.svelte";
   import FileBody from "$lib/components/FileBody.svelte";
   import ModemDefaults from "$lib/components/ModemDefaults.svelte";
-  import PhonePicker from "$lib/components/PhonePicker.svelte";
 
   let { params } = $props();
 
   const args = $derived(bundleArgs(params));
-  const wanted = $derived(page.url.searchParams.get("phone"));
-  const shown = $derived(page.url.searchParams.get("file"));
 
-  /** "OTA build 72.1 (iOS 27.0+)": the copy a phone's files were read from. */
+  /** "OTA build 72.1 (iOS 27.0+)": the copy a file was read from, when not this one. */
   const copyLabel = (e: Pick<PublicEntry, "source" | "ios" | "build">) =>
     e.source === "image" ? `iOS ${e.ios[0]} image` : `OTA build ${e.build}${e.ios.length ? ` (iOS ${e.ios[0]}+)` : ""}`;
-  const copyHref = (slug: string, phone: string) =>
-    `${bundleHref(params.kind, params.name, slug, "baseband")}?phone=${encodeURIComponent(phone)}`;
-
-  // A phone picked by hand drops the package file compared for the one before.
-  const pick = (phone: string, restored: boolean) =>
-    goto(withParams(page.url, restored ? { phone } : { phone, pri: null, efs: null, base: null }), { replaceState: true, keepFocus: true, noScroll: true });
+  // Picking a file drops the package file compared for the one before.
+  const pickHref = (path: string, copy?: string) =>
+    withParams(page.url, { file: path, copy: copy ?? null, pri: null, efs: null, base: null });
+  const families = (phones: Array<{ family: string }>) => [...new Set(phones.map((p) => p.family))];
 </script>
+
+{#snippet modems(phones: Array<{ family: string }>, build: string)}
+  {#each families(phones) as f, i (f)}{i ? ", " : ""}<a href={link(`/baseband/${build}/${f}`)}>{modemLabel(f)}</a>{/each}
+{/snippet}
 
 <div class="scroll pad">
   <Pane>
     {@const bundle = await getBundle(args)}
-    {@const mm = await getBundleModems(args)}
-    {@const shared = sharedPri(bundle.info.files)}
-    {#if mm}
-      {@const phone = [wanted, mm.home].find((p) => p && modemFor(mm.modems, p)) ?? mm.modems[0]?.devices[0]?.id}
-      {@const m = modemFor(mm.modems, phone)}
-      {@const name = m?.devices.find((d) => d.id === phone)?.name ?? phone ?? "this phone"}
-      {@const copy = phone ? await getPhoneOverrides({ ...args, device: phone }) : null}
-      {@const pkg = m && link(`/baseband/${mm.build}/${m.family}`)}
-      {@const caps = m && modemCapabilities(m.family)}
+    {@const ov = await getBundleOverrides(args)}
+    {@const here = bundle.entry.slug}
+    <!-- Files named for phones, then the ones named for none. -->
+    {@const rows = [
+      ...(ov?.files ?? []).map((f) => ({ ...f, copy: f.slug === here ? undefined : f.slug })),
+      ...sharedPri(bundle.info.files).map((f) => ({ ...bundle.entry, path: f.path, copy: undefined, phones: [] })),
+    ]}
+    {@const wanted = page.url.searchParams.get("file")}
+    {@const wantedCopy = page.url.searchParams.get("copy") ?? undefined}
+    {@const sel = (wanted ? rows.find((r) => r.path === wanted && r.copy === wantedCopy) : undefined)
+      ?? rows.find((r) => r.phones.some((p) => p.id === ov?.home)) ?? rows[0]}
 
-      <PhonePicker modems={mm.modems} overridden={mm.overridden} {phone} named={!!wanted} onpick={pick}>
-        {#if m}<a class="dimtext" href={pkg}>{modemLabel(m.family)} package</a>{/if}
-      </PhonePicker>
-
-      {#if copy?.entry && phone && !copy.sameCopy}
-        <!-- Phones this copy has files for, to say why another copy is shown. -->
-        {@const covered = mm.modems.flatMap((x) => x.devices).filter((d) => overridesFor(bundle.info.files, d.id).length)}
-        <p class="dimtext note">
-          From <a href={copyHref(copy.entry.slug, phone)}>{copyLabel(copy.entry)}</a>{covered.length ? `; this copy only has files for ${phoneList(covered)}` : ""}.
-        </p>
-      {/if}
-
-      {#if copy?.entry}
-        {#each copy.files as f (f.path)}
-          <fieldset class="hgroup">
-            <legend class="mono wrap">{f.path}</legend>
-            {#if m && caps?.carrierConfigIn === "bundle"}
-              <p class="dimtext note">The whole carrier config on {modemLabel(m.family)} phones.</p>
+    {#if rows.length || ov?.defaults.length || ov?.unknown.length}
+      <div class="hscroll">
+        <table class="grid">
+          <thead><tr><th>Phones</th><th>Modem</th><th>Override file</th></tr></thead>
+          <tbody>
+            {#each rows as r (r.slug + r.path)}
+              <tr class:sel={r === sel}>
+                <td>{r.phones.length ? phoneList(r.phones) : "Not named for a phone"}</td>
+                <td>{#if ov}{@render modems(r.phones, ov.build)}{/if}</td>
+                <td>
+                  <a class="mono wrap" href={pickHref(r.path, r.copy)} data-sveltekit-noscroll data-sveltekit-replacestate aria-current={r === sel ? "true" : undefined}>{r.path}</a>
+                  {#if r.copy}<span class="dimtext sp">from {copyLabel(r)}</span>{/if}
+                </td>
+              </tr>
+            {/each}
+            {#if ov?.defaults.length}
+              <tr><td>{phoneList(ov.defaults)}</td><td>{@render modems(ov.defaults, ov.build)}</td><td class="dimtext">None: package defaults</td></tr>
             {/if}
-            {#if f.devices && f.devices.length > 1}
-              <p class="dimtext note">Also read by {phoneList(f.devices.flatMap((d) => (d.ids && d.ids !== phone ? [{ id: d.ids, name: d.name }] : [])))}.</p>
+            {#if ov?.unknown.length}
+              <tr><td>{phoneList(ov.unknown)}</td><td>{@render modems(ov.unknown, ov.build)}</td><td class="dimtext">Unknown: no copy of this bundle made for them</td></tr>
             {/if}
-            <FileBody
-              file={await getFile({ ...args, slug: copy.entry.slug, path: f.path })}
-              cc={bundle.cc}
-              raw={rawHref(params.kind, params.name, copy.entry.slug, f.path)}
-              devices={false}
-            />
-          </fieldset>
-        {/each}
-      {:else if copy?.known}
-        <p class="note">
-          No overrides for {name}: the package defaults apply.
-        </p>
-      {:else if phone}
-        <p class="note">
-          No copy of this bundle held here was made for {name}, so its overrides are unknown.
-        </p>
-      {/if}
-
-      {#if params.kind === "carriers" && phone && caps?.plaintextDefaults}
-        <ModemDefaults kind={params.kind} name={params.name} slug={params.version} device={phone} phone={name} />
-      {:else if m && caps?.carrierConfigIn === "package" && !caps.plaintextDefaults}
-        <p class="dimtext note">No plaintext package config to compare against.</p>
-      {/if}
+          </tbody>
+        </table>
+      </div>
     {:else}
-      <p class="dimtext note">No iOS image to read this bundle's phones from.</p>
+      <p class="dimtext note">No modem override files.</p>
     {/if}
 
-    {#if shared.length}
+    {#if sel}
+      {@const phone = sel.phones[0]}
+      {@const caps = phone && modemCapabilities(phone.family)}
       <fieldset class="hgroup">
-        <legend>For every phone</legend>
-        <div class="rowflex">
-          {#each shared as f (f.path)}
-            <a class="chip mono" href={withParams(page.url, { file: f.path === shown ? null : f.path })} aria-current={f.path === shown ? "true" : undefined} data-sveltekit-noscroll data-sveltekit-replacestate>{f.path}</a>
-          {/each}
-        </div>
-        {#if shown && shared.some((f) => f.path === shown)}
-          <Pane>
-            <FileBody
-              file={await getFile({ ...args, slug: params.version, path: shown })}
-              cc={bundle.cc}
-              raw={rawHref(params.kind, params.name, params.version, shown)}
-            />
-          </Pane>
+        <legend class="mono wrap">{sel.path}</legend>
+        {#if caps?.carrierConfigIn === "bundle"}
+          <p class="dimtext note">The whole carrier config on {modemLabel(phone.family)} phones.</p>
         {/if}
+        <FileBody
+          file={await getFile({ ...args, slug: sel.slug, path: sel.path })}
+          cc={bundle.cc}
+          raw={rawHref(params.kind, params.name, sel.slug, sel.path)}
+          devices={false}
+        />
       </fieldset>
+      {#if params.kind === "carriers" && phone && caps?.plaintextDefaults}
+        <ModemDefaults kind={params.kind} name={params.name} slug={params.version} device={phone.id} phone={phoneList(sel.phones)} />
+      {/if}
     {/if}
   </Pane>
 </div>
 
 <style>
-  a.chip[aria-current] { background: var(--sel); color: var(--sel-text); }
-  @media (max-width: 760px) {
-    a.chip { padding: 5px 8px; white-space: normal; word-break: break-all; }
-  }
+  a[aria-current] { font-weight: bold; }
 </style>
