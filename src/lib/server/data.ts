@@ -458,20 +458,6 @@ async function bundleImage(kind: Kind, name: string, slug?: string) {
   return { entry, build: build ?? null, idx: build ? await imageIndex(build) : null };
 }
 
-/** The phones a bundle version can land on, by modem package, and the ones it has override files for. */
-export async function getBundleModems(kind: Kind, name: string, slug?: string) {
-  const { entry, build, idx } = await bundleImage(kind, name, slug);
-  if (!build || !idx) return null;
-  const phones = [...new Set(idx.modems.flatMap((m) => m.devices))];
-  const copies = await Promise.all(phones.map((p) => phoneCopy(kind, name, slug ?? "", p)));
-  return {
-    build,
-    home: homePhone(entry, idx) ?? idx.modems[0]?.devices[0],
-    modems: byNewest(idx.modems.map(modemView)),
-    overridden: phones.filter((_, i) => copies[i]?.entry),
-  };
-}
-
 type PhoneFile = Pick<BundleFile, "path" | "kind" | "devices">;
 
 /** OTA copies one lookup may open for a phone's files before settling on "none". */
@@ -507,15 +493,30 @@ const phoneCopy = perRequest(async (kind: Kind, name: string, slug: string, phon
 });
 
 /**
- * `phone`'s modem override files for this bundle version, from the copy that
- * has them, and whether that is the version asked for. Without them, `known`
- * says whether that is because the bundle has none for the phone.
+ * A bundle version's modem override files, each with the phones that read it
+ * and the copy it was read from (see phoneCopy), and the phones left over:
+ * `defaults` have none, `unknown` have no copy of this bundle made for them.
+ * Phones newest family first; `home` is the phone the version means.
  */
-export async function getPhoneOverrides(kind: Kind, name: string, slug: string | undefined, phone: string) {
-  const c = await phoneCopy(kind, name, slug ?? "", phone);
-  if (!c?.entry) return { entry: null, known: c?.known ?? false };
-  const { slug: s, source, ios, build, productType } = c.entry;
-  return { entry: { slug: s, source, ios, build, productType }, files: c.files, sameCopy: c.sameCopy };
+export async function getBundleOverrides(kind: Kind, name: string, slug?: string) {
+  const { entry, build, idx } = await bundleImage(kind, name, slug);
+  if (!build || !idx) return null;
+  const phones = byNewest(idx.modems.map(modemView)).flatMap((m) => m.devices.map((d) => ({ ...d, family: m.family })));
+  const copies = await Promise.all(phones.map((p) => phoneCopy(kind, name, slug ?? "", p.id)));
+  type Phone = (typeof phones)[number];
+  const files = new Map<string, { slug: string; source: PublicEntry["source"]; ios: string[]; build: string; path: string; phones: Phone[] }>();
+  const defaults: Phone[] = [], unknown: Phone[] = [];
+  phones.forEach((p, i) => {
+    const c = copies[i];
+    if (!c?.entry) return void (c?.known ? defaults : unknown).push(p);
+    for (const f of c.files) {
+      const key = `${c.entry.slug}\0${f.path}`;
+      const { slug: s, source, ios, build: b } = c.entry;
+      if (!files.has(key)) files.set(key, { slug: s, source, ios, build: b, path: f.path, phones: [] });
+      files.get(key)!.phones.push(p);
+    }
+  });
+  return { build, home: homePhone(entry, idx), files: [...files.values()], defaults, unknown };
 }
 
 /**

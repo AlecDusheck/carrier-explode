@@ -39,10 +39,6 @@ export function phoneList(phones: Phone[]): string {
   return names.map((n, i) => (i && n.startsWith("iPhone ") ? n.slice(7) : n)).join(", ");
 }
 
-/** The package serving `productType`. */
-export const modemFor = <M extends PhoneModem>(modems: M[], productType?: string) =>
-  productType ? modems.find((m) => m.devices.some((d) => d.id === productType)) : undefined;
-
 /**
  * The phone a bundle version means when none is named: a per-model OTA file's
  * (its product type is a model, "iPhone17,1", not a family like "iPad"), else

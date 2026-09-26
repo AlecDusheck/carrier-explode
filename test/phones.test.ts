@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { byNewest, compareProducts, homePhone, modemFor, overridesFor, phoneList, sharedPri, sortPhones } from "../src/lib/phones.ts";
+import { byNewest, compareProducts, homePhone, overridesFor, phoneList, sharedPri, sortPhones } from "../src/lib/phones.ts";
 import { modemLabel, modemName } from "../src/lib/decode/modem.ts";
 import { describeDevices, productName } from "../src/lib/decode/devices.ts";
 import type { BundleFile } from "../src/lib/decode/bundle.ts";
@@ -46,12 +46,6 @@ describe("phones", () => {
     expect(phoneList(MODEMS[4].devices)).toBe("iPhone 11, 11 Pro, 11 Pro Max, SE (2nd generation)");
     expect(phoneList([{ id: "iPhone9,1", name: "iPhone 7" }, { id: "iPhone9,3", name: "iPhone 7" }])).toBe("iPhone 7");
     expect(sortPhones(phones("iPhone9,3", "iPhone9,1")).map((p) => p.id)).toEqual(["iPhone9,3", "iPhone9,1"]);
-  });
-
-  it("finds a phone's package", () => {
-    expect(modemFor(MODEMS, "iPhone18,4")?.family).toBe("C1");
-    expect(modemFor(MODEMS, "iPhone3,1")).toBeUndefined();
-    expect(modemFor(MODEMS)).toBeUndefined();
   });
 });
 

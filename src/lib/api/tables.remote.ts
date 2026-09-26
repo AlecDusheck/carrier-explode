@@ -17,9 +17,7 @@ export const getBasebandFile = query(v.object({ id: packageId, i: index }), (a) 
 export const getBasebandCombos = query(v.object({ id: packageId, sha1: v.string(), tag: v.string() }), (a) =>
   data.getBasebandCombos(a.id, a.sha1, a.tag));
 export const getBasebandDiff = query(v.object({ a: build, b: build, family }), (q) => data.getBasebandDiff(q.a, q.b, q.family));
-export const getBundleModems = query(v.object(bundle), (a) => data.getBundleModems(a.kind, a.name, a.slug));
-export const getPhoneOverrides = query(v.object({ ...bundle, device }), (a) =>
-  data.getPhoneOverrides(a.kind, a.name, a.slug, a.device));
+export const getBundleOverrides = query(v.object(bundle), (a) => data.getBundleOverrides(a.kind, a.name, a.slug));
 export const getBasebandDefaults = query(v.object({ ...bundle, device: v.optional(device) }), (a) =>
   data.getBasebandDefaults(a.kind, a.name, a.slug, a.device));
 export const getBasebandOverride = query(
