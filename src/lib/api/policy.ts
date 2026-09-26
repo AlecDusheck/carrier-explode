@@ -29,6 +29,7 @@ export const QUERIES: Record<QueryName, QueryPolicy> = {
   getFile: { rate: "bundle" },
   getBasebandDefaults: { rate: "bundle" },
   getPhoneOverrides: { rate: "bundle" },
+  getBundleModems: { rate: "bundle" },
   getBasebandOverride: { rate: "bundle" },
   // Two bundles or packages and a full diff per miss.
   getComparison: { rate: "diff" },
@@ -42,7 +43,6 @@ export const QUERIES: Record<QueryName, QueryPolicy> = {
   getBaseband: { rate: "base" },
   getBasebandFile: { rate: "base" },
   getBasebandCombos: { rate: "base" },
-  getBundleModems: { rate: "base" },
 };
 
 export const isQueryName = (name: string): name is QueryName => Object.hasOwn(QUERIES, name);

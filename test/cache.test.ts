@@ -88,6 +88,7 @@ describe("rateClass", () => {
     expect(rate(remote("getFile"))).toBe("bundle");
     expect(rate(remote("getBasebandDefaults"))).toBe("bundle");
     expect(rate(remote("getPhoneOverrides"))).toBe("bundle");
+    expect(rate(remote("getBundleModems"))).toBe("bundle");
     expect(rate(page("/raw/[kind=kind]/[name]/[version]/[...path]", "ios-27.0"))).toBe("bundle");
     expect(rate(page("/compare"))).toBe("bundle");
     expect(rate(page("/[kind=kind]/[name]/[version]", "ios-27.0"))).toBe("bundle");

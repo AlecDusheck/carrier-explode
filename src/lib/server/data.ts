@@ -458,14 +458,17 @@ async function bundleImage(kind: Kind, name: string, slug?: string) {
   return { entry, build: build ?? null, idx: build ? await imageIndex(build) : null };
 }
 
-/** The phones a bundle version can land on, by modem package. */
+/** The phones a bundle version can land on, by modem package, and the ones it has override files for. */
 export async function getBundleModems(kind: Kind, name: string, slug?: string) {
   const { entry, build, idx } = await bundleImage(kind, name, slug);
   if (!build || !idx) return null;
+  const phones = [...new Set(idx.modems.flatMap((m) => m.devices))];
+  const copies = await Promise.all(phones.map((p) => phoneCopy(kind, name, slug ?? "", p)));
   return {
     build,
     home: homePhone(entry, idx) ?? idx.modems[0]?.devices[0],
     modems: byNewest(idx.modems.map(modemView)),
+    overridden: phones.filter((_, i) => copies[i]?.entry),
   };
 }
 

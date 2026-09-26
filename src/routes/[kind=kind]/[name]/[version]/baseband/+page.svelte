@@ -42,7 +42,7 @@
       {@const pkg = m && link(`/baseband/${mm.build}/${m.family}`)}
       {@const caps = m && modemCapabilities(m.family)}
 
-      <PhonePicker modems={mm.modems} {phone} named={!!wanted} onpick={pick}>
+      <PhonePicker modems={mm.modems} overridden={mm.overridden} {phone} named={!!wanted} onpick={pick}>
         {#if m}<a class="dimtext" href={pkg}>{modemLabel(m.family)} package</a>{/if}
       </PhonePicker>
 

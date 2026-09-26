@@ -4,8 +4,10 @@
   import { modemFor, sortPhones } from "$lib/phones";
   import type { ImageModem } from "./baseband/types";
 
-  let { modems, phone, named, onpick, children }: {
+  let { modems, overridden, phone, named, onpick, children }: {
     modems: ImageModem[];
+    /** Phones the bundle has override files for. */
+    overridden: string[];
     /** The phone shown. */
     phone: string | undefined;
     /** The URL names the phone; a remembered one only fills in a URL without one. */
@@ -37,7 +39,7 @@
     <select class="grow" name="phone" value={phone} onchange={(e) => pick(e.currentTarget.value)}>
       {#each modems as x (x.family)}
         <optgroup label={modemLabel(x.family)}>
-          {#each sortPhones(x.devices) as d (d.id)}<option value={d.id}>{d.name ?? d.id}</option>{/each}
+          {#each sortPhones(x.devices) as d (d.id)}<option value={d.id}>{d.name ?? d.id}{overridden.includes(d.id) ? " (overrides)" : ""}</option>{/each}
         </optgroup>
       {/each}
     </select>

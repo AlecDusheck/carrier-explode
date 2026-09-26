@@ -21,33 +21,31 @@
   const closeHref = $derived(withParams(page.url, { pri: null, efs: null, base: null }));
 </script>
 
-<fieldset class="hgroup" id="modem">
-  <legend>Modem defaults</legend>
-  <Pane>
-    {@const d = await getBasebandDefaults({ kind, name, slug, device })}
-    {#if d.missing}
-      <p class="dimtext note">
-        {d.build ? `No ${phone} modem package stored for ${d.build}.` : "No image to read a baseband package from."}
-      </p>
-    {:else}
-      {@const pkg = link(`/baseband/${d.build}/${d.family}`)}
+<Pane>
+  {@const d = await getBasebandDefaults({ kind, name, slug, device })}
+  {#if d.missing}
+    {#if d.build}<p class="dimtext note">No {phone} modem package stored for {d.build}.</p>{/if}
+  {:else if d.tags.length || d.overrides.length}
+    {@const pkg = link(`/baseband/${d.build}/${d.family}`)}
+    <fieldset class="hgroup" id="modem">
+      <legend>Modem defaults</legend>
       <p class="dimtext note">
         From the <a href={pkg}>iOS {d.version} {modemLabel(d.family)} package</a>, before this bundle's .der.pri.
       </p>
 
-      <h4>Band combos</h4>
-      {#each d.tags as t (t.tag)}
-        <div class="rowflex">
-          <a class="chip" href="{pkg}#{t.tag}"><b>{t.tag}</b></a>
-          <span class="dimtext">{t.primary ? "default bundle on" : "MVNO on"} {t.plmns.join(" ")}</span>
-        </div>
-        <ComboStatsTable rows={t.sets} />
-      {:else}
-        <p class="dimtext note">None for this bundle's PLMNs.</p>
-      {/each}
+      {#if d.tags.length}
+        <h4>Band combos</h4>
+        {#each d.tags as t (t.tag)}
+          <div class="rowflex">
+            <a class="chip" href="{pkg}#{t.tag}"><b>{t.tag}</b></a>
+            <span class="dimtext">{t.primary ? "default bundle on" : "MVNO on"} {t.plmns.join(" ")}</span>
+          </div>
+          <ComboStatsTable rows={t.sets} />
+        {/each}
+      {/if}
 
-      <h4>Package files this bundle replaces</h4>
       {#if d.overrides.length}
+        <h4>Package files this bundle replaces</h4>
         <!-- The .der.pri column only earns its place when more than one file is in play. -->
         {@const several = new Set(d.overrides.map((o) => o.pri)).size > 1}
         <div class="hscroll">
@@ -70,8 +68,6 @@
             </tbody>
           </table>
         </div>
-      {:else}
-        <p class="dimtext note">None.</p>
       {/if}
       {#if d.otherXml}<p class="dimtext note">{d.otherXml} more XML values set paths the package leaves unset.</p>{/if}
 
@@ -104,9 +100,9 @@
           </Pane>
         </div>
       {/if}
-    {/if}
-  </Pane>
-</fieldset>
+    </fieldset>
+  {/if}
+</Pane>
 
 <style>
   h4 { margin: 8px 0 4px; }
