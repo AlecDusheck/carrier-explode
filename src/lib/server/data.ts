@@ -14,7 +14,7 @@ import { error } from "@sveltejs/kit";
 import { getRequestEvent } from "$app/server";
 import {
   MODEM_SUMMARY_SCHEMA, basebandComparable, carriedBy, compareBundles, contentId, decodeFile, decodedPlist, decodedPri,
-  diffKeyed, diffValues, isRecord, mergeComboSets, openIpcc, parseBandCombos, priReplacements, priText, productName,
+  diffKeyed, diffValues, isRecord, mergeComboSets, openIpcc, parseBandCombos, priReplacements, priText,
   summariseDiff,
   type BasebandSummary, type BundleFile, type ModemKind, type ModemSummary, type OpenedBundle, type PriReplacement,
 } from "$lib/decode";
@@ -458,17 +458,12 @@ async function bundleImage(kind: Kind, name: string, slug?: string) {
   return { entry, build: build ?? null, idx: build ? await imageIndex(build) : null };
 }
 
-/**
- * The phones a bundle version can land on, by modem package. An image bundle
- * holds only the override files of the phone the image was cut for and its
- * family; `extractedFrom` names that phone.
- */
+/** The phones a bundle version can land on, by modem package. */
 export async function getBundleModems(kind: Kind, name: string, slug?: string) {
   const { entry, build, idx } = await bundleImage(kind, name, slug);
   if (!build || !idx) return null;
   return {
-    build, version: idx.version, source: entry.source,
-    extractedFrom: entry.source === "image" && idx.product ? { id: idx.product, name: productName(idx.product) ?? idx.device } : null,
+    build,
     home: homePhone(entry, idx) ?? idx.modems[0]?.devices[0],
     modems: byNewest(idx.modems.map(modemView)),
   };

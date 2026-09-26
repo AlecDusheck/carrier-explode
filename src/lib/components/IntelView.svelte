@@ -43,7 +43,6 @@
   {#if reg && (reg.mcc.length || reg.plmn.length)}
     <details class="reg" open>
       <summary>Allowed bands by country code ({f ? reg.mcc.length + " of " : ""}{reg.total})</summary>
-      <p class="dimtext note">From the regulatory tables below: LTE band masks, and the NR SA / NSA band lists.</p>
       <div class="hscroll">
         <table class="grid">
           <thead><tr><th>MCC</th><th>Region</th><th>LTE</th><th>NR SA</th><th>NR NSA</th></tr></thead>
@@ -90,5 +89,4 @@
 <style>
   .reg { margin: 0 0 8px; }
   .reg > summary { cursor: pointer; padding: 3px 0; font-weight: bold; }
-  .reg .note { margin: 2px 0 6px; }
 </style>

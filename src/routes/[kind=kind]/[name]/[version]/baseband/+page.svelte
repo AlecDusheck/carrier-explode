@@ -42,24 +42,15 @@
       {@const pkg = m && link(`/baseband/${mm.build}/${m.family}`)}
       {@const caps = m && modemCapabilities(m.family)}
 
-      <PhonePicker modems={mm.modems} {phone} named={!!wanted} onpick={pick} />
-      <p class="dimtext note">
-        {#if mm.source === "image"}
-          This copy came out of the iOS {mm.version} ({mm.build}) image{mm.extractedFrom ? ` for ${mm.extractedFrom.name}` : ""}; phones are that build's.
-        {:else}
-          An OTA bundle, read against the current release, iOS {mm.version} ({mm.build}).
-        {/if}
-      </p>
-
-      <h3 class="phone">{name} {#if m}<a class="dimtext" href={pkg}>{modemLabel(m.family)}</a>{/if}</h3>
+      <PhonePicker modems={mm.modems} {phone} named={!!wanted} onpick={pick}>
+        {#if m}<a class="dimtext" href={pkg}>{modemLabel(m.family)} package</a>{/if}
+      </PhonePicker>
 
       {#if copy?.entry && phone && !copy.sameCopy}
         <!-- Phones this copy has files for, to say why another copy is shown. -->
         {@const covered = mm.modems.flatMap((x) => x.devices).filter((d) => overridesFor(bundle.info.files, d.id).length)}
         <p class="dimtext note">
-          From <a href={copyHref(copy.entry.slug, phone)}>{copyLabel(copy.entry)}</a> — this
-          {bundle.entry.source === "image" ? `iOS ${bundle.entry.ios[0]} image copy` : "copy"}
-          {covered.length ? `only carries files for ${phoneList(covered)}` : "carries no phone's override files"}.
+          From <a href={copyHref(copy.entry.slug, phone)}>{copyLabel(copy.entry)}</a>{covered.length ? `; this copy only has files for ${phoneList(covered)}` : ""}.
         </p>
       {/if}
 
@@ -68,7 +59,7 @@
           <fieldset class="hgroup">
             <legend class="mono wrap">{f.path}</legend>
             {#if m && caps?.carrierConfigIn === "bundle"}
-              <p class="dimtext note">On {modemLabel(m.family)} phones this file is the whole modem carrier config: the modem package carries none.</p>
+              <p class="dimtext note">The whole carrier config on {modemLabel(m.family)} phones.</p>
             {/if}
             {#if f.devices && f.devices.length > 1}
               <p class="dimtext note">Also read by {phoneList(f.devices.flatMap((d) => (d.ids && d.ids !== phone ? [{ id: d.ids, name: d.name }] : [])))}.</p>
@@ -83,18 +74,18 @@
         {/each}
       {:else if copy?.known}
         <p class="note">
-          No modem overrides for {name}: this carrier uses the package defaults{#if pkg}{" "}(<a href={pkg}>{modemLabel(m.family)} package</a>){/if}.
+          No overrides for {name}: the package defaults apply.
         </p>
       {:else if phone}
         <p class="note">
-          No copy of this bundle held here was made for {name}, so whether it overrides the package for that phone is unknown.
+          No copy of this bundle held here was made for {name}, so its overrides are unknown.
         </p>
       {/if}
 
       {#if params.kind === "carriers" && phone && caps?.plaintextDefaults}
         <ModemDefaults kind={params.kind} name={params.name} slug={params.version} device={phone} phone={name} />
       {:else if m && caps?.carrierConfigIn === "package" && !caps.plaintextDefaults}
-        <p class="dimtext note">The {m.family} package holds no plaintext config to compare against.</p>
+        <p class="dimtext note">No plaintext package config to compare against.</p>
       {/if}
     {:else}
       <p class="dimtext note">No iOS image to read this bundle's phones from.</p>
@@ -123,8 +114,6 @@
 </div>
 
 <style>
-  h3.phone { margin: 8px 0 4px; font-size: 14px; }
-  h3.phone a { font-size: 12px; font-weight: normal; margin-left: 4px; }
   a.chip[aria-current] { background: var(--sel); color: var(--sel-text); }
   @media (max-width: 760px) {
     a.chip { padding: 5px 8px; white-space: normal; word-break: break-all; }

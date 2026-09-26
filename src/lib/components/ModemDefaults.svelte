@@ -27,13 +27,12 @@
     {@const d = await getBasebandDefaults({ kind, name, slug, device })}
     {#if d.missing}
       <p class="dimtext note">
-        {d.build ? `No .bbfw modem package for ${phone} in ${d.build} is stored yet.` : "No image to read a baseband package from."}
+        {d.build ? `No ${phone} modem package stored for ${d.build}.` : "No image to read a baseband package from."}
       </p>
     {:else}
       {@const pkg = link(`/baseband/${d.build}/${d.family}`)}
       <p class="dimtext note">
-        What {phone}'s modem holds before this bundle's .der.pri arrives, from the <a href={pkg}>iOS {d.version} {modemLabel(d.family)} package</a>.
-        The .der.pri then overwrites the same EFS paths.
+        From the <a href={pkg}>iOS {d.version} {modemLabel(d.family)} package</a>, before this bundle's .der.pri.
       </p>
 
       <h4>Band combos</h4>
@@ -44,7 +43,7 @@
         </div>
         <ComboStatsTable rows={t.sets} />
       {:else}
-        <p class="dimtext note">No carrier in band_combos_per_plmn.xml lists a PLMN that routes to {name}.</p>
+        <p class="dimtext note">None for this bundle's PLMNs.</p>
       {/each}
 
       <h4>Package files this bundle replaces</h4>
@@ -72,9 +71,9 @@
           </table>
         </div>
       {:else}
-        <p class="dimtext note">No .der.pri here for {phone} sets a path the package also writes.</p>
+        <p class="dimtext note">None.</p>
       {/if}
-      {#if d.otherXml}<p class="dimtext note">{d.otherXml} other XML values go to paths the package leaves unset.</p>{/if}
+      {#if d.otherXml}<p class="dimtext note">{d.otherXml} more XML values set paths the package leaves unset.</p>{/if}
 
       {#if selection}
         <div id="override" class="override">

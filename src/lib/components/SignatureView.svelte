@@ -12,7 +12,7 @@
   <legend>Signature</legend>
   <p class="note">
     <span class="chip warn">not verified</span>
-    <span class="dimtext">CMS SignedData envelope, read but not checked against any trust store. The profile below is its content.</span>
+    <span class="dimtext">CMS signature, not checked against a trust store.</span>
   </p>
   <table class="grid">
     <tbody>
