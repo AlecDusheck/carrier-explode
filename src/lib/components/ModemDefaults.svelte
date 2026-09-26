@@ -79,7 +79,7 @@
       {#if selection}
         <div id="override" class="override">
           <Pane>
-            {@const o = await getBasebandOverride({ kind, name, slug, id: d.id, ...selection })}
+            {@const o = await getBasebandOverride({ kind, name, slug: d.slug, id: d.id, ...selection })}
             <div class="rowflex">
               <b class="mono wrap">{o.efs}</b>
               <span class="dimtext">{o.counts.changed + o.counts.added + o.counts.removed} lines differ</span>

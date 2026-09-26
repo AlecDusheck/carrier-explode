@@ -28,6 +28,7 @@ export const QUERIES: Record<QueryName, QueryPolicy> = {
   getBundle: { rate: "bundle" },
   getFile: { rate: "bundle" },
   getBasebandDefaults: { rate: "bundle" },
+  getPhoneOverrides: { rate: "bundle" },
   getBasebandOverride: { rate: "bundle" },
   // Two bundles or packages and a full diff per miss.
   getComparison: { rate: "diff" },

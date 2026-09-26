@@ -57,6 +57,10 @@ const isPri = (f: Pick<BundleFile, "kind">) => f.kind === "pri-der" || f.kind ==
 export const overridesFor = <F extends Pick<BundleFile, "kind" | "devices">>(files: F[], productType: string) =>
   files.filter((f) => isPri(f) && f.devices?.some((d) => d.ids === productType));
 
+/** Whether a copy was made once `productType` existed: an override file names it or a newer model. */
+export const knowsPhone = <F extends Pick<BundleFile, "kind" | "devices">>(files: F[], productType: string) =>
+  files.some((f) => isPri(f) && f.devices?.some((d) => d.ids && compareProducts(d.ids, productType) >= 0));
+
 /** Modem files named for no phone: global_setting_*.der.gri, an MVNO set. */
 export const sharedPri = <F extends Pick<BundleFile, "kind" | "devices">>(files: F[]) =>
   files.filter((f) => isPri(f) && !f.devices?.some((d) => d.ids));
