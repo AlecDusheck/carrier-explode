@@ -1,9 +1,10 @@
 <script lang="ts">
+  import type { Snippet } from "svelte";
   import { modemLabel } from "$lib/decode";
   import { modemFor, sortPhones } from "$lib/phones";
   import type { ImageModem } from "./baseband/types";
 
-  let { modems, phone, named, onpick }: {
+  let { modems, phone, named, onpick, children }: {
     modems: ImageModem[];
     /** The phone shown. */
     phone: string | undefined;
@@ -11,6 +12,8 @@
     named: boolean;
     /** `restored`: the phone came from memory, not from the picker. */
     onpick: (phone: string, restored: boolean) => void;
+    /** Shown after the picker, on its row. */
+    children?: Snippet;
   } = $props();
 
   const KEY = "baseband-phone";
@@ -39,6 +42,7 @@
       {/each}
     </select>
   </label>
+  {@render children?.()}
 </div>
 
 <style>

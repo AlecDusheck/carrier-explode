@@ -115,7 +115,7 @@
 {#if pri.featureGroups.length}
   <fieldset class="hgroup">
     <legend>Carrier Configuration Management feature groups</legend>
-    <p class="dimtext note">25 one-byte flags per group. No public or on-device source names the individual flags.</p>
+    <p class="dimtext note">25 one-byte flags per group; none are named.</p>
     <table class="grid">
       <thead><tr><th>Group</th><th>Flags</th></tr></thead>
       <tbody>
@@ -150,7 +150,7 @@
 {#if pri.nvListed.length}
   <details class="more">
     <summary>Legacy NV item list ({pri.nvListed.length})</summary>
-    <p class="dimtext note">Items this file declares; green ones carry a value above.</p>
+    <p class="dimtext note">Green ones have a value above.</p>
     <div>
       {#each pri.nvListed as n, i (i)}
         <span class="chip" class:good={n.set} title={n.set ? "value present in this file" : "listed, no value in this file"}
@@ -168,7 +168,6 @@
 {#if pri.schema.count}
   <details class="more">
     <summary>NV path schema index ({pri.schema.count} paths, {pri.schema.source})</summary>
-    <p class="dimtext note">Paths the format knows about; no values.</p>
     <pre class="code">{pri.schema.paths.join("\n")}</pre>
   </details>
 {/if}

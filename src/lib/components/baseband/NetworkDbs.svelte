@@ -28,10 +28,9 @@
 
 <fieldset class="hgroup" id="networks">
   <legend>Network databases</legend>
-  <p class="dimtext note">EFS databases (/mdb) and small settings in the modem's built-in configs.</p>
   {#each scans as d (d.sha1)}
     <h4>Where 5G looks, by country <span class="dimtext mono">{dbName(d.path)}</span></h4>
-    <p class="dimtext note">NR frequency ranges the modem scans or allows per country (NR-ARFCN, converted to MHz). The band is named only where a single band holds every range.</p>
+    <p class="dimtext note">NR frequency ranges the modem scans per country. A band is named where one band holds every range.</p>
     <div class="hscroll">
       <table class="grid">
         <thead><tr><th>Country</th><th>Band</th><th>Range (MHz)</th><th>NR-ARFCN</th><th class="num">Key</th></tr></thead>
@@ -56,7 +55,7 @@
   {/each}
   {#if feats.length}
     <h4>Features per network <Confidence c="unknown" /></h4>
-    <p class="dimtext note">plmn2features records: feature id = value pairs per network. The firmware does not name the ids (they are not band numbers).</p>
+    <p class="dimtext note">plmn2features: feature id = value per network. The ids are unnamed.</p>
     <div class="hscroll">
       <table class="grid">
         <thead><tr><th>Networks</th><th>Database</th><th>Features</th></tr></thead>

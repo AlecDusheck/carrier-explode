@@ -18,7 +18,7 @@
 
 <fieldset class="hgroup" id="policy">
   <legend>Policy files ({readable.length})</legend>
-  <p class="dimtext note">Plaintext EFS files the package writes. Where a path appears more than once, each copy serves the platforms or configs shown.</p>
+  <p class="dimtext note">Plaintext EFS files the package writes. A repeated path has one copy per platform or config.</p>
   <div class="hscroll">
     <table class="grid">
       <thead><tr><th>Path</th><th>From</th><th>Serves</th></tr></thead>

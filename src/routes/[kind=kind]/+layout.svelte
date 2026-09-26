@@ -122,7 +122,7 @@
         </ul>
       </div>
       <div class="statusbar list-status">
-        <span class="cell grow">{shown.length} of {all.length}</span>
+        <span class="cell grow">{q ? `${shown.length} of ${all.length}` : all.length}</span>
       </div>
     </Pane>
     {/if}

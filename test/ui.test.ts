@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { cbsEntryLabel, comboPart, plainJson } from "../src/lib/format.ts";
+import { cbsEntryLabel, comboPart, entryLabel, plainJson } from "../src/lib/format.ts";
 import { Folding, toggleIn } from "../src/lib/ui-state.svelte.ts";
 
 describe("plainJson", () => {
@@ -57,5 +57,12 @@ describe("toggleIn", () => {
     expect(s.has("a")).toBe(true);
     toggleIn(s, "a");
     expect(s.has("a")).toBe(false);
+  });
+});
+
+describe("entryLabel", () => {
+  it("writes a run of one release's betas once", () => {
+    expect(entryLabel({ source: "image", ios: ["27.2 beta", "27.2 beta 2"], build: "72.7.2" })).toBe("iOS 27.2 beta 1–2 image · build 72.7.2");
+    expect(entryLabel({ source: "image", ios: ["26.6", "26.6.2"], build: "70.0.1" })).toBe("iOS 26.6 – 26.6.2 image · build 70.0.1");
   });
 });

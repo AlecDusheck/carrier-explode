@@ -69,9 +69,8 @@
       {#if baseband}
         <Pane>
           {@const bb = await baseband}
-          {#if bb.package.version}<div class="rowflex"><span class="dimtext">Package version</span> <b class="mono">{bb.package.version}</b></div>{/if}
           <p class="lead dimtext order">
-            Load order: the modem's built-in config, then the per-platform defaults in bbcfg.mbn, then the carrier bundle's .der.pri, which overwrites the same EFS paths.
+            Load order: the modem's built-in config, then bbcfg.mbn's per-platform defaults, then the bundle's .der.pri.
           </p>
           {#if bb.ssgccs?.length}<FbsSection groups={bb.ssgccs} />{/if}
           <CarrierCombos id={bb.id} bandCombos={bb.bandCombos} carrierMap={bb.carrierMap} />

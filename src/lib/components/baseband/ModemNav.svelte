@@ -21,11 +21,10 @@
   {/each}
 </nav>
 <div class="which">
-  <h2>{modemLabel(family)} <span class="dimtext">for {modem ? phoneList(modem.devices) : "no phone in this image"}</span></h2>
-  <p class="dimtext note">
-    <a href={link("/releases/" + mods.build)}>iOS {mods.version} ({mods.build})</a> ships {mods.modems.length} modem packages, one per modem;
-    this page is the one in <span class="mono">{modem?.package.name ?? family}</span>. The phones above each run their own.
-  </p>
+  <h2>
+    {#if modem}<span class="mono">{modem.package.name}</span>{:else}No {modemLabel(family)} package{/if}
+    <span class="dimtext">in <a href={link("/releases/" + mods.build)}>iOS {mods.version} ({mods.build})</a></span>
+  </h2>
 </div>
 
 <style>

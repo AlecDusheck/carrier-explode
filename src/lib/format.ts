@@ -42,12 +42,18 @@ export function shortValue(v: unknown, max = 160): string {
   return s.length > max ? s.slice(0, max) + "…" : s;
 }
 
+/** "27.2 beta 1–2" for betas of one release, else "26.6 – 26.6.2". */
+function iosRange(first: string, last: string): string {
+  const [a, b] = [/^(.+ beta)(?: (\d+))?$/.exec(first), /^(.+ beta) (\d+)$/.exec(last)];
+  return a && b && a[1] === b[1] ? `${a[1]} ${a[2] ?? 1}–${b[2]}` : `${first} – ${last}`;
+}
+
 /** Where a version came from: the one label used by the timeline, Summary and Compare. */
 export function entryLabel(e: Pick<PublicEntry, "source" | "ios" | "build" | "productType">): string {
   // Every Watch bundle is for Watch; only the iPad and single-model variants need saying.
   const model = e.productType && e.productType !== "Watch" ? " · " + e.productType : "";
   if (e.source === "image") {
-    const ios = e.ios.length > 1 ? `${e.ios[0]} – ${e.ios.at(-1)}` : e.ios[0];
+    const ios = e.ios.length > 1 ? iosRange(e.ios[0], e.ios.at(-1)!) : e.ios[0];
     return `iOS ${ios} image · build ${e.build}${model}`;
   }
   return `OTA · ${e.ios.length ? `iOS ${e.ios[0]}+` : "legacy"} · build ${e.build}${model}`;

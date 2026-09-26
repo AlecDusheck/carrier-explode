@@ -7,7 +7,8 @@
 </script>
 
 {#snippet fields(line: SsgccsLine, keyed: boolean)}
-  <h4>{line.title}{#if keyed}<span class="dimtext mono sp">{line.key}</span>{/if}</h4>
+  {@const one = line.fields.every((f) => f.confidence === line.fields[0]?.confidence)}
+  <h4>{line.title}{#if keyed}<span class="dimtext mono sp">{line.key}</span>{/if}{#if one}{" "}<Confidence c={line.fields[0]?.confidence} />{/if}</h4>
   <div class="hscroll">
     <table class="grid fit">
       <tbody>
@@ -15,7 +16,7 @@
           <tr>
             <td class="k">{f.name}</td>
             <td class="mono">{f.value}{#if f.meaning}<span class="dimtext sp">({f.meaning})</span>{/if}</td>
-            <td><Confidence c={f.confidence} /></td>
+            {#if !one}<td><Confidence c={f.confidence} /></td>{/if}
           </tr>
         {/each}
       </tbody>
@@ -29,10 +30,9 @@
     {@const cfg = g.config}
     {#if groups.length > 1}<div class="rowflex"><span class="dimtext">Serves</span> <Variants variants={g.variants} configs={g.configs} /></div>{/if}
     <p class="prose">
-      The modem scores every cell it sees for signs of a fake base station (an IMSI catcher: a transmitter posing as the carrier
-      to identify or track phones). As a cell's score rises it moves through {SSGCCS_STATES.join(" → ")}, and past a threshold the
-      modem acts against it, for example by barring or deprioritising that cell.
-      {#if cfg.allNetworks}<b>This package turns it on for all networks.</b>{:else if cfg.plmns.length}It is on for {cfg.plmns.join(", ")}.{:else}The files do not say which networks it runs on.{/if}
+      The modem scores each cell for signs of an IMSI catcher, moving it through {SSGCCS_STATES.join(" → ")};
+      past a threshold it bars or deprioritises the cell.
+      {#if cfg.allNetworks}<b>On for all networks.</b>{:else if cfg.plmns.length}On for {cfg.plmns.join(", ")}.{:else}The files do not say which networks it runs on.{/if}
     </p>
     {#if cfg.custom}{@render fields(cfg.custom, false)}{/if}
     {#each [...cfg.rats, ...cfg.other] as l (l.key)}{@render fields(l, true)}{/each}
@@ -44,5 +44,5 @@
       {/each}
     </details>
   {/each}
-  <p class="dimtext note">Field names come from the modem image's key strings and log text; the parser itself is compressed.</p>
+  <p class="dimtext note">Field names come from the modem image's strings.</p>
 </fieldset>

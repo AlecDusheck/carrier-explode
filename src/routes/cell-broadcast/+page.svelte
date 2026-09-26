@@ -47,8 +47,7 @@
 
       {#if view === ""}
         <p class="lead top">
-          The alert switches each country's bundle gives an iPhone. <span class="chip bad">no off switch</span> marks alerts the
-          user cannot turn off; <span class="dimtext">off by default</span> marks ones that start disabled.
+          The alert switches each country's bundle gives an iPhone.
           {#if usual}<span class="dimtext">From {usual === "image" && data.image ? `the iOS ${data.image.version} image` : "OTA bundles"} unless noted.</span>{/if}
         </p>
         <table class="grid">
@@ -82,8 +81,7 @@
       {:else if view === "4382"}
         {@const mapped = configured.filter((r) => r.maps4382)}
         <p class="lead top">
-          4382 is the operator-defined CMAS message ID. {mapped.length} of {configured.length} countries with alerts map it;
-          the rest ignore it.
+          4382 is the operator-defined CMAS message ID: {mapped.length} of {configured.length} countries with alerts map it.
         </p>
         <table class="grid">
           <thead><tr><th class="sticky-col">Country</th><th>Shown as</th><th>User can disable</th></tr></thead>

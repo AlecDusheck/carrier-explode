@@ -28,7 +28,7 @@
           {#if s.package.date}<tr><td class="k">Built</td><td class="mono">{s.package.date}</td></tr>{/if}
           {#if s.package.chip}<tr><td class="k">Chip</td><td class="mono">{s.package.chip}{#if s.package.chipRevision}<span class="dimtext sp">revision {s.package.chipRevision}</span>{/if}</td></tr>{/if}
           {#if s.package.build}<tr><td class="k">Build</td><td class="mono wrap">{s.package.build}</td></tr>{/if}
-          <tr><td class="k">Entries</td><td>{s.entries.length} in the ftab container</td></tr>
+          <tr><td class="k">Entries</td><td>{s.entries.length}</td></tr>
         {:else if s.package.chipId}
           <tr><td class="k">Chip ID</td><td class="mono">{s.package.chipId}</td></tr>
         {/if}
@@ -38,13 +38,12 @@
   </div>
   {#if caps?.carrierConfigIn === "bundle"}
     <p class="prose">
-      {family} phones carry no carrier config in the modem package. Their carrier settings arrive entirely through the
-      carrier bundles' Intel-dialect <span class="mono">.der.pri</span> and <span class="mono">.der.gri</span> files; the regional
-      band tables are in Default.bundle's
+      No carrier config in the package: it all comes from the bundles' <span class="mono">.der.pri</span> and
+      <span class="mono">.der.gri</span> files. Regional band tables are in Default.bundle's
       <a class="mono" href={fileHref("carriers", "Default", imageSlug(version), "global_setting_G.der.gri")}>global_setting_G.der.gri</a>.
     </p>
   {:else}
-    <p class="prose">The {family} package has no plaintext config; its carrier settings come from the bundles' <span class="mono">.der.pri</span> files.</p>
+    <p class="prose">No plaintext config in the package: carrier settings come from the bundles' <span class="mono">.der.pri</span> files.</p>
   {/if}
   {#if others.length}
     <div class="rowflex elsewhere">

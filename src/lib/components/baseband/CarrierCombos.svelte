@@ -29,7 +29,7 @@
 
 <fieldset class="hgroup" id="carriers">
   <legend>Carriers with band combos ({carriers.length})</legend>
-  <p class="dimtext note">From band_combos_per_plmn.xml. Bundles are the ones the OTA manifest routes those PLMNs to.</p>
+  <p class="dimtext note">From band_combos_per_plmn.xml, with the bundles the OTA manifest routes each PLMN to.</p>
   <div class="rowflex taglinks">{#each carriers as c (c.tag)}<a class="chip" href="#{c.tag}">{c.tag}</a>{/each}</div>
   {#each carriers as { tag, map, plmns, rows } (tag)}
     <section class="carrier" id={tag}>

@@ -79,7 +79,7 @@
 
 <fieldset class="hgroup">
   <legend>Acquisition table ({prl.acquisition.length})</legend>
-  <p class="dimtext note">Where to look for a signal: band class and channels, in scan order. System records point here by index.</p>
+  <p class="dimtext note">Band class and channels to scan, in order. System records point here by index.</p>
   <table class="grid">
     <thead><tr><th class="num">#</th><th>Type</th><th>Channels</th></tr></thead>
     <tbody>
