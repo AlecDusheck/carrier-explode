@@ -16,10 +16,10 @@ import {
   MODEM_SUMMARY_SCHEMA, basebandComparable, carriedBy, compareBundles, contentId, decodeFile, decodedPlist, decodedPri,
   diffKeyed, diffValues, isRecord, mergeComboSets, openIpcc, parseBandCombos, priReplacements, priText, productName,
   summariseDiff,
-  type BasebandSummary, type ModemKind, type ModemSummary, type OpenedBundle, type PriReplacement,
+  type BasebandSummary, type BundleFile, type ModemKind, type ModemSummary, type OpenedBundle, type PriReplacement,
 } from "$lib/decode";
 import { imageSlug, isPrerelease } from "$lib/names";
-import { byNewest, homePhone, overridesFor, sharedPri } from "$lib/phones";
+import { byNewest, homePhone, knowsPhone, overridesFor, sharedPri } from "$lib/phones";
 import type { BasebandDiffPart, Kind, PublicEntry, TimelineEntry } from "$lib/types";
 import { cached, digestHex, fetchApple, perRequest } from "./cache";
 import { buildMergedCbsMatrix } from "./cbs";
@@ -29,7 +29,7 @@ import {
   type ScanFileIndex, type ScanPointer, type ScanShard, type ScanTarget, type TargetRow,
 } from "./keyscan";
 import { MANIFEST_URL, countryName, manifestTables, parseManifest, splitName, type ManifestTables } from "./manifest";
-import { modemView, summaryKey } from "./modems";
+import { firstCopyWith, modemView, overrideCandidates, summaryKey } from "./modems";
 import { carriersOf, homeCountry, isoIndex, type CountryPlists } from "./related";
 import { buildTimeline, headIndex, type ImageBuild, type ImageIndex } from "./timeline";
 
@@ -474,6 +474,52 @@ export async function getBundleModems(kind: Kind, name: string, slug?: string) {
   };
 }
 
+type PhoneFile = Pick<BundleFile, "path" | "kind" | "devices">;
+
+/** OTA copies one lookup may open for a phone's files before settling on "none". */
+const OTA_COPIES = 8;
+
+/**
+ * The copy of a bundle version that carries `phone`'s modem override files:
+ * the version itself when it has them, else the OTA copy found by
+ * overrideCandidates. `slug` is empty for the head. Without one, `known` says
+ * whether a copy made while the phone existed was read (so it has none), and
+ * null means a copy could not be read.
+ */
+const phoneCopy = perRequest(async (kind: Kind, name: string, slug: string, phone: string) => {
+  const { timeline, entry } = await resolve(kind, name, slug || undefined);
+  const head = timeline[headIndex(timeline)];
+  // A new head can bring new OTA copies, so it is part of the key.
+  const hit = await cached(`phonecopy:v2:${head.src}|${entry.src}|${phone}`, 7 * 86400, async () => {
+    const found = await firstCopyWith(
+      overrideCandidates(timeline, entry, phone, OTA_COPIES),
+      async (e) => (await open(e.src)).opened.info.files,
+      (files) => overridesFor(files, phone),
+      (files) => knowsPhone(files, phone),
+    );
+    // A copy that could not be read may hold the files: not an answer to keep.
+    if (found === undefined) return null;
+    if (!found.entry) return { slug: null, files: [], known: found.known };
+    const files: PhoneFile[] = found.files.map(({ path, kind, devices }) => ({ path, kind, devices }));
+    return { slug: found.entry.slug, files, known: true };
+  });
+  const copy = hit?.slug ? timeline.find((e) => e.slug === hit.slug) : undefined;
+  if (!hit) return null;
+  return copy ? { entry: copy, files: hit.files, sameCopy: copy.slug === entry.slug } : { entry: null, known: hit.known };
+});
+
+/**
+ * `phone`'s modem override files for this bundle version, from the copy that
+ * has them, and whether that is the version asked for. Without them, `known`
+ * says whether that is because the bundle has none for the phone.
+ */
+export async function getPhoneOverrides(kind: Kind, name: string, slug: string | undefined, phone: string) {
+  const c = await phoneCopy(kind, name, slug ?? "", phone);
+  if (!c?.entry) return { entry: null, known: c?.known ?? false };
+  const { slug: s, source, ios, build, productType } = c.entry;
+  return { entry: { slug: s, source, ios, build, productType }, files: c.files, sameCopy: c.sameCopy };
+}
+
 /**
  * What the modem of `device` runs for this bundle before the bundle's own
  * .der.pri lands: the band-combo carrier tags whose PLMNs route here, and the
@@ -485,7 +531,9 @@ export async function getBasebandDefaults(kind: Kind, name: string, slug?: strin
   const phone = idx && (device ?? homePhone(entry, idx));
   const m = idx && phone ? idx.modems.find((x) => x.devices.includes(phone) && x.package.kind === "bbfw") : undefined;
   if (!build || !idx || !phone || !m) return { build, missing: true as const };
-  const [s, { opened }] = await Promise.all([modemSummary(m.package.id), open(entry.src)]);
+  // The phone's .der.pri may only be in another copy of the bundle; compare against that one.
+  const copy = (await phoneCopy(kind, name, slug ?? "", phone))?.entry ?? entry;
+  const [s, { opened }] = await Promise.all([modemSummary(m.package.id), open(copy.src)]);
   if (s?.kind !== "bbfw") return { build, missing: true as const };
 
   const tags = Object.entries(s.carrierMap ?? {})
@@ -505,6 +553,8 @@ export async function getBasebandDefaults(kind: Kind, name: string, slug?: strin
   }
   return {
     build, missing: false as const, version: idx.version, family: m.family, id: m.package.id, phone, tags, overrides, otherXml,
+    /** The copy the .der.pri files were read from, for getBasebandOverride. */
+    slug: copy.slug,
   };
 }
 

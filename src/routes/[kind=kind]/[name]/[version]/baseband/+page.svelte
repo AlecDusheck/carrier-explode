@@ -2,9 +2,10 @@
   import { goto } from "$app/navigation";
   import { page } from "$app/state";
   import { getBundle, getFile } from "$lib/api/bundles.remote";
-  import { getBundleModems } from "$lib/api/tables.remote";
+  import { getBundleModems, getPhoneOverrides } from "$lib/api/tables.remote";
   import { modemCapabilities, modemLabel } from "$lib/decode";
-  import { bundleArgs, link, rawHref, withParams } from "$lib/format";
+  import { bundleArgs, bundleHref, link, rawHref, withParams } from "$lib/format";
+  import type { PublicEntry } from "$lib/types";
   import { modemFor, overridesFor, phoneList, sharedPri } from "$lib/phones";
   import Pane from "$lib/components/Pane.svelte";
   import FileBody from "$lib/components/FileBody.svelte";
@@ -16,6 +17,12 @@
   const args = $derived(bundleArgs(params));
   const wanted = $derived(page.url.searchParams.get("phone"));
   const shown = $derived(page.url.searchParams.get("file"));
+
+  /** "OTA build 72.1 (iOS 27.0+)": the copy a phone's files were read from. */
+  const copyLabel = (e: Pick<PublicEntry, "source" | "ios" | "build">) =>
+    e.source === "image" ? `iOS ${e.ios[0]} image` : `OTA build ${e.build}${e.ios.length ? ` (iOS ${e.ios[0]}+)` : ""}`;
+  const copyHref = (slug: string, phone: string) =>
+    `${bundleHref(params.kind, params.name, slug, "baseband")}?phone=${encodeURIComponent(phone)}`;
 
   // A phone picked by hand drops the package file compared for the one before.
   const pick = (phone: string, restored: boolean) =>
@@ -31,8 +38,7 @@
       {@const phone = [wanted, mm.home].find((p) => p && modemFor(mm.modems, p)) ?? mm.modems[0]?.devices[0]?.id}
       {@const m = modemFor(mm.modems, phone)}
       {@const name = m?.devices.find((d) => d.id === phone)?.name ?? phone ?? "this phone"}
-      {@const files = phone ? overridesFor(bundle.info.files, phone) : []}
-      {@const home = modemFor(mm.modems, mm.extractedFrom?.id)}
+      {@const copy = phone ? await getPhoneOverrides({ ...args, device: phone }) : null}
       {@const pkg = m && link(`/baseband/${mm.build}/${m.family}`)}
       {@const caps = m && modemCapabilities(m.family)}
 
@@ -47,34 +53,43 @@
 
       <h3 class="phone">{name} {#if m}<a class="dimtext" href={pkg}>{modemLabel(m.family)}</a>{/if}</h3>
 
-      {#each files as f (f.path)}
-        <fieldset class="hgroup">
-          <legend class="mono wrap">{f.path}</legend>
-          {#if m && caps?.carrierConfigIn === "bundle"}
-            <p class="dimtext note">On {modemLabel(m.family)} phones this file is the whole modem carrier config: the modem package carries none.</p>
-          {/if}
-          {#if f.devices && f.devices.length > 1}
-            <p class="dimtext note">Also read by {phoneList(f.devices.flatMap((d) => (d.ids && d.ids !== phone ? [{ id: d.ids, name: d.name }] : [])))}.</p>
-          {/if}
-          <FileBody
-            file={await getFile({ ...args, slug: params.version, path: f.path })}
-            cc={bundle.cc}
-            raw={rawHref(params.kind, params.name, params.version, f.path)}
-            devices={false}
-          />
-        </fieldset>
-      {:else}
-        {#if mm.source === "image" && home && m && home.family !== m.family}
-          <div class="banner">
-            No override file for {name} in this copy, and that says nothing about the carrier: an image's bundles only hold the files of the
-            phones sharing the extracting phone's modem ({modemLabel(home.family)}: {phoneList(home.devices)}).
-          </div>
-        {:else}
-          <p class="note">
-            No modem overrides for {name}: this carrier uses the package defaults{#if pkg}{" "}(<a href={pkg}>{modemLabel(m.family)} package</a>){/if}.
-          </p>
-        {/if}
-      {/each}
+      {#if copy?.entry && phone && !copy.sameCopy}
+        <!-- Phones this copy has files for, to say why another copy is shown. -->
+        {@const covered = mm.modems.flatMap((x) => x.devices).filter((d) => overridesFor(bundle.info.files, d.id).length)}
+        <p class="dimtext note">
+          From <a href={copyHref(copy.entry.slug, phone)}>{copyLabel(copy.entry)}</a> — this
+          {bundle.entry.source === "image" ? `iOS ${bundle.entry.ios[0]} image copy` : "copy"}
+          {covered.length ? `only carries files for ${phoneList(covered)}` : "carries no phone's override files"}.
+        </p>
+      {/if}
+
+      {#if copy?.entry}
+        {#each copy.files as f (f.path)}
+          <fieldset class="hgroup">
+            <legend class="mono wrap">{f.path}</legend>
+            {#if m && caps?.carrierConfigIn === "bundle"}
+              <p class="dimtext note">On {modemLabel(m.family)} phones this file is the whole modem carrier config: the modem package carries none.</p>
+            {/if}
+            {#if f.devices && f.devices.length > 1}
+              <p class="dimtext note">Also read by {phoneList(f.devices.flatMap((d) => (d.ids && d.ids !== phone ? [{ id: d.ids, name: d.name }] : [])))}.</p>
+            {/if}
+            <FileBody
+              file={await getFile({ ...args, slug: copy.entry.slug, path: f.path })}
+              cc={bundle.cc}
+              raw={rawHref(params.kind, params.name, copy.entry.slug, f.path)}
+              devices={false}
+            />
+          </fieldset>
+        {/each}
+      {:else if copy?.known}
+        <p class="note">
+          No modem overrides for {name}: this carrier uses the package defaults{#if pkg}{" "}(<a href={pkg}>{modemLabel(m.family)} package</a>){/if}.
+        </p>
+      {:else if phone}
+        <p class="note">
+          No copy of this bundle held here was made for {name}, so whether it overrides the package for that phone is unknown.
+        </p>
+      {/if}
 
       {#if params.kind === "carriers" && phone && caps?.plaintextDefaults}
         <ModemDefaults kind={params.kind} name={params.name} slug={params.version} device={phone} phone={name} />
