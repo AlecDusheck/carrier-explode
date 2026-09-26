@@ -11,8 +11,12 @@ import { error } from "@sveltejs/kit";
 import { getRequestEvent } from "$app/server";
 import { bytesToHex } from "$lib/decode";
 
-/** JSON built by `fn`, kept in the colo cache for `ttlSeconds`. A null/undefined result is never stored: it usually means "not reachable yet". */
-export async function cached<T>(key: string, ttlSeconds: number, fn: () => Promise<T>): Promise<T> {
+/**
+ * JSON built by `fn`, kept in the colo cache for `ttlSeconds` when `keep`
+ * allows. By default a null/undefined result is never stored: it usually
+ * means "not reachable yet".
+ */
+export async function cached<T>(key: string, ttlSeconds: number, fn: () => Promise<T>, keep: (v: T) => boolean = (v) => v != null): Promise<T> {
   const { platform } = getRequestEvent();
   const cache = platform?.caches?.default;
   if (!platform || !cache) return fn();
@@ -20,7 +24,7 @@ export async function cached<T>(key: string, ttlSeconds: number, fn: () => Promi
   const hit = await cache.match(req);
   if (hit) return hit.json<T>();
   const value = await fn();
-  if (value != null) {
+  if (keep(value)) {
     const res = new Response(JSON.stringify(value), {
       headers: { "content-type": "application/json", "cache-control": `public, s-maxage=${ttlSeconds}` },
     });

@@ -474,7 +474,7 @@ const phoneCopy = perRequest(async (kind: Kind, name: string, slug: string, phon
   const { timeline, entry } = await resolve(kind, name, slug || undefined);
   const head = timeline[headIndex(timeline)];
   // A new head can bring new OTA copies, so it is part of the key.
-  const hit = await cached(`phonecopy:v2:${head.src}|${entry.src}|${phone}`, 7 * 86400, async () => {
+  const hit = await cached(`phonecopy:v3:${head.src}|${entry.src}|${phone}`, 7 * 86400, async () => {
     const found = await firstCopyWith(
       overrideCandidates(timeline, entry, phone, OTA_COPIES),
       async (e) => (await open(e.src)).opened.info.files,
@@ -483,10 +483,10 @@ const phoneCopy = perRequest(async (kind: Kind, name: string, slug: string, phon
     );
     // A copy that could not be read may hold the files: not an answer to keep.
     if (found === undefined) return null;
-    if (!found.entry) return { slug: null, files: [], known: found.known };
+    if (!found.entry) return { slug: null, files: [], known: found.known, settled: true };
     const files: PhoneFile[] = found.files.map(({ path, kind, devices }) => ({ path, kind, devices }));
-    return { slug: found.entry.slug, files, known: true };
-  });
+    return { slug: found.entry.slug, files, known: true, settled: found.settled };
+  }, (v) => !!v?.settled);
   const copy = hit?.slug ? timeline.find((e) => e.slug === hit.slug) : undefined;
   if (!hit) return null;
   return copy ? { entry: copy, files: hit.files, sameCopy: copy.slug === entry.slug } : { entry: null, known: hit.known };
