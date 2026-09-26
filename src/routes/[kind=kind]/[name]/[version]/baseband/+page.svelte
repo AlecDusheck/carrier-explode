@@ -1,5 +1,6 @@
 <script lang="ts">
-  import { page } from "$app/state";
+  import { goto } from "$app/navigation";
+  import { navigating, page } from "$app/state";
   import { getBundle, getFile } from "$lib/api/bundles.remote";
   import { getBundleOverrides } from "$lib/api/tables.remote";
   import { modemCapabilities, modemLabel } from "$lib/decode";
@@ -21,6 +22,16 @@
   const pickHref = (path: string, copy?: string) =>
     withParams(page.url, { file: path, copy: copy ?? null, pri: null, efs: null, base: null });
   const families = (phones: Array<{ family: string }>) => [...new Set(phones.map((p) => p.family))];
+
+  const picked = (u: URL) => ({ file: u.searchParams.get("file"), copy: u.searchParams.get("copy") ?? undefined });
+  const shown = $derived(picked(page.url));
+  // The clicked row lights up before its file has loaded.
+  const lit = $derived(navigating.to ? picked(navigating.to.url) : shown);
+
+  /** A click anywhere on a row but its links picks the row's file. */
+  const rowClick = (href: string) => (e: MouseEvent) => {
+    if (!(e.target as Element).closest("a")) goto(href, { replaceState: true, noScroll: true, keepFocus: true });
+  };
 </script>
 
 {#snippet modems(phones: Array<{ family: string }>, build: string)}
@@ -37,10 +48,10 @@
       ...(ov?.files ?? []).map((f) => ({ ...f, copy: f.slug === here ? undefined : f.slug })),
       ...sharedPri(bundle.info.files).map((f) => ({ ...bundle.entry, path: f.path, copy: undefined, phones: [] })),
     ]}
-    {@const wanted = page.url.searchParams.get("file")}
-    {@const wantedCopy = page.url.searchParams.get("copy") ?? undefined}
-    {@const sel = (wanted ? rows.find((r) => r.path === wanted && r.copy === wantedCopy) : undefined)
+    {@const find = (k: typeof shown) => (k.file ? rows.find((r) => r.path === k.file && r.copy === k.copy) : undefined)
       ?? rows.find((r) => r.phones.some((p) => p.id === ov?.home)) ?? rows[0]}
+    {@const sel = find(shown)}
+    {@const litRow = find(lit)}
 
     {#if rows.length || ov?.defaults.length || ov?.unknown.length}
       <div class="hscroll">
@@ -48,11 +59,11 @@
           <thead><tr><th>Phones</th><th>Modem</th><th>Override file</th></tr></thead>
           <tbody>
             {#each rows as r (r.slug + r.path)}
-              <tr class:sel={r === sel}>
+              <tr class="pick" class:sel={r === litRow} onclick={rowClick(pickHref(r.path, r.copy))}>
                 <td>{r.phones.length ? phoneList(r.phones) : "Not named for a phone"}</td>
                 <td>{#if ov}{@render modems(r.phones, ov.build)}{/if}</td>
                 <td>
-                  <a class="mono wrap" href={pickHref(r.path, r.copy)} data-sveltekit-noscroll data-sveltekit-replacestate aria-current={r === sel ? "true" : undefined}>{r.path}</a>
+                  <a class="mono wrap" href={pickHref(r.path, r.copy)} data-sveltekit-noscroll data-sveltekit-replacestate aria-current={r === litRow ? "true" : undefined}>{r.path}</a>
                   {#if r.copy}<span class="dimtext sp">from {copyLabel(r)}</span>{/if}
                 </td>
               </tr>
@@ -94,4 +105,5 @@
 
 <style>
   a[aria-current] { font-weight: bold; }
+  tr.pick { cursor: pointer; }
 </style>

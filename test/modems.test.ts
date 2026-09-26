@@ -58,12 +58,12 @@ describe("which copy holds a phone's override files", () => {
     firstCopyWith(candidates, async (slug) => files[slug] ?? [], (fs) => overridesFor(fs, phone), (fs) => knowsPhone(fs, phone));
 
   it("stays on the copy asked for when it has the phone's file", async () => {
-    expect(await find("iPhone17,1")).toEqual({ entry: "ios-27.0", files: [pri("overrides_D93_D94_D47_D48.der.pri")] });
+    expect(await find("iPhone17,1")).toEqual({ entry: "ios-27.0", files: [pri("overrides_D93_D94_D47_D48.der.pri")], settled: true });
   });
 
   it("falls back to the first OTA copy naming the phone's codename", async () => {
     expect((await find("iPhone18,1"))?.entry).toBe("ota-72.1");
-    expect(await find("iPhone15,2")).toEqual({ entry: "ota-72.1", files: [pri("overrides_D73_D74.der.pri")] });
+    expect(await find("iPhone15,2")).toEqual({ entry: "ota-72.1", files: [pri("overrides_D73_D74.der.pri")], settled: true });
   });
 
   it("claims no files only for a phone some copy was made for", async () => {
@@ -76,8 +76,9 @@ describe("which copy holds a phone's override files", () => {
   it("says none only when every copy was read", async () => {
     const flaky = (slug: string) => (slug === "ota-72.1" ? Promise.reject(new Error("502")) : Promise.resolve(files[slug] ?? []));
     expect(await firstCopyWith(["ios-27.0", "ota-72.1", "ota-73.0"], flaky, (fs) => overridesFor(fs, "iPhone18,4"), () => true)).toBeUndefined();
-    // A later copy still answers when an earlier OTA one cannot be read.
-    expect((await firstCopyWith(["ios-27.0", "ota-72.1", "ota-73.0"], flaky, (fs) => overridesFor(fs, "iPhone18,1"), () => true))?.entry).toBe("ota-73.0");
+    // A later copy still answers when an earlier OTA one cannot be read, but not for keeps.
+    expect(await firstCopyWith(["ios-27.0", "ota-72.1", "ota-73.0"], flaky, (fs) => overridesFor(fs, "iPhone18,1"), () => true))
+      .toMatchObject({ entry: "ota-73.0", settled: false });
     // The copy asked for failing is the page's error, not a miss.
     await expect(firstCopyWith(["ios-27.0"], () => Promise.reject(new Error("gone")), (fs: BundleFile[]) => fs, () => true)).rejects.toThrow("gone");
   });

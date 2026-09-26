@@ -36,15 +36,15 @@ export function overrideCandidates<E extends Copy>(timeline: E[], from: E, phone
  * The first candidate whose files `match` finds anything in, else whether any
  * candidate `knows` the phone (was made while it existed), so that its having
  * no files means it has none. A candidate other than the first that cannot be
- * read is skipped; `undefined` then means "not found, but not known to be
- * absent", which is not worth remembering.
+ * read is skipped: a match after one is not `settled` (the skipped copy may
+ * hold newer files), and no match is `undefined`, "not known to be absent".
  */
 export async function firstCopyWith<E, F>(
   candidates: E[],
   filesOf: (e: E) => Promise<F[]>,
   match: (files: F[]) => F[],
   knows: (files: F[]) => boolean,
-): Promise<{ entry: E; files: F[] } | { entry: null; known: boolean } | undefined> {
+): Promise<{ entry: E; files: F[]; settled: boolean } | { entry: null; known: boolean } | undefined> {
   let unread = false;
   let known = false;
   for (const [i, entry] of candidates.entries()) {
@@ -57,7 +57,7 @@ export async function firstCopyWith<E, F>(
       continue;
     }
     const files = match(all);
-    if (files.length) return { entry, files };
+    if (files.length) return { entry, files, settled: !unread };
     known ||= knows(all);
   }
   return unread ? undefined : { entry: null, known };
