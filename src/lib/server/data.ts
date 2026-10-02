@@ -83,6 +83,8 @@ const buildsKey = (all: ImageBuild[]) => fingerprint(all.map((b) => `${b.build}@
 /* ---------------------------------------------------------------- manifest */
 
 const MANIFEST_TTL = 6 * 3600;
+/** Why a bundle or version that does exist can be missing. */
+const NOT_LISTED_YET = `If Apple only just published it, it can take up to ${MANIFEST_TTL / 3600} hours to show up here.`;
 
 /** Which six-hour window a manifest fetch falls in; everything derived from the manifest is keyed by it. */
 const manifestSlot = () => Math.floor(Date.now() / (MANIFEST_TTL * 1000));
@@ -90,7 +92,8 @@ const manifestSlot = () => Math.floor(Date.now() / (MANIFEST_TTL * 1000));
 /** The manifest's tables. The plist is 6 MB, so it is parsed once per window and the tables are kept in the colo cache. */
 const manifest = perRequest(() =>
   cached(`manifest:v1:${manifestSlot()}`, MANIFEST_TTL, async (): Promise<ManifestTables & { fetchedAt: string }> => {
-    const res = await fetch(MANIFEST_URL, { cf: { cacheTtl: MANIFEST_TTL, cacheEverything: true } });
+    // The window above decides how often the list is read; a long edge copy on top would double the wait.
+    const res = await fetch(MANIFEST_URL, { cf: { cacheTtl: 300, cacheEverything: true } });
     if (!res.ok) error(502, `manifest fetch failed: ${res.status}`);
     const tables = manifestTables(parseManifest(new Uint8Array(await res.arrayBuffer())));
     return { ...tables, fetchedAt: new Date().toISOString() };
@@ -226,7 +229,7 @@ export const getTimeline = perRequest(async (kind: Kind, name: string): Promise<
   const all = await builds();
   const out = await cached(`timeline:v1:${manifestSlot()}:${buildsKey(all)}:${kind}:${name}`, MANIFEST_TTL,
     () => timelineOf(kind, name), () => true);
-  if (!out.length) error(404, `no bundle named ${name}`);
+  if (!out.length) error(404, `No bundle named ${name}. ${NOT_LISTED_YET}`);
   return out;
 });
 
@@ -242,7 +245,7 @@ async function resolve(kind: Kind, name: string, slug?: string) {
   const i = slug
     ? timeline.findIndex((e) => e.slug === slug || (e.source === "image" && e.ios.some((v) => imageSlug(v) === slug)))
     : headIndex(timeline);
-  if (i < 0) error(404, `${name} has no version ${slug}`);
+  if (i < 0) error(404, `${name} has no version ${slug}. ${NOT_LISTED_YET}`);
   // "Previous" skips per-model variants unless we are on one.
   const entry = timeline[i];
   const previous = timeline.slice(i + 1).find((e) => e.productType === entry.productType) ?? null;
