@@ -76,7 +76,8 @@ function readIndexes(buildsFile: string, dir: string): ImageIndex[] {
 async function plan() {
   const opt = { builds: required("builds"), indexes: required("indexes"), out: required("out") };
   const images = readIndexes(opt.builds, opt.indexes);
-  const { index, refs } = manifestTables(parseManifest(await fetchBytes(MANIFEST_URL)));
+  // Apple's CDN can hand out a copy hours old; a query of its own reaches a fresh one.
+  const { index, refs } = manifestTables(parseManifest(await fetchBytes(`${MANIFEST_URL}?t=${Date.now()}`)));
 
   const names = {
     carriers: new Set([...index.carriers.map((c) => c.name), ...images.flatMap((i) => Object.keys(i.carriers))]),
