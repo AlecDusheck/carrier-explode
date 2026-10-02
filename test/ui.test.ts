@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { cbsEntryLabel, comboPart, entryLabel, plainJson } from "../src/lib/format.ts";
-import { Folding, toggleIn } from "../src/lib/ui-state.svelte.ts";
+import { Folding } from "../src/lib/ui-state.svelte.ts";
 
 describe("plainJson", () => {
   it("matches JSON.stringify for plain values, compact and indented", () => {
@@ -47,16 +47,6 @@ describe("Folding", () => {
     expect(f.openFor(false, t)).toBe(true);
     f.collapseAll();
     expect(f.openFor(true, t)).toBe(false);
-  });
-});
-
-describe("toggleIn", () => {
-  it("adds and removes", () => {
-    const s = new Set<string>();
-    toggleIn(s, "a");
-    expect(s.has("a")).toBe(true);
-    toggleIn(s, "a");
-    expect(s.has("a")).toBe(false);
   });
 });
 

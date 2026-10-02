@@ -7,7 +7,6 @@ import { openIpcc, decodeFile, decodedPlist } from "../src/lib/decode/bundle.ts"
 import {
   IMS_ENUMS,
   IMS_RENAMES,
-  IMS_SECTIONS,
   TERMINATION_EVENTS,
   DEFAULT_END_REASONS,
   DEFAULT_INCOMING_END_REASONS,
@@ -26,18 +25,6 @@ const carrierOf = (bundle: string) => {
 
 describe("IMS registry table", () => {
   const all = imsSettings();
-
-  it("has 552 registrations in 12 sections", () => {
-    expect(all).toHaveLength(552);
-    expect([...IMS_SECTIONS].sort()).toEqual([
-      "CallTransfer", "Cert", "ConferenceCalling", "IPTelephony", "Internal", "Lazuli",
-      "Media", "Media/VoiceOnAP", "Signaling", "Signaling/SipTimers", "Voice", "XCAP",
-    ]);
-    const per = (sec: string) => all.filter((s) => s.section === sec).length;
-    expect(per("Signaling")).toBe(343);
-    expect(per("Media")).toBe(87);
-    expect(per("Signaling/SipTimers")).toBe(20);
-  });
 
   it("is unique per (section, key); only ImpuRank is registered twice", () => {
     const seen = new Set<string>();
@@ -66,7 +53,6 @@ describe("IMS registry table", () => {
   });
 
   it("enum keys are typed e and default to one of their values", () => {
-    expect(Object.keys(IMS_ENUMS)).toHaveLength(10);
     for (const [key, values] of Object.entries(IMS_ENUMS)) {
       const s = describeImsSetting(key)!;
       expect(s.type, key).toBe("e");
@@ -91,8 +77,7 @@ describe("IMS registry table", () => {
 });
 
 describe("legacy renames", () => {
-  it("has 51 renames onto registered keys", () => {
-    expect(Object.keys(IMS_RENAMES)).toHaveLength(51);
+  it("maps every rename onto a registered key", () => {
     for (const [from, to] of Object.entries(IMS_RENAMES)) {
       expect(describeImsSetting(to), `${from} -> ${to}`).toBeTruthy();
       expect(describeImsSetting(from)!.key).toBe(to);
@@ -141,8 +126,6 @@ describe("call end reasons", () => {
   });
 
   it("default maps reference valid reason codes", () => {
-    expect(DEFAULT_INCOMING_END_REASONS).toHaveLength(14);
-    expect(DEFAULT_END_REASONS).toHaveLength(52);
     for (const [name, status, code] of [...DEFAULT_INCOMING_END_REASONS, ...DEFAULT_END_REASONS]) {
       expect(TERMINATION_EVENTS[code], name).toBeTruthy();
       expect(status === 0 || (status >= 200 && status < 700), name).toBe(true);

@@ -12,7 +12,8 @@
 
 import { error } from "@sveltejs/kit";
 import { getRequestEvent } from "$app/server";
-import { env } from "cloudflare:workers";
+import { cache, env, waitUntil } from "cloudflare:workers";
+import { dev } from "$app/env";
 import {
   MODEM_SUMMARY_SCHEMA, basebandComparable, carriedBy, compareBundles, contentId, decodeFile, decodedPlist, decodedPri,
   diffKeyed, diffValues, isRecord, mergeComboSets, openIpcc, parseBandCombos, priReplacements, priText,
@@ -82,29 +83,89 @@ const buildsKey = (all: ImageBuild[]) => fingerprint(all.map((b) => `${b.build}@
 
 /* ---------------------------------------------------------------- manifest */
 
-const MANIFEST_TTL = 3600;
+/**
+ * Apple's manifest is read here, not by requests. Its parsed tables sit in R2
+ * under their content hash, and a small pointer names the current one, so every
+ * location sees the same list and anything derived from it can be cached by
+ * hash for good. A request that finds the pointer older than CHECK_EVERY asks
+ * Apple in the background: a 304 most of the time, and when the contents did
+ * change, a new snapshot and a purge of every cached page.
+ */
+const POINTER = "system/manifest.json";
+const snapshotKey = (hash: string) => `system/manifest/${hash}.json`;
+const CHECK_EVERY = 5 * 60 * 1000;
+/** Derived data is keyed by snapshot hash, so it never goes stale; the TTL only bounds the cache. */
+const KEEP = 30 * 86400;
+
+interface ManifestPointer {
+  hash: string;
+  /** Apple's Last-Modified, sent back as If-Modified-Since. It moves without the contents changing. */
+  lastModified?: string;
+  checkedAt: string;
+  /** When the contents last changed. */
+  changedAt: string;
+}
+
 /** Why a bundle or version that does exist can be missing. */
-const NOT_LISTED_YET = "If Apple only just published it, it can take up to an hour to show up here.";
+const NOT_LISTED_YET = "If Apple only just published it, it can take a few minutes to show up here.";
 
-/** Which hour a manifest fetch falls in; everything derived from the manifest is keyed by it. */
-const manifestSlot = () => Math.floor(Date.now() / (MANIFEST_TTL * 1000));
+/** Asks Apple whether the manifest changed and, if it did, stores the new one and drops every cached page. */
+async function refreshManifest(prev: ManifestPointer | null): Promise<ManifestPointer | null> {
+  const now = new Date().toISOString();
+  // Claim the check first, so other locations do not ask Apple too; a failed check waits its turn the same way.
+  if (prev) await env.SYSTEM.put(POINTER, JSON.stringify({ ...prev, checkedAt: now }));
+  const res = await fetch(MANIFEST_URL, {
+    cache: "no-store",
+    headers: prev?.lastModified ? { "if-modified-since": prev.lastModified } : {},
+  });
+  if (res.status === 304 || !res.ok) return prev;
+  const bytes = new Uint8Array(await res.arrayBuffer());
+  const hash = await digestHex("SHA-1", bytes);
+  const lastModified = res.headers.get("last-modified") ?? undefined;
+  if (hash === prev?.hash) {
+    await env.SYSTEM.put(POINTER, JSON.stringify({ ...prev, lastModified, checkedAt: now }));
+    return prev;
+  }
+  await env.SYSTEM.put(snapshotKey(hash), JSON.stringify(manifestTables(parseManifest(bytes))));
+  const next: ManifestPointer = { hash, lastModified, checkedAt: now, changedAt: now };
+  await env.SYSTEM.put(POINTER, JSON.stringify(next));
+  // Pages list versions and sort by them, pinned ones included. Absent under `vite dev`.
+  await cache?.purge({ tags: ["latest", "pinned"] }).catch(() => {});
+  return next;
+}
 
-/** The manifest's tables. The plist is 6 MB, so it is parsed once per window and the tables are kept in the colo cache. */
-const manifest = perRequest(() =>
-  cached(`manifest:v2:${manifestSlot()}`, MANIFEST_TTL, async (): Promise<ManifestTables & { fetchedAt: string }> => {
-    // The window above decides how often the list is read; a long edge copy on top would double the wait.
-    const res = await fetch(MANIFEST_URL, { cf: { cacheTtl: 300, cacheEverything: true } });
-    if (!res.ok) error(502, `manifest fetch failed: ${res.status}`);
-    const tables = manifestTables(parseManifest(new Uint8Array(await res.arrayBuffer())));
-    return { ...tables, fetchedAt: new Date().toISOString() };
-  }));
+/** The current snapshot's pointer, checking Apple in the background when it is due. */
+const manifestPointer = perRequest(async (): Promise<ManifestPointer> => {
+  const current = await r2json<ManifestPointer>(POINTER);
+  // The first request after this ships has nothing to read, so it waits for Apple once.
+  if (!current) {
+    const made = await refreshManifest(null);
+    if (!made) error(502, "Apple's bundle list could not be read");
+    return made;
+  }
+  // Local dev reads the live bucket; it leaves the checking to the deployed site.
+  if (!dev && Date.now() - Date.parse(current.checkedAt) > CHECK_EVERY) {
+    waitUntil(refreshManifest(current).catch(() => {}));
+  }
+  return current;
+});
 
-/** How big the manifest's tables are, for the wiki: a few numbers, kept for the manifest window. */
-export const getManifestFacts = perRequest(() =>
-  cached(`manifestfacts:v2:${manifestSlot()}`, MANIFEST_TTL, async () => {
+/** The manifest's tables, from the current snapshot. */
+const manifest = perRequest(async () => {
+  const { hash, changedAt } = await manifestPointer();
+  const tables = await cached(`manifest:v3:${hash}`, KEEP, () => r2json<ManifestTables>(snapshotKey(hash)));
+  if (!tables) error(502, "the bundle list snapshot is missing");
+  return { ...tables, fetchedAt: changedAt };
+});
+
+/** How big the manifest's tables are, for the wiki. */
+export const getManifestFacts = perRequest(async () => {
+  const { hash } = await manifestPointer();
+  return cached(`manifestfacts:v3:${hash}`, KEEP, async () => {
     const m = await manifest();
     return { counts: m.index.counts, fetchedAt: m.fetchedAt };
-  }));
+  });
+});
 
 /* ------------------------------------------------------------------- lists */
 
@@ -143,7 +204,8 @@ const newestPublished = (refs: BundleRef[] = []) => newestDate(refs.map((r) => p
 /** Every bundle name. Built from the manifest and every image, so it is kept per manifest window and image set. */
 export const getIndex = perRequest(async () => {
   const all = await builds();
-  return cached(`index:v5:${manifestSlot()}:${buildsKey(all)}`, MANIFEST_TTL, async () => {
+  const { hash } = await manifestPointer();
+  return cached(`index:v6:${hash}:${buildsKey(all)}`, KEEP, async () => {
     const [m, images] = await Promise.all([manifest(), imageIndexes()]);
     const newest = images.find((i) => i.build === release(all)?.build);
 
@@ -227,7 +289,8 @@ const timelineOf = perRequest(async (kind: Kind, name: string): Promise<Timeline
  */
 export const getTimeline = perRequest(async (kind: Kind, name: string): Promise<TimelineEntry[]> => {
   const all = await builds();
-  const out = await cached(`timeline:v2:${manifestSlot()}:${buildsKey(all)}:${kind}:${name}`, MANIFEST_TTL,
+  const { hash } = await manifestPointer();
+  const out = await cached(`timeline:v3:${hash}:${buildsKey(all)}:${kind}:${name}`, KEEP,
     () => timelineOf(kind, name), () => true);
   if (!out.length) error(404, `No bundle named ${name}. ${NOT_LISTED_YET}`);
   return out;

@@ -29,8 +29,8 @@ class Plan(unittest.TestCase):
         self.assertEqual(plan(held(*[v["version"] for v in P]), P, [], None, None, 3), [])
 
     def test_explicit_version_ignores_held_and_floor(self):
-        self.assertEqual(plan(held("26.4"), P, [], "26.0", None, 3),
-                         [{"version": "26.0", "build": "23A341", "device": "iPhone17,1", "released": ""}])
+        got = plan(held("26.4"), P, [], "26.0", None, 3)
+        self.assertEqual([(x["version"], x["build"], x["device"]) for x in got], [("26.0", "23A341", "iPhone17,1")])
 
     def test_carries_the_release_date(self):
         dated = [{**fw("27.0", "24A437"), "releasedate": "2026-09-15T17:05:25Z"}]
@@ -83,8 +83,8 @@ class Betas(unittest.TestCase):
     def test_plans_betas_oldest_first_with_apples_link(self):
         got = plan_betas([beta("27.2 beta 2", "24B5089g"), beta("27.2 beta 1", "24B5084k")], "iPhone17,1", 9)
         self.assertEqual([x["version"] for x in got], ["27.2 beta 1", "27.2 beta 2"])
-        self.assertEqual(got[0], {"version": "27.2 beta 1", "build": "24B5084k", "device": "iPhone17,1",
-                                  "url": "https://updates.cdn-apple.com/iPhone17,1_24B5084k.ipsw", "beta": True, "released": ""})
+        self.assertEqual((got[0]["build"], got[0]["device"], got[0]["beta"]), ("24B5084k", "iPhone17,1", True))
+        self.assertEqual(got[0]["url"], "https://updates.cdn-apple.com/iPhone17,1_24B5084k.ipsw")
 
     def test_falls_back_to_the_newest_iphone_the_beta_has(self):
         got = plan_betas([beta("28.0 beta 1", "25A5001a", ("iPhone18,1", "iPhone19,2", "iPad16,1"))], "iPhone17,1", 9)

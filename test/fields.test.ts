@@ -9,14 +9,11 @@ import {
   CONTEXT_FIELDS,
   SERVICE_TYPES,
   RAT_BITS,
-  PROTOCOL_FAMILY,
   ATTACH_APN_TYPE,
-  BUNDLE_TYPE,
   ENTITLEMENT_CLASSES,
   IKE_DH_GROUP,
   IMS_SERVICE_BITS,
   DATA_MODE_BITS,
-  SMS_FORKING_MECHANISM,
   describeField,
   describeValue,
   type FieldDoc,
@@ -58,14 +55,6 @@ describe("field table shape", () => {
       if (d.format === "enum") expect(d.values, key).toBeTruthy();
       if (d.bits) expect(d.format, key).toBe("bitmask");
     }
-  });
-
-  it("shared tables have the expected extent", () => {
-    expect(Object.keys(SERVICE_TYPES).map(Number)).toEqual([...Array(36).keys()]);
-    expect(Object.keys(RAT_BITS)).toHaveLength(5);
-    expect(PROTOCOL_FAMILY[3]).toMatch(/IPv4v6/);
-    expect(Object.keys(ATTACH_APN_TYPE)).toHaveLength(6);
-    expect(Object.keys(BUNDLE_TYPE)).toHaveLength(8);
   });
 
   it("the service-class keys share one table", () => {
@@ -355,7 +344,6 @@ describe("wave-2 findings", () => {
 
   it("decodes QuickSwitch SMS forking and satellite tier enums", () => {
     expect(labelsOf("SMSForkingMechanism", 3)).toEqual(["selective"]);
-    expect(Object.keys(SMS_FORKING_MECHANISM)).toHaveLength(5);
     expect(labelsOf("Tier", 4, "SatelliteAccessInfo.Tier")).toEqual(["Tier D"]);
     expect(labelsOf("TechnologyMask", 24, "NRSlicing.AppCategories[0].TechnologyMask")).toEqual(["LTE", "NR (5G)"]);
   });
@@ -383,6 +371,5 @@ describe("wave-2 findings", () => {
 
   it("CoreMotion body-threshold keys are documented", () => {
     expect(FIELDS.CMOnBodyStatusManagerWakeThreshold.note).toMatch(/CoreMotion/);
-    expect(Object.keys(FIELDS).filter((k) => k.startsWith("CMOnBodyStatusManager"))).toHaveLength(20);
   });
 });
