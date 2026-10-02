@@ -1,6 +1,6 @@
 <script lang="ts">
-  import { isPlistKind, type DecodedFile, type PlistKind } from "$lib/decode";
-  import { humanBytes, hexDump } from "$lib/format";
+  import { isPlistKind, type DecodedFile, type PlistKind } from "#lib/decode/index.ts";
+  import { humanBytes, hexDump } from "#lib/format.ts";
   import Tree from "./Tree.svelte";
   import PriView from "./PriView.svelte";
   import PrlView from "./PrlView.svelte";

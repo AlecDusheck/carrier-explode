@@ -1,6 +1,6 @@
 import { error, redirect } from "@sveltejs/kit";
-import { builds, getModems, release } from "$lib/server/data";
-import { defaultModem } from "$lib/phones";
+import { builds, getModems, release } from "#lib/server/data.ts";
+import { defaultModem } from "#lib/phones.ts";
 
 export const load = async () => {
   const b = release(await builds());

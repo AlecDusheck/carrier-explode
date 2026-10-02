@@ -49,7 +49,7 @@ jobs:
           FORCE: ${{ inputs.force }}
         run: |
           scripts/modems.sh indexes /tmp/idx
-          npx vite-node scripts/scan_index.ts plan --builds /tmp/idx/builds.json --indexes /tmp/idx --out /tmp/heads.json |
+          npx vite-node --root scripts scripts/scan_index.ts plan --builds /tmp/idx/builds.json --indexes /tmp/idx --out /tmp/heads.json |
             sort -u > /tmp/need.txt
           node_modules/.bin/wrangler r2 object get "$BUCKET/scan/current.json" --remote --pipe > /tmp/current.json 2>/dev/null ||
             echo '{}' > /tmp/current.json
@@ -87,7 +87,7 @@ jobs:
           HASH: ${{ steps.heads.outputs.hash }}
         run: |
           PREV=$(jq -r '.gen // empty' /tmp/current.json)
-          npx vite-node scripts/scan_index.ts build --heads /tmp/heads.json --blobs /tmp/blobs --cache /tmp/ota \
+          npx vite-node --root scripts scripts/scan_index.ts build --heads /tmp/heads.json --blobs /tmp/blobs --cache /tmp/ota \
             --out /tmp/scan --heads-hash "$HASH" ${PREV:+--previous "$PREV"}
 
       - name: Upload, flip the pointer, drop the generation before last

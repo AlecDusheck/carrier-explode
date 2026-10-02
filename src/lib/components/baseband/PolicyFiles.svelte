@@ -1,8 +1,8 @@
 <script lang="ts">
   import { goto } from "$app/navigation";
   import { page } from "$app/state";
-  import { getBasebandFile } from "$lib/api/tables.remote";
-  import { humanBytes, withParams } from "$lib/format";
+  import { getBasebandFile } from "#lib/api/tables.remote.ts";
+  import { humanBytes, withParams } from "#lib/format.ts";
   import Pane from "../Pane.svelte";
   import PolicyTree from "../PolicyTree.svelte";
   import Variants from "../Variants.svelte";
@@ -13,7 +13,7 @@
   let raw = $state(false);
   const readable = $derived(files.filter((f) => f.readable));
   const fileAt = $derived(page.url.searchParams.get("file"));
-  const close = () => goto(withParams(page.url, { file: null }), { replaceState: true, keepFocus: true, noScroll: true });
+  const close = () => goto(withParams(page.url, { file: null }), { replace: true, reset: false });
 </script>
 
 <fieldset class="hgroup" id="policy">
@@ -26,7 +26,7 @@
         {#each readable as f (f.i)}
           <tr class:sel={fileAt === String(f.i)}>
             <td class="wrap">
-              <a class="mono" href="{withParams(page.url, { file: String(f.i) })}#file" data-sveltekit-noscroll data-sveltekit-replacestate>{f.path}</a>
+              <a class="mono" href="{withParams(page.url, { file: String(f.i) })}#file" data-sveltekit-reset="false" data-sveltekit-replacestate>{f.path}</a>
               {#if f.refs?.policy}<span class="tag">{f.refs.policy}</span>{/if}
             </td>
             <td class="mono">{f.member}</td>

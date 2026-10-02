@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { contextMenu } from "$lib/ui-state.svelte";
+  import { contextMenu } from "#lib/ui-state.svelte.ts";
 
   const dismiss = () => contextMenu.open && contextMenu.hide();
 </script>

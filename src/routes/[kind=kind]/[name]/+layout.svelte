@@ -1,10 +1,10 @@
 <script lang="ts">
   import type { Snippet } from "svelte";
   import { page } from "$app/state";
-  import { getBundle } from "$lib/api/bundles.remote";
-  import { bundleArgs, bundleHref } from "$lib/format";
-  import Pane from "$lib/components/Pane.svelte";
-  import VersionTimeline from "$lib/components/VersionTimeline.svelte";
+  import { getBundle } from "#lib/api/bundles.remote.ts";
+  import { bundleArgs, bundleHref } from "#lib/format.ts";
+  import Pane from "#lib/components/Pane.svelte";
+  import VersionTimeline from "#lib/components/VersionTimeline.svelte";
 
   type Bundle = Awaited<ReturnType<typeof getBundle>>;
 

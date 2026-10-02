@@ -1,7 +1,7 @@
 <script lang="ts">
-  import type { getBundle } from "$lib/api/bundles.remote";
-  import { isJsonDict } from "$lib/decode";
-  import { bundleHref, entryLabel, humanBytes } from "$lib/format";
+  import type { getBundle } from "#lib/api/bundles.remote.ts";
+  import { isJsonDict } from "#lib/decode/index.ts";
+  import { bundleHref, entryLabel, humanBytes } from "#lib/format.ts";
   import Tree from "./Tree.svelte";
 
   let { bundle }: { bundle: Awaited<ReturnType<typeof getBundle>> } = $props();

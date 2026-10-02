@@ -1,7 +1,7 @@
 /** Argument schemas the remote queries share. */
 
 import * as v from "valibot";
-import { KINDS } from "$lib/types";
+import { KINDS } from "#lib/types.ts";
 
 export const kind = v.picklist(KINDS);
 

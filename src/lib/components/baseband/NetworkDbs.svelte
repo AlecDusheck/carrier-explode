@@ -1,6 +1,6 @@
 <script lang="ts">
-  import type { ArfcnRange, BasebandSummary, MccScanEntry } from "$lib/decode";
-  import { bundleHref, shortHex } from "$lib/format";
+  import type { ArfcnRange, BasebandSummary, MccScanEntry } from "#lib/decode/index.ts";
+  import { bundleHref, shortHex } from "#lib/format.ts";
   import Confidence from "../Confidence.svelte";
   import Variants from "../Variants.svelte";
   import type { Baseband } from "./types";

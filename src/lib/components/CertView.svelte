@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { CertInfo } from "$lib/decode";
+  import type { CertInfo } from "#lib/decode/index.ts";
 
   let { certs, signer, legend = "Certificate" }: { certs: CertInfo[]; signer?: number; legend?: string } = $props();
 

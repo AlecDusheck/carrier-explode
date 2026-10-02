@@ -1,8 +1,8 @@
 <script lang="ts">
-  import { getRelease } from "$lib/api/bundles.remote";
-  import { bundleHref, link } from "$lib/format";
-  import { imageSlug } from "$lib/names";
-  import Pane from "$lib/components/Pane.svelte";
+  import { getRelease } from "#lib/api/bundles.remote.ts";
+  import { bundleHref, link } from "#lib/format.ts";
+  import { imageSlug } from "#lib/names.ts";
+  import Pane from "#lib/components/Pane.svelte";
 
   let { params } = $props();
 

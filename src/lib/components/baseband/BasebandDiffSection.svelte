@@ -1,8 +1,8 @@
 <script lang="ts">
   import { goto } from "$app/navigation";
   import { page } from "$app/state";
-  import { getBasebandDiff } from "$lib/api/tables.remote";
-  import { withParams } from "$lib/format";
+  import { getBasebandDiff } from "#lib/api/tables.remote.ts";
+  import { withParams } from "#lib/format.ts";
   import Pane from "../Pane.svelte";
   import BasebandDiff from "../BasebandDiff.svelte";
   import type { BasebandBuild } from "./types";
@@ -15,7 +15,7 @@
   } = $props();
 
   const vs = $derived(page.url.searchParams.get("vs"));
-  const pick = (v: string) => goto(withParams(page.url, { vs: v || null }) + "#diff", { replaceState: true, keepFocus: true, noScroll: true });
+  const pick = (v: string) => goto(withParams(page.url, { vs: v || null }) + "#diff", { replace: true, reset: false });
 </script>
 
 <fieldset class="hgroup" id="diff">

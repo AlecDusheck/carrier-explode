@@ -1,7 +1,7 @@
 /**
  * Builds the cross-bundle scan index the worker reads (src/lib/server/keyscan.ts).
  * Works from what is already stored — image indexes and blobs in R2, OTA bundles
- * from Apple — so it never needs an IPSW. Run with vite-node (for `$lib`).
+ * from Apple — so it never needs an IPSW. Run with vite-node (for `#lib`).
  *
  *   scan_index.ts plan  --builds builds.json --indexes DIR --out heads.json
  *       DIR holds <build>/index.json for every held image. Writes the
@@ -19,10 +19,10 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { parseArgs } from "node:util";
 
-import { flattenBundle, openIpcc } from "$lib/decode";
-import { MANIFEST_URL, manifestTables, parseManifest } from "$lib/server/manifest";
-import { buildTimeline, headIndex, type ImageIndex } from "$lib/server/timeline";
-import { POINTER_KEY, bundlesKey, fileDataKey, fileIndexKey, packShards, type ScanPointer } from "$lib/server/keyscan";
+import { flattenBundle, openIpcc } from "#lib/decode/index.ts";
+import { MANIFEST_URL, manifestTables, parseManifest } from "#lib/server/manifest.ts";
+import { buildTimeline, headIndex, type ImageIndex } from "#lib/server/timeline.ts";
+import { POINTER_KEY, bundlesKey, fileDataKey, fileIndexKey, packShards, type ScanPointer } from "#lib/server/keyscan.ts";
 
 interface Head { kind: "carriers" | "countries"; name: string; src: string }
 

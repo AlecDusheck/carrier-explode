@@ -1,9 +1,9 @@
 <script lang="ts">
   import { goto } from "$app/navigation";
   import { page } from "$app/state";
-  import { getPlmn } from "$lib/api/tables.remote";
-  import { bundleHref, withParams } from "$lib/format";
-  import Pane from "$lib/components/Pane.svelte";
+  import { getPlmn } from "#lib/api/tables.remote.ts";
+  import { bundleHref, withParams } from "#lib/format.ts";
+  import Pane from "#lib/components/Pane.svelte";
 
   const LIMIT = 400;
   /** More MVNOs than this fold behind a count. */
@@ -50,7 +50,7 @@
       placeholder="MCC+MNC, bundle name or ICCID prefix"
       aria-label="search"
       bind:value={q}
-      oninput={() => goto(withParams(page.url, { q }), { replaceState: true, keepFocus: true, noScroll: true })}
+      oninput={() => goto(withParams(page.url, { q }), { replace: true, reset: false })}
     />
   </div>
   <div class="scroll pad">

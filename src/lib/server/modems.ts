@@ -1,8 +1,8 @@
 /** Modem packages: where their summaries are stored, an image's package as the pages show it, and which bundle copy holds a phone's files. */
 
-import { MODEM_SUMMARY_SCHEMA, modemVendor, productName } from "$lib/decode";
-import { compareVersions } from "$lib/names";
-import type { TimelineEntry } from "$lib/types";
+import { MODEM_SUMMARY_SCHEMA, modemVendor, productName } from "#lib/decode/index.ts";
+import { compareVersions } from "#lib/names.ts";
+import type { TimelineEntry } from "#lib/types.ts";
 import type { ImageModem } from "./timeline";
 
 /** R2 key of package `id`'s decoded summary. Written by scripts/baseband.ts, read by the worker. */

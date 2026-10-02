@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { Snippet } from "svelte";
-  import { browser } from "$app/environment";
+  import { browser } from "$app/env";
   import PaneError from "./PaneError.svelte";
 
   let { children, quiet = false }: { children: Snippet; quiet?: boolean } = $props();

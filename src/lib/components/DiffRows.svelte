@@ -1,6 +1,6 @@
 <script lang="ts">
-  import type { DiffRow } from "$lib/decode";
-  import { DIFF_CHIP, shortValue } from "$lib/format";
+  import type { DiffRow } from "#lib/decode/index.ts";
+  import { DIFF_CHIP, shortValue } from "#lib/format.ts";
 
   let { rows, head = "Key path", left = "Before", right = "After", lines = false }: {
     rows: DiffRow[];

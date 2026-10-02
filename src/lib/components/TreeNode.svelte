@@ -1,9 +1,9 @@
 <script lang="ts">
   import Self from "./TreeNode.svelte";
   import Confidence from "./Confidence.svelte";
-  import { describeField, describeValue, isBigInt, isBlob, isDate, isJsonDict, isUid } from "$lib/decode";
-  import { menuTrigger, copyText, scan, type Folding, type FoldToggle, type MenuItem } from "$lib/ui-state.svelte";
-  import { hexDump, plainJson } from "$lib/format";
+  import { describeField, describeValue, isBigInt, isBlob, isDate, isJsonDict, isUid } from "#lib/decode/index.ts";
+  import { menuTrigger, copyText, scan, type Folding, type FoldToggle, type MenuItem } from "#lib/ui-state.svelte.ts";
+  import { hexDump, plainJson } from "#lib/format.ts";
   import type { TreeCtx } from "./Tree.svelte";
 
   let {

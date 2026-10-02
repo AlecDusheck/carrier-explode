@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { Snippet } from "svelte";
-  import type { Folding } from "$lib/ui-state.svelte";
+  import type { Folding } from "#lib/ui-state.svelte.ts";
 
   let { filter = $bindable(), notes = $bindable(), fold, name, label, children }: {
     filter: string;

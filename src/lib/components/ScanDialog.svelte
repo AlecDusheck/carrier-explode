@@ -1,7 +1,7 @@
 <script lang="ts">
-  import { scanKey } from "$lib/api/tables.remote";
-  import { bundleHref, shortValue } from "$lib/format";
-  import { scan, copyText, type ScanScope } from "$lib/ui-state.svelte";
+  import { scanKey } from "#lib/api/tables.remote.ts";
+  import { bundleHref, shortValue } from "#lib/format.ts";
+  import { scan, copyText, type ScanScope } from "#lib/ui-state.svelte.ts";
   import Pane from "./Pane.svelte";
 
   let mode = $state<"values" | "bundles">("values");

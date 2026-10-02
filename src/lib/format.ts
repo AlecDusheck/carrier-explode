@@ -1,6 +1,8 @@
 import { resolve } from "$app/paths";
-import { bandList, isBigInt, isRecord, isUid, type ComboComponent, type DiffKind } from "$lib/decode";
-import type { CbsRow, Kind, PublicEntry } from "$lib/types";
+import type { ReadonlyURL } from "$app/state";
+import type { Path } from "$app/types";
+import { bandList, isBigInt, isRecord, isUid, type ComboComponent, type DiffKind } from "#lib/decode/index.ts";
+import type { CbsRow, Kind, PublicEntry } from "#lib/types.ts";
 
 export function humanBytes(n: number): string {
   if (n < 1024) return n + " B";
@@ -79,7 +81,7 @@ const seg = encodeURIComponent;
 const segs = (path: string) => path.split("/").map(seg).join("/");
 
 /** Every internal link goes through here so a configured base path is honoured. */
-export const link = (path: string) => resolve(path as `/${string}`);
+export const link = (path: string) => resolve(path.slice(1) as Path);
 
 export const bundleHref = (kind: Kind, name: string, slug?: string, tab?: string) =>
   link(`/${kind}/${seg(name)}` + (slug ? `/${seg(slug)}` + (tab ? `/${tab}` : "") : ""));
@@ -131,8 +133,8 @@ export function hexDump(hex: string, withOffsets = false): string {
 }
 
 /** Same URL with some search params changed; empty values are dropped. */
-export function withParams(url: URL, changes: Record<string, string | null>): string {
-  const next = new URLSearchParams(url.searchParams);
+export function withParams(url: ReadonlyURL, changes: Record<string, string | null>): string {
+  const next = new URLSearchParams(url.search);
   for (const [k, v] of Object.entries(changes)) {
     if (v) next.set(k, v);
     else next.delete(k);

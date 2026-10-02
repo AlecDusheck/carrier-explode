@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { CafInfo } from "$lib/decode";
+  import type { CafInfo } from "#lib/decode/index.ts";
 
   let { audio: a, src }: { audio: CafInfo; src: string } = $props();
 </script>

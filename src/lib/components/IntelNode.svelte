@@ -9,8 +9,8 @@
   import Self from "./IntelNode.svelte";
   import IntelValueView from "./IntelValue.svelte";
   import Confidence from "./Confidence.svelte";
-  import { isIntelNode, type IntelList, type IntelNode, type IntelTable } from "$lib/decode";
-  import type { Folding, FoldToggle } from "$lib/ui-state.svelte";
+  import { isIntelNode, type IntelList, type IntelNode, type IntelTable } from "#lib/decode/index.ts";
+  import type { Folding, FoldToggle } from "#lib/ui-state.svelte.ts";
 
   let {
     node,

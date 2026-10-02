@@ -1,9 +1,9 @@
 <script lang="ts">
   import { SvelteSet } from "svelte/reactivity";
-  import { getBasebandCombos } from "$lib/api/tables.remote";
-  import { mergeComboSets, type BandComboSet, type CarrierMapping } from "$lib/decode";
-  import { bundleHref } from "$lib/format";
-  import { toggleIn } from "$lib/ui-state.svelte";
+  import { getBasebandCombos } from "#lib/api/tables.remote.ts";
+  import { mergeComboSets, type BandComboSet, type CarrierMapping } from "#lib/decode/index.ts";
+  import { bundleHref } from "#lib/format.ts";
+  import { toggleIn } from "#lib/ui-state.svelte.ts";
   import Pane from "../Pane.svelte";
   import ComboTable from "../ComboTable.svelte";
   import ComboStatsTable from "../ComboStatsTable.svelte";

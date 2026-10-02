@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { CmsSignature } from "$lib/decode";
+  import type { CmsSignature } from "#lib/decode/index.ts";
   import CertView from "./CertView.svelte";
 
   let { sig }: { sig: CmsSignature } = $props();

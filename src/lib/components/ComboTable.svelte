@@ -1,6 +1,6 @@
 <script lang="ts">
-  import { parseCombo, type ComboComponent, type ComboType } from "$lib/decode";
-  import { comboPart } from "$lib/format";
+  import { parseCombo, type ComboComponent, type ComboType } from "#lib/decode/index.ts";
+  import { comboPart } from "#lib/format.ts";
 
   let { combos }: { combos: string[] } = $props();
 

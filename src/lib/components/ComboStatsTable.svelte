@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { Snippet } from "svelte";
-  import { bandList, type ComboSetRow } from "$lib/decode";
+  import { bandList, type ComboSetRow } from "#lib/decode/index.ts";
   import Variants from "./Variants.svelte";
 
   let { rows, action }: {

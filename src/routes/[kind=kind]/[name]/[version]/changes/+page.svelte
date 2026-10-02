@@ -1,10 +1,10 @@
 <script lang="ts">
   import { goto } from "$app/navigation";
   import { page } from "$app/state";
-  import { getBundle, getComparison } from "$lib/api/bundles.remote";
-  import { bundleArgs, entryLabel, link, withParams } from "$lib/format";
-  import Pane from "$lib/components/Pane.svelte";
-  import BundleCompare from "$lib/components/BundleCompare.svelte";
+  import { getBundle, getComparison } from "#lib/api/bundles.remote.ts";
+  import { bundleArgs, entryLabel, link, withParams } from "#lib/format.ts";
+  import Pane from "#lib/components/Pane.svelte";
+  import BundleCompare from "#lib/components/BundleCompare.svelte";
 
   let { params } = $props();
 
@@ -18,7 +18,7 @@
   });
 
   const set = (changes: Record<string, string | null>) =>
-    goto(withParams(page.url, changes), { keepFocus: true, noScroll: true });
+    goto(withParams(page.url, changes), { reset: false });
 
   /** The timeline runs newest first. */
   function notNewer(timeline: Array<{ slug: string }>, x: string, y: string) {

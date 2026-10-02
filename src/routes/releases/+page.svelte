@@ -1,7 +1,7 @@
 <script lang="ts">
-  import { getIndex } from "$lib/api/bundles.remote";
-  import { link } from "$lib/format";
-  import Pane from "$lib/components/Pane.svelte";
+  import { getIndex } from "#lib/api/bundles.remote.ts";
+  import { link } from "#lib/format.ts";
+  import Pane from "#lib/components/Pane.svelte";
 </script>
 
 <div class="view">

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { SSGCCS_STATES, type BasebandSsgccs, type SsgccsLine } from "$lib/decode";
+  import { SSGCCS_STATES, type BasebandSsgccs, type SsgccsLine } from "#lib/decode/index.ts";
   import Confidence from "../Confidence.svelte";
   import Variants from "../Variants.svelte";
 

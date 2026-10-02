@@ -14,7 +14,7 @@ describe("cachePolicy", () => {
 
   it("addresses the edge, and tells browsers to revalidate", () => {
     // s-maxage would disable stale-while-revalidate, and a plain public
-    // Cache-Control would let the adapter's un-purgeable cache keep the page.
+    // Cache-Control would let shared caches we cannot purge keep the page.
     const p = edge({ version: "ios-27.0" });
     expect(p.edge).toBe("max-age=86400, stale-while-revalidate=2592000");
     expect(p.browser).toBe("no-cache");

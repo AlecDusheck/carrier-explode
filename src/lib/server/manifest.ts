@@ -3,8 +3,8 @@
  * carrier and country bundle Apple publishes.
  */
 
-import { parsePlist, isPlistDict, type PlistDict, type PlistValue, bytesToHex } from "$lib/decode";
-import { compareVersions, countryName, splitName, versionKey } from "$lib/names";
+import { parsePlist, isPlistDict, type PlistDict, type PlistValue, bytesToHex } from "#lib/decode/index.ts";
+import { compareVersions, countryName, splitName, versionKey } from "#lib/names.ts";
 
 export { compareVersions, countryName, splitName, versionKey };
 

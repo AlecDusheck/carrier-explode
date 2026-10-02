@@ -58,7 +58,7 @@ fetch() {
     sha=$(sha256sum "$f" | cut -d' ' -f1)
     if [ -n "$id" ] && [ "$sha" != "$id" ]; then echo "blobs/$id.$kind hashes to $sha"; failed=1; continue; fi
     # baseband.ts prints the key the summary belongs at: baseband/v<schema>/<sha>.json.
-    key=$(npx vite-node scripts/baseband.ts "$f" --name "$name" --out "$TMP/summary.json" "${manifest[@]}" < /dev/null) \
+    key=$(npx vite-node --root scripts scripts/baseband.ts "$f" --name "$name" --out "$TMP/summary.json" "${manifest[@]}" < /dev/null) \
       || { failed=1; continue; }
     if [ -z "$id" ]; then
       retry "$W" r2 object put "$BUCKET/blobs/$sha.$kind" --file "$f" --remote || { failed=1; continue; }

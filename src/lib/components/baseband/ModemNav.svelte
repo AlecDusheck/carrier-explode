@@ -1,7 +1,7 @@
 <script lang="ts">
-  import { link } from "$lib/format";
-  import { modemLabel } from "$lib/decode";
-  import { phoneList } from "$lib/phones";
+  import { link } from "#lib/format.ts";
+  import { modemLabel } from "#lib/decode/index.ts";
+  import { phoneList } from "#lib/phones.ts";
   import type { ImageModem, ImageModems } from "./types";
 
   let { mods, modem, family }: {

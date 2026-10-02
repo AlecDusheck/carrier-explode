@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { PrlDecoded, PrlAcqRecord, PrlSysRecord } from "$lib/decode";
+  import type { PrlDecoded, PrlAcqRecord, PrlSysRecord } from "#lib/decode/index.ts";
 
   let { prl }: { prl: PrlDecoded } = $props();
 

@@ -1,5 +1,5 @@
 <script lang="ts" module>
-  import type { PolicyNode } from "$lib/decode";
+  import type { PolicyNode } from "#lib/decode/index.ts";
 
   /** The first node of each tag, and of each tag@attribute, in document order. */
   export interface NoteFirsts { el: Record<string, PolicyNode>; attr: Record<string, PolicyNode> }
@@ -7,8 +7,8 @@
 
 <script lang="ts">
   import { SvelteSet } from "svelte/reactivity";
-  import { describePolicyAttr, describePolicyElement } from "$lib/decode";
-  import { toggleIn } from "$lib/ui-state.svelte";
+  import { describePolicyAttr, describePolicyElement } from "#lib/decode/index.ts";
+  import { toggleIn } from "#lib/ui-state.svelte.ts";
   import Confidence from "./Confidence.svelte";
   import PolicyItem from "./PolicyItem.svelte";
 

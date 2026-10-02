@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { parsePolicyXml, walkPolicy, type PolicyNode } from "$lib/decode";
+  import { parsePolicyXml, walkPolicy, type PolicyNode } from "#lib/decode/index.ts";
   import PolicyItem, { type NoteFirsts } from "./PolicyItem.svelte";
 
   let { xml }: { xml: string } = $props();

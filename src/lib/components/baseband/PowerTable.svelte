@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { bandList, type BasebandSummary } from "$lib/decode";
+  import { bandList, type BasebandSummary } from "#lib/decode/index.ts";
   import Variants from "../Variants.svelte";
   import type { Baseband } from "./types";
 

@@ -1,6 +1,6 @@
 <script lang="ts">
-  import type { BasebandDiffPart } from "$lib/types";
-  import { DIFF_CHIP } from "$lib/format";
+  import type { BasebandDiffPart } from "#lib/types.ts";
+  import { DIFF_CHIP } from "#lib/format.ts";
   import DiffRows from "./DiffRows.svelte";
 
   let { parts }: { parts: BasebandDiffPart[] } = $props();

@@ -1,17 +1,17 @@
 <script lang="ts">
   import { goto } from "$app/navigation";
   import { page } from "$app/state";
-  import { getBundle, getComparison, getIndex } from "$lib/api/bundles.remote";
-  import type { Kind } from "$lib/types";
-  import { entryLabel, withParams } from "$lib/format";
-  import Pane from "$lib/components/Pane.svelte";
-  import BundleCompare from "$lib/components/BundleCompare.svelte";
+  import { getBundle, getComparison, getIndex } from "#lib/api/bundles.remote.ts";
+  import type { Kind } from "#lib/types.ts";
+  import { entryLabel, withParams } from "#lib/format.ts";
+  import Pane from "#lib/components/Pane.svelte";
+  import BundleCompare from "#lib/components/BundleCompare.svelte";
 
   const sp = $derived(page.url.searchParams);
   const file = $derived(sp.get("file"));
 
   const set = (changes: Record<string, string | null>) =>
-    goto(withParams(page.url, changes), { keepFocus: true, noScroll: true });
+    goto(withParams(page.url, changes), { reset: false });
 
   const swap = () => set({ a: sp.get("b"), av: sp.get("bv"), b: sp.get("a"), bv: sp.get("av") });
 

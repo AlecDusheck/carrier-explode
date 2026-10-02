@@ -3,9 +3,9 @@
  * number, which is how the phone decides which copy wins.
  */
 
-import { compareVersions, imageSlug, isPrerelease } from "$lib/names";
-import type { ModemKind } from "$lib/decode/modem";
-import type { Kind, TimelineEntry } from "$lib/types";
+import { compareVersions, imageSlug, isPrerelease } from "#lib/names.ts";
+import type { ModemKind } from "#lib/decode/modem.ts";
+import type { Kind, TimelineEntry } from "#lib/types.ts";
 import type { BundleRef, CountrySummary } from "./manifest";
 
 export interface ImageBuild { build: string; version: string; device: string; product?: string; extractedAt: string; scheme?: number }

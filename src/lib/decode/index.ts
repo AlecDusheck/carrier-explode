@@ -1,5 +1,5 @@
 /**
- * Carrier/country bundle decoder. Self-contained: no SvelteKit, Workers or `$lib`
+ * Carrier/country bundle decoder. Self-contained: no SvelteKit, Workers or `#lib`
  * imports; `fflate` is the only dependency. Safe to run in a browser.
  */
 

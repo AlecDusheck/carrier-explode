@@ -1,10 +1,10 @@
 <script lang="ts">
   import { page } from "$app/state";
-  import { getCbs } from "$lib/api/tables.remote";
-  import { describeMessageId } from "$lib/decode";
-  import type { CbsRow } from "$lib/types";
-  import { cbsEntryLabel, link } from "$lib/format";
-  import Pane from "$lib/components/Pane.svelte";
+  import { getCbs } from "#lib/api/tables.remote.ts";
+  import { describeMessageId } from "#lib/decode/index.ts";
+  import type { CbsRow } from "#lib/types.ts";
+  import { cbsEntryLabel, link } from "#lib/format.ts";
+  import Pane from "#lib/components/Pane.svelte";
 
   const VIEWS = [["", "By country"], ["4382", "Operator-defined 4382"], ["matrix", "ID matrix"]] as const;
   type View = (typeof VIEWS)[number][0];

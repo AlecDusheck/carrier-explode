@@ -4,14 +4,14 @@
 </script>
 
 <script lang="ts">
-  import { browser } from "$app/environment";
+  import { browser } from "$app/env";
   import { goto } from "$app/navigation";
   import { page, navigating } from "$app/state";
   import type { Attachment } from "svelte/attachments";
-  import { getIndex, guessCarrier, guessCountry } from "$lib/api/bundles.remote";
-  import { bundleHref, link } from "$lib/format";
-  import { menuTrigger, copyText } from "$lib/ui-state.svelte";
-  import Pane from "$lib/components/Pane.svelte";
+  import { getIndex, guessCarrier, guessCountry } from "#lib/api/bundles.remote.ts";
+  import { bundleHref, link } from "#lib/format.ts";
+  import { menuTrigger, copyText } from "#lib/ui-state.svelte.ts";
+  import Pane from "#lib/components/Pane.svelte";
 
   let { params, children } = $props();
 

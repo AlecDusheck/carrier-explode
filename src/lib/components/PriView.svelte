@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { dialectLabel, type PriDecoded } from "$lib/decode";
+  import { dialectLabel, type PriDecoded } from "#lib/decode/index.ts";
   import PriValueCell from "./PriValueCell.svelte";
   import Confidence from "./Confidence.svelte";
   import IntelView from "./IntelView.svelte";

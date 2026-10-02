@@ -3,9 +3,9 @@
 </script>
 
 <script lang="ts">
-  import { isJsonDict } from "$lib/decode";
-  import { plainJson } from "$lib/format";
-  import { Folding } from "$lib/ui-state.svelte";
+  import { isJsonDict } from "#lib/decode/index.ts";
+  import { plainJson } from "#lib/format.ts";
+  import { Folding } from "#lib/ui-state.svelte.ts";
   import TreeNode from "./TreeNode.svelte";
   import TreeToolbar from "./TreeToolbar.svelte";
 

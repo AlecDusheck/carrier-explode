@@ -1,7 +1,7 @@
 <script lang="ts">
-  import { getBundle } from "$lib/api/bundles.remote";
-  import { bundleArgs, fileHref, humanBytes, rawHref } from "$lib/format";
-  import Pane from "$lib/components/Pane.svelte";
+  import { getBundle } from "#lib/api/bundles.remote.ts";
+  import { bundleArgs, fileHref, humanBytes, rawHref } from "#lib/format.ts";
+  import Pane from "#lib/components/Pane.svelte";
 
   let { params } = $props();
 </script>

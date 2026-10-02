@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { DmuKey } from "$lib/decode";
+  import type { DmuKey } from "#lib/decode/index.ts";
 
   let { dmu: k }: { dmu: DmuKey } = $props();
 </script>

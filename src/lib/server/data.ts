@@ -12,15 +12,16 @@
 
 import { error } from "@sveltejs/kit";
 import { getRequestEvent } from "$app/server";
+import { env } from "cloudflare:workers";
 import {
   MODEM_SUMMARY_SCHEMA, basebandComparable, carriedBy, compareBundles, contentId, decodeFile, decodedPlist, decodedPri,
   diffKeyed, diffValues, isRecord, mergeComboSets, openIpcc, parseBandCombos, priReplacements, priText,
   summariseDiff,
   type BasebandSummary, type BundleFile, type ModemKind, type ModemSummary, type OpenedBundle, type PriReplacement,
-} from "$lib/decode";
-import { imageSlug, isPrerelease } from "$lib/names";
-import { byNewest, homePhone, knowsPhone, overridesFor, sharedPri } from "$lib/phones";
-import type { BasebandDiffPart, Kind, PublicEntry, TimelineEntry } from "$lib/types";
+} from "#lib/decode/index.ts";
+import { imageSlug, isPrerelease } from "#lib/names.ts";
+import { byNewest, homePhone, knowsPhone, overridesFor, sharedPri } from "#lib/phones.ts";
+import type { BasebandDiffPart, Kind, PublicEntry, TimelineEntry } from "#lib/types.ts";
 import { cached, digestHex, fetchApple, perRequest } from "./cache";
 import { buildMergedCbsMatrix } from "./cbs";
 import { guessCarrierQuery } from "./guess";
@@ -35,14 +36,8 @@ import { buildTimeline, headIndex, type ImageBuild, type ImageIndex } from "./ti
 
 /* ------------------------------------------------------------------ images */
 
-const bucket = () => {
-  const b = getRequestEvent().platform?.env.SYSTEM;
-  if (!b) error(500, "R2 bucket binding SYSTEM is missing");
-  return b;
-};
-
 async function r2json<T>(key: string): Promise<T | null> {
-  const obj = await bucket().get(key);
+  const obj = await env.SYSTEM.get(key);
   return obj ? obj.json<T>() : null;
 }
 
@@ -223,7 +218,7 @@ function publicEntry({ src, ...rest }: TimelineEntry): PublicEntry {
 const open = perRequest(async (src: string) => {
   let bytes: Uint8Array<ArrayBuffer>;
   if (src.startsWith("blob:")) {
-    const obj = await bucket().get(`blobs/${src.slice(5)}.ipcc`);
+    const obj = await env.SYSTEM.get(`blobs/${src.slice(5)}.ipcc`);
     if (!obj) error(404, "bundle is not in the bucket");
     bytes = new Uint8Array(await obj.arrayBuffer());
   } else {
@@ -625,7 +620,7 @@ export const getPlmn = async () => (await manifest()).plmn;
 
 /** One shard, by range read out of the file's packed data object. */
 async function scanShard(gen: string, file: string, [offset, length]: [number, number]) {
-  const obj = await bucket().get(fileDataKey(gen, file), { range: { offset, length } });
+  const obj = await env.SYSTEM.get(fileDataKey(gen, file), { range: { offset, length } });
   return obj ? obj.json<ScanShard>() : null;
 }
 
@@ -682,12 +677,15 @@ function fingerprint(xs: string[]): string {
 
 /* ----------------------------------------------------------------- guesses */
 
+/** A request as it reached the worker; Request alone also covers outgoing ones, whose `cf` differs. */
+type IncomingRequest = Request<unknown, IncomingRequestCfProperties>;
+
 /** A country search guessed from where the request came from. */
 export async function guessCountry(): Promise<string | null> {
-  const { platform, locals } = getRequestEvent();
+  const { request, locals } = getRequestEvent();
   // Same bargain as the carrier guess: this is the visitor's own location.
   locals.perVisitor = true;
-  const cc = platform?.cf?.country?.toLowerCase();
+  const cc = (request as IncomingRequest).cf?.country?.toLowerCase();
   if (!cc) return null;
   const [{ countries }, plists] = await Promise.all([getIndex(), releasePlists()]);
   const hit = isoIndex(plists).get(cc);
@@ -703,11 +701,11 @@ export async function guessCountry(): Promise<string | null> {
 
 /** On a phone, a carrier search guessed from the network the request came in on. */
 export async function guessCarrier(): Promise<string | null> {
-  const { request, platform, locals } = getRequestEvent();
+  const { request, locals } = getRequestEvent();
   // The answer is the visitor's own network and device, so whatever rendered it
   // is theirs alone. A remote function cannot set a header, but it shares locals
   // with the page event, and hooks.server.ts reads this before it decides.
   locals.perVisitor = true;
   if (!/Mobi|Android|iPhone/i.test(request.headers.get("user-agent") ?? "")) return null;
-  return guessCarrierQuery(platform?.cf?.asOrganization, (await getIndex()).carriers);
+  return guessCarrierQuery((request as IncomingRequest).cf?.asOrganization, (await getIndex()).carriers);
 }

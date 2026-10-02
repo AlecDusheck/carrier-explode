@@ -1,8 +1,8 @@
 <script lang="ts">
-  import { getModemPackageHeader } from "$lib/api/tables.remote";
-  import type { ModemCapabilities } from "$lib/decode";
-  import { fileHref, humanBytes, link } from "$lib/format";
-  import { imageSlug } from "$lib/names";
+  import { getModemPackageHeader } from "#lib/api/tables.remote.ts";
+  import type { ModemCapabilities } from "#lib/decode/index.ts";
+  import { fileHref, humanBytes, link } from "#lib/format.ts";
+  import { imageSlug } from "#lib/names.ts";
   import type { BasebandBuild, ImageModem } from "./types";
 
   let { modem, caps, version, others }: {

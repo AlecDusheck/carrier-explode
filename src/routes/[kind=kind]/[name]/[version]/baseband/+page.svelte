@@ -1,15 +1,15 @@
 <script lang="ts">
   import { goto } from "$app/navigation";
-  import { navigating, page } from "$app/state";
-  import { getBundle, getFile } from "$lib/api/bundles.remote";
-  import { getBundleOverrides } from "$lib/api/tables.remote";
-  import { modemCapabilities, modemLabel } from "$lib/decode";
-  import { bundleArgs, link, rawHref, withParams } from "$lib/format";
-  import type { PublicEntry } from "$lib/types";
-  import { phoneList, sharedPri } from "$lib/phones";
-  import Pane from "$lib/components/Pane.svelte";
-  import FileBody from "$lib/components/FileBody.svelte";
-  import ModemDefaults from "$lib/components/ModemDefaults.svelte";
+  import { navigating, page, type ReadonlyURL } from "$app/state";
+  import { getBundle, getFile } from "#lib/api/bundles.remote.ts";
+  import { getBundleOverrides } from "#lib/api/tables.remote.ts";
+  import { modemCapabilities, modemLabel } from "#lib/decode/index.ts";
+  import { bundleArgs, link, rawHref, withParams } from "#lib/format.ts";
+  import type { PublicEntry } from "#lib/types.ts";
+  import { phoneList, sharedPri } from "#lib/phones.ts";
+  import Pane from "#lib/components/Pane.svelte";
+  import FileBody from "#lib/components/FileBody.svelte";
+  import ModemDefaults from "#lib/components/ModemDefaults.svelte";
 
   let { params } = $props();
 
@@ -23,14 +23,14 @@
     withParams(page.url, { file: path, copy: copy ?? null, pri: null, efs: null, base: null });
   const families = (phones: Array<{ family: string }>) => [...new Set(phones.map((p) => p.family))];
 
-  const picked = (u: URL) => ({ file: u.searchParams.get("file"), copy: u.searchParams.get("copy") ?? undefined });
+  const picked = (u: ReadonlyURL) => ({ file: u.searchParams.get("file"), copy: u.searchParams.get("copy") ?? undefined });
   const shown = $derived(picked(page.url));
   // The clicked row lights up before its file has loaded.
   const lit = $derived(navigating.to ? picked(navigating.to.url) : shown);
 
   /** A click anywhere on a row but its links picks the row's file. */
   const rowClick = (href: string) => (e: MouseEvent) => {
-    if (!(e.target as Element).closest("a")) goto(href, { replaceState: true, noScroll: true, keepFocus: true });
+    if (!(e.target as Element).closest("a")) goto(href, { replace: true, reset: false });
   };
 </script>
 
@@ -63,7 +63,7 @@
                 <td>{r.phones.length ? phoneList(r.phones) : "Not named for a phone"}</td>
                 <td>{#if ov}{@render modems(r.phones, ov.build)}{/if}</td>
                 <td>
-                  <a class="mono wrap" href={pickHref(r.path, r.copy)} data-sveltekit-noscroll data-sveltekit-replacestate aria-current={r === litRow ? "true" : undefined}>{r.path}</a>
+                  <a class="mono wrap" href={pickHref(r.path, r.copy)} data-sveltekit-reset="false" data-sveltekit-replacestate aria-current={r === litRow ? "true" : undefined}>{r.path}</a>
                   {#if r.copy}<span class="dimtext sp">from {copyLabel(r)}</span>{/if}
                 </td>
               </tr>

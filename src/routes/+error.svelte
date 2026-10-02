@@ -1,6 +1,6 @@
 <script lang="ts">
   import { page } from "$app/state";
-  import { link } from "$lib/format";
+  import { link } from "#lib/format.ts";
 </script>
 
 <div class="view">

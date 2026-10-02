@@ -1,17 +1,17 @@
 <script lang="ts">
   import { goto } from "$app/navigation";
   import { page } from "$app/state";
-  import { getBundle, getFile } from "$lib/api/bundles.remote";
-  import { bundleArgs, rawHref, withParams } from "$lib/format";
-  import Pane from "$lib/components/Pane.svelte";
-  import FileBody from "$lib/components/FileBody.svelte";
+  import { getBundle, getFile } from "#lib/api/bundles.remote.ts";
+  import { bundleArgs, rawHref, withParams } from "#lib/format.ts";
+  import Pane from "#lib/components/Pane.svelte";
+  import FileBody from "#lib/components/FileBody.svelte";
 
   let { params } = $props();
 
   const wantedLocale = $derived(page.url.searchParams.get("locale"));
   const wantedFile = $derived(page.url.searchParams.get("file"));
   const set = (changes: Record<string, string | null>) =>
-    goto(withParams(page.url, changes), { replaceState: true, keepFocus: true, noScroll: true });
+    goto(withParams(page.url, changes), { replace: true, reset: false });
 </script>
 
 <div class="scroll pad">

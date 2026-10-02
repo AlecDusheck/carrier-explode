@@ -3,24 +3,21 @@
  * is built from; this decides how long the built page itself may sit in front of
  * the worker.
  *
- * Two caches sit there, not one. Workers Cache ("cache" in wrangler.jsonc) is
- * keyed by worker version and can be purged by tag. The Cloudflare adapter also
- * wraps the worker in its own Cache API layer, and that one is keyed by URL
- * alone: it outlives deploys, ignores ctx.cache.purge(), and once it has a page
- * it will serve that page's markup long after the scripts it references have
- * been replaced. It stores anything whose Cache-Control lacks private, no-cache
- * or no-store, so everything shareable here is addressed to the edge through
+ * That cache is Workers Cache ("cache" in wrangler.jsonc): keyed by worker
+ * version and purgeable by tag. It is addressed through
  * cloudflare-cdn-cache-control — highest precedence, consumed by Cloudflare,
- * stripped before the client — while Cache-Control speaks only to browsers and
- * keeps that second cache out of the way.
+ * stripped before the client — so Cache-Control speaks only to browsers, and
+ * no shared cache we cannot purge ever holds a page.
  *
  * The edge TTL uses max-age rather than s-maxage on purpose: s-maxage disables
  * stale-while-revalidate, which would make every expiry block on a fresh render.
  */
 
-import type { Handle, RequestEvent } from "@sveltejs/kit";
+import { env } from "cloudflare:workers";
+import type { RequestEvent } from "@sveltejs/kit";
+import type { Handle } from "@sveltejs/kit/hooks";
 import type { RouteId } from "$app/types";
-import { QUERIES, isQueryName, type QueryPolicy, type RateClass } from "$lib/api/policy";
+import { QUERIES, isQueryName, type QueryPolicy, type RateClass } from "#lib/api/policy.ts";
 
 /**
  * Per-IP budgets, sized to the work a request can start rather than to the
@@ -78,11 +75,10 @@ export function rateClass(event: Pick<RequestEvent, "route" | "params">, query: 
   return routeIn(BUNDLE_ROUTES, event.route.id) || event.params.version ? "bundle" : "base";
 }
 
-/** A 429, or null to let the request through. Missing binding or IP fails open. */
+/** A 429, or null to let the request through. A request without an IP fails open. */
 async function overBudget(event: RequestEvent, rate: RateClass): Promise<Response | null> {
   const ip = event.request.headers.get("cf-connecting-ip");
-  const limiter = event.platform?.env[BUDGET[rate]];
-  if (!ip || !limiter || (await limiter.limit({ key: ip })).success) return null;
+  if (!ip || (await env[BUDGET[rate]].limit({ key: ip })).success) return null;
 
   const message = "Too many requests from your address. Give it a minute.";
   // The remote client parses this shape off a failed response and throws it
@@ -113,7 +109,7 @@ const MISSING_EDGE = "max-age=60";
 const RAW_EDGE = "max-age=2592000";
 
 // What browsers are told. "no-cache" is revalidate-before-use, not don't-store:
-// a purge reaches people at once, and the adapter's Cache API layer skips it.
+// a purge reaches people at once.
 const REVALIDATE = "no-cache";
 // Same intent for a file: hold it, but never let a shared cache we cannot purge
 // keep a copy.

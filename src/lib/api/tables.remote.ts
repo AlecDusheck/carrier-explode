@@ -1,6 +1,6 @@
 import * as v from "valibot";
 import { query } from "$app/server";
-import * as data from "$lib/server/data";
+import * as data from "#lib/server/data.ts";
 import { build, bundle, device, family, index, packageId } from "./schemas";
 
 export const getCbs = query(() => data.getCbs());

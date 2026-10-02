@@ -1,6 +1,6 @@
 import { error, redirect } from "@sveltejs/kit";
-import { getModems } from "$lib/server/data";
-import { defaultModem } from "$lib/phones";
+import { getModems } from "#lib/server/data.ts";
+import { defaultModem } from "#lib/phones.ts";
 
 /** The package serving the newest named phone; the others are a tab away. */
 export const load = async ({ params }) => {

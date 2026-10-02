@@ -1,6 +1,6 @@
 <script lang="ts">
-  import { bandList, type ComboComponent, type IntelValue } from "$lib/decode";
-  import { comboPart } from "$lib/format";
+  import { bandList, type ComboComponent, type IntelValue } from "#lib/decode/index.ts";
+  import { comboPart } from "#lib/format.ts";
   import Confidence from "./Confidence.svelte";
 
   // `bare`: the column already names the label, so only the value shows.

@@ -1,6 +1,6 @@
 <script lang="ts">
   import { page } from "$app/state";
-  import { errorMessage } from "$lib/format";
+  import { errorMessage } from "#lib/format.ts";
 
   let { error, reset, quiet }: { error: unknown; reset: () => void; quiet: boolean } = $props();
 

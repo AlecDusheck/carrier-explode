@@ -1,9 +1,9 @@
 <script lang="ts">
   import { SvelteMap, SvelteSet } from "svelte/reactivity";
-  import { summariseDiff, type BundleDiff, type DiffKind } from "$lib/decode";
-  import type { Kind, PublicEntry } from "$lib/types";
-  import { DIFF_CHIP, fileHref } from "$lib/format";
-  import { Folding, toggleIn, type FoldToggle } from "$lib/ui-state.svelte";
+  import { summariseDiff, type BundleDiff, type DiffKind } from "#lib/decode/index.ts";
+  import type { Kind, PublicEntry } from "#lib/types.ts";
+  import { DIFF_CHIP, fileHref } from "#lib/format.ts";
+  import { Folding, toggleIn, type FoldToggle } from "#lib/ui-state.svelte.ts";
   import DiffRows from "./DiffRows.svelte";
 
   interface Side { kind: Kind; name: string; entry: PublicEntry }

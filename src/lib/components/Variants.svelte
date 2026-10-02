@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { variantKey, type Variant } from "$lib/decode";
+  import { variantKey, type Variant } from "#lib/decode/index.ts";
 
   let { variants = [], configs = [] }: { variants?: Variant[]; configs?: string[] } = $props();
 

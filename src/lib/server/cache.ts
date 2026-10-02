@@ -9,7 +9,8 @@
 
 import { error } from "@sveltejs/kit";
 import { getRequestEvent } from "$app/server";
-import { bytesToHex } from "$lib/decode";
+import { waitUntil } from "cloudflare:workers";
+import { bytesToHex } from "#lib/decode/index.ts";
 
 /**
  * JSON built by `fn`, kept in the colo cache for `ttlSeconds` when `keep`
@@ -17,9 +18,7 @@ import { bytesToHex } from "$lib/decode";
  * means "not reachable yet".
  */
 export async function cached<T>(key: string, ttlSeconds: number, fn: () => Promise<T>, keep: (v: T) => boolean = (v) => v != null): Promise<T> {
-  const { platform } = getRequestEvent();
-  const cache = platform?.caches?.default;
-  if (!platform || !cache) return fn();
+  const cache = await caches.open("derived");
   const req = new Request(`https://cache.carrier-explode/${encodeURIComponent(key)}`);
   const hit = await cache.match(req);
   if (hit) return hit.json<T>();
@@ -28,7 +27,7 @@ export async function cached<T>(key: string, ttlSeconds: number, fn: () => Promi
     const res = new Response(JSON.stringify(value), {
       headers: { "content-type": "application/json", "cache-control": `public, s-maxage=${ttlSeconds}` },
     });
-    platform.ctx.waitUntil(cache.put(req, res).catch(() => {}));
+    waitUntil(cache.put(req, res).catch(() => {}));
   }
   return value;
 }

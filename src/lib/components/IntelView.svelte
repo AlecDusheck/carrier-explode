@@ -1,7 +1,7 @@
 <script lang="ts">
   import type { Snippet } from "svelte";
-  import { bandList, filterIntel, type IntelTree } from "$lib/decode";
-  import { Folding } from "$lib/ui-state.svelte";
+  import { bandList, filterIntel, type IntelTree } from "#lib/decode/index.ts";
+  import { Folding } from "#lib/ui-state.svelte.ts";
   import IntelNode from "./IntelNode.svelte";
   import TreeToolbar from "./TreeToolbar.svelte";
 

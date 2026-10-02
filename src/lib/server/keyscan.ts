@@ -8,7 +8,7 @@
  * are reported as unindexed until the next one.
  */
 
-import { lookupAll, stable, type Flat } from "$lib/decode";
+import { lookupAll, stable, type Flat } from "#lib/decode/index.ts";
 
 /* ------------------------------------------------------------ storage layout */
 

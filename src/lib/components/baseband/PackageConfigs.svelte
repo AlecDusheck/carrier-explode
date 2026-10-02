@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { humanBytes, shortHex } from "$lib/format";
+  import { humanBytes, shortHex } from "#lib/format.ts";
   import Confidence from "../Confidence.svelte";
   import Variants from "../Variants.svelte";
   import type { Baseband } from "./types";

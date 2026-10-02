@@ -1,4 +1,4 @@
-import { basebandBuilds, getIndex } from "$lib/server/data";
+import { basebandBuilds, getIndex } from "#lib/server/data.ts";
 
 /** The lists, one page per bundle, per iOS image and per modem package in each image. Versions, tabs and files hang off those. */
 export async function GET({ url }) {

@@ -1,7 +1,7 @@
 <script lang="ts">
   import type { Attachment } from "svelte/attachments";
-  import type { PublicEntry } from "$lib/types";
-  import { entryLabel } from "$lib/format";
+  import type { PublicEntry } from "#lib/types.ts";
+  import { entryLabel } from "#lib/format.ts";
 
   let { timeline, current, href }: {
     timeline: PublicEntry[];

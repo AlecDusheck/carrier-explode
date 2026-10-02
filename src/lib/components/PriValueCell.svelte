@@ -1,6 +1,6 @@
 <script lang="ts">
-  import type { PriValue } from "$lib/decode";
-  import { hexDump } from "$lib/format";
+  import type { PriValue } from "#lib/decode/index.ts";
+  import { hexDump } from "#lib/format.ts";
 
   let { v, label }: { v: PriValue; label?: string } = $props();
   let open = $state(false);

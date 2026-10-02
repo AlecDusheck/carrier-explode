@@ -1,19 +1,19 @@
 <script lang="ts">
   import { goto } from "$app/navigation";
-  import { getBaseband, getBasebandBuilds, getModems } from "$lib/api/tables.remote";
-  import { modemCapabilities } from "$lib/decode";
-  import { link } from "$lib/format";
-  import Pane from "$lib/components/Pane.svelte";
-  import ModemNav from "$lib/components/baseband/ModemNav.svelte";
-  import FbsSection from "$lib/components/baseband/FbsSection.svelte";
-  import CarrierCombos from "$lib/components/baseband/CarrierCombos.svelte";
-  import PolicyFiles from "$lib/components/baseband/PolicyFiles.svelte";
-  import PowerTable from "$lib/components/baseband/PowerTable.svelte";
-  import NetworkDbs from "$lib/components/baseband/NetworkDbs.svelte";
-  import PackageConfigs from "$lib/components/baseband/PackageConfigs.svelte";
-  import BasebandDiffSection from "$lib/components/baseband/BasebandDiffSection.svelte";
-  import ModemFirmware from "$lib/components/baseband/ModemFirmware.svelte";
-  import type { Baseband } from "$lib/components/baseband/types";
+  import { getBaseband, getBasebandBuilds, getModems } from "#lib/api/tables.remote.ts";
+  import { modemCapabilities } from "#lib/decode/index.ts";
+  import { link } from "#lib/format.ts";
+  import Pane from "#lib/components/Pane.svelte";
+  import ModemNav from "#lib/components/baseband/ModemNav.svelte";
+  import FbsSection from "#lib/components/baseband/FbsSection.svelte";
+  import CarrierCombos from "#lib/components/baseband/CarrierCombos.svelte";
+  import PolicyFiles from "#lib/components/baseband/PolicyFiles.svelte";
+  import PowerTable from "#lib/components/baseband/PowerTable.svelte";
+  import NetworkDbs from "#lib/components/baseband/NetworkDbs.svelte";
+  import PackageConfigs from "#lib/components/baseband/PackageConfigs.svelte";
+  import BasebandDiffSection from "#lib/components/baseband/BasebandDiffSection.svelte";
+  import ModemFirmware from "#lib/components/baseband/ModemFirmware.svelte";
+  import type { Baseband } from "#lib/components/baseband/types.ts";
 
   let { params } = $props();
 

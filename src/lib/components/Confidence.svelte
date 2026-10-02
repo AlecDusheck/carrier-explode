@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { ConfidenceOrUnknown } from "$lib/decode";
+  import type { ConfidenceOrUnknown } from "#lib/decode/index.ts";
 
   let { c }: { c?: ConfidenceOrUnknown } = $props();
 

@@ -1,6 +1,6 @@
 /**
  * Summarises a modem package into the summary the site reads. Run with
- * vite-node (for `$lib`). The kind is read off the file: a .bbfw is a zip, an
+ * vite-node (for `#lib`). The kind is read off the file: a .bbfw is a zip, an
  * Apple ftab has 'rkos' 'ftab' at 0x20.
  *
  *   baseband.ts <package> --name NAME --out summary.json [--manifest manifest.plist] [--no-modem]
@@ -20,9 +20,9 @@ import { basename } from "node:path";
 import { parseArgs } from "node:util";
 import { unzipSync } from "fflate";
 
-import { basebandSummary, ftabSummary, type ModemSummary } from "$lib/decode";
-import { MANIFEST_URL, parseManifest } from "$lib/server/manifest";
-import { summaryKey } from "$lib/server/modems";
+import { basebandSummary, ftabSummary, type ModemSummary } from "#lib/decode/index.ts";
+import { MANIFEST_URL, parseManifest } from "#lib/server/manifest.ts";
+import { summaryKey } from "#lib/server/modems.ts";
 
 const { positionals, values: arg } = parseArgs({
   allowPositionals: true,

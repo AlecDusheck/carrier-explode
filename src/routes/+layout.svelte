@@ -1,13 +1,13 @@
 <script lang="ts">
-  import "$lib/ui.css";
+  import "#lib/ui.css";
   import { page, navigating } from "$app/state";
-  import { getStats } from "$lib/api/bundles.remote";
-  import { link } from "$lib/format";
-  import { SITE, seo } from "$lib/seo";
-  import { scan } from "$lib/ui-state.svelte";
-  import ContextMenu from "$lib/components/ContextMenu.svelte";
-  import ScanDialog from "$lib/components/ScanDialog.svelte";
-  import Pane from "$lib/components/Pane.svelte";
+  import { getStats } from "#lib/api/bundles.remote.ts";
+  import { link } from "#lib/format.ts";
+  import { SITE, seo } from "#lib/seo.ts";
+  import { scan } from "#lib/ui-state.svelte.ts";
+  import ContextMenu from "#lib/components/ContextMenu.svelte";
+  import ScanDialog from "#lib/components/ScanDialog.svelte";
+  import Pane from "#lib/components/Pane.svelte";
 
   let { children } = $props();
 

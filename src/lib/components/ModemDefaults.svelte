@@ -1,9 +1,9 @@
 <script lang="ts">
   import { page } from "$app/state";
-  import { getBasebandDefaults, getBasebandOverride } from "$lib/api/tables.remote";
-  import { modemLabel } from "$lib/decode";
-  import type { Kind } from "$lib/types";
-  import { link, withParams } from "$lib/format";
+  import { getBasebandDefaults, getBasebandOverride } from "#lib/api/tables.remote.ts";
+  import { modemLabel } from "#lib/decode/index.ts";
+  import type { Kind } from "#lib/types.ts";
+  import { link, withParams } from "#lib/format.ts";
   import Pane from "./Pane.svelte";
   import Variants from "./Variants.svelte";
   import ComboStatsTable from "./ComboStatsTable.svelte";
@@ -60,7 +60,7 @@
                     <td><span class="mono">{b.member}</span> <Variants variants={b.variants} configs={b.configs} /></td>
                     <td>
                       {#if b.same}<span class="chip good">identical</span>
-                      {:else}<a class="btn" href={compareHref(o.pri, o.efs, b.i)} data-sveltekit-noscroll data-sveltekit-replacestate>Compare</a>{/if}
+                      {:else}<a class="btn" href={compareHref(o.pri, o.efs, b.i)} data-sveltekit-reset="false" data-sveltekit-replacestate>Compare</a>{/if}
                     </td>
                   </tr>
                 {/each}
@@ -79,7 +79,7 @@
               <b class="mono wrap">{o.efs}</b>
               <span class="dimtext">{o.counts.changed + o.counts.added + o.counts.removed} lines differ</span>
               <span class="grow"></span>
-              <a class="btn" href={closeHref} data-sveltekit-noscroll data-sveltekit-replacestate>Close</a>
+              <a class="btn" href={closeHref} data-sveltekit-reset="false" data-sveltekit-replacestate>Close</a>
             </div>
             <div class="sides">
               <div>

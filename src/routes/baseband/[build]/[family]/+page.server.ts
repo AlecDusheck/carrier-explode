@@ -1,5 +1,5 @@
 import { error } from "@sveltejs/kit";
-import { getModems } from "$lib/server/data";
+import { getModems } from "#lib/server/data.ts";
 
 export const load = async ({ params }) => {
   const { modems, version } = await getModems(params.build);

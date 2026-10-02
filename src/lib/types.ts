@@ -1,9 +1,9 @@
 /**
- * Shapes the server hands to pages, kept out of $lib/server so components can
+ * Shapes the server hands to pages, kept out of #lib/server so components can
  * name them.
  */
 
-import type { FileDiff } from "$lib/decode";
+import type { FileDiff } from "#lib/decode/index.ts";
 
 export const KINDS = ["carriers", "countries", "watch"] as const;
 export type Kind = (typeof KINDS)[number];

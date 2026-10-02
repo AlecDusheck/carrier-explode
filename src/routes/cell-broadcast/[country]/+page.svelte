@@ -1,9 +1,9 @@
 <script lang="ts">
-  import { getCbs } from "$lib/api/tables.remote";
-  import { describeMessageId } from "$lib/decode";
-  import type { CbsRow } from "$lib/types";
-  import { bundleHref, cbsEntryLabel, link } from "$lib/format";
-  import Pane from "$lib/components/Pane.svelte";
+  import { getCbs } from "#lib/api/tables.remote.ts";
+  import { describeMessageId } from "#lib/decode/index.ts";
+  import type { CbsRow } from "#lib/types.ts";
+  import { bundleHref, cbsEntryLabel, link } from "#lib/format.ts";
+  import Pane from "#lib/components/Pane.svelte";
 
   let { params } = $props();
 

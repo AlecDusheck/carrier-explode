@@ -6,8 +6,8 @@
  * user can switch it off is the interesting difference between bundles.
  */
 
-import { openIpcc, decodeFile, decodedPlist, isRecord } from "$lib/decode";
-import type { CbsAlertType, CbsMapping, CbsRow } from "$lib/types";
+import { openIpcc, decodeFile, decodedPlist, isRecord } from "#lib/decode/index.ts";
+import type { CbsAlertType, CbsMapping, CbsRow } from "#lib/types.ts";
 import { compareVersions, type CountrySummary } from "./manifest";
 
 type Rec = Record<string, unknown>;

@@ -26,6 +26,8 @@
     { "name": "RL_BUNDLE", "namespace_id": "7030", "simple": { "limit": 60, "period": 60 } },
     { "name": "RL_BASE", "namespace_id": "7040", "simple": { "limit": 120, "period": 60 } }
   ],
+  // For /internal/purge; set with `wrangler secret put PURGE_TOKEN`.
+  "secrets": { "required": ["PURGE_TOKEN"] },
   "observability": { "enabled": true },
   "placement": { "mode": "smart" }
   // Optional durable cache layer. Create with:
