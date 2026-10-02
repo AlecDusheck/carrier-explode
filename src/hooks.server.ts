@@ -96,11 +96,11 @@ async function overBudget(event: RequestEvent, rate: RateClass): Promise<Respons
   });
 }
 
-// Pages are purged when their data changes: "latest" and "pinned" when Apple's
-// manifest does (lib/server/data.ts), "latest" when an image is ingested. The TTLs
-// only bound how long a page can outlive a purge that never came.
-const PINNED_EDGE = "max-age=86400, stale-while-revalidate=2592000";
-const LATEST_EDGE = "max-age=21600, stale-while-revalidate=86400";
+// A pinned version's files never change, but its page lists every version of the
+// bundle, so a new OTA has to show up on it too.
+const PINNED_EDGE = "max-age=21600, stale-while-revalidate=86400";
+// New OTA bundles appear within the hour. An ingest purges "latest" when it lands.
+const LATEST_EDGE = "max-age=3600, stale-while-revalidate=86400";
 // A missing bundle is usually a typo or a crawler, and the answer can change when
 // Apple ships; long enough to absorb a hammering, short enough to heal.
 const MISSING_EDGE = "max-age=60";
