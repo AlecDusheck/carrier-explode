@@ -96,11 +96,13 @@ async function overBudget(event: RequestEvent, rate: RateClass): Promise<Respons
   });
 }
 
-const PINNED_EDGE = "max-age=86400, stale-while-revalidate=2592000";
-// Six hours matches the manifest window in lib/server/data.ts: a shorter page TTL
+// A pinned version's files never change, but its page lists every version of the
+// bundle, so a new OTA has to show up on it too.
+const PINNED_EDGE = "max-age=21600, stale-while-revalidate=86400";
+// An hour matches the manifest window in lib/server/data.ts: a shorter page TTL
 // buys freshness the data behind it does not have, and a longer one outlives it.
 // An ingest purges "latest" when it lands, which is what actually cuts it short.
-const LATEST_EDGE = "max-age=21600, stale-while-revalidate=86400";
+const LATEST_EDGE = "max-age=3600, stale-while-revalidate=86400";
 // A missing bundle is usually a typo or a crawler, and the answer can change when
 // Apple ships; long enough to absorb a hammering, short enough to heal.
 const MISSING_EDGE = "max-age=60";

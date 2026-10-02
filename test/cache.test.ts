@@ -16,14 +16,14 @@ describe("cachePolicy", () => {
     // s-maxage would disable stale-while-revalidate, and a plain public
     // Cache-Control would let shared caches we cannot purge keep the page.
     const p = edge({ version: "ios-27.0" });
-    expect(p.edge).toBe("max-age=86400, stale-while-revalidate=2592000");
+    expect(p.edge).toBe("max-age=21600, stale-while-revalidate=86400");
     expect(p.browser).toBe("no-cache");
     expect(p.browser).not.toContain("public");
   });
 
-  it("holds a pinned version far longer than a page that tracks newest", () => {
-    expect(edge({ version: "ios-27.0" }).edge).toContain("max-age=86400");
-    expect(edge().edge).toContain("max-age=21600");
+  it("holds a pinned version longer than a page that tracks newest", () => {
+    expect(edge({ version: "ios-27.0" }).edge).toContain("max-age=21600");
+    expect(edge().edge).toContain("max-age=3600");
   });
 
   it("tags pages rendered from modem package summaries so a rebuild can purge them", () => {
@@ -41,7 +41,7 @@ describe("cachePolicy", () => {
   });
 
   it("caches the redirect off /", () => {
-    expect(edge({}, 307).edge).toContain("max-age=21600");
+    expect(edge({}, 307).edge).toContain("max-age=3600");
   });
 
   it("keeps a 404 briefly and never keeps an error", () => {

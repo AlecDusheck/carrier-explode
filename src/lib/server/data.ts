@@ -82,16 +82,16 @@ const buildsKey = (all: ImageBuild[]) => fingerprint(all.map((b) => `${b.build}@
 
 /* ---------------------------------------------------------------- manifest */
 
-const MANIFEST_TTL = 6 * 3600;
+const MANIFEST_TTL = 3600;
 /** Why a bundle or version that does exist can be missing. */
-const NOT_LISTED_YET = `If Apple only just published it, it can take up to ${MANIFEST_TTL / 3600} hours to show up here.`;
+const NOT_LISTED_YET = "If Apple only just published it, it can take up to an hour to show up here.";
 
-/** Which six-hour window a manifest fetch falls in; everything derived from the manifest is keyed by it. */
+/** Which hour a manifest fetch falls in; everything derived from the manifest is keyed by it. */
 const manifestSlot = () => Math.floor(Date.now() / (MANIFEST_TTL * 1000));
 
 /** The manifest's tables. The plist is 6 MB, so it is parsed once per window and the tables are kept in the colo cache. */
 const manifest = perRequest(() =>
-  cached(`manifest:v1:${manifestSlot()}`, MANIFEST_TTL, async (): Promise<ManifestTables & { fetchedAt: string }> => {
+  cached(`manifest:v2:${manifestSlot()}`, MANIFEST_TTL, async (): Promise<ManifestTables & { fetchedAt: string }> => {
     // The window above decides how often the list is read; a long edge copy on top would double the wait.
     const res = await fetch(MANIFEST_URL, { cf: { cacheTtl: 300, cacheEverything: true } });
     if (!res.ok) error(502, `manifest fetch failed: ${res.status}`);
@@ -101,7 +101,7 @@ const manifest = perRequest(() =>
 
 /** How big the manifest's tables are, for the wiki: a few numbers, kept for the manifest window. */
 export const getManifestFacts = perRequest(() =>
-  cached(`manifestfacts:v1:${manifestSlot()}`, MANIFEST_TTL, async () => {
+  cached(`manifestfacts:v2:${manifestSlot()}`, MANIFEST_TTL, async () => {
     const m = await manifest();
     return { counts: m.index.counts, fetchedAt: m.fetchedAt };
   }));
@@ -143,7 +143,7 @@ const newestPublished = (refs: BundleRef[] = []) => newestDate(refs.map((r) => p
 /** Every bundle name. Built from the manifest and every image, so it is kept per manifest window and image set. */
 export const getIndex = perRequest(async () => {
   const all = await builds();
-  return cached(`index:v4:${manifestSlot()}:${buildsKey(all)}`, MANIFEST_TTL, async () => {
+  return cached(`index:v5:${manifestSlot()}:${buildsKey(all)}`, MANIFEST_TTL, async () => {
     const [m, images] = await Promise.all([manifest(), imageIndexes()]);
     const newest = images.find((i) => i.build === release(all)?.build);
 
@@ -227,7 +227,7 @@ const timelineOf = perRequest(async (kind: Kind, name: string): Promise<Timeline
  */
 export const getTimeline = perRequest(async (kind: Kind, name: string): Promise<TimelineEntry[]> => {
   const all = await builds();
-  const out = await cached(`timeline:v1:${manifestSlot()}:${buildsKey(all)}:${kind}:${name}`, MANIFEST_TTL,
+  const out = await cached(`timeline:v2:${manifestSlot()}:${buildsKey(all)}:${kind}:${name}`, MANIFEST_TTL,
     () => timelineOf(kind, name), () => true);
   if (!out.length) error(404, `No bundle named ${name}. ${NOT_LISTED_YET}`);
   return out;
