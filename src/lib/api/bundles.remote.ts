@@ -5,9 +5,11 @@ import { build, bundle, pinned } from "./schemas";
 
 export const getIndex = query(() => data.getIndex());
 export const getStats = query(() => data.getStats());
+export const getManifestFacts = query(() => data.getManifestFacts());
 export const guessCarrier = query(() => data.guessCarrier());
 export const guessCountry = query(() => data.guessCountry());
 export const getBundle = query(v.object(bundle), (a) => data.getBundle(a.kind, a.name, a.slug));
+export const getHead = query(v.object({ kind: bundle.kind, name: bundle.name }), (a) => data.getHead(a.kind, a.name));
 export const getFile = query(v.object({ ...pinned, path: v.string() }), (a) =>
   data.getFile(a.kind, a.name, a.slug, a.path));
 /** One diff for /compare and the Changes tab. No `a`: against the version before `b`. */

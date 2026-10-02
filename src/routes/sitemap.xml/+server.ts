@@ -1,10 +1,12 @@
 import { basebandBuilds, getIndex } from "#lib/server/data.ts";
+import { ARTICLES } from "#lib/wiki.ts";
 
 /** The lists, one page per bundle, per iOS image and per modem package in each image. Versions, tabs and files hang off those. */
 export async function GET({ url }) {
   const [idx, bb] = await Promise.all([getIndex(), basebandBuilds()]);
   const paths = [
-    "/carriers", "/countries", "/watch", "/cell-broadcast", "/plmn", "/releases",
+    "/carriers", "/countries", "/watch", "/cell-broadcast", "/plmn", "/releases", "/wiki",
+    ...ARTICLES.map((a) => `/wiki/${a.slug}`),
     ...(["carriers", "countries", "watch"] as const).flatMap((kind) =>
       idx[kind].map((e) => `/${kind}/${encodeURIComponent(e.name)}`)),
     ...idx.builds.map((b) => `/releases/${encodeURIComponent(b.build)}`),

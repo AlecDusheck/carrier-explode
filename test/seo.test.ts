@@ -15,6 +15,7 @@ const CASES: Array<[string, Parameters<typeof seo>[1]]> = [
   ["/cell-broadcast/[country]", { country: "India" }],
   ["/compare", {}],
   ["/releases", {}],
+  ["/wiki", {}],
   ["/releases/[build]", { build: "24A437" }],
   ["/baseband/[build]", { build: "24A437" }],
   ["/baseband/[build]", { build: "24B5089g" }],

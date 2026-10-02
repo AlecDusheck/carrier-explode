@@ -190,6 +190,11 @@ export function seo(id: string | null, p: Params): Meta {
         title: "Compare carrier bundles",
         description: "Diff two iOS carrier or country bundles key by key, across carriers or across versions.",
       };
+    case "/wiki":
+      return {
+        title: "Carrier bundle wiki",
+        description: "How iOS carrier and country bundles are built, matched to a SIM, signed and delivered, and what the modem override files inside them do.",
+      };
     case "/releases":
       return {
         title: "iOS releases and betas — carrier bundle changes",

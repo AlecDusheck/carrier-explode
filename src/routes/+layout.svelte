@@ -20,10 +20,12 @@
     ["/baseband", "Baseband"],
     ["/compare", "Compare"],
     ["/releases", "Releases"],
+    ["/wiki", "Wiki"],
   ];
 
   const here = $derived(page.url.pathname);
-  const meta = $derived(seo(page.route.id, page.params));
+  // A page that knows its own title (a wiki article) says so in its data.
+  const meta = $derived(page.data.meta ?? seo(page.route.id, page.params));
   // One address per page: the compare tool is the only page with meaningful
   // search params, and its results are not what should be indexed.
   const canonical = $derived(page.url.origin + page.url.pathname);
@@ -49,8 +51,8 @@
 
     <nav class="menubar">
       {#each MENU as [href, label] (href)}
-        {@const to = link(href)}
-        <a href={to} aria-current={here === to || here.startsWith(to + "/") ? "page" : undefined}>{label}</a>
+        <!-- Compared unresolved: during SSR link() is relative to the page. -->
+        <a href={link(href)} aria-current={here === href || here.startsWith(href + "/") ? "page" : undefined}>{label}</a>
       {/each}
     </nav>
 

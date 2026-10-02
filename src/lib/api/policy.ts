@@ -21,9 +21,12 @@ export type QueryName = keyof typeof bundles | keyof typeof tables;
 export const QUERIES: Record<QueryName, QueryPolicy> = {
   getIndex: { rate: "base", shared: true },
   getStats: { rate: "base", shared: true },
+  getManifestFacts: { rate: "base", shared: true },
   guessCarrier: { rate: "base" },
   guessCountry: { rate: "base" },
   getRelease: { rate: "base" },
+  // A bundle's current version, for the wiki's links: one cached timeline read.
+  getHead: { rate: "base", shared: true },
   // Anything that can pull and unzip an .ipcc.
   getBundle: { rate: "bundle" },
   getFile: { rate: "bundle" },
@@ -34,6 +37,8 @@ export const QUERIES: Record<QueryName, QueryPolicy> = {
   getComparison: { rate: "diff" },
   getBasebandDiff: { rate: "diff" },
   scanKey: { rate: "scan" },
+  // A scan cut to a few numbers, the same for everybody: wiki pages show several at once.
+  getSettingSummary: { rate: "base", shared: true },
   getCbs: { rate: "base" },
   getPlmn: { rate: "base" },
   getBasebandBuilds: { rate: "base" },

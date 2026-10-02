@@ -6,8 +6,10 @@ import { build, bundle, device, family, index, packageId } from "./schemas";
 export const getCbs = query(() => data.getCbs());
 export const getPlmn = query(() => data.getPlmn());
 
-export const scanKey = query(v.object({ path: v.string(), file: v.string(), scope: v.string() }), (a) =>
-  data.scanKey(a.path, a.file, a.scope));
+const scan = v.object({ path: v.string(), file: v.string(), scope: v.string() });
+
+export const scanKey = query(scan, (a) => data.scanKey(a.path, a.file, a.scope));
+export const getSettingSummary = query(scan, (a) => data.settingSummary(a.path, a.file, a.scope));
 
 export const getBasebandBuilds = query(() => data.basebandBuilds());
 export const getModems = query(build, (b) => data.getModems(b));

@@ -57,7 +57,6 @@ body {
 .window { height: 100%; display: flex; flex-direction: column }
 .frame {
   flex: 1; min-height: 0; display: flex; flex-direction: column;
-  border: 2px solid; border-color: var(--light) var(--dark) var(--dark) var(--light);
   background: var(--face);
 }
 .titlebar {
@@ -192,6 +191,35 @@ table.grid td.mono { font-family: var(--mono); font-size: 11px; }
 table.grid td.k { background: var(--face-hi); font-weight: bold; white-space: nowrap; }
 table.grid td.wrap { word-break: break-all; }
 table.grid tr.sel td { background: var(--sel-row); }
+/* Wiki articles: markdown, so the elements are styled rather than classed. */
+.wiki { max-width: 86ch; line-height: 1.5; background: var(--field); padding: 10px 14px 16px; border: 1px solid var(--shadow); }
+.wiki h1 { font-size: 20px; font-weight: normal; margin: 0 0 8px; padding-bottom: 2px; border-bottom: 1px solid var(--shadow); }
+.wiki h2 { font-size: 16px; font-weight: normal; margin: 18px 0 6px; padding-bottom: 2px; border-bottom: 1px solid var(--shadow); }
+.wiki h3 { font-size: 13px; margin: 14px 0 4px; }
+.wiki p, .wiki ul, .wiki ol { margin: 0 0 8px; }
+.wiki li { margin: 2px 0; }
+.wiki code { font-family: var(--mono); font-size: 11px; background: var(--face-hi); padding: 0 3px; }
+.wiki pre { font-family: var(--mono); font-size: 11px; background: #f8f8f6; border: 1px dashed var(--shadow); padding: 6px 8px; overflow: auto; margin: 4px 0 10px; }
+.wiki pre code { background: none; padding: 0; }
+/* Wide tables scroll inside the article rather than spill out of it. */
+.wiki table { border-collapse: collapse; font-size: 11.5px; margin: 4px 0 10px; display: block; max-width: 100%; overflow-x: auto; }
+.wiki td code { word-break: break-all; }
+.wiki th, .wiki td { border: 1px solid #c9c5bd; padding: 2px 6px; text-align: left; vertical-align: top; }
+.wiki th { background: var(--face); }
+.wiki-meta { margin-top: 18px; padding-top: 6px; border-top: 1px solid var(--shadow); font-size: 11px; color: var(--text-dim); }
+.wiki-page { display: flex; gap: 10px; align-items: flex-start; }
+.wiki-page > .wiki { flex: 1; min-width: 0; }
+.wiki-nav { flex: none; width: 170px; display: flex; flex-direction: column; gap: 2px; font-size: 11.5px; position: sticky; top: 0; }
+.wiki-nav h2 { font-size: 11px; color: var(--text-dim); margin: 8px 0 2px; font-weight: normal; border-bottom: 1px solid var(--shadow); }
+.wiki-nav a[aria-current="page"] { font-weight: bold; color: var(--text); text-decoration: none; }
+.wiki-nav details { margin-top: 8px; }
+.wiki-nav summary { font-size: 11px; color: var(--text-dim); cursor: pointer; border-bottom: 1px solid var(--shadow); margin-bottom: 2px; }
+.wiki-nav details > a { display: block; padding-left: 8px; margin: 2px 0; }
+@media (max-width: 760px) {
+  .wiki-page { flex-direction: column; }
+  .wiki-nav { position: static; width: auto; flex-direction: row; flex-wrap: wrap; gap: 4px 10px; }
+  .wiki-nav h2 { display: none; }
+}
 /* Two-column key/value tables size to their content. */
 table.grid.fit { width: auto; }
 .sticky-col { position: sticky; left: 0; z-index: 1; background: var(--face); }

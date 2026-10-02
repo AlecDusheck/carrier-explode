@@ -96,6 +96,13 @@ const manifest = perRequest(() =>
     return { ...tables, fetchedAt: new Date().toISOString() };
   }));
 
+/** How big the manifest's tables are, for the wiki: a few numbers, kept for the manifest window. */
+export const getManifestFacts = perRequest(() =>
+  cached(`manifestfacts:v1:${manifestSlot()}`, MANIFEST_TTL, async () => {
+    const m = await manifest();
+    return { counts: m.index.counts, fetchedAt: m.fetchedAt };
+  }));
+
 /* ------------------------------------------------------------------- lists */
 
 export interface ListEntry {
@@ -194,6 +201,13 @@ export const getTimeline = perRequest(async (kind: Kind, name: string): Promise<
   if (!out.length) error(404, `no bundle named ${name}`);
   return out;
 });
+
+/** The version a bundle's page opens on, without opening it: what a wiki link names. */
+export async function getHead(kind: Kind, name: string) {
+  const timeline = await getTimeline(kind, name);
+  const { slug, build, ios, source } = timeline[headIndex(timeline)];
+  return { slug, build, ios, source };
+}
 
 async function resolve(kind: Kind, name: string, slug?: string) {
   const timeline = await getTimeline(kind, name);
@@ -666,6 +680,29 @@ export async function scanKey(path: string, file: string, scope: string) {
     }
     return keyScan(targets, rows, file, path, scope);
   });
+}
+
+/**
+ * One setting across every bundle in scope, cut to what a wiki table shows: how
+ * many bundles set it, the median of its numeric values, and every bundle that
+ * holds the largest and the smallest. Built from scanKey, so it moves with each
+ * index run.
+ */
+export async function settingSummary(path: string, file: string, scope: string) {
+  const r = await scanKey(path, file, scope);
+  const nums = r.hits
+    .flatMap((h) => h.matches.map((m) => ({ name: h.name, value: m.value })))
+    .filter((x): x is { name: string; value: number } => typeof x.value === "number")
+    .sort((a, b) => a.value - b.value);
+  const holders = (value: number | undefined) =>
+    value === undefined ? null : { value, names: [...new Set(nums.filter((x) => x.value === value).map((x) => x.name))] };
+  return {
+    scanned: r.scanned,
+    set: r.set,
+    median: nums.length ? nums[Math.floor(nums.length / 2)].value : null,
+    min: holders(nums[0]?.value),
+    max: holders(nums.at(-1)?.value),
+  };
 }
 
 /** FNV-1a over a set of strings: a cache key part that changes when any member does. */
