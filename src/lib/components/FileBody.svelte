@@ -1,6 +1,6 @@
 <script lang="ts">
   import { isPlistKind, type DecodedFile, type PlistKind } from "#lib/decode/index.ts";
-  import { humanBytes, hexDump } from "#lib/format.ts";
+  import { hexDump } from "#lib/format.ts";
   import Tree from "./Tree.svelte";
   import PriView from "./PriView.svelte";
   import PrlView from "./PrlView.svelte";
@@ -38,16 +38,13 @@
   {#if showRaw}{@render rawBody()}{/if}
 {/snippet}
 
-<div class="filters">
-  {#if devices && file.devices?.length}
+{#if devices && file.devices?.length}
+  <div class="filters">
     <span class="dimtext">
       {#each file.devices as d, i (i)}{i ? ", " : ""}<span title={d.ids ?? d.code}>{d.name ?? d.code}</span>{/each}
     </span>
-  {/if}
-  <span class="grow"></span>
-  <a class="btn" href="{raw}?dl" data-sveltekit-reload title={humanBytes(file.size)}>Save</a>
-  <a class="btn" href={raw} target="_blank" rel="noreferrer">Raw</a>
-</div>
+  </div>
+{/if}
 
 {#if file.note}<div class="banner">{file.note}</div>{/if}
 {#if file.error}

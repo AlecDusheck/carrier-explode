@@ -89,8 +89,9 @@ export const bundleHref = (kind: Kind, name: string, slug?: string, tab?: string
 export const fileHref = (kind: Kind, name: string, slug: string, path: string) =>
   `${bundleHref(kind, name, slug, "files")}/${segs(path)}`;
 
-export const rawHref = (kind: Kind, name: string, slug: string, path: string, download = false) =>
-  link(`/raw/${kind}/${seg(name)}/${seg(slug)}/${segs(path)}`) + (download ? "?dl" : "");
+/** Only images and audio: the pages embed those, every other file is shown decoded. */
+export const rawHref = (kind: Kind, name: string, slug: string, path: string) =>
+  link(`/raw/${kind}/${seg(name)}/${seg(slug)}/${segs(path)}`);
 
 
 /** Query args must be built the same way everywhere so layout and page share one cached query. */
