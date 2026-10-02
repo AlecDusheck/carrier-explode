@@ -94,7 +94,7 @@ describe("legacy renames", () => {
 
 describe("real bundle values", () => {
   it("every ATT_RedPocket IMSConfig.Signaling enum value is an allowed value", () => {
-    const sig = (carrierOf("ATT_RedPocket_Watch.ipcc").IMSConfig as Dict).Signaling as Dict;
+    const sig = (carrierOf("watch-redpocket.ipcc").IMSConfig as Dict).Signaling as Dict;
     let checked = 0;
     for (const [k, v] of Object.entries(sig)) {
       const s = describeImsSetting(k, "Signaling");
@@ -106,7 +106,7 @@ describe("real bundle values", () => {
   });
 
   it("booleans and integers in the bundle match the registry type", () => {
-    const sig = (carrierOf("ATT_RedPocket_Watch.ipcc").IMSConfig as Dict).Signaling as Dict;
+    const sig = (carrierOf("watch-redpocket.ipcc").IMSConfig as Dict).Signaling as Dict;
     for (const [k, v] of Object.entries(sig)) {
       const s = describeImsSetting(k, "Signaling");
       if (!s || s.section !== "Signaling") continue;
@@ -142,7 +142,7 @@ describe("call end reasons", () => {
   });
 
   it("ATT_RedPocket TerminationEvent values are ReasonCode names", () => {
-    const inc = ((carrierOf("ATT_RedPocket_Watch.ipcc").IMSConfig as Dict).Signaling as Dict).IncomingCallEndReasons as Record<string, Dict>;
+    const inc = ((carrierOf("watch-redpocket.ipcc").IMSConfig as Dict).Signaling as Dict).IncomingCallEndReasons as Record<string, Dict>;
     for (const e of Object.values(inc)) expect(TERMINATION_EVENTS).toContain(e.TerminationEvent);
   });
 });

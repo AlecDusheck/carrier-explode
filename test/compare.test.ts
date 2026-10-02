@@ -77,8 +77,8 @@ describe("stable and diffKeyed", () => {
 });
 
 describe("compareBundles", () => {
-  const att = openIpcc(fixture("ATT_US.ipcc"));
-  const vzw = openIpcc(fixture("Verizon_LTE_US.ipcc"));
+  const att = openIpcc(fixture("carrier-att.ipcc"));
+  const vzw = openIpcc(fixture("carrier-verizon.ipcc"));
 
   it("finds nothing between a bundle and itself", () => {
     const d = compareBundles(att, att);

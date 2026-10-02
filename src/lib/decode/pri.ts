@@ -97,7 +97,7 @@ export const PRI_TAGS: Record<string, PriTagInfo> = {
   "9fa70e": { kind: "name", pairsWith: "9fa70f", name: "Setting name (CDMA NAM / data parameters)", confidence: "low" },
   "9fa70f": { kind: "value", name: "Setting value (CDMA NAM / data parameters)", confidence: "low" },
   "9fa70c": { kind: "path", pairsWith: "9fa70d", name: "EFS path", confidence: "high" },
-  // same role as 9fa70c in older files, long high-tag-number encoding (test fixtures CW_pa, BhartiAirtel_in)
+  // same role as 9fa70c in older files, long high-tag-number encoding (test fixtures carrier-cw-pa, carrier-airtel-in)
   "9f98808080808080a70c": { kind: "path", pairsWith: "9fa70d", name: "EFS path (long-form tag)", confidence: "high" },
   "9fa70d": { kind: "value", name: "EFS value", confidence: "high" },
   "9fae72": { kind: "path", pairsWith: "9fae73", name: "Intel / Apple C1 setting key (%u: / %qu[N]: + NVM path)", confidence: "high" },

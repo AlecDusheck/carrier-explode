@@ -45,7 +45,7 @@ describe("flatten", () => {
   });
 
   it("flattens every decodable member of a real bundle", () => {
-    const flat = flattenBundle(openIpcc(fixture("ATT_US.ipcc")));
+    const flat = flattenBundle(openIpcc(fixture("carrier-att.ipcc")));
     expect(Object.keys(flat)).toContain("carrier.plist");
     expect(Object.keys(flat["carrier.plist"]).some((k) => /^apns\[\d+\]\./.test(k))).toBe(true);
   });

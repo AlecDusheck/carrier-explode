@@ -44,10 +44,10 @@ describe("bit reader and CRC", () => {
 
 describe("PRL", () => {
   it("decodes a small extended PRL field by field", () => {
-    const d = decodePrl(fx("extended-sprint-400.prl"));
+    const d = decodePrl(fx("prl-extended.prl"));
     expect(d.format).toBe("extended");
     expect(d.sspPRev).toBe(3);
-    expect(d).toMatchObject({ size: 44, id: 400, prefOnly: true, defRoamInd: 0, numAcqRecs: 2, numCommonSubnetRecs: 0, numSysRecs: 2 });
+    expect(d).toMatchObject({ size: 44, id: 401, prefOnly: true, defRoamInd: 0, numAcqRecs: 2, numCommonSubnetRecs: 0, numSysRecs: 2 });
     expect(d.crc.ok).toBe(true);
     expect(d.warnings).toEqual([]);
     expect(d.acquisition[0]).toMatchObject({ type: 6, typeName: "PCS CDMA (Using Channels)", length: 5 });
@@ -61,7 +61,7 @@ describe("PRL", () => {
   });
 
   it("decodes MCC-MNC and HRPD system records", () => {
-    const d = decodePrl(fx("extended-mccmnc-31100.prl"));
+    const d = decodePrl(fx("prl-extended-mccmnc.prl"));
     expect(d.warnings).toEqual([]);
     const mcc = d.systems.find((s) => s.type === 3)!;
     expect(mcc).toMatchObject({ subtype: "MCC, MNC, SIDs and NIDs", mcc: "310", sidNids: [{ sid: 4162, nid: 65535 }] });
@@ -73,10 +73,10 @@ describe("PRL", () => {
   });
 
   it("decodes a legacy SSPR_P_REV 1 PRL, which has no revision byte", () => {
-    const d = decodePrl(fx("legacy-31001.prl"));
+    const d = decodePrl(fx("prl-legacy.prl"));
     expect(d.format).toBe("prl");
     expect(d.sspPRev).toBe(1);
-    expect(d.id).toBe(31001);
+    expect(d.id).toBe(31002);
     expect(d.crc.ok).toBe(true);
     expect(d.systems).toHaveLength(d.numSysRecs);
     expect(d.acquisition).toHaveLength(d.numAcqRecs);
@@ -86,7 +86,7 @@ describe("PRL", () => {
   });
 
   it("flags a corrupted CRC but still decodes", () => {
-    const b = fx("extended-sprint-400.prl").slice();
+    const b = fx("prl-extended.prl").slice();
     b[20] ^= 0x01;
     expect(isPrl(b)).toBe(false);
     const d = decodePrl(b);
@@ -102,11 +102,11 @@ describe("PRL", () => {
   });
 
   it("is wired into decodeFile as kind prl", () => {
-    const b = bundleWith({ "carrier.prl": fx("extended-sprint-400.prl") });
+    const b = bundleWith({ "carrier.prl": fx("prl-extended.prl") });
     const d = decodeFile(b, "carrier.prl");
     if (d.kind !== "prl" || !d.prl) throw new Error(d.kind);
-    expect(d.prl.id).toBe(400);
-    expect(describePrl(d.prl)).toMatch(/^Extended PRL \(SSPR_P_REV 3\), ID 400: 2 acquisition records, 2 system records/);
+    expect(d.prl.id).toBe(401);
+    expect(describePrl(d.prl)).toMatch(/^Extended PRL \(SSPR_P_REV 3\), ID 401: 2 acquisition records, 2 system records/);
     expect(d.hex).toBeTruthy();
     expect(() => JSON.stringify(d)).not.toThrow();
   });
@@ -167,7 +167,7 @@ describe("ASN.1", () => {
 
 describe("certificates", () => {
   it("summarises a PEM certificate", () => {
-    const [der] = pemBlocks(new TextDecoder().decode(fx("pem-Maxis_my.crt")));
+    const [der] = pemBlocks(new TextDecoder().decode(fx("cert-pem.crt")));
     const c = parseCertificate(der);
     expect(c).toMatchObject({
       subject: "CN=GlobalSign, O=GlobalSign, OU=GlobalSign Root CA - R3",
@@ -183,7 +183,7 @@ describe("certificates", () => {
   });
 
   it("finds every certificate in an OpenSSL text export", () => {
-    const b = bundleWith({ "CarrierCA.crt": fx("openssl-text-Dish_MVNO_US.crt") });
+    const b = bundleWith({ "CarrierCA.crt": fx("cert-openssl-text.crt") });
     const d = decodeFile(b, "CarrierCA.crt");
     if (d.kind !== "certificate") throw new Error(d.kind);
     expect(d.text).toContain("subject=CN=Entrust");
@@ -198,7 +198,7 @@ describe("certificates", () => {
 
 describe("signed configuration profiles", () => {
   it("unwraps a BER-encoded SignedData profile to its plist", () => {
-    const raw = fx("signed-Aircel_in.mobileconfig");
+    const raw = fx("profile-signed-1.mobileconfig");
     expect(isCmsSignedData(raw)).toBe(true);
     const sd = parseSignedData(raw);
     expect(sd.contentType).toBe("data");
@@ -215,7 +215,7 @@ describe("signed configuration profiles", () => {
   });
 
   it("is wired into decodeFile, keeping kind mobileconfig", () => {
-    const b = bundleWith({ "profile.mobileconfig": fx("signed-AWCC_af.mobileconfig") });
+    const b = bundleWith({ "profile.mobileconfig": fx("profile-signed-2.mobileconfig") });
     const d = decodeFile(b, "profile.mobileconfig");
     if (d.kind !== "mobileconfig" || !d.signature) throw new Error(d.kind);
     expect((decodedPlist(d) as Record<string, unknown>).PayloadType).toBe("Configuration");
@@ -233,15 +233,15 @@ describe("signed configuration profiles", () => {
 
 describe("other bundle members", () => {
   it("decodes the DMU key blob", () => {
-    const k = decodeDmu(fx("Verizon_LTE_US.dmu"));
+    const k = decodeDmu(fx("key.dmu"));
     expect(k).toMatchObject({ pkoid: 0x0a, pkoidName: "Verizon Wireless", pkoi: 2, pkExpansion: 0xff, atv: 1, algorithm: "RSA-1024", dmuVersion: 0, exponent: "17", modulusBits: 1024 });
-    const d = decodeFile(bundleWith({ "carrier.dmu": fx("Verizon_LTE_US.dmu") }), "carrier.dmu");
+    const d = decodeFile(bundleWith({ "carrier.dmu": fx("key.dmu") }), "carrier.dmu");
     if (d.kind !== "dmu") throw new Error(d.kind);
     expect(d.dmu).toEqual(k);
   });
 
   it("parses .loctable as a plist keyed by locale", () => {
-    const d = decodeFile(bundleWith({ "carrier.loctable": fx("Rogers_chatr_ca.loctable") }), "carrier.loctable");
+    const d = decodeFile(bundleWith({ "carrier.loctable": fx("strings.loctable") }), "carrier.loctable");
     expect(d.kind).toBe("plist");
     const p = decodedPlist(d) as Record<string, Record<string, string>>;
     expect(p.en["chatr Page_MYACCOUNTURLTITLE"]).toBe("chatr Page");
@@ -250,17 +250,17 @@ describe("other bundle members", () => {
   });
 
   it("parses ERI.plist as a normal plist", () => {
-    const d = decodeFile(bundleWith({ "ERI.plist": fx("ATN_vi-ERI.plist") }), "ERI.plist");
+    const d = decodeFile(bundleWith({ "ERI.plist": fx("eri.plist") }), "ERI.plist");
     const p = decodedPlist(d) as Record<string, any>;
     expect(p.name).toBe("CHOICE");
     expect(p.roaming_indicator_table["0"].text).toBe("Extended");
   });
 
   it("describes Core Audio files from their header", () => {
-    const a = decodeCaf(fx("cbs_alert_us-head.caf"));
+    const a = decodeCaf(fx("alert-head.caf"));
     expect(a).toMatchObject({ sampleRate: 44100, format: "lpcm", channels: 2, bitsPerChannel: 16, encoding: "int, big-endian" });
     expect(a.duration).toBeCloseTo(11.078, 2);
-    const d = decodeFile(bundleWith({ "cbs_alert_us.caf": fx("cbs_alert_us-head.caf") }), "cbs_alert_us.caf");
+    const d = decodeFile(bundleWith({ "cbs_alert_us.caf": fx("alert-head.caf") }), "cbs_alert_us.caf");
     if (d.kind !== "audio") throw new Error(d.kind);
     expect(d.audio).toEqual(a);
   });

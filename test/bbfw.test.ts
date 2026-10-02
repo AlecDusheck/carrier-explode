@@ -2,16 +2,21 @@
  * Tests for `src/lib/decode/bbfw.ts` (baseband package decoder; mdb.ts and ssgccs.ts in modem.test.ts) and
  * `src/lib/decode/policy.ts` (policyman XML, band combos, A-MPR NS).
  *
- * Fixtures in test/fixtures/bbfw/ come from Mav25-2.10.01.Release.bbfw
- * (iOS 27.0 24A437, iPhone18,1); every expected value was read back out of them:
- *   bbcfg_trimmed.mbn  the real header and meta (tags 80..87), blobs 0, 4, 20, 122
+ * Fixtures in test/fixtures/bbfw/ are cut from Mav25-2.10.01.Release.bbfw
+ * (iOS 27.0 24A437, iPhone18,1) and then altered so they are not the shipped
+ * bytes; every size, offset and container is kept, and every expected value was
+ * read back out of the altered files. Changed: digests, build time, NV/EFS and
+ * RF table values, policy XML comments and versions, the combo order in
+ * band-combos.xml (same combos), A-MPR NS values, SSGCCS thresholds;
+ * ELF hash segments and the modem code between the configs are zeroed.
+ *   bbcfg-cut.mbn      the real header and meta (tags 80..87), blobs 0, 4, 20, 122
  *                      (PROT_NV, PROT_SKU MAVZ, RFC_MMW MAVZ, PROT_PRI) and at most
  *                      three of each blob's index records, renumbered 0..3, re-wrapped
  *                      in a8/a9 with the header size fields patched
- *   pt_trimmed.mbn     the same cut of pt.mbn, blob 17 (carries NV 64628)
- *   qdsp6sw_57236896.bin  qdsp6sw.mbn bytes 57236896..57256400: two plain MCFG
+ *   pt-cut.mbn         the same cut of pt.mbn, blob 17 (carries NV 64628)
+ *   modem-configs.bin  qdsp6sw.mbn bytes 57236896..57256400: two plain MCFG
  *                      images, a plain SW image and the two zlib images inside it
- *   band_combos_per_plmn.xml  bbcfg.mbn blob 1, unmodified
+ *   band-combos.xml    bbcfg.mbn blob 1
  * The last block runs on the whole package when it is on disk, and checks the
  * output against the reference Python extractor's manifest.json.
  */
@@ -48,10 +53,10 @@ import { bytesToHex, sha1Hex } from "../src/lib/decode/bytes.ts";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const fx = (name: string) => new Uint8Array(readFileSync(join(here, "fixtures", "bbfw", name)));
-const bbcfg = fx("bbcfg_trimmed.mbn");
-const pt = fx("pt_trimmed.mbn");
-const modem = fx("qdsp6sw_57236896.bin");
-const combosXml = new TextDecoder().decode(fx("band_combos_per_plmn.xml"));
+const bbcfg = fx("bbcfg-cut.mbn");
+const pt = fx("pt-cut.mbn");
+const modem = fx("modem-configs.bin");
+const combosXml = new TextDecoder().decode(fx("band-combos.xml"));
 
 describe("sha1Hex", () => {
   it("matches FIPS 180-4 test vectors", () => {
@@ -78,7 +83,7 @@ describe("readBbcfg: container header, meta, index", () => {
       buildUser: "default_local_user",
       field84: "0.0.0.0",
       field85: "aabbccddeeff",
-      buildTime: "2021_02_09_17_46_14_PST",
+      buildTime: "2021_02_11_08_13_52_PST",
       sourceRevision: "heads/default_local_revision",
       version: "2.10.01",
     });
@@ -90,7 +95,7 @@ describe("readBbcfg: container header, meta, index", () => {
     ]);
     expect(c.index[5].fileTypeName).toBe("PROT_PRI");
     expect(c.blobs.map((b) => [b.format, b.length])).toEqual([["der", 7457], ["mavz", 1064], ["mavz", 2927], ["der", 67410]]);
-    expect(c.blobs[0].digest).toBe("e3bbefa1042b5e3d77027977792cc8a0f6e32309");
+    expect(c.blobs[0].digest).toBe("3baa098ad0b4494e0422d77031215d85500e4302");
   });
 
   it("rejects anything else", () => {
@@ -122,7 +127,7 @@ describe("blob payloads", () => {
     const b = decodeBbcfgBlob(bbcfg, c.blobs[0]);
     expect(b.nv.map((r) => [r.id, bytesToHex(r.value), r.f11, r.f14])).toEqual([
       [6876, "0000000005", 0, 18], [6876, "0000000005", 0, 20], [6876, "0000000005", 0, 24],
-      [1920, "29040000", 2, 94], [7, "3000", 0, 94], [8, "69", 0, 94],
+      [1920, "29040000", 2, 94], [7, "3100", 0, 94], [8, "69", 0, 94],
     ]);
     expect(b.files).toHaveLength(16);
     expect(b.files[0]).toMatchObject({ path: "/mav/bbcfg_file_hash_protocol_static_nv", f77: 0, f78: 30 });
@@ -136,7 +141,7 @@ describe("blob payloads", () => {
     expect(files).toHaveLength(40);
     const byPath = new Map(files.map((f) => [f.path, f.data]));
     expect(byPath.get("/policyman/band_combos_per_plmn.xml")?.length).toBe(49509);
-    expect(new TextDecoder().decode(byPath.get("/SSGCCS/ssgccs_config.txt"))).toBe("CUSTOM: 2, 500, 200, 500, 0\nACTIVE_PLMN_LIST: ALL");
+    expect(new TextDecoder().decode(byPath.get("/SSGCCS/ssgccs_config.txt"))).toBe("CUSTOM: 2, 600, 250, 600, 0\nACTIVE_PLMN_LIST: ALL");
   });
 
   it("classifies content like the reference extractor", () => {
@@ -328,7 +333,7 @@ describe("basebandSummary", () => {
     const bb = s.files.filter((f) => f.member === "bbcfg.mbn");
     expect(bb).toHaveLength(13);
     const combos = bb.find((f) => f.path === "/policyman/band_combos_per_plmn.xml")!;
-    expect(combos).toMatchObject({ sha1: "ecfbf1cc953111bc188968c021f72716d27773ca", blobs: [3], variants: [{ platform: 5, sku: 0, hwRev: 0 }] });
+    expect(combos).toMatchObject({ sha1: "af035cfbe9b0afdf814feccc55ee16c4f4302429", blobs: [3], variants: [{ platform: 5, sku: 0, hwRev: 0 }] });
     expect(combos.refs?.carriers).toHaveLength(11);
     const ftb = s.files.filter((f) => f.path === "/mcfg_ftb");
     expect(ftb).toHaveLength(1);
@@ -360,7 +365,7 @@ describe("basebandSummary", () => {
     expect(s.bandCombos).toHaveLength(1);
     expect(s.bandCombos[0].carriers.map((c) => [c.tag, c.combos])).toContainEqual(["TMO", 646]);
     expect(s.amprNs).toHaveLength(1);
-    expect(s.amprNs[0].groups[0].bands).toEqual([{ band: 41, nsNoCa: 4, nsWithCa: 4 }, { band: 48, nsNoCa: 27, nsWithCa: 10 }]);
+    expect(s.amprNs[0].groups[0].bands).toEqual([{ band: 41, nsNoCa: 4, nsWithCa: 4 }, { band: 48, nsNoCa: 28, nsWithCa: 11 }]);
     expect(s.amprNs[0].groups.map((g) => g.mccs.length)).toEqual([57, 1, 1, 2]);
     expect(s.carrierMap).toBeUndefined();
   });

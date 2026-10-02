@@ -1,7 +1,7 @@
 /**
  * Tests for `src/lib/decode/intel.ts` (Intel / Apple C1 dialect tree).
- * Fixtures: `intel/KDDI_jp_overrides_D23.der.pri` is the unmodified KDDI_jp override for iPhone Air;
- * `intel/global_setting_G_trimmed.der.gri` keeps 120 of the 3850 records of iOS 27.0 (24A437) Default/global_setting_G.
+ * Fixtures: `intel/kddi.der.pri` is an altered KDDI_jp override for iPhone Air (see test/README.md);
+ * `intel/default-g-cut.der.gri` keeps 120 of the 3850 records of iOS 27.0 (24A437) Default/global_setting_G.
  */
 
 import { describe, it, expect } from "vitest";
@@ -28,8 +28,8 @@ import { openIpcc, decodeFile, decodedPri } from "../src/lib/decode/bundle.ts";
 const here = dirname(fileURLToPath(import.meta.url));
 const fixture = (...p: string[]) => new Uint8Array(readFileSync(join(here, "fixtures", ...p)));
 
-const d23 = decodePri(fixture("intel", "KDDI_jp_overrides_D23.der.pri"));
-const gri = decodePri(fixture("intel", "global_setting_G_trimmed.der.gri"), "der.gri");
+const d23 = decodePri(fixture("intel", "kddi.der.pri"));
+const gri = decodePri(fixture("intel", "default-g-cut.der.gri"), "der.gri");
 
 /** Find a node by its full dotted path. */
 function at(t: IntelTree, path: string): IntelNode {
@@ -70,7 +70,7 @@ describe("intelTree: KDDI_jp D23", () => {
     expect(t.count).toBe(96);
     expect(t.unparsed).toEqual([]);
     expect(t.nodes.map((n) => n.name)).toEqual(["dyn_cps", "dyn_cps_5g"]);
-    expect(decodePri(fixture("ios27_Altice_LTE_US_overrides_V53_V54_V57.der.pri")).intel).toBeUndefined();
+    expect(decodePri(fixture("pri/altice.der.pri")).intel).toBeUndefined();
   });
 
   it("folds single-child chains and keeps name-derived notes", () => {
@@ -132,8 +132,8 @@ describe("intelTree: KDDI_jp D23", () => {
 
   it("keeps scalar arrays as lists and names band numbers", () => {
     const bn = at(t, "dyn_cps.apf.rat_icon.nas_config.uwb_bw_list.band_num") as IntelList;
-    expect(bn.items.map((x) => x.value.int)).toEqual([77, 78, 79, 0, 0, 0, 0, 0, 0, 0]);
-    expect(bn.items[0].value.decoded).toEqual({ kind: "band", rat: "nr", band: 77, confidence: "med" });
+    expect(bn.items.map((x) => x.value.int)).toEqual([76, 78, 78, 0, 0, 0, 0, 0, 0, 0]);
+    expect(bn.items[0].value.decoded).toEqual({ kind: "band", rat: "nr", band: 76, confidence: "med" });
     expect(bn.items[3].value.decoded).toBeUndefined();
   });
 
@@ -165,11 +165,11 @@ describe("intelTree: label:value strings and GRI tables", () => {
     expect(na.columns).toEqual(["mcc", "lte_band_mask"]);
     expect(na.rows[0].cells.mcc).toMatchObject({ raw: "mcc:302", label: "mcc", text: "302", int: 302 });
     expect(na.rows[0].mcc).toBe("302");
-    // Canada's LTE bands.
+    // Canada's LTE bands, plus band 33 the fixture adds.
     expect((na.rows[0].cells.lte_band_mask as IntelValue).decoded).toEqual({
-      kind: "bands", rat: "lte", bands: [2, 4, 5, 7, 12, 13, 14, 17, 25, 29, 30, 38, 41, 46, 53, 66, 71], confidence: "high",
+      kind: "bands", rat: "lte", bands: [2, 4, 5, 7, 12, 13, 14, 17, 25, 29, 30, 33, 38, 41, 46, 53, 66, 71], confidence: "high",
     });
-    expect((na.rows[0].cells.lte_band_mask as IntelValue).raw).toBe("1_32=0x3101385a 33_64=0x00102120 65_96=0x00000042");
+    expect((na.rows[0].cells.lte_band_mask as IntelValue).raw).toBe("1_32=0x3101385a 33_64=0x00102121 65_96=0x00000042");
   });
 
   it("builds a per-MCC table of allowed LTE and NR bands", () => {
@@ -177,7 +177,7 @@ describe("intelTree: label:value strings and GRI tables", () => {
     expect(reg.mcc.map((r) => [r.region, r.mcc])).toEqual([["na", "302"], ["na", "308"], ["na", "310"], ["ww", "901"]]);
     expect(reg.mcc[0]).toEqual({
       region: "na", regionName: "North America", mcc: "302",
-      lte: [2, 4, 5, 7, 12, 13, 14, 17, 25, 29, 30, 38, 41, 46, 53, 66, 71],
+      lte: [2, 4, 5, 7, 12, 13, 14, 17, 25, 29, 30, 33, 38, 41, 46, 53, 66, 71],
       nrSa: [2, 5, 7, 12, 25, 29, 41, 53, 66, 71, 77, 78],
       nrNsa: [2, 5, 7, 12, 25, 29, 41, 53, 66, 71, 77, 78],
     });
@@ -214,7 +214,7 @@ describe("intelTree: label:value strings and GRI tables", () => {
 });
 
 describe("intelTree: older Intel file (ATT_US D321/D331/N841, iPhone XS/XR)", () => {
-  const b = openIpcc(new Uint8Array(readFileSync(join(here, "fixtures", "ATT_US.ipcc"))));
+  const b = openIpcc(new Uint8Array(readFileSync(join(here, "fixtures", "carrier-att.ipcc"))));
   const d = decodedPri(decodeFile(b, "overrides_D321_D331_N841.der.pri"))!;
 
   it("still decodes, with range-named bitmasks folded", () => {

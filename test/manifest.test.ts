@@ -39,20 +39,20 @@ type Dict = Record<string, unknown>;
 
 /** Every .ipcc fixture in the repository. */
 const FIXTURES = [
-  "ATT_US.ipcc",
-  "ATT_RedPocket_Watch.ipcc",
-  "Australia_Watch.ipcc",
-  "BhartiAirtel_in.ipcc",
-  "CW_pa.ipcc",
-  "CW_wi.ipcc",
-  "Germany.ipcc",
-  "UnitedStates.ipcc",
-  "Verizon_LTE_US.ipcc",
-  "legacy_ATT_2009.ipcc",
+  "carrier-att.ipcc",
+  "watch-redpocket.ipcc",
+  "watch-country-australia.ipcc",
+  "carrier-airtel-in.ipcc",
+  "carrier-cw-pa.ipcc",
+  "carrier-cw-wi.ipcc",
+  "country-germany.ipcc",
+  "country-us.ipcc",
+  "carrier-verizon.ipcc",
+  "carrier-att-2009.ipcc",
 ];
 
-const manifestXml = parseManifest(fixture("manifest-trimmed.xml")) as PlistDict;
-const manifestBin = parseManifest(fixture("manifest-trimmed.bplist")) as PlistDict;
+const manifestXml = parseManifest(fixture("manifest.xml")) as PlistDict;
+const manifestBin = parseManifest(fixture("manifest.bplist")) as PlistDict;
 const index = buildIndex(manifestXml);
 
 /* ---------------------------------------------------- manifest: version helpers */
@@ -748,21 +748,21 @@ describe("manifest XML and binary parity", () => {
 
 describe("openIpcc", () => {
   it("pulls the bundle name out of the Payload/<Name>.bundle/ prefix", () => {
-    expect(openIpcc(fixture("ATT_US.ipcc")).info.bundleName).toBe("ATT_US");
-    expect(openIpcc(fixture("Verizon_LTE_US.ipcc")).info.bundleName).toBe("Verizon_LTE_US");
-    expect(openIpcc(fixture("UnitedStates.ipcc")).info.bundleName).toBe("UnitedStates");
-    expect(openIpcc(fixture("Germany.ipcc")).info.bundleName).toBe("Germany");
-    expect(openIpcc(fixture("CW_wi.ipcc")).info.bundleName).toBe("CW_wi");
-    expect(openIpcc(fixture("CW_pa.ipcc")).info.bundleName).toBe("CW_pa");
-    expect(openIpcc(fixture("BhartiAirtel_in.ipcc")).info.bundleName).toBe("BhartiAirtel_in");
+    expect(openIpcc(fixture("carrier-att.ipcc")).info.bundleName).toBe("ATT_US");
+    expect(openIpcc(fixture("carrier-verizon.ipcc")).info.bundleName).toBe("Verizon_LTE_US");
+    expect(openIpcc(fixture("country-us.ipcc")).info.bundleName).toBe("UnitedStates");
+    expect(openIpcc(fixture("country-germany.ipcc")).info.bundleName).toBe("Germany");
+    expect(openIpcc(fixture("carrier-cw-wi.ipcc")).info.bundleName).toBe("CW_wi");
+    expect(openIpcc(fixture("carrier-cw-pa.ipcc")).info.bundleName).toBe("CW_pa");
+    expect(openIpcc(fixture("carrier-airtel-in.ipcc")).info.bundleName).toBe("BhartiAirtel_in");
     // The Watch country bundle ships under the plain country name.
-    expect(openIpcc(fixture("Australia_Watch.ipcc")).info.bundleName).toBe("Australia");
+    expect(openIpcc(fixture("watch-country-australia.ipcc")).info.bundleName).toBe("Australia");
     // The 2009 bundle is named after the carrier, like the modern ones.
-    expect(openIpcc(fixture("legacy_ATT_2009.ipcc")).info.bundleName).toBe("ATT_US");
+    expect(openIpcc(fixture("carrier-att-2009.ipcc")).info.bundleName).toBe("ATT_US");
   });
 
   it("records the zip prefix and strips it off every listed path", () => {
-    const b = openIpcc(fixture("ATT_US.ipcc"));
+    const b = openIpcc(fixture("carrier-att.ipcc"));
     expect(b.prefix).toBe("Payload/ATT_US.bundle/");
     for (const f of b.info.files) {
       expect(f.path.startsWith("Payload/")).toBe(false);
@@ -771,7 +771,7 @@ describe("openIpcc", () => {
   });
 
   it("excludes directory entries from the file list", () => {
-    const b = openIpcc(fixture("ATT_US.ipcc"));
+    const b = openIpcc(fixture("carrier-att.ipcc"));
     const keys = Object.keys(b.entries);
     expect(keys).toHaveLength(155);
     expect(keys.filter((k) => k.endsWith("/"))).toHaveLength(45);
@@ -820,8 +820,8 @@ describe("openIpcc", () => {
       for (const f of openIpcc(fixture(n)).info.files) out[f.kind] = (out[f.kind] ?? 0) + 1;
       return out;
     };
-    expect(kinds("ATT_US.ipcc")).toEqual({ strings: 42, plist: 60, "pri-der": 7, mobileconfig: 1 });
-    expect(kinds("Verizon_LTE_US.ipcc")).toEqual({
+    expect(kinds("carrier-att.ipcc")).toEqual({ strings: 42, plist: 60, "pri-der": 7, mobileconfig: 1 });
+    expect(kinds("carrier-verizon.ipcc")).toEqual({
       dmu: 1,
       xml: 1,
       plist: 28,
@@ -829,29 +829,29 @@ describe("openIpcc", () => {
       "pri-der": 11,
       mobileconfig: 1,
     });
-    expect(kinds("CW_wi.ipcc")).toEqual({ strings: 41, plist: 65, "pri-der": 9 });
-    expect(kinds("BhartiAirtel_in.ipcc")).toEqual({ plist: 20, "pri-der": 7, "pri-plain": 1 });
-    expect(kinds("CW_pa.ipcc")).toEqual({ plist: 24, "pri-der": 7, "pri-plain": 2 });
-    expect(kinds("UnitedStates.ipcc")).toEqual({ plist: 4 });
-    expect(kinds("Germany.ipcc")).toEqual({ plist: 16 });
-    expect(kinds("Australia_Watch.ipcc")).toEqual({ plist: 4 });
+    expect(kinds("carrier-cw-wi.ipcc")).toEqual({ strings: 41, plist: 65, "pri-der": 9 });
+    expect(kinds("carrier-airtel-in.ipcc")).toEqual({ plist: 20, "pri-der": 7, "pri-plain": 1 });
+    expect(kinds("carrier-cw-pa.ipcc")).toEqual({ plist: 24, "pri-der": 7, "pri-plain": 2 });
+    expect(kinds("country-us.ipcc")).toEqual({ plist: 4 });
+    expect(kinds("country-germany.ipcc")).toEqual({ plist: 16 });
+    expect(kinds("watch-country-australia.ipcc")).toEqual({ plist: 4 });
     // The 2009 bundle carries PNG status-bar logos and no overrides at all.
-    expect(kinds("legacy_ATT_2009.ipcc")).toEqual({ plist: 21, strings: 18, image: 6 });
+    expect(kinds("carrier-att-2009.ipcc")).toEqual({ plist: 21, strings: 18, image: 6 });
   });
 
   it("treats .der.gri global settings as pri-der and a plaintext .pri as pri-plain", () => {
-    const cw = openIpcc(fixture("CW_wi.ipcc"));
+    const cw = openIpcc(fixture("carrier-cw-wi.ipcc"));
     const gri = cw.info.files.filter((f) => f.path.endsWith(".der.gri"));
     expect(gri).toHaveLength(9);
     expect(gri.map((f) => f.path)).toContain("global_setting_B.der.gri");
     for (const f of gri) expect(f.kind).toBe("pri-der");
 
-    const bh = openIpcc(fixture("BhartiAirtel_in.ipcc"));
+    const bh = openIpcc(fixture("carrier-airtel-in.ipcc"));
     expect(bh.info.files.find((f) => f.path === "overrides_N69.pri")!.kind).toBe("pri-plain");
   });
 
   it("extracts locales from .lproj folders, including region-qualified ones", () => {
-    const att = openIpcc(fixture("ATT_US.ipcc"));
+    const att = openIpcc(fixture("carrier-att.ipcc"));
     expect(att.info.locales).toHaveLength(42);
     expect(att.info.locales).toEqual([...att.info.locales].sort());
     expect(att.info.locales).toContain("en");
@@ -865,7 +865,7 @@ describe("openIpcc", () => {
   });
 
   it("handles the 2009 bundle's English-word locale folders", () => {
-    const lg = openIpcc(fixture("legacy_ATT_2009.ipcc"));
+    const lg = openIpcc(fixture("carrier-att-2009.ipcc"));
     expect(lg.info.locales).toEqual([
       "Dutch", "English", "French", "German", "Italian", "Japanese", "Spanish",
       "da", "fi", "ko", "no", "pl", "pt", "pt_PT", "ru", "sv", "zh_CN", "zh_TW",
@@ -877,7 +877,7 @@ describe("openIpcc", () => {
   });
 
   it("parses device stems from overrides_* filenames and resolves codenames", () => {
-    const att = openIpcc(fixture("ATT_US.ipcc"));
+    const att = openIpcc(fixture("carrier-att.ipcc"));
     expect(att.info.deviceStems).toEqual([
       "D321_D331_N841",
       "D421_D431_N104_D79",
@@ -894,7 +894,7 @@ describe("openIpcc", () => {
   });
 
   it("recognises a device stem on a plaintext .pri as well as on .der.pri and .plist", () => {
-    const bh = openIpcc(fixture("BhartiAirtel_in.ipcc"));
+    const bh = openIpcc(fixture("carrier-airtel-in.ipcc"));
     expect(bh.info.deviceStems).toContain("N69");
     expect(
       bh.info.files.find((f) => f.path === "overrides_N69.pri")!.devices!.map((d) => d.code),
@@ -905,20 +905,20 @@ describe("openIpcc", () => {
   });
 
   it("does not treat global_setting_*.der.gri as a device override", () => {
-    const cw = openIpcc(fixture("CW_wi.ipcc"));
+    const cw = openIpcc(fixture("carrier-cw-wi.ipcc"));
     expect(cw.info.files.find((f) => f.path === "global_setting_B.der.gri")!.devices).toBeUndefined();
     expect(cw.info.deviceStems).not.toContain("global");
   });
 
   it("totals uncompressed bytes over the listed files only", () => {
     const expected: Array<[string, number, number]> = [
-      ["UnitedStates.ipcc", 3709, 4],
-      ["Australia_Watch.ipcc", 3103, 4],
-      ["Germany.ipcc", 5974, 16],
-      ["ATT_US.ipcc", 230233, 110],
-      ["Verizon_LTE_US.ipcc", 402424, 43],
-      ["CW_wi.ipcc", 704619, 115],
-      ["legacy_ATT_2009.ipcc", 24769, 45],
+      ["country-us.ipcc", 3619, 4],
+      ["watch-country-australia.ipcc", 3052, 4],
+      ["country-germany.ipcc", 5924, 16],
+      ["carrier-att.ipcc", 227963, 110],
+      ["carrier-verizon.ipcc", 397958, 43],
+      ["carrier-cw-wi.ipcc", 704580, 115],
+      ["carrier-att-2009.ipcc", 24742, 45],
     ];
     for (const [name, total, count] of expected) {
       const b = openIpcc(fixture(name));
@@ -929,7 +929,7 @@ describe("openIpcc", () => {
   });
 
   it("sorts the file list by path", () => {
-    const b = openIpcc(fixture("Verizon_LTE_US.ipcc"));
+    const b = openIpcc(fixture("carrier-verizon.ipcc"));
     expect(b.info.files.map((f) => f.path)).toEqual(
       [...b.info.files.map((f) => f.path)].sort((a, c) => a.localeCompare(c)),
     );
@@ -940,29 +940,29 @@ describe("openIpcc", () => {
 
 describe("decodeFile", () => {
   it("decodes a country bundle's binary carrier.plist", () => {
-    const b = openIpcc(fixture("UnitedStates.ipcc"));
+    const b = openIpcc(fixture("country-us.ipcc"));
     const d = decodeFile(b, "carrier.plist");
     expect(d.kind).toBe("plist");
-    expect(d.size).toBe(2389);
+    expect(d.size).toBe(2299);
     expect(d.note).toBeUndefined();
     expect((decodedPlist(d) as Dict).CountryName).toBe("United States of America");
   });
 
   it("decodes .strings files that are really binary plists", () => {
-    const b = openIpcc(fixture("ATT_US.ipcc"));
+    const b = openIpcc(fixture("carrier-att.ipcc"));
     const d = decodeFile(b, "de.lproj/carrier.strings");
     expect(d.kind).toBe("strings");
     expect(decodedPlist(d)).toBeTruthy();
     expect(d.text).toBeUndefined();
     expect(Object.keys(decodedPlist(d) as Dict).length).toBeGreaterThan(0);
     // The 2009 bundle's .strings are binary plists too.
-    const ls = decodeFile(openIpcc(fixture("legacy_ATT_2009.ipcc")), "English.lproj/carrier.strings");
+    const ls = decodeFile(openIpcc(fixture("carrier-att-2009.ipcc")), "English.lproj/carrier.strings");
     expect(ls.kind).toBe("strings");
     expect((decodedPlist(ls) as Dict)["Pay My Bill_SERVICE_NAME"]).toBe("Pay My Bill");
   });
 
   it("falls back to text for an old-style text .strings file", () => {
-    const b = openIpcc(fixture("ATT_US.ipcc"));
+    const b = openIpcc(fixture("carrier-att.ipcc"));
     b.entries[b.prefix + "en.lproj/plain.strings"] = enc.encode('"a" = "b";\n');
     const d = decodeFile(b, "en.lproj/plain.strings");
     expect(d.kind).toBe("strings");
@@ -972,7 +972,7 @@ describe("decodeFile", () => {
   });
 
   it("decodes profile.mobileconfig as a plist", () => {
-    for (const name of ["ATT_US.ipcc", "Verizon_LTE_US.ipcc"]) {
+    for (const name of ["carrier-att.ipcc", "carrier-verizon.ipcc"]) {
       const d = decodeFile(openIpcc(fixture(name)), "profile.mobileconfig");
       expect(d.kind).toBe("mobileconfig");
       expect(d.note).toBeUndefined();
@@ -982,7 +982,7 @@ describe("decodeFile", () => {
   });
 
   it("decodes carrier.ims as XML text", () => {
-    const d = decodeFile(openIpcc(fixture("Verizon_LTE_US.ipcc")), "carrier.ims");
+    const d = decodeFile(openIpcc(fixture("carrier-verizon.ipcc")), "carrier.ims");
     expect(d.kind).toBe("xml");
     expect(d.text!.startsWith("<?xml")).toBe(true);
     expect(d.text).toContain("<QIMF>");
@@ -992,7 +992,7 @@ describe("decodeFile", () => {
   });
 
   it("decodes a .der.pri override into a PRI structure", () => {
-    const b = openIpcc(fixture("Verizon_LTE_US.ipcc"));
+    const b = openIpcc(fixture("carrier-verizon.ipcc"));
     const d = decodeFile(b, "overrides_D63_D64_D16_D17.der.pri");
     expect(d.kind).toBe("pri-der");
     expect(decodedPri(d)).toBeTruthy();
@@ -1002,7 +1002,7 @@ describe("decodeFile", () => {
   });
 
   it("decodes a .der.gri global settings blob into a PRI structure", () => {
-    const d = decodeFile(openIpcc(fixture("CW_wi.ipcc")), "global_setting_C.der.gri");
+    const d = decodeFile(openIpcc(fixture("carrier-cw-wi.ipcc")), "global_setting_C.der.gri");
     expect(d.kind).toBe("pri-der");
     expect(decodedPri(d)).toBeTruthy();
     expect(decodedPri(d)!.leafCount).toBeGreaterThan(0);
@@ -1010,7 +1010,7 @@ describe("decodeFile", () => {
   });
 
   it("decodes a plaintext .pri that is actually an XML document", () => {
-    const d = decodeFile(openIpcc(fixture("BhartiAirtel_in.ipcc")), "overrides_N69.pri");
+    const d = decodeFile(openIpcc(fixture("carrier-airtel-in.ipcc")), "overrides_N69.pri");
     expect(d.kind).toBe("pri-plain");
     // The file starts with <?xml, so the plist parser claims it.
     expect(decodedPlist(d)).toBeTruthy();
@@ -1019,7 +1019,7 @@ describe("decodeFile", () => {
   });
 
   it("decodes carrier.dmu as a DMU public key and keeps the hex", () => {
-    const d = decodeFile(openIpcc(fixture("Verizon_LTE_US.ipcc")), "carrier.dmu");
+    const d = decodeFile(openIpcc(fixture("carrier-verizon.ipcc")), "carrier.dmu");
     expect(d.kind).toBe("dmu");
     expect(d.size).toBe(260);
     expect(d.hex).toHaveLength(520);
@@ -1031,7 +1031,7 @@ describe("decodeFile", () => {
   });
 
   it("truncates a large opaque blob to 8 KiB and says so", () => {
-    const b = openIpcc(fixture("ATT_US.ipcc"));
+    const b = openIpcc(fixture("carrier-att.ipcc"));
     b.entries[b.prefix + "blob.bin"] = new Uint8Array(20000).fill(7);
     const d = decodeFile(b, "blob.bin");
     expect(d.kind).toBe("binary");
@@ -1040,7 +1040,7 @@ describe("decodeFile", () => {
   });
 
   it("promotes a small printable binary member to text", () => {
-    const b = openIpcc(fixture("ATT_US.ipcc"));
+    const b = openIpcc(fixture("carrier-att.ipcc"));
     b.entries[b.prefix + "small.bin"] = enc.encode("hello world");
     const d = decodeFile(b, "small.bin");
     expect(d.kind).toBe("binary");
@@ -1049,7 +1049,7 @@ describe("decodeFile", () => {
   });
 
   it("reports the 2009 bundle's PNG status-bar logos without inlining them", () => {
-    const lg = openIpcc(fixture("legacy_ATT_2009.ipcc"));
+    const lg = openIpcc(fixture("carrier-att-2009.ipcc"));
     const d = decodeFile(lg, "Default_CARRIER_ATT.png");
     if (d.kind !== "image") throw new Error(d.kind);
     expect(d.image).toEqual({ width: 31, height: 20, cgbi: true });
@@ -1066,7 +1066,7 @@ describe("decodeFile", () => {
   });
 
   it("decodes the 2009 bundle's carrier.plist, Info.plist and locversion.plist", () => {
-    const lg = openIpcc(fixture("legacy_ATT_2009.ipcc"));
+    const lg = openIpcc(fixture("carrier-att-2009.ipcc"));
     const carrier = decodedPlist(decodeFile(lg, "carrier.plist")) as Dict;
     expect(carrier.CarrierName).toBe("AT&T");
     expect(Array.isArray(carrier.StatusBarImages)).toBe(true);
@@ -1078,7 +1078,7 @@ describe("decodeFile", () => {
   });
 
   it("decodes Verizon's CDMA-era ERI.plist and supported_devices.plist", () => {
-    const b = openIpcc(fixture("Verizon_LTE_US.ipcc"));
+    const b = openIpcc(fixture("carrier-verizon.ipcc"));
     expect(Object.keys(decodedPlist(decodeFile(b, "ERI.plist")) as Dict)).toEqual([
       "name",
       "version",
@@ -1092,9 +1092,9 @@ describe("decodeFile", () => {
 
   it("decodes every member of every fixture without throwing", () => {
     const names = [
-      "ATT_US.ipcc", "Verizon_LTE_US.ipcc", "UnitedStates.ipcc", "Germany.ipcc",
-      "Australia_Watch.ipcc", "CW_wi.ipcc", "CW_pa.ipcc", "BhartiAirtel_in.ipcc",
-      "legacy_ATT_2009.ipcc",
+      "carrier-att.ipcc", "carrier-verizon.ipcc", "country-us.ipcc", "country-germany.ipcc",
+      "watch-country-australia.ipcc", "carrier-cw-wi.ipcc", "carrier-cw-pa.ipcc", "carrier-airtel-in.ipcc",
+      "carrier-att-2009.ipcc",
     ];
     let seen = 0;
     for (const name of names) {
@@ -1123,29 +1123,29 @@ describe("decodeFile", () => {
       const d = decodeFile(b, p) as unknown as Record<string, unknown>;
       return ["plist", "pri", "text", "hex"].filter((k) => d[k] !== undefined);
     };
-    const vz = openIpcc(fixture("Verizon_LTE_US.ipcc"));
+    const vz = openIpcc(fixture("carrier-verizon.ipcc"));
     expect(fields(vz, "carrier.plist")).toEqual(["plist"]);
     expect(fields(vz, "profile.mobileconfig")).toEqual(["plist"]);
     expect(fields(vz, "carrier.ims")).toEqual(["text"]);
     expect(fields(vz, "carrier.dmu")).toEqual(["hex"]);
     expect(fields(vz, "CarrierCA.crt")).toEqual(["text"]); // PEM, not DER
     expect(fields(vz, "overrides_V59.der.pri")).toEqual(["pri"]);
-    expect(fields(openIpcc(fixture("ATT_US.ipcc")), "ja.lproj/carrier.strings")).toEqual(["plist"]);
-    expect(fields(openIpcc(fixture("CW_wi.ipcc")), "global_setting_J.der.gri")).toEqual(["pri"]);
+    expect(fields(openIpcc(fixture("carrier-att.ipcc")), "ja.lproj/carrier.strings")).toEqual(["plist"]);
+    expect(fields(openIpcc(fixture("carrier-cw-wi.ipcc")), "global_setting_J.der.gri")).toEqual(["pri"]);
     // An image has no inline payload; /api/raw serves the bytes.
-    expect(fields(openIpcc(fixture("legacy_ATT_2009.ipcc")), "FSO_CARRIER_ATT.png")).toEqual([]);
+    expect(fields(openIpcc(fixture("carrier-att-2009.ipcc")), "FSO_CARRIER_ATT.png")).toEqual([]);
   });
 
   // Verizon's CarrierCA.crt is PEM, not DER, so it is shown as text.
   it("shows a PEM certificate as text rather than as mislabelled hex", () => {
-    const d = decodeFile(openIpcc(fixture("Verizon_LTE_US.ipcc")), "CarrierCA.crt");
+    const d = decodeFile(openIpcc(fixture("carrier-verizon.ipcc")), "CarrierCA.crt");
     expect(d.text).toBeDefined();
     expect(d.text!.startsWith("-----BEGIN CERTIFICATE-----")).toBe(true);
     expect(d.note).not.toBe("DER-encoded X.509 certificate");
   });
 
   it("still hex-dumps a certificate that really is DER", () => {
-    const b = openIpcc(fixture("Verizon_LTE_US.ipcc"));
+    const b = openIpcc(fixture("carrier-verizon.ipcc"));
     b.entries[b.prefix + "der.crt"] = new Uint8Array([0x30, 0x82, 0x01, 0x0a, 0x02, 0x01]);
     const d = decodeFile(b, "der.crt");
     if (d.kind !== "certificate") throw new Error(d.kind);
@@ -1161,14 +1161,14 @@ describe("decodeFile", () => {
 
 describe("decodeFile error handling", () => {
   it("throws for a path that is not in the bundle", () => {
-    const b = openIpcc(fixture("Verizon_LTE_US.ipcc"));
+    const b = openIpcc(fixture("carrier-verizon.ipcc"));
     expect(() => decodeFile(b, "nope.plist")).toThrow("no such file in bundle: nope.plist");
     expect(() => decodeFile(b, "signatures/nope.plist")).toThrow(/no such file in bundle/);
     expect(() => decodeFile(b, "carrier.plist/")).toThrow(/not a file/);
   });
 
   it("falls back to the raw zip key when the path already carries the prefix", () => {
-    const b = openIpcc(fixture("Verizon_LTE_US.ipcc"));
+    const b = openIpcc(fixture("carrier-verizon.ipcc"));
     const d = decodeFile(b, "Payload/Verizon_LTE_US.bundle/carrier.plist");
     expect((decodedPlist(d) as Dict).CarrierName).toBe("Verizon");
     // The reported path is whatever was asked for, not the bundle-relative one.
@@ -1176,13 +1176,13 @@ describe("decodeFile error handling", () => {
   });
 
   it("rejects a directory entry and an empty path", () => {
-    const b = openIpcc(fixture("Verizon_LTE_US.ipcc"));
+    const b = openIpcc(fixture("carrier-verizon.ipcc"));
     expect(() => decodeFile(b, "signatures/")).toThrow(/not a file/);
     expect(() => decodeFile(b, "")).toThrow(/not a file/);
   });
 
   it("degrades a corrupt binary plist to a note plus a hex dump", () => {
-    const b = openIpcc(fixture("ATT_US.ipcc"));
+    const b = openIpcc(fixture("carrier-att.ipcc"));
     b.entries[b.prefix + "broken.plist"] = enc.encode("bplist00garbage");
     const d = decodeFile(b, "broken.plist");
     expect(d.kind).toBe("plist");
@@ -1193,7 +1193,7 @@ describe("decodeFile error handling", () => {
   });
 
   it("degrades a corrupt .strings member the same way", () => {
-    const b = openIpcc(fixture("ATT_US.ipcc"));
+    const b = openIpcc(fixture("carrier-att.ipcc"));
     b.entries[b.prefix + "en.lproj/broken.strings"] = enc.encode("bplist00truncated");
     const d = decodeFile(b, "en.lproj/broken.strings");
     expect(d.kind).toBe("strings");
@@ -1202,7 +1202,7 @@ describe("decodeFile error handling", () => {
   });
 
   it("does not throw on a .der.pri holding junk", () => {
-    const b = openIpcc(fixture("ATT_US.ipcc"));
+    const b = openIpcc(fixture("carrier-att.ipcc"));
     b.entries[b.prefix + "junk.der.pri"] = new Uint8Array([1, 2, 3, 4, 5]);
     expect(() => decodeFile(b, "junk.der.pri")).not.toThrow();
     expect(decodedPri(decodeFile(b, "junk.der.pri"))).toBeTruthy();
@@ -1214,7 +1214,7 @@ describe("decodeFile error handling", () => {
   // Repro: decodeFile on a ".plist" entry holding [0,1,2,3,250,251] returns
   //        text " ��" and note undefined.
   it("flags a .plist member whose content is not a plist at all", () => {
-    const b = openIpcc(fixture("ATT_US.ipcc"));
+    const b = openIpcc(fixture("carrier-att.ipcc"));
     b.entries[b.prefix + "notaplist.plist"] = new Uint8Array([0, 1, 2, 3, 250, 251]);
     const d = decodeFile(b, "notaplist.plist");
     expect(d.error).toEqual({ reason: "unrecognised" });
@@ -1222,7 +1222,7 @@ describe("decodeFile error handling", () => {
   });
 
   it("still returns plain text for a .strings member in the legacy text format", () => {
-    const b = openIpcc(fixture("ATT_US.ipcc"));
+    const b = openIpcc(fixture("carrier-att.ipcc"));
     b.entries[b.prefix + "en.lproj/legacy.strings"] = enc.encode('"KEY" = "value";\n');
     const d = decodeFile(b, "en.lproj/legacy.strings");
     expect(d.text).toBe('"KEY" = "value";\n');
@@ -1262,7 +1262,7 @@ describe("base64Of", () => {
   });
 
   it("round-trips a real bundle member well over 32 KiB", () => {
-    const cw = openIpcc(fixture("CW_wi.ipcc"));
+    const cw = openIpcc(fixture("carrier-cw-wi.ipcc"));
     const big = cw.entries[cw.prefix + "global_setting_B.der.gri"];
     expect(big.length).toBeGreaterThan(0x8000 * 8);
     expect(roundTrip(big).equals(Buffer.from(big))).toBe(true);
@@ -1284,7 +1284,7 @@ describe("openIpcc hostile input", () => {
   });
 
   it("throws cleanly on a truncated ZIP", () => {
-    const raw = fixture("UnitedStates.ipcc");
+    const raw = fixture("country-us.ipcc");
     expect(() => openIpcc(raw.subarray(0, 200))).toThrow();
     expect(() => openIpcc(raw.subarray(0, raw.length - 10))).toThrow();
     expect(() => openIpcc(raw.subarray(0, Math.floor(raw.length / 2)))).toThrow();
@@ -1297,7 +1297,7 @@ describe("openIpcc hostile input", () => {
   });
 
   it("still opens a valid bundle after the hostile cases", () => {
-    expect(openIpcc(fixture("UnitedStates.ipcc")).info.files).toHaveLength(4);
+    expect(openIpcc(fixture("country-us.ipcc")).info.files).toHaveLength(4);
   });
 });
 
@@ -1305,9 +1305,9 @@ describe("openIpcc hostile input", () => {
 
 const countryFetcher = async (url: string) => {
   const map: Record<string, string> = {
-    UnitedStates: "UnitedStates.ipcc",
-    Germany: "Germany.ipcc",
-    Australia_Watch: "Australia_Watch.ipcc",
+    UnitedStates: "country-us.ipcc",
+    Germany: "country-germany.ipcc",
+    Australia_Watch: "watch-country-australia.ipcc",
   };
   for (const [needle, file] of Object.entries(map)) {
     if (url.includes(needle)) return fixture(file);
@@ -1459,7 +1459,7 @@ describe("buildCbsRow against the real UnitedStates bundle", () => {
     // CBMessage.strings, so it exercises the locale collector.
     const row = await buildCbsRow(
       { ...us, id: "CW", bundleId: "CW", key: "CW_1", url: "mem://cw" },
-      async () => fixture("CW_wi.ipcc"),
+      async () => fixture("carrier-cw-wi.ipcc"),
     );
     expect(row.cbMessageLocales).toHaveLength(41);
     expect(row.cbMessageLocales).toContain("en");
@@ -1470,7 +1470,7 @@ describe("buildCbsRow against the real UnitedStates bundle", () => {
   it("returns an empty but valid row for a bundle with no CellBroadcast key", async () => {
     const row = await buildCbsRow(
       { ...us, id: "CW", bundleId: "CW", key: "CW_1", url: "mem://cw" },
-      async () => fixture("CW_wi.ipcc"),
+      async () => fixture("carrier-cw-wi.ipcc"),
     );
     expect(row.error).toBeUndefined();
     expect(row.hasCellBroadcast).toBe(false);
@@ -1851,11 +1851,11 @@ describe("diffValues", () => {
   });
 
   it("diffs two real carrier bundles' carrier.plist", () => {
-    const a = decodedPlist(decodeFile(openIpcc(fixture("ATT_US.ipcc")), "carrier.plist"));
-    const b = decodedPlist(decodeFile(openIpcc(fixture("Verizon_LTE_US.ipcc")), "carrier.plist"));
+    const a = decodedPlist(decodeFile(openIpcc(fixture("carrier-att.ipcc")), "carrier.plist"));
+    const b = decodedPlist(decodeFile(openIpcc(fixture("carrier-verizon.ipcc")), "carrier.plist"));
 
     const rows = diffValues(a, b);
-    expect(summariseDiff(rows)).toEqual({ added: 61, removed: 67, changed: 56, same: 0 });
+    expect(summariseDiff(rows)).toEqual({ added: 61, removed: 67, changed: 57, same: 0 });
     expect(rows.find((r) => r.path === "CarrierName")).toEqual({
       path: "CarrierName",
       kind: "changed",
@@ -1869,7 +1869,7 @@ describe("diffValues", () => {
   });
 
   it("reports no differences for a bundle against itself", () => {
-    const p = decodedPlist(decodeFile(openIpcc(fixture("Verizon_LTE_US.ipcc")), "carrier.plist"));
+    const p = decodedPlist(decodeFile(openIpcc(fixture("carrier-verizon.ipcc")), "carrier.plist"));
     expect(diffValues(p, p)).toEqual([]);
     const same = diffValues(p, p, true);
     expect(same).toHaveLength(132);
@@ -1877,8 +1877,8 @@ describe("diffValues", () => {
   });
 
   it("diffs two country bundles' CellBroadcast schemas", () => {
-    const us = decodedPlist(decodeFile(openIpcc(fixture("UnitedStates.ipcc")), "carrier.plist")) as Dict;
-    const au = decodedPlist(decodeFile(openIpcc(fixture("Australia_Watch.ipcc")), "carrier.plist")) as Dict;
+    const us = decodedPlist(decodeFile(openIpcc(fixture("country-us.ipcc")), "carrier.plist")) as Dict;
+    const au = decodedPlist(decodeFile(openIpcc(fixture("watch-country-australia.ipcc")), "carrier.plist")) as Dict;
     const rows = diffValues(us, au);
     expect(rows.find((r) => r.path === "CountryName")).toEqual({
       path: "CountryName",
@@ -1923,7 +1923,7 @@ describe("summariseDiff", () => {
 
 describe("ipcc: assets and packaging leftovers", () => {
   it("classifies and measures a PNG carrier logo without inlining it", () => {
-    const b = openIpcc(fixture("legacy_ATT_2009.ipcc"));
+    const b = openIpcc(fixture("carrier-att-2009.ipcc"));
     const png = b.info.files.find((f) => f.kind === "image")!;
     expect(png).toBeTruthy();
     expect(png.path.endsWith(".png")).toBe(true);
@@ -1936,7 +1936,7 @@ describe("ipcc: assets and packaging leftovers", () => {
   });
 
   it("classifies images by extension, case-insensitively", () => {
-    const b = openIpcc(fixture("legacy_ATT_2009.ipcc"));
+    const b = openIpcc(fixture("carrier-att-2009.ipcc"));
     for (const name of ["a.PNG", "b.jpeg", "c.jpg", "d.gif", "e.tif", "f.tiff", "g.svg"]) {
       b.entries[b.prefix + name] = new Uint8Array([1, 2, 3]);
       expect(decodeFile(b, name).kind, name).toBe("image");
@@ -1944,7 +1944,7 @@ describe("ipcc: assets and packaging leftovers", () => {
   });
 
   it("decodes bundle.metadata, which is base64-encoded JSON", () => {
-    const b = openIpcc(fixture("ATT_RedPocket_Watch.ipcc"));
+    const b = openIpcc(fixture("watch-redpocket.ipcc"));
     const f = b.info.files.find((x) => x.path === "bundle.metadata")!;
     expect(f.kind).toBe("metadata");
     const d = decodeFile(b, "bundle.metadata");
@@ -1955,7 +1955,7 @@ describe("ipcc: assets and packaging leftovers", () => {
   });
 
   it("falls back to text when a .metadata member is not base64 JSON", () => {
-    const b = openIpcc(fixture("ATT_RedPocket_Watch.ipcc"));
+    const b = openIpcc(fixture("watch-redpocket.ipcc"));
     b.entries[b.prefix + "broken.metadata"] = enc.encode("plainly not base64 json");
     const d = decodeFile(b, "broken.metadata");
     expect(decodedPlist(d)).toBeUndefined();
@@ -1964,9 +1964,9 @@ describe("ipcc: assets and packaging leftovers", () => {
   });
 
   it("annotates the opaque binary members it knows about", () => {
-    const vz = openIpcc(fixture("Verizon_LTE_US.ipcc"));
+    const vz = openIpcc(fixture("carrier-verizon.ipcc"));
     expect(decodeFile(vz, "carrier.dmu").kind).toBe("dmu");
-    const b = openIpcc(fixture("Verizon_LTE_US.ipcc"));
+    const b = openIpcc(fixture("carrier-verizon.ipcc"));
     b.entries[b.prefix + "carrier.prl"] = new Uint8Array([0, 0x57, 0, 3, 3, 0x80]);
     const prl = decodeFile(b, "carrier.prl");
     expect(prl.note).toMatch(/Preferred Roaming List/);
@@ -1999,7 +1999,7 @@ describe("ipcc: assets and packaging leftovers", () => {
 
 describe("Apple CgBI PNG normalisation", () => {
   const logos = () => {
-    const b = openIpcc(fixture("legacy_ATT_2009.ipcc"));
+    const b = openIpcc(fixture("carrier-att-2009.ipcc"));
     return b.info.files
       .filter((f) => f.kind === "image")
       .map((f) => ({ path: f.path, bytes: b.entries[b.prefix + f.path] }));

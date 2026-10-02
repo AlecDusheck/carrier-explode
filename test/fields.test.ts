@@ -87,7 +87,7 @@ describe("field table shape", () => {
 
 describe("describeValue on real bundles", () => {
   it("decodes ATT_US APN type-masks", () => {
-    const carrier = plistOf("ATT_US.ipcc", "carrier.plist");
+    const carrier = plistOf("carrier-att.ipcc", "carrier.plist");
     const masks = (carrier.apns as Dict[]).map((a) => a["type-mask"]);
     expect(masks).toEqual(expect.arrayContaining([32775, 16, 32774]));
     expect(labelsOf("type-mask", 16)).toEqual(["WirelessModemTraffic (Personal Hotspot data)"]);
@@ -96,7 +96,7 @@ describe("describeValue on real bundles", () => {
   });
 
   it("decodes ATT_US override APNs (IMS, SOS, full default APN = 0x108007)", () => {
-    const b = openIpcc(fixture("ATT_US.ipcc"));
+    const b = openIpcc(fixture("carrier-att.ipcc"));
     const f = b.info.files.find((x) => /^overrides_.*\.plist$/.test(x.path))!;
     const apns = (decodedPlist(decodeFile(b, f.path)) as Dict).apns as Dict[];
     const byName = Object.fromEntries(apns.map((a) => [a.apn, a]));
@@ -112,7 +112,7 @@ describe("describeValue on real bundles", () => {
   });
 
   it("decodes MTU technology-mask and entitlement bits", () => {
-    const carrier = plistOf("ATT_US.ipcc", "carrier.plist");
+    const carrier = plistOf("carrier-att.ipcc", "carrier.plist");
     const mtu = (carrier.MTU as Dict[])[0];
     expect(labelsOf("technology-mask", mtu["technology-mask"])).toEqual(["UMTS (GSM/UMTS, 3GPP)", "LTE"]);
     expect(labelsOf("technology-mask", 32)).toEqual(["bit 5"]);
@@ -132,7 +132,7 @@ describe("describeValue on real bundles", () => {
   });
 
   it("decodes Verizon technology-masks, entitlements and FallbackMethod", () => {
-    const carrier = plistOf("Verizon_LTE_US.ipcc", "carrier.plist");
+    const carrier = plistOf("carrier-verizon.ipcc", "carrier.plist");
     const mtu = (carrier.MTU as Dict[]).map((m) => m["technology-mask"]);
     expect(mtu).toEqual(expect.arrayContaining([12, 2]));
     expect(labelsOf("technology-mask", 12)).toEqual(["eHRPD", "LTE"]);
@@ -166,7 +166,7 @@ describe("describeValue on real bundles", () => {
   });
 
   it("decodes TechSettings masks and enums from a real bundle", () => {
-    const carrier = plistOf("ATT_RedPocket_Watch.ipcc", "carrier.plist");
+    const carrier = plistOf("watch-redpocket.ipcc", "carrier.plist");
     const ts = carrier.TechSettings as Dict;
     expect(labelsOf("5wiServiceMask", ts["5wiServiceMask"])).toEqual(["Internet", "VVM (visual voicemail)"]);
     expect(labelsOf("5wiServiceMask", 1)).toEqual(["Internet"]);
@@ -261,7 +261,7 @@ describe("IMSConfig keys resolve through the IMS registry", () => {
   const imsOf = (bundle: string) => plistOf(bundle, "carrier.plist").IMSConfig as Dict;
 
   it("types, defaults and enum values under real ATT_RedPocket paths", () => {
-    const sig = imsOf("ATT_RedPocket_Watch.ipcc").Signaling as Dict;
+    const sig = imsOf("watch-redpocket.ipcc").Signaling as Dict;
     expect(sig.AccessBarringType).toBe("ACB");
     const abt = describeField("AccessBarringType", "IMSConfig.Signaling.AccessBarringType")!;
     expect(abt.format).toBe("enum");
@@ -281,7 +281,7 @@ describe("IMSConfig keys resolve through the IMS registry", () => {
   });
 
   it("SipTimers keys only resolve under SipTimers", () => {
-    const timers = (imsOf("ATT_RedPocket_Watch.ipcc").Signaling as Dict).SipTimers as Dict;
+    const timers = (imsOf("watch-redpocket.ipcc").Signaling as Dict).SipTimers as Dict;
     expect(Object.keys(timers)).toEqual(expect.arrayContaining(["B", "D", "InviteResponseTimeout"]));
     expect(describeField("D", "IMSConfig.Signaling.SipTimers.D")).toMatchObject({ type: "integer", default: 128000, unit: "ms" });
     expect(describeField("InviteResponseTimeout", "IMSConfig.Signaling.SipTimers")!.default).toBe(10000);
@@ -300,12 +300,12 @@ describe("IMSConfig keys resolve through the IMS registry", () => {
   });
 
   it("keys outside the registry section fall back to FIELDS", () => {
-    const cw = imsOf("CW_wi.ipcc");
+    const cw = imsOf("carrier-cw-wi.ipcc");
     expect((cw.SIM as Dict).IgnoreISIM).toBe(true);
     expect(describeField("IgnoreISIM", "IMSConfig.SIM.IgnoreISIM")).toBe(FIELDS.IgnoreISIM);
     expect(FIELDS.IgnoreISIM.default).toBe(false);
     expect(describeField("SIM", "IMSConfig.SIM")!.note).toMatch(/impiFormat/);
-    const us = imsOf("UnitedStates.ipcc");
+    const us = imsOf("country-us.ipcc");
     expect((us.Voice as Dict).EnableVolteByDefault).toBe(true);
     expect(describeField("EnableVolteByDefault", "IMSConfig.Voice")).toBe(FIELDS.EnableVolteByDefault);
     expect(describeField("SuppressDisclosingSuspiciousUndetectedEmergency", "IMSConfig.Voice")!.default).toBe(false);
@@ -313,7 +313,7 @@ describe("IMSConfig keys resolve through the IMS registry", () => {
   });
 
   it("documents call end-reason entries and their TerminationEvent", () => {
-    const sig = imsOf("ATT_RedPocket_Watch.ipcc").Signaling as Dict;
+    const sig = imsOf("watch-redpocket.ipcc").Signaling as Dict;
     const inc = sig.IncomingCallEndReasons as Record<string, Dict>;
     expect(inc.TemporarilyUnavailable).toEqual({ StatusCode: 480, TerminationEvent: "RemoteHangup" });
     expect(describeField("TemporarilyUnavailable", "IMSConfig.Signaling.IncomingCallEndReasons.TemporarilyUnavailable")!.note).toMatch(/SIP 480, event TemporarilyUnavailable/);

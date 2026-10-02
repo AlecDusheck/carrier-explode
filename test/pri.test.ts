@@ -4,8 +4,8 @@
  *
  * Every expected value in this file was read back out of the real fixture
  * corpus (or out of a hand-built DER buffer) before being asserted.
- * `ios27_*` fixtures are unmodified iOS 27.0 (24A437) override files, except the
- * `_trimmed` .der.gri, which keeps the first 41 records of Default/global_setting_G.
+ * `pri/` fixtures are altered iOS 27.0 (24A437) override files (see test/README.md);
+ * `default-g-cut.der.gri` keeps the first 41 records of Default/global_setting_G.
  */
 
 import { describe, it, expect } from "vitest";
@@ -57,11 +57,11 @@ function pri(bundleName: string, path: string): PriDecoded {
 }
 
 const BUNDLES_WITH_PRI = [
-  "ATT_US.ipcc",
-  "BhartiAirtel_in.ipcc",
-  "CW_pa.ipcc",
-  "CW_wi.ipcc",
-  "Verizon_LTE_US.ipcc",
+  "carrier-att.ipcc",
+  "carrier-airtel-in.ipcc",
+  "carrier-cw-pa.ipcc",
+  "carrier-cw-wi.ipcc",
+  "carrier-verizon.ipcc",
 ];
 
 /** Every (bundle, path) pair naming a binary .der.pri / .der.gri in the corpus. */
@@ -174,7 +174,7 @@ describe("flattenDer: DER container mechanics", () => {
     it("reads a real 2-byte long-form length (0x82) out of a fixture", () => {
       // Every fixture .der.pri is bigger than 255 bytes, so the outer SET must use
       // a multi-byte length; if the reader got it wrong we would see zero leaves.
-      const bytes = raw("CW_pa.ipcc", "overrides_D10_D11.der.pri");
+      const bytes = raw("carrier-cw-pa.ipcc", "overrides_D10_D11.der.pri");
       expect(bytes[0]).toBe(0x31);
       expect(bytes[1] & 0x80).toBe(0x80);
       expect(flattenDer(bytes).length).toBe(34);
@@ -255,7 +255,7 @@ describe("flattenDer: DER container mechanics", () => {
   });
 
   it("never throws on any prefix of a real file", () => {
-    const bytes = raw("CW_pa.ipcc", "overrides_D10_D11.der.pri");
+    const bytes = raw("carrier-cw-pa.ipcc", "overrides_D10_D11.der.pri");
     for (let i = 0; i <= bytes.length; i++) {
       expect(() => flattenDer(bytes.subarray(0, i))).not.toThrow();
     }
@@ -426,11 +426,11 @@ describe("decodePri over the whole fixture corpus", () => {
     const perBundle = new Map<string, number>();
     for (const f of files) perBundle.set(f.bundle, (perBundle.get(f.bundle) ?? 0) + 1);
     expect(Object.fromEntries(perBundle)).toEqual({
-      "ATT_US.ipcc": 7,
-      "BhartiAirtel_in.ipcc": 7,
-      "CW_pa.ipcc": 7,
-      "CW_wi.ipcc": 9,
-      "Verizon_LTE_US.ipcc": 11,
+      "carrier-att.ipcc": 7,
+      "carrier-airtel-in.ipcc": 7,
+      "carrier-cw-pa.ipcc": 7,
+      "carrier-cw-wi.ipcc": 9,
+      "carrier-verizon.ipcc": 11,
     });
   });
 
@@ -524,18 +524,18 @@ describe("decodePri over the whole fixture corpus", () => {
   });
 
   it("reaches the same result through decodeFile as through decodePri directly", () => {
-    const d = decodeFile(bundle("CW_pa.ipcc"), "overrides_D10_D11.der.pri");
+    const d = decodeFile(bundle("carrier-cw-pa.ipcc"), "overrides_D10_D11.der.pri");
     expect(d.kind).toBe("pri-der");
     expect(decodedPri(d)).toBeDefined();
-    expect(decodedPri(d)).toEqual(pri("CW_pa.ipcc", "overrides_D10_D11.der.pri"));
-    const g = decodeFile(bundle("CW_wi.ipcc"), "global_setting_C.der.gri");
+    expect(decodedPri(d)).toEqual(pri("carrier-cw-pa.ipcc", "overrides_D10_D11.der.pri"));
+    const g = decodeFile(bundle("carrier-cw-wi.ipcc"), "global_setting_C.der.gri");
     expect(decodedPri(g)!.kind).toBe("der.gri");
   });
 });
 
 describe("decodePri: headers", () => {
   it("lifts Carrier ID, PRI Revision and PRI Name out of the named pairs", () => {
-    const d = pri("ATT_US.ipcc", "overrides_D321_D331_N841.der.pri");
+    const d = pri("carrier-att.ipcc", "overrides_D321_D331_N841.der.pri");
     expect(d.header).toEqual({
       "Carrier ID": "",
       "PRI Revision": "0.0.26",
@@ -549,8 +549,8 @@ describe("decodePri: headers", () => {
       expect(Object.keys(h)).toEqual(["GRI Revision"]);
       expect(h["GRI Revision"]).toMatch(/^\d+\.\d+\.\d+$/);
     }
-    expect(pri("CW_wi.ipcc", "global_setting_B.der.gri").header["GRI Revision"]).toBe("12.1.9");
-    expect(pri("CW_wi.ipcc", "global_setting_G.der.gri").header["GRI Revision"]).toBe("2.1.2");
+    expect(pri("carrier-cw-wi.ipcc", "global_setting_B.der.gri").header["GRI Revision"]).toBe("12.1.9");
+    expect(pri("carrier-cw-wi.ipcc", "global_setting_G.der.gri").header["GRI Revision"]).toBe("2.1.2");
   });
 
   it("renders an empty header value as the empty string rather than (empty)", () => {
@@ -558,7 +558,7 @@ describe("decodePri: headers", () => {
       const h = pri(f.bundle, f.path).header;
       for (const v of Object.values(h)) expect(v).not.toBe("(empty)");
     }
-    expect(pri("CW_pa.ipcc", "overrides_D10_D11.der.pri").header["Carrier ID"]).toBe("");
+    expect(pri("carrier-cw-pa.ipcc", "overrides_D10_D11.der.pri").header["Carrier ID"]).toBe("");
   });
 
   it("keeps header keys out of `named` — no fixture file has any named settings", () => {
@@ -600,7 +600,7 @@ describe("decodePri: headers", () => {
 
 describe("decodePri: pair families", () => {
   it("decodes a classic-format file into /nv/item_files EFS paths under tag 9fa70c", () => {
-    const d = pri("ATT_US.ipcc", "overrides_D63_D64_D16_D17.der.pri");
+    const d = pri("carrier-att.ipcc", "overrides_D63_D64_D16_D17.der.pri");
     expect(d.efs.length).toBe(70);
     expect([...new Set(d.efs.map((e) => e.tag))]).toEqual(["9fa70c"]);
     expect(d.efs.every((e) => e.path.startsWith("/"))).toBe(true);
@@ -608,7 +608,7 @@ describe("decodePri: pair families", () => {
   });
 
   it("decodes the long-form Qualcomm path tag as the same EFS family", () => {
-    const d = pri("CW_pa.ipcc", "overrides_D10_D11.der.pri");
+    const d = pri("carrier-cw-pa.ipcc", "overrides_D10_D11.der.pri");
     expect([...new Set(d.efs.map((e) => e.tag))]).toEqual(["9f98808080808080a70c"]);
     expect(d.efs.map((e) => [e.path, e.value.text])).toEqual([
       ["/nv/item_files/jcdma/jcdma_mode", "0"],
@@ -622,7 +622,7 @@ describe("decodePri: pair families", () => {
   });
 
   it("decodes an Intel-dialect file into %u:dyn_cps.* paths under tag 9fae72", () => {
-    const d = pri("ATT_US.ipcc", "overrides_D321_D331_N841.der.pri");
+    const d = pri("carrier-att.ipcc", "overrides_D321_D331_N841.der.pri");
     expect(d.efs.length).toBe(53);
     expect([...new Set(d.efs.map((e) => e.tag))]).toEqual(["9fae72"]);
     expect(d.efs.every((e) => e.path.startsWith("%u:dyn_"))).toBe(true);
@@ -654,7 +654,7 @@ describe("decodePri: pair families", () => {
   });
 
   it("decodes the embedded policyman carrier policy document as XML", () => {
-    const d = pri("ATT_US.ipcc", "overrides_D63_D64_D16_D17.der.pri");
+    const d = pri("carrier-att.ipcc", "overrides_D63_D64_D16_D17.der.pri");
     const policy = d.efs.find((e) => e.path === "/policyman/carrier_policy.xml")!;
     expect(policy).toBeDefined();
     expect(policy.value.kind).toBe("xml");
@@ -663,7 +663,7 @@ describe("decodePri: pair families", () => {
   });
 
   it("finds the SUPL H-SLP hostname blob in the Verizon files", () => {
-    const d = pri("Verizon_LTE_US.ipcc", "overrides_D49.der.pri");
+    const d = pri("carrier-verizon.ipcc", "overrides_D49.der.pri");
     const hslp = d.unknown.find((u) => u.tag === "9fa45f")!;
     expect(hslp).toBeDefined();
     expect(hslp.len).toBe(128);
@@ -684,7 +684,7 @@ describe("decodePri: pair families", () => {
 
 describe("decodePri: feature groups", () => {
   it("names all eight standard groups plus the unnamed 9f83e453", () => {
-    const d = pri("CW_pa.ipcc", "overrides_D10_D11.der.pri");
+    const d = pri("carrier-cw-pa.ipcc", "overrides_D10_D11.der.pri");
     expect(d.featureGroups.length).toBe(8);
     expect([...d.featureGroups.map((g) => g.name)].sort()).toEqual([
       "CDMA 1X Feature Group",
@@ -696,14 +696,14 @@ describe("decodePri: feature groups", () => {
       "UIM Service Feature Group",
       "Wireless Messaging Feature Group",
     ]);
-    const att = pri("ATT_US.ipcc", "overrides_D49.der.pri");
+    const att = pri("carrier-att.ipcc", "overrides_D49.der.pri");
     const unnamed = att.featureGroups.find((g) => g.tag === "9f83e453")!;
     expect(unnamed.name).toBe("Feature Group (unnamed, tag 9f83e453)");
     expect(unnamed.bits).toEqual([3]);
   });
 
   it("reports set bits as byte indices of non-zero bytes", () => {
-    const d = pri("CW_pa.ipcc", "overrides_D10_D11.der.pri");
+    const d = pri("carrier-cw-pa.ipcc", "overrides_D10_D11.der.pri");
     const cm = d.featureGroups.find((g) => g.name === "Call Manager Feature Group")!;
     expect(cm.tag).toBe("9f83e43c");
     expect(cm.bits).toEqual([8, 10]);
@@ -715,7 +715,7 @@ describe("decodePri: feature groups", () => {
   });
 
   it("uses a different Call Manager bitfield in the AT&T bundle", () => {
-    const cm = pri("ATT_US.ipcc", "overrides_D49.der.pri").featureGroups.find(
+    const cm = pri("carrier-att.ipcc", "overrides_D49.der.pri").featureGroups.find(
       (g) => g.tag === "9f83e43c",
     )!;
     expect(cm.bits).toEqual([12, 20]);
@@ -736,7 +736,7 @@ describe("decodePri: feature groups", () => {
 
 describe("decodePri: NV path schema index", () => {
   it("keeps the raw schema list in `schema`, separate from the assigned `efs` overrides", () => {
-    const d = pri("CW_pa.ipcc", "overrides_D10_D11.der.pri");
+    const d = pri("carrier-cw-pa.ipcc", "overrides_D10_D11.der.pri");
     expect(d.schema.source).toBe("raw");
     expect(d.schema.count).toBe(193);
     expect(d.schema.paths.length).toBe(193);
@@ -769,7 +769,7 @@ describe("decodePri: NV path schema index", () => {
 
   it("reports source none when no schema tag is present", () => {
     expect(decodePri(new Uint8Array()).schema).toEqual({ source: "none", count: 0, paths: [] });
-    expect(pri("ATT_US.ipcc", "overrides_D321_D331_N841.der.pri").schema).toEqual({
+    expect(pri("carrier-att.ipcc", "overrides_D321_D331_N841.der.pri").schema).toEqual({
       source: "none",
       count: 0,
       paths: [],
@@ -801,7 +801,7 @@ describe("decodePri: NV path schema index", () => {
 
   it("recognises the MAVZ container and its little-endian uncompressed-size header", () => {
     // Establishes the ground truth used by the failing test below.
-    const leaf = flattenDer(raw("ATT_US.ipcc", "overrides_D73_D74_D27_D28.der.pri")).find(
+    const leaf = flattenDer(raw("carrier-att.ipcc", "overrides_D73_D74_D27_D28.der.pri")).find(
       (l) => l.tag === "9fa709",
     )!;
     expect(new TextDecoder().decode(leaf.value.subarray(0, 4))).toBe("MAVZ");
@@ -820,7 +820,7 @@ describe("decodePri: NV path schema index", () => {
 
   // Regression: MAVZ carries a zlib stream (78 9c); bare `inflateSync` threw and every schema came back empty.
   it("inflates a MAVZ schema blob into its path list", () => {
-    const d = pri("ATT_US.ipcc", "overrides_D73_D74_D27_D28.der.pri");
+    const d = pri("carrier-att.ipcc", "overrides_D73_D74_D27_D28.der.pri");
     expect(d.schema.source).toBe("MAVZ");
     expect(d.schema.count).toBe(292);
     expect(d.schema.paths[0]).toBe("/nv/item_files/modem/nas/lte_nas_temp_fplmn_backoff_time");
@@ -828,7 +828,7 @@ describe("decodePri: NV path schema index", () => {
   });
 
   it("inflates the largest MAVZ schema blob in the corpus", () => {
-    const d = pri("Verizon_LTE_US.ipcc", "overrides_V53_V54_V57.der.pri");
+    const d = pri("carrier-verizon.ipcc", "overrides_V53_V54_V57.der.pri");
     expect(d.schema.source).toBe("MAVZ");
     expect(d.schema.count).toBe(357);
   });
@@ -845,11 +845,11 @@ describe("decodePri: NV path schema index", () => {
   });
 
   it("matches the MAVZ uncompressed-size header against what it inflated", () => {
-    const leaf = flattenDer(raw("ATT_US.ipcc", "overrides_D73_D74_D27_D28.der.pri")).find(
+    const leaf = flattenDer(raw("carrier-att.ipcc", "overrides_D73_D74_D27_D28.der.pri")).find(
       (l) => l.tag === "9fa709",
     )!;
     const declared = leaf.value[4] | (leaf.value[5] << 8) | (leaf.value[6] << 16) | (leaf.value[7] << 24);
-    const schema = pri("ATT_US.ipcc", "overrides_D73_D74_D27_D28.der.pri").schema;
+    const schema = pri("carrier-att.ipcc", "overrides_D73_D74_D27_D28.der.pri").schema;
     // NUL-separated: the joined length plus one terminator per path.
     expect(schema.paths.join("").length + schema.count).toBe(declared);
   });
@@ -857,10 +857,10 @@ describe("decodePri: NV path schema index", () => {
 
 describe("decodePri: legacy NV item list", () => {
   it("decodes the uint16 little-endian item numbers of a real file", () => {
-    const d = pri("CW_pa.ipcc", "overrides_D10_D11.der.pri");
+    const d = pri("carrier-cw-pa.ipcc", "overrides_D10_D11.der.pri");
     expect(d.nvItems.length).toBe(126);
     expect(d.nvItems.slice(0, 6)).toEqual([259, 255, 176, 177, 20, 21]);
-    const leaf = flattenDer(raw("CW_pa.ipcc", "overrides_D10_D11.der.pri")).find(
+    const leaf = flattenDer(raw("carrier-cw-pa.ipcc", "overrides_D10_D11.der.pri")).find(
       (l) => l.tag === "9fa708",
     )!;
     expect(leaf.value.length).toBe(d.nvItems.length * 2);
@@ -881,7 +881,7 @@ describe("decodePri: legacy NV item list", () => {
 
 describe("decodePri: unidentified tags", () => {
   it("aggregates unknown tags instead of dropping them", () => {
-    const d = pri("CW_pa.ipcc", "overrides_D10_D11.der.pri");
+    const d = pri("carrier-cw-pa.ipcc", "overrides_D10_D11.der.pri");
     expect(d.unknown.map((u) => u.tag).sort()).toEqual([
       "8a",
       "9f83e435",
@@ -965,7 +965,7 @@ describe("decodePri: unidentified tags", () => {
 describe("cross-check against the plaintext .pri plists shipped alongside", () => {
   const GROUND_TRUTH = [
     {
-      bundle: "CW_pa.ipcc",
+      bundle: "carrier-cw-pa.ipcc",
       plain: "overrides_N69.pri",
       binaries: [
         "overrides_D10_D11.der.pri",
@@ -975,12 +975,12 @@ describe("cross-check against the plaintext .pri plists shipped alongside", () =
       ],
     },
     {
-      bundle: "CW_pa.ipcc",
+      bundle: "carrier-cw-pa.ipcc",
       plain: "overrides_N56_N61.pri",
       binaries: ["overrides_D10_D11.der.pri", "overrides_N66_N71.der.pri"],
     },
     {
-      bundle: "BhartiAirtel_in.ipcc",
+      bundle: "carrier-airtel-in.ipcc",
       plain: "overrides_N69.pri",
       binaries: [
         "overrides_D10_D11.der.pri",
@@ -1033,10 +1033,10 @@ describe("cross-check against the plaintext .pri plists shipped alongside", () =
   });
 
   it("finds the Call Manager bits 8 and 10 in both the plist and the binary", () => {
-    const ccm = plainPlist("CW_pa.ipcc", "overrides_N69.pri")["Carrier Configuration Management"];
+    const ccm = plainPlist("carrier-cw-pa.ipcc", "overrides_N69.pri")["Carrier Configuration Management"];
     const arr = ccm["Call Manager Feature Group"] as boolean[];
     expect(arr.map((on, i) => (on ? i : -1)).filter((i) => i >= 0)).toEqual([8, 10]);
-    const group = pri("CW_pa.ipcc", "overrides_D10_D11.der.pri").featureGroups.find(
+    const group = pri("carrier-cw-pa.ipcc", "overrides_D10_D11.der.pri").featureGroups.find(
       (g) => g.name === "Call Manager Feature Group",
     )!;
     expect(group.bits).toEqual([8, 10]);
@@ -1051,8 +1051,8 @@ describe("cross-check against the plaintext .pri plists shipped alongside", () =
         expect(h["Carrier ID"]).toBe(mav["Carrier ID"]);
       }
     }
-    expect(pri("CW_pa.ipcc", "overrides_D10_D11.der.pri").header["PRI Revision"]).toBe("0.1.161");
-    expect(pri("BhartiAirtel_in.ipcc", "overrides_D10_D11.der.pri").header["PRI Revision"]).toBe(
+    expect(pri("carrier-cw-pa.ipcc", "overrides_D10_D11.der.pri").header["PRI Revision"]).toBe("0.1.161");
+    expect(pri("carrier-airtel-in.ipcc", "overrides_D10_D11.der.pri").header["PRI Revision"]).toBe(
       "0.1.168",
     );
   });
@@ -1143,7 +1143,7 @@ describe("cross-check against the plaintext .pri plists shipped alongside", () =
 /* ============================================================ value decoding */
 
 describe("the %qu[N] quoted-string family", () => {
-  const G = () => pri("CW_wi.ipcc", "global_setting_G.der.gri");
+  const G = () => pri("carrier-cw-wi.ipcc", "global_setting_G.der.gri");
 
   it("decodes a %qu[N] path whose value exceeds the 8-byte window as text", () => {
     const e = G().efs.find(
@@ -1183,7 +1183,7 @@ describe("the %qu[N] quoted-string family", () => {
   });
 
   it("decodes the %u: scalar family correctly, so the heuristic is right there", () => {
-    const d = pri("CW_wi.ipcc", "global_setting_B.der.gri");
+    const d = pri("carrier-cw-wi.ipcc", "global_setting_B.der.gri");
     const us = d.efs.filter((e) => e.path.startsWith("%u:"));
     expect(us.length).toBeGreaterThan(1000);
     for (const e of us) expect(e.value.kind, e.path).toBe("int");
@@ -1206,7 +1206,7 @@ describe("malformed and hostile input", () => {
   });
 
   it("survives every truncation offset of a real classic file, quickly", () => {
-    const bytes = raw("CW_pa.ipcc", "overrides_D10_D11.der.pri");
+    const bytes = raw("carrier-cw-pa.ipcc", "overrides_D10_D11.der.pri");
     const started = Date.now();
     for (let i = 0; i <= bytes.length; i++) {
       const d = decodePri(bytes.subarray(0, i));
@@ -1218,14 +1218,14 @@ describe("malformed and hostile input", () => {
   });
 
   it("survives every truncation offset of a newer CPS file", () => {
-    const bytes = raw("ATT_US.ipcc", "overrides_D321_D331_N841.der.pri");
+    const bytes = raw("carrier-att.ipcc", "overrides_D321_D331_N841.der.pri");
     for (let i = 0; i <= bytes.length; i++) {
       expect(() => decodePri(bytes.subarray(0, i))).not.toThrow();
     }
   });
 
   it("survives a strided truncation sweep of the largest .der.gri", () => {
-    const bytes = raw("CW_wi.ipcc", "global_setting_G.der.gri");
+    const bytes = raw("carrier-cw-wi.ipcc", "global_setting_G.der.gri");
     expect(bytes.length).toBeGreaterThan(300_000);
     const started = Date.now();
     for (let i = 0; i <= bytes.length; i += 997) {
@@ -1300,7 +1300,7 @@ describe("malformed and hostile input", () => {
   });
 
   it("does not hang or throw on single-byte mutations of a real file", () => {
-    const original = raw("CW_pa.ipcc", "overrides_D10_D11.der.pri");
+    const original = raw("carrier-cw-pa.ipcc", "overrides_D10_D11.der.pri");
     const started = Date.now();
     for (let i = 0; i < original.length; i += 29) {
       for (const flip of [0x00, 0xff, 0x80]) {
@@ -1409,7 +1409,7 @@ describe("PRI_TAGS", () => {
 
 describe("dialect", () => {
   it("tells Qualcomm files from Intel / C1 ones by their tags", () => {
-    const qc = decodePri(new Uint8Array(readFileSync(join(here, "fixtures", "ios27_Altice_LTE_US_overrides_V53_V54_V57.der.pri"))));
+    const qc = decodePri(new Uint8Array(readFileSync(join(here, "fixtures", "pri/altice.der.pri"))));
     expect(qc.dialect).toBe("qualcomm");
     // 9fae70/9fae71 name/value pairs are the Intel dialect Apple C1 kept: [6000] "PRI Name", [6001] value.
     const c1 = new Uint8Array([0x31, 0x13, 0x80, 0x11, 0x30, 0x0f, 0x9f, 0xae, 0x70, 0x08, ...new TextEncoder().encode("PRI Name"), 0x9f, 0xae, 0x71, 0x01, 0x41]);
@@ -1537,7 +1537,7 @@ describe("describeNv / decodeNvValue", () => {
 
 describe("decodePri: CCM feature flags", () => {
   it("exposes 25 independent 0/1 flags per group, none of them named", () => {
-    const cm = pri("CW_pa.ipcc", "overrides_D10_D11.der.pri").featureGroups.find((g) => g.nv === 62012)!;
+    const cm = pri("carrier-cw-pa.ipcc", "overrides_D10_D11.der.pri").featureGroups.find((g) => g.nv === 62012)!;
     expect(cm.flags.length).toBe(25);
     expect(cm.boolean).toBe(true);
     expect(cm.confidence).toBe("high");
@@ -1564,7 +1564,7 @@ describe("decodePri: CCM feature flags", () => {
 
 describe("decodePri: legacy NV values", () => {
   it("decodes the NV-value tags of a classic file with names and labels", () => {
-    const d = pri("CW_pa.ipcc", "overrides_D10_D11.der.pri");
+    const d = pri("carrier-cw-pa.ipcc", "overrides_D10_D11.der.pri");
     expect(d.nv.map((x) => [x.item, x.tag, x.value.text, x.label])).toEqual([
       [946, "9f8732", "48895", "GSM 450, GSM 480, GSM 750, GSM 850, GSM railways 900, GSM PCS 1900, WCDMA B1 2100, WCDMA B2 1900, WCDMA B4 1700, WCDMA B5 850, WCDMA B6 800, bit 12, bit 13, bit 15"],
       [62005, "9f83e435", "10551552", "0.1.161"],
@@ -1585,7 +1585,7 @@ describe("decodePri: legacy NV values", () => {
   });
 
   it("marks which listed items carry a value in nvListed", () => {
-    const d = pri("CW_pa.ipcc", "overrides_D10_D11.der.pri");
+    const d = pri("carrier-cw-pa.ipcc", "overrides_D10_D11.der.pri");
     expect(d.nvListed.length).toBe(d.nvItems.length);
     expect(d.nvListed.find((x) => x.item === 946)).toEqual({ item: 946, name: "Band preference bits 16-31", set: true });
     expect(d.nvListed.find((x) => x.item === 62012)!.set).toBe(true); // a CCM group
@@ -1593,7 +1593,7 @@ describe("decodePri: legacy NV values", () => {
   });
 
   it("annotates EFS entries with the NV lookup", () => {
-    const d = pri("CW_pa.ipcc", "overrides_D10_D11.der.pri");
+    const d = pri("carrier-cw-pa.ipcc", "overrides_D10_D11.der.pri");
     const vdp = d.efs.find((e) => e.path.endsWith("/voice_domain_pref"))!;
     expect(vdp).toMatchObject({ name: "Voice domain preference", label: "CS voice only", confidence: "high" });
     const police = d.efs.find((e) => e.path === "/mav/mav_police_pri_mode_pref_mask")!;
@@ -1609,11 +1609,11 @@ describe("iOS 27.0 fixtures", () => {
     const bytes = new Uint8Array(readFileSync(join(here, "fixtures", name)));
     return decodePri(bytes, name.endsWith(".der.gri") ? "der.gri" : "der.pri");
   };
-  const V = (carrier: string) => fx(`ios27_${carrier}_overrides_V53_V54_V57.der.pri`);
-  const PRI = ["Altice_LTE_US", "ChinaTelecom_USIM_mo", "CrossWireless_Bravado_LTE_US", "Docomo_gu", "KTF_kr", "UnitedWireless_LTE_US", "Vodafone_Lebara_au"];
+  const V = (carrier: string) => fx(`pri/${carrier}.der.pri`);
+  const PRI = ["altice", "chinatelecom", "crosswireless", "docomo", "ktf", "unitedwireless", "lebara"];
 
   it("ships the fixtures this block reads", () => {
-    const names = readdirSync(join(here, "fixtures")).filter((n) => n.startsWith("ios27_"));
+    const names = readdirSync(join(here, "fixtures", "pri"));
     expect(names.length).toBe(9);
   });
 
@@ -1631,31 +1631,31 @@ describe("iOS 27.0 fixtures", () => {
   });
 
   it("decodes the NV tags new in iOS 27", () => {
-    const d = V("CrossWireless_Bravado_LTE_US");
+    const d = V("crosswireless");
     expect(d.nv.map((x) => [x.tag, x.item, x.value.int])).toEqual([
       ["9fa660", 4960, 1], ["9f833a", 442, 255], ["9f8429", 553, 5], ["9fa250", 4432, 7], ["9fa129", 4265, 0],
-      ["9f83e435", 62005, 10551552], ["9f8732", 946, 48895], ["9f9b05", 3461, 0], ["9fa016", 4118, 24],
-      ["9fa072", 4210, 6], ["9fae07", 5895, 1], ["9fb542", 6850, 13], ["9f83c525", 58021, 247],
+      ["9f83e435", 62005, 10551552], ["9f8732", 946, 48894], ["9f9b05", 3461, 0], ["9fa016", 4118, 24],
+      ["9fa072", 4210, 6], ["9fae07", 5895, 1], ["9fb542", 6850, 13], ["9f83c525", 58021, 246],
     ]);
-    const ct = V("ChinaTelecom_USIM_mo").nv;
+    const ct = V("chinatelecom").nv;
     expect(ct.find((x) => x.tag === "9f8311")).toMatchObject({ item: 401, name: "GPSOne PDE TCP Address" });
     expect(ct.find((x) => x.tag === "9f832a")).toMatchObject({ item: 426, name: "GPSOne PDE Port" });
-    const ktf = V("KTF_kr").nv;
+    const ktf = V("ktf").nv;
     expect(ktf.find((x) => x.item === 4703)!.value.text).toBe("e-slp.kt.com:7276");
-    expect(ktf.find((x) => x.item === 6792)!.label).toBe("2.0.0");
+    expect(ktf.find((x) => x.item === 6792)!.label).toBe("2.0.1");
     expect(ktf.find((x) => x.item === 3758)!.label).toBe("On");
     expect(ktf.find((x) => x.tag === "9f83e447")!.item).toBe(62023);
-    const uw = V("UnitedWireless_LTE_US").nv;
+    const uw = V("unitedwireless").nv;
     expect(uw.find((x) => x.tag === "9f8657")!.name).toBe("RTRE Configuration");
     expect(uw.find((x) => x.tag === "9f83e44a")!.value).toMatchObject({ kind: "bytes", len: 14 });
-    expect(V("Docomo_gu").nv.find((x) => x.tag === "9f870d")!.name).toBe("GSM/UMTS SMS Bearer Preference");
+    expect(V("docomo").nv.find((x) => x.tag === "9f870d")!.name).toBe("GSM/UMTS SMS Bearer Preference");
   });
 
   it("decodes the CCM groups, including the unnamed ninth", () => {
-    const alt = V("Altice_LTE_US").featureGroups;
+    const alt = V("altice").featureGroups;
     expect(alt.map((g) => [g.tag, g.nv, g.bits])).toEqual([["9f83e43c", 62012, [20]], ["9f83e453", 62035, [2]]]);
     expect(alt[1].confidence).toBe("low");
-    const vf = V("Vodafone_Lebara_au").featureGroups;
+    const vf = V("lebara").featureGroups;
     expect(vf.map((g) => [g.name, g.bits])).toEqual([
       ["Call Manager Feature Group", [20]],
       ["System Determination Feature Group", [17]],
@@ -1663,7 +1663,7 @@ describe("iOS 27.0 fixtures", () => {
   });
 
   it("labels iOS 27 EFS values", () => {
-    const efs = V("Altice_LTE_US").efs;
+    const efs = V("altice").efs;
     const get = (s: string) => efs.find((e) => e.path.endsWith(s))!;
     expect(get("/voice_domain_pref").label).toBe("IMS PS voice preferred");
     expect(get("/ue_usage_setting").label).toBe("Voice centric");
@@ -1672,7 +1672,7 @@ describe("iOS 27.0 fixtures", () => {
   });
 
   it("decodes a .der.gri with a raw schema and the GRI revision in NV 62033", () => {
-    const d = fx("ios27_Default_global_setting_F.der.gri");
+    const d = fx("pri/default-f.der.gri");
     expect(d.header).toEqual({ "GRI Revision": "14.0.9" });
     expect(d.schema.source).toBe("raw");
     expect(d.schema.count).toBe(6);
@@ -1680,7 +1680,7 @@ describe("iOS 27.0 fixtures", () => {
   });
 
   it("decodes %qu[N]: strings and %u: scalars in the trimmed CPS .der.gri", () => {
-    const d = fx("ios27_Default_global_setting_G_trimmed.der.gri");
+    const d = fx("pri/default-g-cut.der.gri");
     expect(d.header).toEqual({ "GRI Revision": "3.0.16" });
     const qu = d.efs.filter((e) => e.path.startsWith("%qu["));
     const u = d.efs.filter((e) => e.path.startsWith("%u:"));
@@ -1741,7 +1741,7 @@ describe("describeDevices", () => {
 
   it("resolves every device stem that the corpus actually ships", () => {
     const stems = new Set<string>();
-    for (const name of [...BUNDLES_WITH_PRI, "Germany.ipcc", "UnitedStates.ipcc"]) {
+    for (const name of [...BUNDLES_WITH_PRI, "country-germany.ipcc", "country-us.ipcc"]) {
       for (const s of bundle(name).info.deviceStems) stems.add(s);
     }
     expect(stems.size).toBeGreaterThan(20);
@@ -1773,11 +1773,11 @@ describe("describeDevices", () => {
   });
 
   it("carries the same devices through openIpcc onto the file listing", () => {
-    const f = bundle("Verizon_LTE_US.ipcc").info.files.find(
+    const f = bundle("carrier-verizon.ipcc").info.files.find(
       (x) => x.path === "overrides_V53_V54_V57.der.pri",
     )!;
     expect(f.devices).toEqual(describeDevices("V53_V54_V57"));
-    const d = decodeFile(bundle("Verizon_LTE_US.ipcc"), "overrides_V53_V54_V57.der.pri");
+    const d = decodeFile(bundle("carrier-verizon.ipcc"), "overrides_V53_V54_V57.der.pri");
     expect(d.devices!.map((x) => x.code)).toEqual(["V53", "V54", "V57"]);
   });
 

@@ -38,7 +38,7 @@ describe("plist", () => {
   });
 
   it("parses binary plists out of a real bundle", () => {
-    const b = openIpcc(fixture("ATT_US.ipcc"));
+    const b = openIpcc(fixture("carrier-att.ipcc"));
     const strings = b.info.files.find((f) => f.path === "en.lproj/carrier.strings")!;
     expect(strings).toBeTruthy();
     const d = decodeFile(b, strings.path);
@@ -47,7 +47,7 @@ describe("plist", () => {
   });
 
   it("round-trips a hand-built binary plist header", () => {
-    const b = openIpcc(fixture("UnitedStates.ipcc"));
+    const b = openIpcc(fixture("country-us.ipcc"));
     const raw = b.entries[b.prefix + "carrier.plist"];
     const parsed = parseBinaryPlist(raw) as Record<string, unknown>;
     expect(parsed.CountryName).toBe("United States of America");
@@ -57,7 +57,7 @@ describe("plist", () => {
 
 describe("ipcc", () => {
   it("lists bundle contents and maps device codenames", () => {
-    const b = openIpcc(fixture("CW_pa.ipcc"));
+    const b = openIpcc(fixture("carrier-cw-pa.ipcc"));
     expect(b.info.bundleName).toBe("CW_pa");
     expect(b.info.files.length).toBeGreaterThan(5);
     const der = b.info.files.find((f) => f.kind === "pri-der")!;
@@ -66,14 +66,14 @@ describe("ipcc", () => {
   });
 
   it("classifies localisation folders", () => {
-    const b = openIpcc(fixture("ATT_US.ipcc"));
+    const b = openIpcc(fixture("carrier-att.ipcc"));
     expect(b.info.locales).toContain("en");
     expect(b.info.locales.length).toBeGreaterThan(10);
     expect(b.info.files.some((f) => f.locale === "de")).toBe(true);
   });
 
   it("decodes carrier.plist of a country bundle", () => {
-    const b = openIpcc(fixture("UnitedStates.ipcc"));
+    const b = openIpcc(fixture("country-us.ipcc"));
     const d = decodeFile(b, "carrier.plist");
     const p = decodedPlist(d) as any;
     expect(p.CountryName).toBe("United States of America");
@@ -86,7 +86,7 @@ describe("ipcc", () => {
 
 describe("der pri", () => {
   it("decodes a real .der.pri into named settings, EFS paths and feature groups", () => {
-    const b = openIpcc(fixture("CW_pa.ipcc"));
+    const b = openIpcc(fixture("carrier-cw-pa.ipcc"));
     const der = b.info.files.find((f) => f.kind === "pri-der")!;
     const d = decodeFile(b, der.path);
     const pri = decodedPri(d)!;
@@ -98,7 +98,7 @@ describe("der pri", () => {
   });
 
   it("names the feature groups and lists set bits", () => {
-    const b = openIpcc(fixture("ATT_US.ipcc"));
+    const b = openIpcc(fixture("carrier-att.ipcc"));
     let found = false;
     for (const f of b.info.files.filter((x) => x.kind === "pri-der")) {
       const pri = decodedPri(decodeFile(b, f.path))!;
@@ -113,7 +113,7 @@ describe("der pri", () => {
   });
 
   it("separates the NV path schema index from assigned overrides", () => {
-    const b = openIpcc(fixture("ATT_US.ipcc"));
+    const b = openIpcc(fixture("carrier-att.ipcc"));
     const f = b.info.files.find((x) => x.kind === "pri-der")!;
     const pri = decodedPri(decodeFile(b, f.path))!;
     // The MAVZ/raw blob is a schema index; it carries paths but no values.
@@ -126,7 +126,7 @@ describe("der pri", () => {
   });
 
   it("decodes little-endian scalars and detects embedded XML", () => {
-    const b = openIpcc(fixture("ATT_US.ipcc"));
+    const b = openIpcc(fixture("carrier-att.ipcc"));
     let sawXml = false;
     for (const f of b.info.files.filter((x) => x.kind === "pri-der")) {
       for (const e of decodedPri(decodeFile(b, f.path))!.efs) {
@@ -138,7 +138,7 @@ describe("der pri", () => {
   });
 
   it("flattenDer tolerates truncated input without throwing", () => {
-    const b = openIpcc(fixture("CW_pa.ipcc"));
+    const b = openIpcc(fixture("carrier-cw-pa.ipcc"));
     const f = b.info.files.find((x) => x.kind === "pri-der")!;
     const raw = b.entries[b.prefix + f.path];
     expect(() => flattenDer(raw.subarray(0, 40))).not.toThrow();

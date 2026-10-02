@@ -360,7 +360,7 @@ describe("binary plist: trailer, offset table and object references", () => {
 });
 
 describe("binary plist: malformed and hostile input", () => {
-  const real = fixture("manifest-trimmed.bplist");
+  const real = fixture("manifest.bplist");
 
   /** Asserts the call terminates, either by throwing an Error or returning something. */
   const survives = (fn: () => unknown) => {
@@ -857,8 +857,8 @@ function normalise(v: PlistValue): unknown {
 }
 
 describe("cross-format equivalence: manifest-trimmed.xml vs manifest-trimmed.bplist", () => {
-  const fromXml = parsePlist(fixture("manifest-trimmed.xml")) as Record<string, PlistValue>;
-  const fromBin = parsePlist(fixture("manifest-trimmed.bplist")) as Record<string, PlistValue>;
+  const fromXml = parsePlist(fixture("manifest.xml")) as Record<string, PlistValue>;
+  const fromBin = parsePlist(fixture("manifest.bplist")) as Record<string, PlistValue>;
 
   it("produces the same top-level key set", () => {
     expect(Object.keys(fromXml).sort()).toEqual(Object.keys(fromBin).sort());
@@ -891,9 +891,9 @@ describe("cross-format equivalence: manifest-trimmed.xml vs manifest-trimmed.bpl
     expect(b["17.5"].BundleURL).toBe(
       "https://updates.cdn-apple.com/20240607/carrierbundles/032-24052/B739986A-91FF-4A56-A0C6-08F0A826C7C4/ATT_US_iPhone.ipcc",
     );
-    expect(bytesToHex(b["17.5"].Digest)).toBe("a7151006fb3b71643ec59040fce64310079fe550");
+    expect(bytesToHex(b["17.5"].Digest)).toBe("814ab6541740045a03a9f9467a0a65aa9283a5fc");
     expect(bytesToHex(b["17.5"].Digest3)).toBe(
-      "b326c7f75a589acb3d5addf2f51ac67fc5462bb6f0915bb48f60189ea5611ecc047ad6db9683350c738cbc63011e09ab",
+      "26d012f7a973dc73c030a8ad38136956a89c7a49dc5b40878db1dbcff244545a02a646200960928114da17473afb714e",
     );
     // The 2009-era entry has no Digest at all.
     expect(Object.keys(b["3.1"]).sort()).toEqual(["BuildVersion", "BundleURL"]);
@@ -919,7 +919,7 @@ describe("cross-format equivalence: manifest-trimmed.xml vs manifest-trimmed.bpl
     expect(b.Australia_1.BundleID).toBe("Australia");
     expect(b.Australia_1.BundleVersion).toBe("69.1");
     expect(bytesToHex(b.Australia_1.Digest)).toBe(
-      "c6ef6b9d61c26ee874718790c470f3390f5f2dfd7b481cffe2513528b2cf2192bbe4567307d455faba3af761e8b220df",
+      "6242cfbce66ec5693c50f648d2d707d6c6085e91d3002517b2441e288960a52c361a95e42a149e6441183d45c3c4bc2d",
     );
   });
 
@@ -956,7 +956,7 @@ describe("cross-format equivalence: manifest-trimmed.xml vs manifest-trimmed.bpl
     expect(bs).toBeInstanceOf(Uint8Array);
     expect(bs.length).toBe(103);
     expect(bytesToHex(xs)).toBe(bytesToHex(bs));
-    expect(bytesToHex(bs).startsWith("3065023100c72262401d858225ec8111")).toBe(true);
+    expect(bytesToHex(bs).startsWith("3065023100bfabeec028caf4f70f2480")).toBe(true);
     expect(fromXml.iTunesMacVersion).toBe("12.8.1");
     expect(fromBin.iTunesMacVersion).toBe("12.8.1");
   });
@@ -1061,7 +1061,7 @@ describe("toJsonSafe", () => {
   });
 
   it("produces output that survives JSON.stringify for a whole real bundle plist", () => {
-    const parsed = parseBinaryPlist(member("ATT_US.ipcc", "carrier.plist"));
+    const parsed = parseBinaryPlist(member("carrier-att.ipcc", "carrier.plist"));
     const safe = toJsonSafe(parsed);
     const round = JSON.parse(JSON.stringify(safe));
     expect(round.CarrierName).toBe("AT&T");
@@ -1122,7 +1122,7 @@ describe("maybeText", () => {
 
 describe("real .ipcc fixtures: binary plists", () => {
   it("parses UnitedStates carrier.plist with the values the bundle actually carries", () => {
-    const p = parseBinaryPlist(member("UnitedStates.ipcc", "carrier.plist")) as any;
+    const p = parseBinaryPlist(member("country-us.ipcc", "carrier.plist")) as any;
     expect(p.CountryName).toBe("United States of America");
     expect(p.ISOAlpha2CountryCode).toEqual(["us"]);
     expect(Object.keys(p).sort()).toEqual([
@@ -1148,20 +1148,20 @@ describe("real .ipcc fixtures: binary plists", () => {
   });
 
   it("parses Info.plist of a country bundle and a Watch bundle", () => {
-    const us = parseBinaryPlist(member("UnitedStates.ipcc", "Info.plist")) as any;
+    const us = parseBinaryPlist(member("country-us.ipcc", "Info.plist")) as any;
     expect(us.CFBundleIdentifier).toBe("com.apple.UnitedStates");
     expect(us.CFBundleDeviceFamily).toBe("iPhone");
     expect(us.CFBundleShortVersionString).toBe("58.1.0");
     expect(us.CFBundleSignature).toBe("????");
 
-    const watch = parseBinaryPlist(member("Australia_Watch.ipcc", "Info.plist")) as any;
+    const watch = parseBinaryPlist(member("watch-country-australia.ipcc", "Info.plist")) as any;
     expect(watch.CFBundleIdentifier).toBe("com.apple.Australia");
     expect(watch.CFBundleDeviceFamily).toBe("Watch");
     expect(watch.CFBundleVersion).toBe("39.1");
   });
 
   it("parses signature blobs as raw data objects", () => {
-    const sig = parseBinaryPlist(member("UnitedStates.ipcc", "signatures/common.plist")) as any;
+    const sig = parseBinaryPlist(member("country-us.ipcc", "signatures/common.plist")) as any;
     expect(Object.keys(sig).sort()).toEqual(["CBSignature2", "CBSignature3"]);
     expect(sig.CBSignature2).toBeInstanceOf(Uint8Array);
     expect(sig.CBSignature2.length).toBe(256);
@@ -1170,23 +1170,23 @@ describe("real .ipcc fixtures: binary plists", () => {
   });
 
   it("decodes UTF-16BE strings out of localised .strings files", () => {
-    const ar = parseBinaryPlist(member("ATT_US.ipcc", "ar.lproj/carrier.strings")) as any;
+    const ar = parseBinaryPlist(member("carrier-att.ipcc", "ar.lproj/carrier.strings")) as any;
     expect(ar["Voice Connect_SERVICE_NAME"]).toBe("توصيل الصوت");
     expect(ar["AT&T MyAccount_MYACCOUNTURLTITLE"]).toBe("AT&T MyAccount");
 
-    const bg = parseBinaryPlist(member("ATT_US.ipcc", "bg.lproj/carrier.strings")) as any;
+    const bg = parseBinaryPlist(member("carrier-att.ipcc", "bg.lproj/carrier.strings")) as any;
     expect(bg["Voice Connect_SERVICE_NAME"]).toBe("Гласова връзка");
 
-    const zh = parseBinaryPlist(member("ATT_US.ipcc", "zh_CN.lproj/carrier.strings")) as any;
+    const zh = parseBinaryPlist(member("carrier-att.ipcc", "zh_CN.lproj/carrier.strings")) as any;
     expect(zh["Pay My Bill_SERVICE_NAME"]).toBe("支付账单");
     expect(zh["Directory Assistance_SERVICE_NAME"]).toBe("查号台");
 
-    const ja = parseBinaryPlist(member("ATT_US.ipcc", "ja.lproj/carrier.strings")) as any;
+    const ja = parseBinaryPlist(member("carrier-att.ipcc", "ja.lproj/carrier.strings")) as any;
     expect(ja["Pay My Bill_SERVICE_NAME"]).toBe("料金を支払う");
   });
 
   it("gives every locale of one .strings file the same key set", () => {
-    const opened = openIpcc(fixture("ATT_US.ipcc"));
+    const opened = openIpcc(fixture("carrier-att.ipcc"));
     const paths = opened.info.files
       .map((f) => f.path)
       .filter((p) => p.endsWith(".lproj/carrier.strings"));
@@ -1203,14 +1203,14 @@ describe("real .ipcc fixtures: binary plists", () => {
   });
 
   it("decodes negative integers stored through the 8 byte signed path", () => {
-    const p = parseBinaryPlist(member("Verizon_LTE_US.ipcc", "overrides_D23.plist")) as any;
+    const p = parseBinaryPlist(member("carrier-verizon.ipcc", "overrides_D23.plist")) as any;
     expect(p.IMSConfig.Signaling.SpamCallRiskLevels).toEqual({ high: -4, medium: -3, low: -2 });
-    expect(p.IMSConfig.Signaling.ActivationBackoffTimerOverIWLANMilliseconds).toBe(3600000);
+    expect(p.IMSConfig.Signaling.ActivationBackoffTimerOverIWLANMilliseconds).toBe(3600001);
     expect(p.CarrierEntitlements.SupportedEntitlements).toBe(4238745);
   });
 
   it("decodes a 0x0f extended-length array out of a real bundle", () => {
-    const p = parseBinaryPlist(member("Verizon_LTE_US.ipcc", "supported_devices.plist")) as any;
+    const p = parseBinaryPlist(member("carrier-verizon.ipcc", "supported_devices.plist")) as any;
     expect(Object.keys(p).sort()).toEqual(["SupportedDevicesExactMatch", "SupportedSIMOverrides"]);
     expect(p.SupportedDevicesExactMatch).toHaveLength(31);
     expect(p.SupportedDevicesExactMatch[0]).toBe("D421");
@@ -1219,7 +1219,7 @@ describe("real .ipcc fixtures: binary plists", () => {
   });
 
   it("decodes a legacy 2009-era bundle", () => {
-    const p = parseBinaryPlist(member("legacy_ATT_2009.ipcc", "carrier.plist")) as any;
+    const p = parseBinaryPlist(member("carrier-att-2009.ipcc", "carrier.plist")) as any;
     expect(p.CarrierName).toBe("AT&T");
     expect(p.SupportsNITZ).toBe(true);
     expect(p.MyAccountURL).toBe("https://www.wireless.att.com/my-account");
@@ -1239,7 +1239,7 @@ describe("real .ipcc fixtures: binary plists", () => {
   });
 
   it("decodes an ERI table keyed by stringified numeric indices", () => {
-    const p = parseBinaryPlist(member("Verizon_LTE_US.ipcc", "ERI.plist")) as any;
+    const p = parseBinaryPlist(member("carrier-verizon.ipcc", "ERI.plist")) as any;
     expect(Object.keys(p).sort()).toEqual(["name", "roaming_indicator_table", "version"]);
     expect(p.name).toBe("Verizon Wireless");
     expect(p.version).toBe(8);
@@ -1258,7 +1258,7 @@ describe("real .ipcc fixtures: binary plists", () => {
   });
 
   it("decodes an ATT bundle with an empty <data> leaf and 60+ top-level keys", () => {
-    const p = parseBinaryPlist(member("ATT_US.ipcc", "carrier.plist")) as any;
+    const p = parseBinaryPlist(member("carrier-att.ipcc", "carrier.plist")) as any;
     expect(p.CarrierName).toBe("AT&T");
     expect(Object.keys(p).length).toBe(61);
     expect(p.OTAActivationAPN.apn).toBe("LWAActivate");
@@ -1269,15 +1269,15 @@ describe("real .ipcc fixtures: binary plists", () => {
 
   it("decodes every binary plist in every fixture bundle without throwing", () => {
     const bundles = [
-      "ATT_US.ipcc",
-      "Verizon_LTE_US.ipcc",
-      "UnitedStates.ipcc",
-      "Germany.ipcc",
-      "CW_pa.ipcc",
-      "CW_wi.ipcc",
-      "BhartiAirtel_in.ipcc",
-      "legacy_ATT_2009.ipcc",
-      "Australia_Watch.ipcc",
+      "carrier-att.ipcc",
+      "carrier-verizon.ipcc",
+      "country-us.ipcc",
+      "country-germany.ipcc",
+      "carrier-cw-pa.ipcc",
+      "carrier-cw-wi.ipcc",
+      "carrier-airtel-in.ipcc",
+      "carrier-att-2009.ipcc",
+      "watch-country-australia.ipcc",
     ];
     let count = 0;
     for (const name of bundles) {
@@ -1299,7 +1299,7 @@ describe("real .ipcc fixtures: binary plists", () => {
 
 describe("real .ipcc fixtures: XML plists", () => {
   it("parses version.plist", () => {
-    const v = parsePlist(member("UnitedStates.ipcc", "version.plist")) as any;
+    const v = parsePlist(member("country-us.ipcc", "version.plist")) as any;
     expect(v).toEqual({
       BuildVersion: "1",
       CFBundleShortVersionString: "58.1.0",
@@ -1310,7 +1310,7 @@ describe("real .ipcc fixtures: XML plists", () => {
   });
 
   it("parses a locversion.plist out of a localisation folder", () => {
-    const v = parsePlist(member("ATT_US.ipcc", "en.lproj/locversion.plist")) as any;
+    const v = parsePlist(member("carrier-att.ipcc", "en.lproj/locversion.plist")) as any;
     expect(v).toEqual({
       LprojCompatibleVersion: "3479.90",
       LprojLocale: "en",
@@ -1320,7 +1320,7 @@ describe("real .ipcc fixtures: XML plists", () => {
   });
 
   it("parses a .mobileconfig, an array of dicts followed by more keys", () => {
-    const v = parsePlist(member("Verizon_LTE_US.ipcc", "profile.mobileconfig")) as any;
+    const v = parsePlist(member("carrier-verizon.ipcc", "profile.mobileconfig")) as any;
     expect(Object.keys(v).sort()).toEqual([
       "PayloadContent",
       "PayloadDisplayName",
@@ -1348,15 +1348,15 @@ describe("real .ipcc fixtures: XML plists", () => {
 
   it("parses every XML plist in every fixture bundle without throwing", () => {
     const bundles = [
-      "ATT_US.ipcc",
-      "Verizon_LTE_US.ipcc",
-      "UnitedStates.ipcc",
-      "Germany.ipcc",
-      "CW_pa.ipcc",
-      "CW_wi.ipcc",
-      "BhartiAirtel_in.ipcc",
-      "legacy_ATT_2009.ipcc",
-      "Australia_Watch.ipcc",
+      "carrier-att.ipcc",
+      "carrier-verizon.ipcc",
+      "country-us.ipcc",
+      "country-germany.ipcc",
+      "carrier-cw-pa.ipcc",
+      "carrier-cw-wi.ipcc",
+      "carrier-airtel-in.ipcc",
+      "carrier-att-2009.ipcc",
+      "watch-country-australia.ipcc",
     ];
     let count = 0;
     for (const name of bundles) {
