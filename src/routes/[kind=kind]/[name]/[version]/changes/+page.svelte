@@ -5,6 +5,7 @@
   import { bundleArgs, entryLabel, link, withParams } from "#lib/format.ts";
   import Pane from "#lib/components/Pane.svelte";
   import BundleCompare from "#lib/components/BundleCompare.svelte";
+  import type { BundleDiff } from "#lib/decode/compare.ts";
 
   let { params } = $props();
 
@@ -19,6 +20,18 @@
 
   const set = (changes: Record<string, string | null>) =>
     goto(withParams(page.url, changes), { reset: false });
+
+  /** Files that change with every build whatever the settings: the version, signatures and translations. */
+  const packaging = (path: string) =>
+    path === "Info.plist" || path.startsWith("signatures/") || path.includes(".lproj/") || path.endsWith(".loctable");
+
+  /** The answer to "did any setting change?", ahead of the file list. */
+  function summary(diff: BundleDiff) {
+    const settings = diff.files.filter((f) => f.kind === "changed" && !packaging(f.path)).map((f) => f.path);
+    const groups = (kind: "added" | "removed") =>
+      diff.files.filter((f) => f.kind === kind && /^overrides_.*\.plist$/.test(f.path)).length;
+    return { settings, added: groups("added"), removed: groups("removed") };
+  }
 
   /** The timeline runs newest first. */
   function notNewer(timeline: Array<{ slug: string }>, x: string, y: string) {
@@ -70,6 +83,19 @@
             </tr>
           </tbody>
         </table>
+      {/if}
+      {#if !file}
+        {@const s = summary(cmp.diff)}
+        <p class="gap-above">
+          {#if s.settings.length}
+            Settings changed in {#each s.settings as p, i (p)}{i ? ", " : ""}<a href={withParams(page.url, { file: p })} class="mono">{p}</a>{/each}.
+          {:else}
+            <strong>No settings changed</strong> in the files both versions have.
+          {/if}
+          {#if s.added}Overrides for {s.added} phone {s.added === 1 ? "group" : "groups"} added.{/if}
+          {#if s.removed}Overrides for {s.removed} phone {s.removed === 1 ? "group" : "groups"} removed.{/if}
+          {#if s.added || s.removed}<span class="dimtext">(A copy inside an iOS image only has the overrides for that image's phones.)</span>{/if}
+        </p>
       {/if}
       <BundleCompare
         diff={cmp.diff}
