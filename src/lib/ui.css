@@ -199,6 +199,8 @@ table.grid tr.sel td { background: var(--sel-row); }
 .wiki p, .wiki ul, .wiki ol { margin: 0 0 8px; }
 .wiki li { margin: 2px 0; }
 .wiki code { font-family: var(--mono); font-size: 11px; background: var(--face-hi); padding: 0 3px; }
+/* Long key paths break rather than push the page sideways; code blocks scroll on their own. */
+.wiki :not(pre) > code { overflow-wrap: anywhere; }
 .wiki pre { font-family: var(--mono); font-size: 11px; background: #f8f8f6; border: 1px dashed var(--shadow); padding: 6px 8px; overflow: auto; margin: 4px 0 10px; }
 .wiki pre code { background: none; padding: 0; }
 /* Wide tables scroll inside the article rather than spill out of it. */
@@ -209,6 +211,8 @@ table.grid tr.sel td { background: var(--sel-row); }
 .wiki-meta { margin-top: 18px; padding-top: 6px; border-top: 1px solid var(--shadow); font-size: 11px; color: var(--text-dim); }
 .wiki-page { display: flex; gap: 10px; align-items: flex-start; }
 .wiki-page > .wiki { flex: 1; min-width: 0; }
+button.wiki-nav-toggle { display: none; width: 100%; justify-content: space-between; align-items: center; text-align: left; }
+.wiki-nav-toggle .chev { color: var(--text-dim); }
 .wiki-nav { flex: none; width: 170px; display: flex; flex-direction: column; gap: 2px; font-size: 11.5px; position: sticky; top: 0; }
 .wiki-nav h2 { font-size: 11px; color: var(--text-dim); margin: 8px 0 2px; font-weight: normal; border-bottom: 1px solid var(--shadow); }
 .wiki-nav a[aria-current="page"] { font-weight: bold; color: var(--text); text-decoration: none; }
@@ -216,9 +220,12 @@ table.grid tr.sel td { background: var(--sel-row); }
 .wiki-nav summary { font-size: 11px; color: var(--text-dim); cursor: pointer; border-bottom: 1px solid var(--shadow); margin-bottom: 2px; }
 .wiki-nav details > a { display: block; padding-left: 8px; margin: 2px 0; }
 @media (max-width: 760px) {
-  .wiki-page { flex-direction: column; }
-  .wiki-nav { position: static; width: auto; flex-direction: row; flex-wrap: wrap; gap: 4px 10px; }
-  .wiki-nav h2 { display: none; }
+  /* One button instead of the sidebar; it opens the same list, full width. */
+  .wiki-page { flex-direction: column; align-items: stretch; gap: 6px; }
+  button.wiki-nav-toggle { display: flex; }
+  .wiki-nav { display: none; position: static; width: auto; font-size: 13px; gap: 6px; }
+  .wiki-nav.open { display: flex; }
+  .wiki { padding: 8px 10px 12px; }
 }
 /* Two-column key/value tables size to their content. */
 table.grid.fit { width: auto; }
