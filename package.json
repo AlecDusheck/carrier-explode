@@ -4,6 +4,7 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
+    "prepare": "svelte-kit sync",
     "dev": "vite dev",
     "build": "vite build",
     "preview": "wrangler dev",

@@ -49,6 +49,7 @@ jobs:
         env:
           FORCE: ${{ inputs.force }}
         run: |
+          set -o pipefail
           scripts/modems.sh indexes /tmp/idx
           npx vite-node --root scripts scripts/scan_index.ts plan --builds /tmp/idx/builds.json --indexes /tmp/idx --out /tmp/heads.json |
             sort -u > /tmp/need.txt
