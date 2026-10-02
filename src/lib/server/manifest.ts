@@ -85,6 +85,20 @@ function refFromEntry(os: string, e: Dict, productType?: string): BundleRef | nu
   };
 }
 
+/**
+ * When Apple published a bundle file, read off its URL: YYYY-MM-DD from
+ * `/20261001/`, `/031-04427-20150119-…/` or `/031-2099.20131204.rVQEN/`, and
+ * just YYYY from the 2020-2022 scheme, whose path only has `/2020/`, or from a
+ * malformed date (`2019503`, `/202206043/`). A YYYY sorts after every full date
+ * of the same year.
+ */
+export function publishedOn(url: string): string | undefined {
+  for (const [, y, m, d] of url.matchAll(/(?<=[/.-])(20\d\d)(\d\d)(\d\d)(?=[/.-])/g)) {
+    if (+m >= 1 && +m <= 12 && +d >= 1 && +d <= 31) return `${y}-${m}-${d}`;
+  }
+  return url.match(/\/(20\d\d)\d*\//)?.[1];
+}
+
 /** All published refs for one carrier name: iOS-family newest first, then Watch. */
 export function carrierRefs(root: Dict, name: string): BundleRef[] {
   const out: BundleRef[] = [];

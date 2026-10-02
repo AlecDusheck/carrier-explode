@@ -66,6 +66,12 @@
     return () => wide.removeEventListener("change", check);
   });
   const showList = $derived(!params.name || wanted);
+
+  // Carrier and Watch lists can put the most recently changed bundles first; countries stay A-Z.
+  let byUpdated = $state(true);
+  const sortable = $derived(params.kind !== "countries");
+  const newestFirst = (a: { name: string; updated?: string }, b: { name: string; updated?: string }) =>
+    (b.updated ?? "").localeCompare(a.updated ?? "") || a.name.localeCompare(b.name);
   const label = $derived(params.kind[0].toUpperCase() + params.kind.slice(1));
 
   // The row lights up on click, before the bundle behind it has loaded.
@@ -99,7 +105,9 @@
     <Pane>
       {@const all = (await getIndex())[params.kind]}
       {@const q = query.trim().toLowerCase()}
-      {@const shown = q ? all.filter((c) => matches(c, q)) : all}
+      {@const matched = q ? all.filter((c) => matches(c, q)) : all}
+      {@const dated = sortable && byUpdated}
+      {@const shown = dated ? [...matched].sort(newestFirst) : matched}
       <div class="scroll list-box">
         <ul class="list" aria-label={params.kind}>
           {#each shown as c (c.name)}
@@ -113,7 +121,9 @@
                 {@attach c.name === selected && reveal}
               >
                 <span class="name">{c.display}</span>
-                {#if c.cc}<span class="dim">{c.cc.toUpperCase()}</span>{/if}
+                {#if c.cc || (dated && c.updated)}
+                  <span class="dim">{c.cc?.toUpperCase() ?? ""}{#if dated && c.updated}&nbsp; {c.updated}{/if}</span>
+                {/if}
               </a>
             </li>
           {:else}
@@ -123,6 +133,11 @@
       </div>
       <div class="statusbar list-status">
         <span class="cell grow">{q ? `${shown.length} of ${all.length}` : all.length}</span>
+        {#if sortable}
+          <button class="cell sort" title="Sort by when the bundle last changed, or by name" onclick={() => (byUpdated = !byUpdated)}>
+            {byUpdated ? "Newest" : "A–Z"}
+          </button>
+        {/if}
       </div>
     </Pane>
     {/if}
@@ -143,4 +158,5 @@
   .from-ip { align-self: center; }
   .list-box { margin: 0 6px 6px; }
   .list-status { padding: 2px 6px 6px; }
+  .sort { font: inherit; cursor: pointer; }
 </style>

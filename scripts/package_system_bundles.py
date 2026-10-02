@@ -112,6 +112,7 @@ def main() -> None:
     ap.add_argument("--have", type=Path, help="content ids already in the bucket, one per line")
     ap.add_argument("--version", help="version to record instead of the image's own; a beta image "
                     "says 27.2, and only the planner knows it is 27.2 beta 2")
+    ap.add_argument("--released", default="", help="the day Apple released the image, YYYY-MM-DD; from the planner")
     a = ap.parse_args()
 
     meta = json.loads(a.meta.read_text())
@@ -123,6 +124,7 @@ def main() -> None:
         "device": device.get("name", ""),
         "product": device.get("product", ""),
         "extractedAt": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        **({"released": a.released} if a.released else {}),
         "carriers": package(a.carriers, a.out / "blobs"),
         "countries": package(a.countries, a.out / "blobs"),
         "modems": [],
@@ -133,7 +135,8 @@ def main() -> None:
     (sysdir / "countries.json").write_text(json.dumps(carrier_plists(a.countries), separators=(",", ":")))
 
     builds = json.loads(a.builds.read_text()) if a.builds and a.builds.exists() and a.builds.stat().st_size else []
-    builds = merge([builds, [{k: index[k] for k in ("build", "version", "device", "product", "extractedAt", "scheme")}]])
+    keys = ("build", "version", "device", "product", "extractedAt", "released", "scheme")
+    builds = merge([builds, [{k: index[k] for k in keys if k in index}]])
     (a.out / "builds.json").write_text(json.dumps(builds, separators=(",", ":")))
 
     # For `wrangler r2 bulk put`. builds.json goes up last, on its own, so the

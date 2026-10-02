@@ -29,10 +29,10 @@ import {
   POINTER_KEY, bundlesKey, fileDataKey, fileIndexKey, keyScan, topKey,
   type ScanFileIndex, type ScanPointer, type ScanShard, type ScanTarget, type TargetRow,
 } from "./keyscan";
-import { MANIFEST_URL, countryName, manifestTables, parseManifest, splitName, type ManifestTables } from "./manifest";
+import { MANIFEST_URL, countryName, manifestTables, parseManifest, publishedOn, splitName, type BundleRef, type ManifestTables } from "./manifest";
 import { firstCopyWith, modemView, overrideCandidates, summaryKey, type ModemView } from "./modems";
 import { carriersOf, homeCountry, isoIndex, type CountryPlists } from "./related";
-import { buildTimeline, headIndex, type ImageBuild, type ImageIndex } from "./timeline";
+import { buildTimeline, headIndex, imageDate, type ImageBuild, type ImageIndex } from "./timeline";
 
 /* ------------------------------------------------------------------ images */
 
@@ -113,15 +113,39 @@ export interface ListEntry {
   image?: string;
   /** Distinct OTA builds published. */
   ota: number;
+  /** YYYY-MM-DD (or YYYY, see publishedOn): the newer of its newest published file and the image where its contents last changed. */
+  updated?: string;
 }
+
+/** The newest of some YYYY-MM-DD (or YYYY) dates. */
+const newestDate = (dates: Array<string | undefined>) =>
+  dates.reduce<string | undefined>((a, d) => (d && (!a || d > a) ? d : a), undefined);
+
+/** Per bundle name, the date of the image where its contents last changed, walking images oldest first. */
+function imageChanges(images: ImageIndex[], kind: "carriers" | "countries") {
+  const last = new Map<string, { id: string; date: string }>();
+  for (const img of [...images].sort((a, b) => imageDate(a).localeCompare(imageDate(b)))) {
+    for (const [name, b] of Object.entries(img[kind])) {
+      // Ids only compare within one hashing scheme, so a new scheme counts as a change.
+      const id = `${img.scheme ?? 1}:${b.id}`;
+      if (last.get(name)?.id !== id) last.set(name, { id, date: imageDate(img) });
+    }
+  }
+  return new Map([...last].map(([name, v]) => [name, v.date]));
+}
+
+/** The day the newest of these files was published. */
+const newestPublished = (refs: BundleRef[] = []) => newestDate(refs.map((r) => publishedOn(r.url)));
 
 /** Every bundle name. Built from the manifest and every image, so it is kept per manifest window and image set. */
 export const getIndex = perRequest(async () => {
   const all = await builds();
-  return cached(`index:v1:${manifestSlot()}:${buildsKey(all)}`, MANIFEST_TTL, async () => {
+  return cached(`index:v4:${manifestSlot()}:${buildsKey(all)}`, MANIFEST_TTL, async () => {
     const [m, images] = await Promise.all([manifest(), imageIndexes()]);
     const newest = images.find((i) => i.build === release(all)?.build);
 
+    const changed = imageChanges(images, "carriers");
+    const phone = (name: string) => m.refs[name]?.filter((r) => r.productType !== "Watch");
     const carriers = new Map<string, ListEntry>();
     for (const c of m.index.carriers) {
       carriers.set(c.name, { name: c.name, display: c.display, cc: c.cc, ota: c.versions.length + (c.hasLegacy ? 1 : 0) });
@@ -131,6 +155,7 @@ export const getIndex = perRequest(async () => {
         if (!carriers.has(name)) carriers.set(name, { name, ...splitName(name), ota: 0 });
       }
     }
+    for (const e of carriers.values()) e.updated = newestDate([newestPublished(phone(e.name)), changed.get(e.name)]);
 
     const countries = new Map<string, ListEntry>();
     for (const c of m.index.countries) {
@@ -153,7 +178,10 @@ export const getIndex = perRequest(async () => {
     return {
       carriers: withImage(carriers, newest?.carriers),
       countries: withImage(countries, newest?.countries),
-      watch: m.index.watchCarriers.map((c): ListEntry => ({ name: c.name, display: c.display, cc: c.cc, ota: c.versions.length })),
+      watch: m.index.watchCarriers.map((c): ListEntry => ({
+        name: c.name, display: c.display, cc: c.cc, ota: c.versions.length,
+        updated: newestPublished(m.refs[c.name]?.filter((r) => r.productType === "Watch")),
+      })),
       builds: all,
       manifestFetchedAt: m.fetchedAt,
     };

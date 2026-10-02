@@ -6,6 +6,7 @@ import { zipSync, unzlibSync } from "fflate";
 
 import * as manifestModule from "../src/lib/server/manifest.ts";
 import {
+  publishedOn,
   buildIndex,
   buildMccMnc,
   carrierRefs,
@@ -2071,5 +2072,21 @@ describe("Apple CgBI PNG normalisation", () => {
     const broken = new Uint8Array(bytes);
     broken[24 + 8 + 8] = 4; // IHDR bit depth
     expect(normalizeApplePng(broken)).toBeNull();
+  });
+});
+
+describe("publishedOn", () => {
+  it("reads the date out of every URL scheme Apple has used", () => {
+    expect(publishedOn("https://updates.cdn-apple.com/20261001/carrierbundles/142-29613/9763C9C0-86F5-4D14-8B50-2C02ACE04457/ATT_US_iPhone.ipcc")).toBe("2026-10-01");
+    expect(publishedOn("http://updates-http.cdn-apple.com/2018/ios/carrierbundles/091-80246-20180504-CC3E1C52-4D8B-11E8-BA4C-38D21A00AB6B/AIS_th_iPhone.ipcc")).toBe("2018-05-04");
+    expect(publishedOn("http://appldnld.apple.com/iOS7/CarrierBundles/031-2099.20131204.rVQEN/2degrees_nz_iPhone.ipcc")).toBe("2013-12-04");
+    expect(publishedOn("http://appldnld.apple.com.edgesuite.net/content.info.apple.com/iPhone/CarrierBundles/061-4732.20090203.gj3ef/ATT_US.ipcc")).toBe("2009-02-03");
+  });
+
+  it("falls back to the year where the path has nothing more", () => {
+    expect(publishedOn("https://updates.cdn-apple.com/2020/carrierbundles/001-80023/80B77606-453A-4462-A609-98577E6EE499/Bell_ca_Watch.ipcc")).toBe("2020");
+    expect(publishedOn("https://updates.cdn-apple.com/2019/carrierbundles/041-56849-2019503-D84FB36A-6C44-11E9-B635-4CC8AFCA7786/2degrees_nz_iPad.ipcc")).toBe("2019");
+    expect(publishedOn("https://updates.cdn-apple.com/202206043/carrierbundles/071-96019/1C8525EF-8FB9-472B-BF6C-17EFB79E7ED3/Cyta_cy_Watch.ipcc")).toBe("2022");
+    expect(publishedOn("https://example.com/carrier.ipcc")).toBeUndefined();
   });
 });

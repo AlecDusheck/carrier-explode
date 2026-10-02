@@ -8,7 +8,19 @@ import type { ModemKind } from "#lib/decode/modem.ts";
 import type { Kind, TimelineEntry } from "#lib/types.ts";
 import type { BundleRef, CountrySummary } from "./manifest";
 
-export interface ImageBuild { build: string; version: string; device: string; product?: string; extractedAt: string; scheme?: number }
+export interface ImageBuild {
+  build: string;
+  version: string;
+  device: string;
+  product?: string;
+  extractedAt: string;
+  /** The day Apple released the image, YYYY-MM-DD. Absent for images extracted before it was recorded. */
+  released?: string;
+  scheme?: number;
+}
+
+/** When an image came out: its release date, else the day it was extracted, which is close for recent images. */
+export const imageDate = (b: Pick<ImageBuild, "released" | "extractedAt">) => b.released || b.extractedAt.slice(0, 10);
 /** `id` is the content hash the blob is stored under; only comparable within one `scheme`. */
 export interface ImageBundle { id: string; size: number; build: string }
 export interface ImageIndex extends ImageBuild {

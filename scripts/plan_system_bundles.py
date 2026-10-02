@@ -55,7 +55,8 @@ def plan(held: list[dict], preferred: list[dict], fallback: list[dict],
                 continue
             if v in held_from and held_from[v] not in (None, device):
                 continue
-        chosen[v] = {"version": v, "build": fw["buildid"], "device": device}
+        # ipsw.me: "2026-09-15T17:05:25Z". Sorts bundles that only ship in images by when they shipped.
+        chosen[v] = {"version": v, "build": fw["buildid"], "device": device, "released": (fw.get("releasedate") or "")[:10]}
 
     out = sorted(chosen.values(), key=lambda x: version_key(x["version"]))
     # No floor at all: take just the newest rather than all of history.
@@ -103,7 +104,8 @@ def plan_betas(entries: list[dict], device: str, cap: int) -> list[dict]:
         if not ipsws:
             continue
         pick = device if device in ipsws else max(ipsws, key=product_key)
-        out.append({"version": e["version"], "build": e["build"], "device": pick, "url": ipsws[pick], "beta": True})
+        out.append({"version": e["version"], "build": e["build"], "device": pick, "url": ipsws[pick], "beta": True,
+                    "released": str(e.get("released") or "")[:10]})
     out.sort(key=lambda x: version_key(x["version"]))
     return out[:cap]
 
