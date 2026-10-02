@@ -83,33 +83,35 @@ const buildsKey = (all: ImageBuild[]) => fingerprint(all.map((b) => `${b.build}@
 /* ---------------------------------------------------------------- manifest */
 
 /**
- * Apple's OTA manifest, through Cloudflare's cache for ten minutes at a time.
- * Its Last-Modified keys everything parsed or derived from it, so the 6 MB plist
- * is parsed again only when Apple changes it.
+ * Apple's OTA manifest, read at most once per ten-minute window. Apple's own CDN
+ * can hand out a copy hours old, so the window goes in the URL to reach a fresh
+ * one. Its contents' hash keys everything parsed or derived from it, so the 6 MB
+ * plist is parsed again only when Apple changes it.
  */
 const MANIFEST_TTL = 600;
-/** Derived data is keyed by the manifest's Last-Modified; the TTL only bounds the cache. */
+/** Derived data is keyed by the manifest's hash; the TTL only bounds the cache. */
 const KEEP = 30 * 86400;
 
 /** Why a bundle or version that does exist can be missing. */
 const NOT_LISTED_YET = "If Apple only just published it, it can take up to an hour to show up here.";
 
-const manifestResponse = perRequest(async () => {
-  // A cache key of its own, so copies cached under older settings are never served.
-  const res = await fetch(MANIFEST_URL, { cf: { cacheTtl: MANIFEST_TTL, cacheEverything: true, cacheKey: "ota-manifest" } });
+const manifestWindow = () => Math.floor(Date.now() / (MANIFEST_TTL * 1000));
+
+const manifestBytes = perRequest(async () => {
+  const res = await fetch(`${MANIFEST_URL}?w=${manifestWindow()}`, { cf: { cacheTtl: MANIFEST_TTL, cacheEverything: true } });
   if (!res.ok) error(502, `manifest fetch failed: ${res.status}`);
-  return res;
+  return new Uint8Array(await res.arrayBuffer());
 });
 
-/** Which manifest is current: Apple's Last-Modified. */
-const manifestVersion = perRequest(async () => (await manifestResponse()).headers.get("last-modified") ?? "");
+/** Which manifest is current: a hash of its contents, worked out once per window. */
+const manifestVersion = perRequest(() =>
+  cached(`manifesthash:${manifestWindow()}`, MANIFEST_TTL, async () => digestHex("SHA-1", await manifestBytes())));
 
 /** The manifest's tables. */
 const manifest = perRequest(async () => {
   const version = await manifestVersion();
-  const tables = await cached(`manifest:v4:${version}`, KEEP, async () =>
-    manifestTables(parseManifest(new Uint8Array(await (await manifestResponse()).arrayBuffer()))));
-  return { ...tables, fetchedAt: version ? new Date(version).toISOString() : tables.index.fetchedAt };
+  return cached(`manifest:v4:${version}`, KEEP, async () => manifestTables(parseManifest(await manifestBytes())))
+    .then((tables) => ({ ...tables, fetchedAt: tables.index.fetchedAt }));
 });
 
 /** How big the manifest's tables are, for the wiki. */
