@@ -29,7 +29,7 @@ import {
   type ScanFileIndex, type ScanPointer, type ScanShard, type ScanTarget, type TargetRow,
 } from "./keyscan";
 import { MANIFEST_URL, countryName, manifestTables, parseManifest, splitName, type ManifestTables } from "./manifest";
-import { firstCopyWith, modemView, overrideCandidates, summaryKey } from "./modems";
+import { firstCopyWith, modemView, overrideCandidates, summaryKey, type ModemView } from "./modems";
 import { carriersOf, homeCountry, isoIndex, type CountryPlists } from "./related";
 import { buildTimeline, headIndex, type ImageBuild, type ImageIndex } from "./timeline";
 
@@ -67,11 +67,20 @@ const imageIndexes = perRequest(async () => {
 /** Every country carrier.plist of an image, decoded. */
 const countryPlists = perRequest((build: string) => r2json<CountryPlists>(`system/${build}/countries.json`));
 
-/** The current release's country plists. */
-async function releasePlists(): Promise<CountryPlists> {
+/**
+ * The current release's country plists, cut to the ISO codes: all that the
+ * links between carriers and countries read. The whole file is 200 KB and a
+ * bundle page needs it every time, so the cut is kept per extraction.
+ */
+const releasePlists = perRequest(async (): Promise<CountryPlists> => {
   const newest = release(await builds());
-  return (newest && (await countryPlists(newest.build))) ?? {};
-}
+  if (!newest) return {};
+  const cut = await cached(`countryiso:v1:${newest.build}@${newest.extractedAt}`, 30 * 86400, async () => {
+    const all = await countryPlists(newest.build);
+    return all && Object.fromEntries(Object.entries(all).map(([c, p]) => [c, { ISOAlpha2CountryCode: p.ISOAlpha2CountryCode }]));
+  });
+  return cut ?? {};
+});
 
 /** Distinguishes one list of images from another in a cache key. */
 const buildsKey = (all: ImageBuild[]) => fingerprint(all.map((b) => `${b.build}@${b.extractedAt}`));
@@ -167,10 +176,26 @@ export async function getStats() {
 
 /* ---------------------------------------------------------------- timeline */
 
-export const getTimeline = perRequest(async (kind: Kind, name: string): Promise<TimelineEntry[]> => {
+/**
+ * Built from the whole manifest and every image index — megabytes of JSON — so
+ * a page keeps its one bundle's result instead. Uncached here: a scan builds
+ * every bundle's in one request, and the inputs are already in hand after the first.
+ */
+const timelineOf = perRequest(async (kind: Kind, name: string): Promise<TimelineEntry[]> => {
   const [m, images] = await Promise.all([manifest(), imageIndexes()]);
   const refs = Object.hasOwn(m.refs, name) ? m.refs[name] : [];
-  const out = buildTimeline(kind, name, images, refs, m.index.countries);
+  return buildTimeline(kind, name, images, refs, m.index.countries);
+});
+
+/**
+ * One bundle's history, kept as long as its inputs: the manifest window and the
+ * image set. baseband.yml only rewrites an index's modems, which a timeline
+ * does not read. An unknown name is kept too, so a typo costs one build.
+ */
+export const getTimeline = perRequest(async (kind: Kind, name: string): Promise<TimelineEntry[]> => {
+  const all = await builds();
+  const out = await cached(`timeline:v1:${manifestSlot()}:${buildsKey(all)}:${kind}:${name}`, MANIFEST_TTL,
+    () => timelineOf(kind, name), () => true);
   if (!out.length) error(404, `no bundle named ${name}`);
   return out;
 });
@@ -453,61 +478,64 @@ export async function getBasebandDiff(a: string, b: string, family: string) {
  * current release for OTA.
  */
 async function bundleImage(kind: Kind, name: string, slug?: string) {
-  const [{ entry }, all] = await Promise.all([resolve(kind, name, slug), builds()]);
+  const [{ timeline, entry }, all] = await Promise.all([resolve(kind, name, slug), builds()]);
   const build = entry.image ?? release(all)?.build;
-  return { entry, build: build ?? null, idx: build ? await imageIndex(build) : null };
+  return { timeline, entry, build: build ?? null, idx: build ? await imageIndex(build) : null };
 }
 
 type PhoneFile = Pick<BundleFile, "path" | "kind" | "devices">;
+type Phone = ModemView["devices"][number] & { family: string };
 
-/** OTA copies one lookup may open for a phone's files before settling on "none". */
+/** OTA copies one phone's lookup may open before settling on "none". */
 const OTA_COPIES = 8;
 
 /**
- * The copy of a bundle version that carries `phone`'s modem override files:
- * the version itself when it has them, else the OTA copy found by
- * overrideCandidates. `slug` is empty for the head. Without one, `known` says
+ * Every phone of a bundle version's image, newest family first, with the copy
+ * that carries its modem override files: the version itself when it has them,
+ * else the OTA copy found by overrideCandidates. Without one, `known` says
  * whether a copy made while the phone existed was read (so it has none), and
- * null means a copy could not be read.
+ * null means a copy could not be read. `slug` is empty for the head.
+ *
+ * Kept per version, head (a new one can bring new OTA copies) and phone list
+ * (baseband.yml can change it), once no unreadable copy could change an answer.
  */
-const phoneCopy = perRequest(async (kind: Kind, name: string, slug: string, phone: string) => {
-  const { timeline, entry } = await resolve(kind, name, slug || undefined);
+const phoneCopies = perRequest(async (kind: Kind, name: string, slug: string) => {
+  const { timeline, entry, build, idx } = await bundleImage(kind, name, slug || undefined);
+  if (!build || !idx) return null;
+  const phones: Phone[] = byNewest(idx.modems.map(modemView)).flatMap((m) => m.devices.map((d) => ({ ...d, family: m.family })));
   const head = timeline[headIndex(timeline)];
-  // A new head can bring new OTA copies, so it is part of the key.
-  const hit = await cached(`phonecopy:v3:${head.src}|${entry.src}|${phone}`, 7 * 86400, async () => {
-    const found = await firstCopyWith(
-      overrideCandidates(timeline, entry, phone, OTA_COPIES),
+  const key = `phonecopies:v1:${head.src}|${entry.src}|${fingerprint(phones.map((p) => `${p.family}/${p.id}`))}`;
+  const { found } = await cached(key, 7 * 86400, async () => {
+    const found = await Promise.all(phones.map((p) => firstCopyWith(
+      overrideCandidates(timeline, entry, p.id, OTA_COPIES),
       async (e) => (await open(e.src)).opened.info.files,
-      (files) => overridesFor(files, phone),
-      (files) => knowsPhone(files, phone),
-    );
-    // A copy that could not be read may hold the files: not an answer to keep.
-    if (found === undefined) return null;
-    if (!found.entry) return { slug: null, files: [], known: found.known, settled: true };
-    const files: PhoneFile[] = found.files.map(({ path, kind, devices }) => ({ path, kind, devices }));
-    return { slug: found.entry.slug, files, known: true, settled: found.settled };
-  }, (v) => !!v?.settled);
-  const copy = hit?.slug ? timeline.find((e) => e.slug === hit.slug) : undefined;
-  if (!hit) return null;
-  return copy ? { entry: copy, files: hit.files, sameCopy: copy.slug === entry.slug } : { entry: null, known: hit.known };
+      (files) => overridesFor(files, p.id),
+      (files) => knowsPhone(files, p.id),
+    )));
+    return {
+      found: found.map((f) => !f ? null : f.entry
+        ? { slug: f.entry.slug, files: f.files.map(({ path, kind, devices }): PhoneFile => ({ path, kind, devices })), known: true }
+        : { slug: null, files: [], known: f.known }),
+      settled: found.every((f) => f && (!f.entry || f.settled)),
+    };
+  }, (v) => v.settled);
+  const copies = found.map((f) => f && { ...f, entry: timeline.find((e) => e.slug === f.slug) });
+  return { entry, build, idx, phones, copies };
 });
 
 /**
  * A bundle version's modem override files, each with the phones that read it
- * and the copy it was read from (see phoneCopy), and the phones left over:
+ * and the copy it was read from (see phoneCopies), and the phones left over:
  * `defaults` have none, `unknown` have no copy of this bundle made for them.
  * Phones newest family first; `home` is the phone the version means.
  */
 export async function getBundleOverrides(kind: Kind, name: string, slug?: string) {
-  const { entry, build, idx } = await bundleImage(kind, name, slug);
-  if (!build || !idx) return null;
-  const phones = byNewest(idx.modems.map(modemView)).flatMap((m) => m.devices.map((d) => ({ ...d, family: m.family })));
-  const copies = await Promise.all(phones.map((p) => phoneCopy(kind, name, slug ?? "", p.id)));
-  type Phone = (typeof phones)[number];
+  const v = await phoneCopies(kind, name, slug ?? "");
+  if (!v) return null;
   const files = new Map<string, { slug: string; source: PublicEntry["source"]; ios: string[]; build: string; path: string; phones: Phone[] }>();
   const defaults: Phone[] = [], unknown: Phone[] = [];
-  phones.forEach((p, i) => {
-    const c = copies[i];
+  v.phones.forEach((p, i) => {
+    const c = v.copies[i];
     if (!c?.entry) return void (c?.known ? defaults : unknown).push(p);
     for (const f of c.files) {
       const key = `${c.entry.slug}\0${f.path}`;
@@ -516,7 +544,7 @@ export async function getBundleOverrides(kind: Kind, name: string, slug?: string
       files.get(key)!.phones.push(p);
     }
   });
-  return { build, home: homePhone(entry, idx), files: [...files.values()], defaults, unknown };
+  return { build: v.build, home: homePhone(v.entry, v.idx), files: [...files.values()], defaults, unknown };
 }
 
 /**
@@ -531,7 +559,8 @@ export async function getBasebandDefaults(kind: Kind, name: string, slug?: strin
   const m = idx && phone ? idx.modems.find((x) => x.devices.includes(phone) && x.package.kind === "bbfw") : undefined;
   if (!build || !idx || !phone || !m) return { build, missing: true as const };
   // The phone's .der.pri may only be in another copy of the bundle; compare against that one.
-  const copy = (await phoneCopy(kind, name, slug ?? "", phone))?.entry ?? entry;
+  const v = await phoneCopies(kind, name, slug ?? "");
+  const copy = v?.copies[v.phones.findIndex((p) => p.id === phone)]?.entry ?? entry;
   const [s, { opened }] = await Promise.all([modemSummary(m.package.id), open(copy.src)]);
   if (s?.kind !== "bbfw") return { build, missing: true as const };
 
@@ -607,8 +636,8 @@ async function scanTargets(scope: string): Promise<ScanTarget[]> {
   const cc = scope.startsWith("country:") ? scope.slice(8) : null;
   const names = idx[kind].filter((e) => !cc || e.cc === cc);
   const targets = await Promise.all(names.map(async (e): Promise<ScanTarget | null> => {
-    const t = await getTimeline(kind, e.name).catch(() => null);
-    const head = t?.[headIndex(t)];
+    const t = await timelineOf(kind, e.name);
+    const head = t[headIndex(t)];
     return head ? { name: e.name, display: e.display, cc: e.cc, os: head.ios.at(-1) ?? "", build: head.build, src: head.src } : null;
   }));
   return targets.filter((t): t is ScanTarget => !!t);

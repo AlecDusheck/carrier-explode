@@ -5,4 +5,21 @@ Disallow: /raw/
 Disallow: /compare
 Disallow: /internal/
 
+# AI crawlers walk every file of every version, and each one is a bundle to
+# unzip. They keep the bundle pages but not the file views. A crawler obeys only
+# the group that names it, so the rules above are repeated.
+User-agent: GPTBot
+User-agent: ClaudeBot
+User-agent: CCBot
+User-agent: Amazonbot
+User-agent: Bytespider
+User-agent: meta-externalagent
+User-agent: PerplexityBot
+User-agent: Reflectionbot
+User-agent: KeenableBot
+Disallow: /*/files
+Disallow: /raw/
+Disallow: /compare
+Disallow: /internal/
+
 Sitemap: https://carrierexplode.com/sitemap.xml
