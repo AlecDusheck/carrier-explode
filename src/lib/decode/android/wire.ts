@@ -25,6 +25,8 @@ function wireType(n: number): WireType | undefined {
 export interface Tag {
   readonly field: number;
   readonly wire: WireType;
+  /** `<field>:<wire>`, what decoders switch on: a known number with an unexpected wire type falls through to unknown. */
+  readonly key: `${number}:${WireType}`;
 }
 
 const utf8 = new TextDecoder();
@@ -47,7 +49,7 @@ export class WireReader {
     if (wire === undefined) throw new ProtobufError(`unsupported wire type ${key & 7n} at byte ${at}`);
     const field = Number(key >> 3n);
     if (field === 0) throw new ProtobufError(`field number 0 at byte ${at}`);
-    return { field, wire };
+    return { field, wire, key: `${field}:${wire}` };
   }
 
   /** Raw varint, up to 64 bits, unsigned. */
@@ -116,10 +118,5 @@ export class WireReader {
       case "bytes":
         return { path, field, wire, value: bytesToBase64(this.bytes()) };
     }
-  }
-
-  /** A known field must arrive with the wire type its proto declares; anything else is a different message. */
-  expect(tag: Tag, wire: WireType, what: string): void {
-    if (tag.wire !== wire) throw new ProtobufError(`${what} (field ${tag.field}) sent as ${tag.wire}, expected ${wire}`);
   }
 }
