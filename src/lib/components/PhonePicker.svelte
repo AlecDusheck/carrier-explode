@@ -2,7 +2,7 @@
   import { page } from "$app/state";
   import { modemLabel } from "#lib/decode/index.ts";
   import { withParams } from "#lib/format.ts";
-  import { compareProducts, phoneList, type PhoneRow } from "#lib/phones.ts";
+  import { newestNamed, phoneList, type PhoneRow } from "#lib/phones.ts";
   import PhoneImage from "./PhoneImage.svelte";
   import Picker from "./Picker.svelte";
 
@@ -14,12 +14,10 @@
     const modems = [...new Set(r.phones.map((p) => p.family).filter((f): f is string => !!f))].map(modemLabel).join(", ");
     return `${phoneList(r.phones)}${modems ? ` · ${modems}` : ""}`;
   };
-  // A group's picture is its newest named model.
-  const newest = (r: PhoneRow) => r.phones.filter((p) => p.name).sort((a, b) => compareProducts(b.id, a.id))[0]?.name;
 </script>
 
 {#snippet option(r: PhoneRow)}
-  <span class="picker-opt"><PhoneImage name={newest(r)} /><span class="text">{label(r)}</span></span>
+  <span class="picker-opt"><PhoneImage name={newestNamed(r.phones)} /><span class="text">{label(r)}</span></span>
 {/snippet}
 
 {#if rows.length}
