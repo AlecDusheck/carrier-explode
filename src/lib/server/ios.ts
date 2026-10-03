@@ -16,7 +16,7 @@ import {
 } from "#lib/decode/index.ts";
 import { sha1Hex, sha256Hex } from "#lib/binary/index.ts";
 import { keys } from "#lib/storage/keys.ts";
-import { sourceKey, type SourceRef, type TimelineEntry } from "#lib/schema/types.ts";
+import { decoderFamily, sourceKey, type Platform, type SourceRef, type TimelineEntry } from "#lib/schema/types.ts";
 import { countryName, splitName } from "#lib/names.ts";
 import { homePhone, isPri, knowsPhone, overridesFor, sharedPri, type GroupPhone, type PhoneRow } from "#lib/phones.ts";
 import type { CbsRow, Version } from "#lib/types.ts";
@@ -32,16 +32,36 @@ import { readBytes } from "./store";
 /** Content never changes under a sha or an Apple URL, so what is derived from one is kept for a month. */
 const KEEP = 30 * 86400;
 
-/** What a version's bytes are cached and diffed by: its object, else its Apple URL. */
-const identity = (e: TimelineEntry): string => e.sha ?? e.url ?? e.slug;
+/** A copy the bucket holds: an image copy always, an OTA copy once archived. */
+const archived = (e: TimelineEntry): string | undefined => e.copies.flatMap((c) => c.sha ?? [])[0];
+/** The Apple URL of an OTA copy, for content the bucket does not hold yet. */
+const upstream = (e: TimelineEntry): string | undefined => e.copies.flatMap((c) => (c.via === "ota" ? [c.url] : []))[0];
 
+/** What a version's derived views are cached by: its object, else its Apple URL. Content never changes under either. */
+const identity = (e: TimelineEntry): string => archived(e) ?? upstream(e) ?? e.slug;
+
+/** A version's bytes: from the bucket, or from Apple for an OTA file not archived yet. */
 async function bytesOf(e: TimelineEntry): Promise<Uint8Array<ArrayBuffer>> {
-  if (e.sha) {
-    const held = await readBytes(keys.obj(e.sha));
-    if (held) return held;
-  }
-  if (e.url) return fetchApple(e.url);
+  const sha = archived(e);
+  const held = sha === undefined ? null : await readBytes(keys.obj(sha));
+  if (held) return held;
+  const url = upstream(e);
+  if (url) return fetchApple(url);
   error(404, `Version ${e.slug} is neither in the bucket nor published by Apple.`);
+}
+
+/**
+ * Whether the bytes are what the index says: archived content by its sha or
+ * content id, Apple's by the SHA-1 it publishes. An OTA copy with only a
+ * SHA-384 is not checked: #lib/binary has no SHA-384 yet.
+ */
+function verify(e: TimelineEntry, got: { cid: string; sha256: string; sha1: string }): boolean | null {
+  const checks = e.copies.flatMap((c): boolean[] => {
+    if (c.cid !== undefined) return [c.cid === got.cid];
+    if (c.sha !== undefined) return [c.sha === got.sha256];
+    return c.via === "ota" && c.sha1 !== undefined ? [c.sha1 === got.sha1] : [];
+  });
+  return checks.length ? checks.some(Boolean) : null;
 }
 
 interface Opened extends Resolved {
@@ -52,7 +72,7 @@ interface Opened extends Resolved {
 /** A version's bytes and zip index. Several queries of one page read the same bundle, so it is opened once per request. `slug` "" is the head. */
 const open = perRequest(async (key: string, slug: string): Promise<Opened> => {
   const r = await resolve(key, slug || undefined);
-  if (r.ref.platform !== "ios") error(400, `${key} is not an iOS bundle.`);
+  if (decoderFamily(r.ref.platform) !== "apple") error(400, `${key} is not an Apple bundle.`);
   const bytes = await bytesOf(r.entry);
   return { ...r, opened: openIpcc(bytes), bytes };
 });
@@ -79,11 +99,12 @@ function plistOf(opened: OpenedBundle, path: string): Record<string, unknown> | 
 }
 
 /** A carrier bundle's home country bundle, by HomeBundleIdentifier ("com.apple.UnitedStates"), when the index has it. */
-async function homeCountry(carrier: Record<string, unknown> | undefined): Promise<string | null> {
+async function homeCountry(platform: Platform, carrier: Record<string, unknown> | undefined): Promise<string | null> {
   const home = carrier?.HomeBundleIdentifier;
   if (typeof home !== "string") return null;
   const name = home.replace(/^com\.apple\./, "");
-  return sourceKey({ platform: "ios", kind: "country", name }) in (await sourceSlugs()) ? name : null;
+  const key = sourceKey({ platform, kind: "country", name });
+  return key in (await sourceSlugs()) ? key : null;
 }
 
 export interface IosBundle {
@@ -105,14 +126,14 @@ export interface IosBundle {
   readonly verified: boolean | null;
   /** carrier.plist, Info.plist and version.plist, decoded: what the Overview and Settings read. */
   readonly quick: Readonly<Record<string, unknown>>;
-  /** The home country bundle's name, for a carrier bundle that names one. */
+  /** The home country bundle's source key, for a carrier bundle that names one. */
   readonly home: string | null;
 }
 
 export async function getBundle(key: string, slug?: string): Promise<IosBundle> {
   const o = await open(key, slug ?? "");
   const { entry, opened, bytes } = o;
-  const [id, sha256, timeline] = await Promise.all([contentId(opened), sha256Hex(bytes), versionsOf("ios", o.timeline)]);
+  const [id, sha256, timeline] = await Promise.all([contentId(opened), sha256Hex(bytes), versionsOf(o.ref.platform, o.timeline)]);
   const sha1 = sha1Hex(bytes);
   const quick: Record<string, unknown> = {};
   for (const f of ["carrier.plist", "Info.plist", "version.plist"]) {
@@ -122,9 +143,7 @@ export async function getBundle(key: string, slug?: string): Promise<IosBundle> 
   const cc = o.doc.carrier.iso ?? splitName(o.ref.name).cc;
   const current = timeline.find((e) => e.slug === entry.slug);
   if (!current) error(500, `${key}: ${entry.slug} is not in its own timeline`);
-  // Archived bytes are checked by content; Apple's by the SHA-1 it publishes. An OTA entry
-  // with only a SHA-384 is not checked: #lib/binary has no SHA-384 yet.
-  const verified = entry.cid ? entry.cid === id : entry.sha ? entry.sha === sha256 : entry.sha1 ? entry.sha1 === sha1 : null;
+  const verified = verify(entry, { cid: id, sha256, sha1 });
   return {
     source: key, ref: o.ref, cc, countryName: countryName(cc),
     entry: current,
@@ -134,7 +153,7 @@ export async function getBundle(key: string, slug?: string): Promise<IosBundle> 
     info: opened.info,
     downloadSize: bytes.length,
     contentId: id, sha256, sha1, verified, quick,
-    home: o.ref.kind === "carrier" ? await homeCountry(plistOf(opened, "carrier.plist")) : null,
+    home: o.ref.kind === "carrier" ? await homeCountry(o.ref.platform, plistOf(opened, "carrier.plist")) : null,
   };
 }
 
@@ -189,7 +208,7 @@ export async function getComparison(a: Side | null, b: Side, path?: string): Pro
   const [rb, ra] = await Promise.all([resolve(b.source, b.slug), a ? resolve(a.source, a.slug) : null]);
   const left = ra ? { r: ra, entry: ra.entry } : rb.previous ? { r: rb, entry: rb.previous } : null;
   const side = async (r: Resolved, entry: TimelineEntry): Promise<ComparedSide> =>
-    ({ source: r.key, ref: r.ref, entry: await versionOf("ios", entry) });
+    ({ source: r.key, ref: r.ref, entry: await versionOf(r.ref.platform, entry) });
   const right = await side(rb, rb.entry);
   if (!left) return { a: null, b: right, diff: null };
   const leftSide = await side(left.r, left.entry);
@@ -205,13 +224,11 @@ export async function getComparison(a: Side | null, b: Side, path?: string): Pro
 type PhoneFile = Pick<BundleFile, "path" | "kind" | "devices">;
 type ReleasePhone = GroupPhone & { readonly family: string };
 
-/** The iOS release a version is read against: its own newest image for an image entry, the current release for OTA. */
-async function releaseOf(entry: TimelineEntry): Promise<string | null> {
-  if (entry.via === "image") {
-    const order = (await releaseList()).filter((r) => r.platform === "ios").map((r) => r.id);
-    return order.find((id) => entry.releases.includes(id)) ?? entry.releases[0] ?? null;
-  }
-  return (await currentRelease("ios"))?.id ?? null;
+/** The release a version is read against: the newest image carrying it, else (an OTA file) the platform's current release. */
+async function releaseOf(platform: Platform, entry: TimelineEntry): Promise<string | null> {
+  const carrying = new Set(entry.copies.flatMap((c) => (c.via === "image" ? c.releases : [])));
+  const newest = (await releaseList()).find((r) => r.platform === platform && carrying.has(r.id));
+  return newest?.id ?? (await currentRelease(platform))?.id ?? null;
 }
 
 interface PhoneCopies {
@@ -229,8 +246,8 @@ interface PhoneCopies {
  * and runs the defaults); otherwise the version is older than the phone.
  */
 const phoneCopies = perRequest(async (key: string, slug: string): Promise<PhoneCopies | null> => {
-  const { entry, opened } = await open(key, slug);
-  const build = await releaseOf(entry);
+  const { entry, opened, ref } = await open(key, slug);
+  const build = await releaseOf(ref.platform, entry);
   if (!build) return null;
   const { release, modems } = await releaseModems(build);
   const phones = byNewest(modems.map(modemView)).flatMap((m) => m.devices.map((d) => ({ ...d, family: m.family })));
@@ -344,7 +361,7 @@ export async function getPhoneChanges(key: string, slug: string, against?: strin
       const phone = phones[0]?.id;
       if (!phone) return [];
       // A per-model copy only speaks for its own model.
-      const before = a.productType && a.productType !== phone ? [] : filesFor(A, phone);
+      const before = a.devices && !a.devices.includes(phone) ? [] : filesFor(A, phone);
       const known = before.length > 0 || knowsPhone(A.info.files, phone);
       const had = before.length ? A : null;
       return [{

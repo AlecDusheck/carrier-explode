@@ -14,7 +14,7 @@
  */
 
 import { keys } from "../../../../../../src/lib/storage/keys.ts";
-import type { Release, ReleaseSource } from "../../../../../../src/lib/schema/types.ts";
+import { parseSourceKey, type Release, type ReleaseSource } from "../../../../../../src/lib/schema/types.ts";
 import { compareProducts } from "../../../../../../src/lib/decode/index.ts";
 import { readJobOutput } from "../../../job-records.ts";
 import type { JobContext, JobOutput, JobRunner } from "../../../job.ts";
@@ -42,11 +42,11 @@ function bySource(parts: readonly IpswOutput[]): Map<string, Part[]> {
   return out;
 }
 
-const kindOf = (source: string): BundleKind => {
-  const kind = source.split(":")[1];
-  if (kind === "carrier" || kind === "country") return kind;
+function kindOf(source: string): BundleKind {
+  const ref = parseSourceKey(source);
+  if (ref?.platform === "ios" && (ref.kind === "carrier" || ref.kind === "country")) return ref.kind;
   throw new Error(`${source} is not an iOS carrier or country bundle`);
-};
+}
 
 async function loadCopy(ctx: JobContext<"ios.release">, sha: string): Promise<Bundle> {
   const bytes = await ctx.r2.get(keys.obj(sha));
@@ -64,29 +64,28 @@ async function mergeSource(ctx: JobContext<"ios.release">, source: string, copie
   const bundles = await Promise.all(copies.map((c) => loadCopy(ctx, c.sha)));
   const { bundle, conflicts } = mergeCopies(bundles);
   for (const c of conflicts) ctx.log(`differs between images, kept the first: ${c}`);
-  const stored = await storeBundle(ctx.r2, kindOf(source), bundle, { release: ctx.spec.params.build, device }, ctx.log);
+  const stored = await storeBundle(ctx.r2, kindOf(source), bundle, { release: ctx.spec.params.build, device });
   return { sha: stored.sha, version: stored.version, size: stored.size, cid: stored.cid };
 }
 
 export const runRelease: JobRunner<"ios.release"> = async (ctx): Promise<JobOutput<"ios.release">> => {
   const p = ctx.spec.params;
-  if (p.parts.length === 0) throw new Error(`${p.build}: no ios.ipsw parts`);
   const parts = await Promise.all(p.parts.map((id) => readJobOutput(ctx.r2, id, "ios.ipsw")));
+  const [lead] = parts;
+  if (!lead) throw new Error(`${p.build}: no ios.ipsw parts`);
   const stray = parts.filter((o) => o.build !== p.build);
   if (stray.length) throw new Error(`parts of other builds: ${stray.map((o) => `${o.device} ${o.build}`).join(", ")}`);
-  const lead = parts[0]?.device ?? "";
 
   const sources = bySource(parts);
   let done = 0;
   const merged = await mapLimit([...sources], CONCURRENCY, async ([source, copies]) => {
-    const r = await mergeSource(ctx, source, copies, lead);
+    const r = await mergeSource(ctx, source, copies, lead.device);
     if (++done % 200 === 0) await ctx.progress(done, sources.size, "bundles merged");
     return [source, [r]] as const;
   });
 
-  let modems: unknown[] | undefined;
-  if (p.modems === null) ctx.log(`${p.build}: ios.modems failed, the release ships without modem packages`);
-  else modems = (await readJobOutput(ctx.r2, p.modems, "ios.modems")).modems;
+  const modems = p.modems === null ? undefined : (await readJobOutput(ctx.r2, p.modems, "ios.modems")).modems;
+  if (!modems) ctx.log(`${p.build}: ios.modems failed, the release ships without modem packages`);
 
   const release: Release = {
     platform: "ios",

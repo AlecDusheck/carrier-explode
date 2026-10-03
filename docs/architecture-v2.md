@@ -178,12 +178,16 @@ export const CONCEPTS: ConceptDef[];                                            
 
 **The visual design and layout don't change. The URL model does, so it can be honest about platforms.**
 
-- **Path shape:** `/<kind>/<platform>/<name>/<version>/<tab>`, for example `/carriers/ios/Verizon_LTE/72.0/`, `/carriers/android/verizon_us/79000000034/settings`, `/carriers/ipados/Verizon_LTE/58.1/`, `/carriers/watchos/Vodafone_uk/…`, `/countries/ios/UnitedStates/…` and `/defaults/android/default/…`.
+- **Path shape:** `/<kind>/<platform>/<name>[/<line>]/<version>/<tab>`, where the line is the Pixel codename on Android. For example `/carriers/ios/Verizon_LTE/72.0/`, `/carriers/android/verizon_us/tokay/79000000034/settings`, `/carriers/ipados/Verizon_LTE/58.1/`, `/carriers/watchos/Vodafone_uk/…`, `/countries/ios/UnitedStates/…` and `/defaults/android/default/…`.
 - **Platforms:** `ios`, `ipados`, `watchos` and `android`. Apple's iPad and Watch bundles are separate files with their own version lines, so they're platforms, not slug suffixes or a `/watch` section. Paths come from `sourcePath()` and are never assembled by hand.
-- **Version segment:** it's the source's own version. Copies of one content (image and OTA) are one entry. Two different contents under one version get semver build metadata, `<version>+<hash8>`.
+- **Version identity:** each platform uses what it actually versions, measured on real data.
+  - **Apple:** the bundle's own version (`/carriers/ios/Verizon_LTE/72.0/`). It's unique in 4,433 of 4,434 OTA groups.
+  - **Android:** device + version (`/carriers/android/tmobile_us/tokay/79000000034/`). The version is a per-device counter: 479 of 1,544 (carrier, version) pairs differ by device within one build. Identical files on several Pixels share one canonical URL.
+  - **Reused versions** are named by where they first appeared: `50.1@2022-04-12`, `64.1@ios-26.0`, `79000000004@cp3a.260905.009`.
+  - **Copies** (image or OTA) are where a version came from, listed on its page. They aren't separate URLs.
 - **Lists:** `/carriers` lists every platform, with a filter, and `/carriers/<platform>` lists one platform. The two-pane explorer, bundle head, version strip, tabs and styling all stay as they are.
 - **Cross-platform links:** pages are per source. The Carrier (an internal id) links a page to its counterparts on other platforms, through the bundle head and one "iOS and Android" Overview section.
-- **Redirects:** every v1 URL (`/carriers/<Name>/<ios-x|ota-x|ota-x-iPad>/…`, `/countries/<Name>/…`, `/watch/<Name>/…`, `/raw/…`) gets a 301 from a single hook, driven by `index/legacy.json`, which the index job writes.
+- **Redirects:** every v1 URL (`/carriers/<Name>/<ios-x|ota-x|ota-x-iPad>/…`, `/countries/<Name>/…`, `/watch/<Name>/…`, `/raw/…`) gets a 301 from a single `handle` step before routing, driven by `index/legacy.json`, which the index job writes. The step matches the longest prefix and carries over the sub-path and query. An unknown v1 slug is a 404, never a guess. After that step, routing only knows v2. A table-driven test checks every v1 slug form.
 - **Android versions** use the existing components: Settings, APNs, Files and Changes. Android uses the existing phone picker, generalised to Pixels.
 - **Other pages:**
   - Compare lets both sides pick any platform.

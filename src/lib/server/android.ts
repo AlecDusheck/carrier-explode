@@ -25,7 +25,8 @@ interface Decoded extends Resolved {
 }
 
 async function decodeEntry(e: TimelineEntry): Promise<CarrierSettings> {
-  const bytes = e.sha ? await readBytes(keys.obj(e.sha)) : null;
+  const sha = e.copies.flatMap((c) => c.sha ?? [])[0];
+  const bytes = sha === undefined ? null : await readBytes(keys.obj(sha));
   if (!bytes) error(404, `Version ${e.slug} is not in the bucket.`);
   return decodeCarrierSettings(bytes);
 }

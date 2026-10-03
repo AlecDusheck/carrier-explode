@@ -5,7 +5,7 @@
  * is several refs sharing one URL, and one download.
  */
 
-import { sourceKey, type SourceRef } from "../../../../../src/lib/schema/index.ts";
+import { sourceKey, type Platform } from "../../../../../src/lib/schema/index.ts";
 import type { ManifestTables } from "../../../../../src/lib/decode/index.ts";
 import type { OtaRef } from "../../../../../src/lib/storage/keys.ts";
 
@@ -14,23 +14,40 @@ export type Listed = Pick<OtaRef, "url" | "source" | "os" | "build" | "productTy
 
 const identity = (r: Listed): string => [r.source, r.os, r.productType ?? "", r.url].join("|");
 
+/**
+ * The platform a manifest entry is for: ByProductType "iPad" entries are
+ * ipados, CarrierBundles.Watch entries watchos, and everything else, the
+ * model-specific iPhone entries (iPhone7,1) included, ios.
+ */
+function platformOf(productType: string | undefined): Platform {
+  if (productType?.startsWith("iPad")) return "ipados";
+  if (productType === "Watch") return "watchos";
+  return "ios";
+}
+
+/** A product type worth keeping on the ref: a single model (`iPhone7,1`), not a family the platform already says. */
+const modelOf = (productType: string | undefined): string | undefined => (productType?.includes(",") ? productType : undefined);
+
 /** Every carrier and country bundle entry the manifest lists. */
 export function listedRefs(tables: ManifestTables): Listed[] {
   const out: Listed[] = [];
   for (const [name, refs] of Object.entries(tables.refs)) {
     for (const r of refs) {
-      const source: SourceRef = { platform: "ios", kind: "carrier", name, ...(r.productType === "Watch" ? { family: "Watch" } : {}) };
+      const model = modelOf(r.productType);
       out.push({
-        url: r.url, source: sourceKey(source), os: r.os, build: r.build,
-        ...(r.productType !== undefined ? { productType: r.productType } : {}),
+        url: r.url,
+        source: sourceKey({ platform: platformOf(r.productType), kind: "carrier", name }),
+        os: r.os,
+        build: r.build,
+        ...(model !== undefined ? { productType: model } : {}),
         ...(r.digest !== undefined ? { sha1: r.digest } : {}),
         ...(r.digest3 !== undefined ? { sha384: r.digest3 } : {}),
       });
     }
   }
   for (const c of tables.index.countries) {
-    const source: SourceRef = { platform: "ios", kind: "country", name: c.id, ...(c.family === "Watch" ? { family: "Watch" } : {}) };
-    out.push({ url: c.url, source: sourceKey(source), os: c.minOS ?? "", build: c.version });
+    const platform = c.family === "Watch" ? "watchos" : "ios";
+    out.push({ url: c.url, source: sourceKey({ platform, kind: "country", name: c.id }), os: c.minOS ?? "", build: c.version });
   }
   return out;
 }

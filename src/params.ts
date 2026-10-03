@@ -1,5 +1,6 @@
 import { defineParams } from "@sveltejs/kit/params";
 import { isVersionSlug } from "./lib/schema/slug.ts";
+import { PLATFORMS, type Platform } from "./lib/schema/types.ts";
 import { KINDS, type Kind } from "./lib/types.ts";
 
 /**
@@ -36,7 +37,8 @@ export type FeatureSlug = (typeof FEATURE_SLUGS)[number];
 
 export const params = defineParams({
   kind: (p): Kind | undefined => KINDS.find((k) => k === p),
-  // Every version slug starts with where it came from (an iOS image, an OTA file, an Android image), so a tab name never is one.
+  platform: (p): Platform | undefined => PLATFORMS.find((x) => x === p),
+  // A version is the source's own version number (72.0, 79000000034), so a tab name never is one.
   version: (p): string | undefined => (isVersionSlug(p) ? p : undefined),
   tab: (p): Tab | undefined => TABS.find((t) => t === p),
   feature: (p): FeatureSlug | undefined => FEATURE_SLUGS.find((f) => f === p),

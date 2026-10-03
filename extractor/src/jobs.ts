@@ -10,7 +10,7 @@
 
 import * as v from "valibot";
 
-import type { Json } from "../../src/lib/schema/index.ts";
+import { parseSourceKey, type Json } from "../../src/lib/schema/index.ts";
 
 /* ------------------------------------------------------------------ atoms */
 
@@ -22,8 +22,8 @@ const sha256 = v.pipe(v.string(), v.regex(/^[0-9a-f]{64}$/, "expected a lower-ca
 const url = v.pipe(v.string(), v.url());
 const count = v.pipe(v.number(), v.integer(), v.minValue(0));
 const positive = v.pipe(v.number(), v.integer(), v.minValue(1));
-/** `ios:carrier:TMobile_us`; parsed strictly by parseSourceKey where it matters. */
-const sourceKey = v.pipe(v.string(), v.regex(/^(ios|android):(carrier|country|default):[^:]+(:Watch)?$/));
+/** `ios:carrier:TMobile_us`, `watchos:carrier:Vodafone_uk`: exactly what parseSourceKey accepts. */
+const sourceKey = v.pipe(v.string(), v.check((s) => parseSourceKey(s) !== undefined, "expected a sourceKey"));
 /** YYYY-MM, a Pixel security patch month. */
 const month = v.pipe(v.string(), v.regex(/^\d{4}-\d{2}$/));
 

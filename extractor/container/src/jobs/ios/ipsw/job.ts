@@ -44,18 +44,17 @@ export const runIpsw: JobRunner<"ios.ipsw"> = async (ctx): Promise<JobOutput<"io
 
   const bundles: StoredBundle[] = [];
   for (const kind of KINDS) {
-    const listing = await listBundles(dirs[kind]);
-    // Every iPhone image since iOS 8 carries both directories, full; an empty one means the wrong image was read.
-    if (listing.bundles.length === 0) throw new Error(`${BUNDLE_DIRS[kind]} is empty in ${image.member}`);
-    if (listing.aliases.length) ctx.log(`${kind}: ${listing.aliases.length} symlinked bundles left out: ${listing.aliases.join(", ")}`);
+    const dirsOfKind = await listBundles(dirs[kind]);
+    // Every iPhone image carries both directories, full; an empty one means the wrong image was read.
+    if (dirsOfKind.length === 0) throw new Error(`${BUNDLE_DIRS[kind]} is empty in ${image.member}`);
     let n = 0;
-    for (const b of listing.bundles) {
+    for (const b of dirsOfKind) {
       const bundle = await readBundle(b);
       const origin = { url, release: build, device, path: `${BUNDLE_DIRS[kind]}/${b.name}.bundle` };
-      bundles.push(await storeBundle(ctx.r2, kind, bundle, origin, ctx.log));
-      if (++n % 100 === 0) await ctx.progress(n, listing.bundles.length, `${kind} bundles stored`);
+      bundles.push(await storeBundle(ctx.r2, kind, bundle, origin));
+      if (++n % 100 === 0) await ctx.progress(n, dirsOfKind.length, `${kind} bundles stored`);
     }
-    ctx.log(`${kind}: ${listing.bundles.length} bundles stored`);
+    ctx.log(`${kind}: ${dirsOfKind.length} bundles stored`);
   }
   return { build, device, devices: [...manifest.devices], bundles };
 };

@@ -24,11 +24,19 @@ export async function handleApi(req: Request, env: Env): Promise<Response> {
     const [, head, id, ...rest] = pathname.split("/");
     if (rest.length) throw new RequestError(404, `${pathname}: no such route`);
     if (head === "run" && id === undefined && req.method === "POST") return await run(req, env);
-    if (head === "runs" && id && req.method === "GET") return await runStatus(decodeURIComponent(id), env);
-    if (head === "jobs" && id && req.method === "GET") return await jobStatus(decodeURIComponent(id), env);
+    if (head === "runs" && id && req.method === "GET") return await runStatus(decoded(id), env);
+    if (head === "jobs" && id && req.method === "GET") return await jobStatus(decoded(id), env);
     throw new RequestError(404, `${req.method} ${pathname}: no such route`);
   } catch (e) {
     return errorResponse(e);
+  }
+}
+
+function decoded(segment: string): string {
+  try {
+    return decodeURIComponent(segment);
+  } catch {
+    throw new RequestError(400, `bad percent-encoding in ${segment}`);
   }
 }
 

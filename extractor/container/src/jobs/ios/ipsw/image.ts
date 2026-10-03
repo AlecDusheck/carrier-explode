@@ -4,14 +4,16 @@
  * decryption when the member is a .dmg.aea, into one file. Neither the IPSW
  * nor the encrypted member is ever stored.
  *
- * Disk budget on the heavy container (20 GB including the image, ~0.5 GB):
+ * Disk budget on the heavy container (20 GB, the container image included),
+ * measured on iOS 27.0.1 for iPhone17,1 (IPSW 12.3 GB):
  *
- *   iOS 27.0.1, iPhone17,1  IPSW 12.3 GB, OS member 8.86 GB (.aea), plain image 10.24 GB
- *   bundle directories out of it                                  ~0.2 GB
- *   packaged .ipcc files, one at a time                           < 0.1 GB
+ *   OS member 043-70165-666.dmg.aea      8.86 GB   streamed, never on disk
+ *   plain image (raw APFS container)    10.24 GB   on disk until the bundles are out
+ *   both bundle directories              0.05 GB   on disk; packaged in memory, one bundle at a time
  *
- * so the peak is the plain image plus ~0.3 GB, against ~19 GB free. The image
- * size is checked against free space before a byte is written (MARGIN below).
+ * so the peak is ~10.3 GB. The image size is known from the AEA root header
+ * before a byte is written, and checked against free space with MARGIN to spare.
+ * Before iOS 18 the member is a plain UDIF .dmg, streamed as is.
  */
 
 import { open, statfs } from "node:fs/promises";

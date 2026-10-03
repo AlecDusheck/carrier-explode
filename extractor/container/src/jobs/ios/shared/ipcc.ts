@@ -6,7 +6,7 @@
  * level 9. The same files therefore give the same bytes, hence the same
  * sha256 and R2 key, on every run and every machine.
  *
- * Pure (fflate only), for the iOS decoder package.
+ * Pure (fflate and the plist decoder), for the iOS decoder package.
  */
 
 import { unzipSync, zipSync, type ZipOptions } from "fflate";
@@ -64,17 +64,12 @@ export function packIpcc(b: Bundle): Uint8Array {
 /** The bundle inside an .ipcc: the first `<Name>.bundle/` directory's files, as openIpcc finds it. */
 export function unpackIpcc(bytes: Uint8Array): Bundle {
   const zip = unzipSync(bytes);
-  let prefix: string | undefined;
-  for (const n of Object.keys(zip)) {
-    const m = /^(.*?([^/]+)\.bundle\/)/.exec(n);
-    if (m?.[1]) {
-      prefix = m[1];
-      break;
-    }
-  }
-  if (!prefix) throw new Error("ipcc has no .bundle directory");
-  const root = prefix;
-  const name = root.slice(0, -"/".length).split("/").at(-1)?.replace(/\.bundle$/, "") ?? "";
+  const m = Object.keys(zip)
+    .map((n) => /^(.*?([^/]+)\.bundle\/)/.exec(n))
+    .find((x) => x !== null);
+  const root = m?.[1];
+  const name = m?.[2];
+  if (!root || !name) throw new Error("ipcc has no .bundle directory");
   const files = Object.entries(zip)
     .filter(([n]) => n.startsWith(root) && !n.endsWith("/"))
     .map(([n, data]) => ({ path: n.slice(root.length), bytes: data }))

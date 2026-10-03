@@ -12,7 +12,7 @@
 import { resolve } from "node:path";
 import { parseArgs } from "node:util";
 
-import { JOBS, isJobType, parseJobSpec } from "../src/jobs.ts";
+import { JOB_TYPES, JOBS, isJobType, parseJobSpec } from "../src/jobs.ts";
 import { RUNNERS } from "../container/src/jobs/index.ts";
 import { createControlClient } from "../container/src/runtime/control-client.ts";
 import { executeJob } from "../container/src/runtime/execute.ts";
@@ -30,7 +30,7 @@ const { positionals, values } = parseArgs({
 
 const [type] = positionals;
 if (type === undefined || !isJobType(type)) {
-  process.stderr.write(`usage: job <type> [--params JSON] [--r2 DIR] [--id ID]\n  type: ${Object.keys(JOBS).join(", ")}\n`);
+  process.stderr.write(`usage: job <type> [--params JSON] [--r2 DIR] [--id ID]\n  type: ${JOB_TYPES.join(", ")}\n`);
   process.exit(2);
 }
 

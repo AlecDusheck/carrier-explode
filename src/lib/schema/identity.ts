@@ -21,7 +21,7 @@
  */
 
 import { LINKS, type Links } from "./links.ts";
-import { matcherKey, type Carrier, type SimMatcher, type SourceRef } from "./types.ts";
+import { decoderFamily, matcherKey, type Carrier, type SimMatcher, type SourceRef } from "./types.ts";
 
 export interface LinkMember {
   /** sourceKey. */
@@ -62,7 +62,7 @@ class Groups {
   }
 }
 
-/** Shared keys between every pair of linkable sources on opposite platforms. */
+/** Shared keys between every pair of linkable sources read by different decoder families (Apple vs Android). */
 function sharedKeys(members: readonly LinkMember[]): Map<string, Map<string, string[]>> {
   const owners = new Map<string, LinkMember[]>();
   for (const m of members) for (const k of new Set(m.sims.map(matcherKey))) {
@@ -77,9 +77,9 @@ function sharedKeys(members: readonly LinkMember[]): Map<string, Map<string, str
     row.set(to.key, [...(row.get(to.key) ?? []), k]);
   };
   for (const [k, list] of owners) {
-    const ios = list.filter((m) => m.source.platform === "ios");
-    const android = list.filter((m) => m.source.platform === "android");
-    for (const a of ios) {
+    const apple = list.filter((m) => decoderFamily(m.source.platform) === "apple");
+    const android = list.filter((m) => decoderFamily(m.source.platform) === "android");
+    for (const a of apple) {
       for (const b of android) {
         note(a, b, k);
         note(b, a, k);
@@ -117,9 +117,9 @@ function simEdges(members: readonly LinkMember[], splits: ReadonlySet<string>): 
   return [...edges.values()];
 }
 
-/** The member a carrier is named after: an iOS bundle (they carry brand names) with the most SIM rules, else the largest Android canonical. */
-function primary(members: readonly LinkMember[]): LinkMember | undefined {
-  const rank = (m: LinkMember): number => (m.source.platform === "ios" ? 1e6 : 0) + m.sims.length;
+/** The member a carrier is named after: an Apple bundle (they carry brand names) with the most SIM rules, else the largest Android canonical. */
+export function primary(members: readonly LinkMember[]): LinkMember | undefined {
+  const rank = (m: LinkMember): number => (decoderFamily(m.source.platform) === "apple" ? 1e6 : 0) + m.sims.length;
   return [...members].sort((x, y) => rank(y) - rank(x) || x.key.localeCompare(y.key))[0];
 }
 
@@ -143,6 +143,14 @@ export function linkSources(members: readonly LinkMember[], links: Links = LINKS
   for (const e of simEdges(linkable, splits)) {
     groups.union(e.a, e.b);
     for (const k of [e.a, e.b]) simShared.set(k, new Set([...(simShared.get(k) ?? []), ...e.shared]));
+  }
+  // Apple names a carrier's iPhone, iPad and Watch bundles alike (ATT_US): one bundle name is one carrier.
+  const appleByName = new Map<string, string>();
+  for (const m of linkable) {
+    if (decoderFamily(m.source.platform) !== "apple") continue;
+    const first = appleByName.get(m.source.name);
+    if (first === undefined) appleByName.set(m.source.name, m.key);
+    else groups.union(first, m.key);
   }
   for (const [a, b] of links.link) {
     if (!known.has(a) || !known.has(b)) continue;

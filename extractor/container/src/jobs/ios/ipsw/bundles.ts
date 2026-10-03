@@ -1,11 +1,10 @@
 /**
  * Bundles as extracted to disk, read back into memory one at a time.
  *
- * Symlinks are skipped, both a symlinked `.bundle` and a symlinked file inside
- * one. That is what v1 stored: ipsw walked the mounted image to the link
- * targets and copied those, so a link never became a copy under its own name,
- * and scripts/package_system_bundles.py skipped file links. Listed in
- * `aliases` so a run says what it left out.
+ * A bundle directory also holds symlinks, which are lookup aliases, not
+ * bundles: `310240_GID1-6434 -> TMobile_us.bundle` in Carrier Bundles,
+ * `202 -> Greece.bundle` in CountryBundles. Only real `.bundle` directories are
+ * read, and only regular files in them, as v1 stored them.
  */
 
 import { readdir, readFile } from "node:fs/promises";
@@ -18,24 +17,14 @@ export interface BundleDir {
   readonly path: string;
 }
 
-export interface BundleListing {
-  readonly bundles: readonly BundleDir[];
-  /** `.bundle` entries that are symlinks, left out. */
-  readonly aliases: readonly string[];
-}
-
 const SUFFIX = ".bundle";
 
-export async function listBundles(dir: string): Promise<BundleListing> {
-  const bundles: BundleDir[] = [];
-  const aliases: string[] = [];
+export async function listBundles(dir: string): Promise<BundleDir[]> {
+  const out: BundleDir[] = [];
   for (const e of await readdir(dir, { withFileTypes: true })) {
-    if (!e.name.endsWith(SUFFIX)) continue;
-    if (e.isSymbolicLink()) aliases.push(e.name);
-    else if (e.isDirectory()) bundles.push({ name: e.name.slice(0, -SUFFIX.length), path: join(dir, e.name) });
+    if (e.isDirectory() && e.name.endsWith(SUFFIX)) out.push({ name: e.name.slice(0, -SUFFIX.length), path: join(dir, e.name) });
   }
-  bundles.sort((a, b) => comparePaths(a.name, b.name));
-  return { bundles, aliases: aliases.sort(comparePaths) };
+  return out.sort((a, b) => comparePaths(a.name, b.name));
 }
 
 async function walk(root: string, rel: string, out: BundleFile[]): Promise<void> {

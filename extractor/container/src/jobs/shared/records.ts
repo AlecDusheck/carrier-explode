@@ -10,7 +10,7 @@
 
 import * as v from "valibot";
 
-import { PLATFORMS, PROFILE_SCHEMA, type Profile, type Release, type TimelineEntry } from "../../../../../src/lib/schema/index.ts";
+import { PLATFORMS, PROFILE_SCHEMA, SOURCE_KINDS, type Profile, type Release, type TimelineEntry } from "../../../../../src/lib/schema/index.ts";
 import type { ArtifactKind, ObjMeta, OtaRef } from "../../../../../src/lib/storage/keys.ts";
 import type { ScanPointer } from "../../../../../src/lib/storage/scan.ts";
 import { jsonSchema } from "../../../../src/jobs.ts";
@@ -66,12 +66,7 @@ export const releaseSchema = v.object({
   modems: opt(v.array(v.unknown())),
 }) satisfies v.GenericSchema<unknown, Release>;
 
-const sourceRefSchema = v.object({
-  platform: v.picklist(PLATFORMS),
-  kind: v.picklist(["carrier", "country", "default"]),
-  name: str,
-  family: opt(v.literal("Watch")),
-});
+const sourceRefSchema = v.object({ platform: v.picklist(PLATFORMS), kind: v.picklist(SOURCE_KINDS), name: str });
 
 const simMatcherSchema = v.object({
   mccmnc: str, gid1: opt(str), gid2: opt(str), spn: opt(str), imsiPrefix: opt(str), iccidPrefix: opt(str),

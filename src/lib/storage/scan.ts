@@ -118,6 +118,8 @@ export interface ScanEntry {
   readonly source: string;
   /** `<platform>:<kind>`: rarity is judged among sources of the same platform and kind. */
   readonly group: string;
+  /** The file rarity is judged in: the platform's main settings file (`carrier.plist`, `config`). */
+  readonly main: string;
   readonly files: Readonly<Record<string, Readonly<Record<string, Json>>>>;
 }
 
@@ -175,16 +177,16 @@ const isSetting = (distinct: number, present: number): boolean => present >= 15 
 const wildcard = (path: string): string => path.replace(/\[\d+\]/g, "[*]");
 
 /**
- * For every source, the settings in `file` it shares with at most `max` others
+ * For every source, the settings in its main file it shares with at most `max` others
  * of its group: keys almost nobody sets, and values almost nobody picks for a
  * key many set. Identifiers (names, URLs, APNs) are skipped: their values
  * never repeat. The v1 algorithm (keyscan.ts rareSettings), over Profile.raw.
  */
-export function rareSettings(entries: readonly ScanEntry[], file: (group: string) => string, max = 3, keep = 30): Record<string, RareSetting[]> {
+export function rareSettings(entries: readonly ScanEntry[], max = 3, keep = 30): Record<string, RareSetting[]> {
   const out: Record<string, RareSetting[]> = {};
   for (const group of new Set(entries.map((e) => e.group))) {
     const mine = entries.flatMap((e) => {
-      const leaves = e.group === group ? e.files[file(group)] : undefined;
+      const leaves = e.group === group ? e.files[e.main] : undefined;
       return leaves ? [{ source: e.source, leaves }] : [];
     });
     // Per source: wildcard path → the set of values it holds there.

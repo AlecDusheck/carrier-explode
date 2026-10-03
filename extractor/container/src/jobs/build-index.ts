@@ -48,6 +48,7 @@ export async function buildIndex(ctx: JobContext<"index">): Promise<JobOutput<"i
   allOrThrow("carrier docs", await fanOut(out.docs, READ_CONCURRENCY, (doc) => ctx.r2.putJson(keys.carrier(doc.carrier.slug), doc)));
   await ctx.r2.putJson(keys.releases(), out.releases);
   await ctx.r2.putJson(keys.countries(), out.countries);
+  await ctx.r2.putJson(keys.legacy(), out.legacy);
   await ctx.r2.putJson(keys.carriers(), out.carriers);
   await ctx.r2.putJson(keys.sources(), out.sources);
 

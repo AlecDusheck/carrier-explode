@@ -21,7 +21,7 @@ import { openRemoteZip, type RemoteZip } from "../../../../../../src/lib/firmwar
 import { fetchWithRetry } from "../../../../../../src/lib/http/index.ts";
 import { keys } from "../../../../../../src/lib/storage/keys.ts";
 import type { JobContext, JobOutput, JobRunner, R2Client } from "../../../job.ts";
-import { iphoneCatalog, mapLimit } from "../catalog.ts";
+import { appledbFirmware, iphoneCatalog, mapLimit } from "../catalog.ts";
 import { parseBuildManifest } from "../shared/build-manifest.ts";
 import { fetchMember } from "./fetch.ts";
 import { group, modemMembers, packageKey, type ModemGroup, type ModemMember } from "./group.ts";
@@ -31,7 +31,10 @@ import { modemSummary } from "./summary.ts";
 const CONCURRENCY = 4;
 const SUMMARY_KIND = "baseband";
 
-/** Release.modems entry: the v1 ImageModem shape (src/lib/server/timeline.ts), package.id being the sha256. */
+/**
+ * Release.modems entry: the v1 ImageModem shape (src/lib/server/timeline.ts), package.id being the
+ * sha256. A type alias rather than an interface, so it is assignable to the output's Json.
+ */
 type ImageModem = {
   family: string;
   package: { id: string; size: number; name: string; crc32: string; kind: "bbfw" | "ftab" };
@@ -43,35 +46,30 @@ const ImageModemSchema = v.object({
   package: v.object({ id: v.string(), size: v.number(), name: v.string(), crc32: v.string(), kind: v.picklist(["bbfw", "ftab"]) }),
   devices: v.array(v.string()),
 });
-const ReleaseModems = v.looseObject({ modems: v.optional(v.array(v.unknown())) });
+/** A release without modems is one whose ios.modems run failed. */
+const ReleaseModems = v.looseObject({ modems: v.optional(v.array(ImageModemSchema)) });
 
 /** Packages earlier releases point at, by packageKey. */
-async function knownPackages(ctx: JobContext<"ios.modems">): Promise<Map<string, ImageModem>> {
+async function knownPackages(r2: R2Client): Promise<Map<string, ImageModem>> {
   const out = new Map<string, ImageModem>();
-  let unreadable = 0;
-  const releases = (await ctx.r2.list(keys.releasesPrefix("ios"))).filter((k) => k.endsWith(".json"));
+  const releases = (await r2.list(keys.releasesPrefix("ios"))).filter((k) => k.endsWith(".json"));
   await mapLimit(releases, 8, async (key) => {
-    const r = v.parse(ReleaseModems, await ctx.r2.getJson(key));
-    for (const m of r.modems ?? []) {
-      const parsed = v.safeParse(ImageModemSchema, m);
-      if (parsed.success) out.set(packageKey(parsed.output.package), parsed.output);
-      else unreadable++;
-    }
+    for (const m of v.parse(ReleaseModems, await r2.getJson(key)).modems ?? []) out.set(packageKey(m.package), m);
   });
-  // Not fatal: such a package is fetched and decoded again, as if new.
-  if (unreadable) ctx.log(`${unreadable} modem entries in held releases did not parse; their packages are fetched again`);
   return out;
 }
 
-/** The OTA manifest's carrier table, for bbfw band-combo tags; without it, summaries lack that map (logged). */
-async function carrierTable(ctx: JobContext<"ios.modems">): Promise<unknown> {
-  try {
-    const bytes = new Uint8Array(await (await fetchWithRetry(MANIFEST_URL)).arrayBuffer());
-    return parseManifest(bytes).MobileDeviceCarriersByMccMnc;
-  } catch (e) {
-    ctx.log(`carrier manifest unavailable, summaries go without the carrier map: ${e instanceof Error ? e.message : String(e)}`);
-    return undefined;
-  }
+/**
+ * The OTA manifest's carrier table, which maps bbfw band-combo tags to
+ * bundles. Required: a summary stored without it would never be redone, since
+ * a stored package is not decoded again; an outage fails the job, and the
+ * Workflow's retry or the next run does it whole.
+ */
+async function carrierTable(): Promise<unknown> {
+  const bytes = new Uint8Array(await (await fetchWithRetry(MANIFEST_URL)).arrayBuffer());
+  const table = parseManifest(bytes).MobileDeviceCarriersByMccMnc;
+  if (table === undefined) throw new Error("carrier manifest has no MobileDeviceCarriersByMccMnc");
+  return table;
 }
 
 /** Both the package and its summary are in the bucket. */
@@ -115,19 +113,21 @@ export const runModems: JobRunner<"ios.modems"> = async (ctx): Promise<JobOutput
   const { build, ipsws } = ctx.spec.params;
   const catalog = await iphoneCatalog();
 
-  // Phones per IPSW: the planner lists each file once, under one phone; the catalogue knows the rest.
+  // Phones per IPSW: the planner lists each file once, under one phone; the catalogue knows the
+  // rest (ipsw.me for releases, AppleDB for the betas ipsw.me does not list).
+  const pairs = catalog.byBuild.get(build) ?? [...(await appledbFirmware(build)).ipsws].map(([device, url]) => ({ device, url }));
   const serves = new Map<string, string[]>();
   for (const i of ipsws) {
-    const sharing = (catalog.byBuild.get(build) ?? []).filter((p) => p.url === i.url).map((p) => p.device);
+    const sharing = pairs.filter((p) => p.url === i.url).map((p) => p.device);
     serves.set(i.url, [...new Set([i.device, ...sharing])]);
   }
   const urls = [...serves.keys()];
   const listings = new Map(await mapLimit(urls, CONCURRENCY, async (url) => [url, await listing(url)] as const));
   const groups = group(serves, new Map([...listings].map(([u, l]) => [u, l.members])), catalog.boards);
 
-  const known = await knownPackages(ctx);
+  const known = await knownPackages(ctx.r2);
   let table: Promise<unknown> | undefined;
-  const mccMnc = (): Promise<unknown> => (table ??= carrierTable(ctx));
+  const mccMnc = (): Promise<unknown> => (table ??= carrierTable());
 
   const modems: ImageModem[] = [];
   for (const g of groups) {

@@ -1,231 +1,173 @@
 /**
- * One history per source, from the OS images that carry it (Releases) and,
- * for iOS, Apple's OTA feed (OtaRefs, archived or not).
+ * One history per source: one entry per distinct content, however many copies
+ * of it exist. Copies come from OS images (Releases: an iOS build, a Pixel
+ * build) and, for Apple sources, from Apple's OTA feed (OtaRefs, archived or
+ * not). Copies are the same content when their file-set content ids are equal
+ * (an image copy is re-zipped, so its bytes never equal the OTA original), or
+ * else their stored bytes. An OTA file not archived yet has neither: it is
+ * its own entry until its bytes are stored.
  *
- * iOS ordering follows the phone: it runs whichever copy has the higher
- * bundle version, and the image copy wins a tie. Per-model OTA variants
- * (`ByProductType`: an iPad build, the iPhone 6's own ATT_US) sink below the
- * main line, since most phones never load them.
+ * Order is precedence, newest first: the higher version wins, as a phone picks
+ * between its image copy and a downloaded one, and on a tie the entry with an
+ * image copy wins (the phone prefers the image copy). Entries for named devices
+ * only (the iPhone 6's own ATT_US builds) sink below the entries every device
+ * gets; when every entry names devices (Android, one file per device
+ * generation) the order is by version alone.
  *
- * Android is per device line. A build ships one CarrierSettings file per
- * device group (Release.sources holds one artifact per distinct file, with the
- * Pixels that carry it), and groups split and merge between builds. An entry
- * is one artifact for one exact set of Pixels over consecutive builds; when
- * the set changes (Pixel 9 and 9 Pro Fold part ways, a new Pixel joins) a new
- * entry starts, unchanged in content if the file is the same, so `devices`
- * always says exactly who ran it. Entries order by build, newest first, and
- * within a build by their newest Pixel.
+ * `devices` is every device that carried the content. `changed` compares an
+ * entry with the next one below it for an overlapping device set, never across
+ * device generations: distinct contents always differ, except that an
+ * unarchived OTA file of the same version as the entry below is taken to be
+ * that content until its bytes say otherwise.
  *
- * `changed` compares an entry with the next older one for the same product
- * type and an overlapping device set, never across generations: by file-set
- * content id when both have one (an image copy is re-zipped, so its bytes
- * never equal the OTA original), else the stored bytes, else the version.
- *
- * Slugs: `ios-<version>` / `android-<build>` for images, `ota-<build>[-<model>]`
- * for OTA files. An Android entry whose devices do not include the build's
- * default device (./devices.ts, the newest flagship) gets `-<codename>` of its
- * newest Pixel: `android-cp3a.260905.009` is the Pixel 10 Pro's file,
- * `android-cp3a.260905.009-oriole` the Pixel 6's. Any remaining clash takes
- * the newest release id (images) or a counter (OTA).
+ * Slugs are the source's own version (`72.0`, `79000000034`). When two
+ * contents share a version, the one with precedence keeps it and each other
+ * gets `<version>+<first 8 hex of its sha, or upstream sha1>` (semver's build
+ * metadata: same version, different build). VERSION_SLUG is that grammar.
  */
 
 import { compareVersions, isPrerelease } from "#lib/decode/index.ts";
 import type { OtaRef } from "#lib/storage/keys.ts";
-import { byPixelRank, defaultDevice, pixelRank } from "./devices.ts";
-import type { Platform, Release, ReleaseSource, TimelineEntry } from "./types.ts";
+import { byPixelRank, defaultDevice } from "./devices.ts";
+import type { Release, ReleaseSource, TimelineCopy, TimelineEntry } from "./types.ts";
 
-/** A release id inside a slug: iOS builds as Apple writes them (v1 URLs did), Android ids lower-cased like the rest of their slug. */
-const idSegment = (r: Pick<Release, "platform" | "id">): string => (r.platform === "ios" ? r.id : r.id.toLowerCase());
+/** Every timeline slug matches: a version starting with a digit, optionally `+<8 hex>`. Tab names never do. */
+export const VERSION_SLUG = /^\d[\w.-]*(?:\+[0-9a-f]{8})?$/;
 
-/** URL segment for an image entry: `ios-27.2-beta-3`, `android-cp3a.260905.009`. */
-export function imageSlug(release: Pick<Release, "platform" | "id" | "version">): string {
-  return release.platform === "ios"
-    ? `ios-${release.version.trim().replace(/\s+/g, "-")}`
-    : `android-${idSegment(release)}`;
-}
+export const isVersionSlug = (s: string): boolean => VERSION_SLUG.test(s);
 
-/** Oldest first. Android has no version that orders builds within a month; the patch level and build id do. */
+/** Oldest first. Android has no OS version that orders builds within a month; its patch level and build id do. */
 export function compareReleases(a: Release, b: Release): number {
-  if (a.platform !== b.platform) return a.platform.localeCompare(b.platform);
-  if (a.platform === "android") {
-    return (a.patch ?? a.released ?? "").localeCompare(b.patch ?? b.released ?? "") || a.id.localeCompare(b.id);
-  }
-  return compareVersions(a.version, b.version) || (a.released ?? "").localeCompare(b.released ?? "") || a.id.localeCompare(b.id);
+  return compareVersions(a.version, b.version)
+    || (a.patch ?? "").localeCompare(b.patch ?? "")
+    || (a.released ?? "").localeCompare(b.released ?? "")
+    || a.id.localeCompare(b.id);
 }
 
 export const isBeta = (r: Release): boolean => r.prerelease ?? isPrerelease(r.version);
 
-/** Family-level product types name every phone, not one model; only a model makes a variant. */
-const isModelVariant = (productType: string | undefined): boolean =>
-  productType !== undefined && productType !== "iPhone" && productType !== "Watch";
+/** A model the manifest names (`iPhone7,1`); family names (`iPad`, `Watch`) are already the platform. */
+export const modelOf = (productType: string | undefined): string | undefined => (productType?.includes(",") ? productType : undefined);
 
-const sameDevices = (a: readonly string[] | undefined, b: readonly string[] | undefined): boolean =>
-  a === undefined || b === undefined ? a === b : a.length === b.length && a.every((d) => b.includes(d));
-
-/** Device sets overlap; a set that is not stated (iOS) overlaps only another unstated one. */
+/** Device sets overlap; "every device" (undefined) overlaps only itself. */
 function overlaps(a: readonly string[] | undefined, b: readonly string[] | undefined): boolean {
   if (a === undefined || b === undefined) return a === b;
   return a.some((d) => b.includes(d));
 }
 
-function sameArtifact(a: Pick<ReleaseSource, "cid" | "sha">, b: Pick<ReleaseSource, "cid" | "sha">): boolean {
-  return a.cid !== undefined && b.cid !== undefined ? a.cid === b.cid : a.sha === b.sha;
+/** A content while its copies are gathered. `known` is false for an unarchived OTA file. */
+interface Draft {
+  readonly id: string;
+  readonly known: boolean;
+  readonly version: string;
+  /** Undefined: every device. */
+  devices: Set<string> | undefined;
+  readonly images: Map<string, { releases: Release[]; sha: string; cid?: string }>;
+  readonly otas: Map<string, OtaRef[]>;
 }
 
-function sameContent(a: TimelineEntry, b: TimelineEntry): boolean {
-  if (a.cid !== undefined && b.cid !== undefined) return a.cid === b.cid;
-  if (a.sha !== undefined && b.sha !== undefined) return a.sha === b.sha;
-  return a.version === b.version;
-}
+const contentId = (x: { readonly cid?: string | undefined; readonly sha?: string | undefined }): string | undefined =>
+  x.cid !== undefined ? `cid:${x.cid}` : x.sha !== undefined ? `sha:${x.sha}` : undefined;
 
-/** One artifact over consecutive releases (newest first), for one device line. */
-interface ImageRun {
-  readonly newest: Release;
-  readonly releases: Release[];
-  readonly src: ReleaseSource;
-  readonly devices: readonly string[] | undefined;
-}
-
-function imageRuns(key: string, releases: readonly Release[]): ImageRun[] {
-  const runs: ImageRun[] = [];
-  let open: ImageRun[] = [];
-  for (const r of [...releases].sort((a, b) => compareReleases(b, a))) {
-    const srcs = r.sources[key];
-    if (!srcs?.length) continue;
-    const touched: ImageRun[] = [];
-    for (const src of srcs) {
-      const run = open.find((x) => !touched.includes(x) && sameArtifact(x.src, src) && sameDevices(x.devices, src.devices));
-      if (run) {
-        run.releases.push(r);
-        touched.push(run);
-      } else {
-        const fresh: ImageRun = { newest: r, releases: [r], src, devices: src.devices ? [...src.devices] : undefined };
-        runs.push(fresh);
-        touched.push(fresh);
-      }
+function collect(key: string, releases: readonly Release[], refs: readonly OtaRef[]): Draft[] {
+  const drafts = new Map<string, Draft>();
+  /** The draft for a content, with `devices` widened by this copy's (a copy for every device makes it every device's). */
+  const place = (id: string, known: boolean, version: string, devices: readonly string[] | undefined): Draft => {
+    const existing = drafts.get(id);
+    if (!existing) {
+      const d: Draft = { id, known, version, devices: devices ? new Set(devices) : undefined, images: new Map(), otas: new Map() };
+      drafts.set(id, d);
+      return d;
     }
-    open = touched;
-  }
-  return runs;
-}
-
-interface Built { entry: TimelineEntry; release?: Release; rank: number }
-
-function imageEntry(run: ImageRun): Built {
-  const devices = run.devices ? [...run.devices].sort(byPixelRank) : undefined;
-  const flagship = defaultDevice(run.newest.devices);
-  const lead = devices?.[0];
-  const suffix = devices && lead !== undefined && flagship !== undefined && !devices.includes(flagship) ? `-${lead}` : "";
-  const entry: TimelineEntry = {
-    slug: `${imageSlug(run.newest)}${suffix}`,
-    via: "image",
-    version: run.src.version,
-    releases: [...run.releases].sort(compareReleases).map((r) => r.id),
-    sha: run.src.sha,
-    ...(run.src.cid !== undefined ? { cid: run.src.cid } : {}),
-    ...(devices ? { devices } : {}),
-    ...(run.releases.every(isBeta) ? { beta: true } : {}),
-    changed: true,
+    if (devices === undefined) existing.devices = undefined;
+    else if (existing.devices) for (const x of devices) existing.devices.add(x);
+    return existing;
   };
-  return { entry, release: run.newest, rank: lead === undefined ? 0 : pixelRank(lead) };
-}
-
-function otaEntries(key: string, refs: readonly OtaRef[]): Built[] {
-  const byUrl = new Map<string, TimelineEntry>();
-  for (const r of refs) {
-    if (r.source !== key) continue;
-    const known = byUrl.get(r.url);
-    const os = r.os !== "legacy" && r.os !== "" ? [r.os] : [];
-    if (known) {
-      for (const o of os) if (!known.releases.includes(o)) known.releases.push(o);
-      continue;
+  for (const r of releases) {
+    for (const src of r.sources[key] ?? []) {
+      const d = place(contentId(src) ?? `sha:${src.sha}`, true, src.version, src.devices);
+      const copy = d.images.get(src.sha) ?? { releases: [], sha: src.sha, ...(src.cid !== undefined ? { cid: src.cid } : {}) };
+      copy.releases.push(r);
+      d.images.set(src.sha, copy);
     }
-    const model = isModelVariant(r.productType) ? `-${r.productType}` : "";
-    byUrl.set(r.url, {
-      slug: r.os === "legacy" ? "ota-legacy" : `ota-${r.build}${model}`,
-      via: "ota",
-      version: r.build,
-      releases: os,
-      url: r.url,
-      ...(r.sha !== undefined ? { sha: r.sha } : {}),
-      ...(r.sha1 !== undefined ? { sha1: r.sha1 } : {}),
-      ...(r.sha384 !== undefined ? { sha384: r.sha384 } : {}),
-      ...(r.cid !== undefined ? { cid: r.cid } : {}),
-      ...(r.productType !== undefined ? { productType: r.productType } : {}),
-      changed: true,
-    });
   }
-  return [...byUrl.values()].map((e) => ({ entry: { ...e, releases: [...e.releases].sort(compareVersions) }, rank: 0 }));
+  for (const ref of refs) {
+    if (ref.source !== key) continue;
+    const id = contentId(ref);
+    const model = modelOf(ref.productType);
+    const d = place(id ?? `url:${ref.url}`, id !== undefined, ref.build, model === undefined ? undefined : [model]);
+    d.otas.set(ref.url, [...(d.otas.get(ref.url) ?? []), ref]);
+  }
+  return [...drafts.values()];
 }
 
-/** iOS: by bundle version as the phone picks, variants last, image first on a tie. */
-function iosOrder(a: Built, b: Built): number {
-  return Number(isModelVariant(a.entry.productType)) - Number(isModelVariant(b.entry.productType)) ||
-    compareVersions(b.entry.version || "0", a.entry.version || "0") ||
-    Number(b.entry.via === "image") - Number(a.entry.via === "image");
-}
-
-/** Android: by build, newest first; within a build, the newest Pixels' file first. */
-function androidOrder(a: Built, b: Built): number {
-  if (a.release && b.release) return compareReleases(b.release, a.release) || b.rank - a.rank;
-  return 0;
-}
-
-export interface SourceTimeline {
-  readonly entries: TimelineEntry[];
-  /** Newest day any entry changed the content, YYYY-MM-DD; undefined when nothing carries a date. */
-  readonly updated: string | undefined;
-}
-
-/**
- * The timeline of one source, newest first. `releases` may hold every
- * release of every platform; only those of `platform` carrying `key` contribute.
- */
-export function sourceTimeline(key: string, platform: Platform, releases: readonly Release[], refs: readonly OtaRef[]): SourceTimeline {
-  const built = [
-    ...imageRuns(key, releases.filter((r) => r.platform === platform)).map(imageEntry),
-    ...(platform === "ios" ? otaEntries(key, refs) : []),
-  ].sort(platform === "ios" ? iosOrder : androidOrder);
-
-  const changed = built.map(({ entry: e }, i) => {
-    const below = built.slice(i + 1).find(({ entry: x }) => x.productType === e.productType && overlaps(x.devices, e.devices));
-    return below === undefined || !sameContent(e, below.entry);
+function copiesOf(d: Draft): TimelineCopy[] {
+  const images = [...d.images.values()].map((c): TimelineCopy => ({
+    via: "image",
+    releases: [...c.releases].sort(compareReleases).map((r) => r.id),
+    sha: c.sha,
+    ...(c.cid !== undefined ? { cid: c.cid } : {}),
+  }));
+  const otas = [...d.otas.entries()].map(([url, listed]): TimelineCopy => {
+    // One URL is one file: every ref listing it carries the same digests and archive state.
+    const first = listed[0];
+    return {
+      via: "ota",
+      os: [...new Set(listed.map((r) => r.os).filter((os) => os !== "" && os !== "legacy"))].sort(compareVersions),
+      url,
+      ...(first?.sha !== undefined ? { sha: first.sha } : {}),
+      ...(first?.cid !== undefined ? { cid: first.cid } : {}),
+      ...(first?.sha1 !== undefined ? { sha1: first.sha1 } : {}),
+      ...(first?.sha384 !== undefined ? { sha384: first.sha384 } : {}),
+    };
   });
+  return [...images, ...otas];
+}
 
-  const seen = new Map<string, number>();
-  const entries = built.map(({ entry: e, release }, i): TimelineEntry => {
-    const n = (seen.get(e.slug) ?? 0) + 1;
-    seen.set(e.slug, n);
-    const slug = n === 1 ? e.slug : release ? `${e.slug}-${idSegment(release)}` : `${e.slug}-${n}`;
-    return { ...e, slug, changed: changed[i] ?? true };
-  });
+/** Precedence, highest first. */
+function precedence(a: Draft, b: Draft): number {
+  const named = (d: Draft): number => Number(d.devices !== undefined);
+  return named(a) - named(b)
+    || compareVersions(b.version || "0", a.version || "0")
+    || Number(b.images.size > 0) - Number(a.images.size > 0)
+    || a.id.localeCompare(b.id);
+}
 
-  const firstSeen = new Map(refs.filter((r) => r.source === key).map((r) => [r.url, r.firstSeen]));
-  const dates = built.flatMap(({ entry: e, release }, i) => {
-    if (!changed[i]) return [];
-    const day = release ? release.released : e.url !== undefined ? firstSeen.get(e.url) : undefined;
-    return day ? [day.slice(0, 10)] : [];
+/** The 8 hex a `+` slug carries: a stored sha, else Apple's sha1, else the content id. */
+function hash8(d: Draft, copies: readonly TimelineCopy[]): string {
+  const sha = copies.find((c) => c.sha !== undefined)?.sha;
+  const sha1 = copies.flatMap((c) => (c.via === "ota" && c.sha1 !== undefined ? [c.sha1] : []))[0];
+  const hex = (sha ?? sha1 ?? d.id.replace(/[^0-9a-f]/g, "")).toLowerCase();
+  return hex.slice(0, 8).padEnd(8, "0");
+}
+
+const devicesOf = (d: Draft): string[] | undefined => (d.devices ? [...d.devices].sort(byPixelRank) : undefined);
+
+/** The timeline of one source, newest first. `releases` and `refs` may hold everything; only copies of `key` count. */
+export function sourceTimeline(key: string, releases: readonly Release[], refs: readonly OtaRef[]): TimelineEntry[] {
+  const drafts = collect(key, releases, refs).sort(precedence);
+  const taken = new Set<string>();
+  return drafts.map((d, i): TimelineEntry => {
+    const copies = copiesOf(d);
+    const devices = devicesOf(d);
+    const below = drafts.slice(i + 1).find((x) => overlaps(devicesOf(x), devices));
+    const assumedSame = below !== undefined && below.version === d.version && (!d.known || !below.known);
+    const version = d.version || "0";
+    const slug = taken.has(version) ? `${version}+${hash8(d, copies)}` : version;
+    taken.add(slug);
+    const imageReleases = [...d.images.values()].flatMap((c) => c.releases);
+    return {
+      slug,
+      version: d.version,
+      copies,
+      ...(devices !== undefined ? { devices } : {}),
+      beta: d.otas.size === 0 && imageReleases.length > 0 && imageReleases.every(isBeta),
+      changed: below === undefined || !assumedSame,
+    };
   });
-  return { entries, updated: dates.sort().at(-1) };
 }
 
 /* ------------------------------------------------------------ device picks */
-
-/**
- * The entry a page shows when none is named. iOS: the newest plain copy a
- * release carries (beta-only copies and per-model variants are one click
- * away). Android: the newest entry for `device`, by default the newest
- * flagship of the newest build.
- */
-export function headIndex(timeline: readonly TimelineEntry[], device?: string): number {
-  if (timeline.some((e) => e.devices !== undefined)) {
-    const want = device ?? defaultDevice(deviceGroups(timeline).flatMap((g) => g.devices));
-    const i = want === undefined ? -1 : entryForDevice(timeline, want);
-    if (i >= 0) return i;
-  }
-  const i = timeline.findIndex((e) => !isModelVariant(e.productType) && !e.beta);
-  return i >= 0 ? i : Math.max(0, timeline.findIndex((e) => !isModelVariant(e.productType)));
-}
 
 /** Index of the newest non-beta entry that applies to `device` (else the newest at all), or -1. */
 export function entryForDevice(timeline: readonly TimelineEntry[], device: string): number {
@@ -234,20 +176,43 @@ export function entryForDevice(timeline: readonly TimelineEntry[], device: strin
   return i >= 0 ? i : timeline.findIndex(fits);
 }
 
+/**
+ * The entry a page shows when none is named. With `device`, that device's
+ * newest. Otherwise the newest non-beta entry every device gets; for a
+ * timeline whose entries all name devices, the newest for the default device
+ * (./devices.ts: the newest flagship).
+ */
+export function headIndex(timeline: readonly TimelineEntry[], device?: string): number {
+  const everyDevice = timeline.some((e) => e.devices === undefined);
+  const want = device ?? (everyDevice ? undefined : defaultDevice(timeline.flatMap((e) => e.devices ?? [])));
+  if (want !== undefined) {
+    const i = entryForDevice(timeline, want);
+    if (i >= 0) return i;
+  }
+  const i = timeline.findIndex((e) => e.devices === undefined && !e.beta);
+  return i >= 0 ? i : Math.max(0, timeline.findIndex((e) => e.devices === undefined));
+}
+
 export interface DeviceGroup {
-  /** Devices sharing one file in the newest release, newest Pixel first. */
+  /** Devices sharing one file in the newest release carrying the source, newest first. */
   readonly devices: readonly string[];
   /** Their entry in the timeline. */
   readonly index: number;
 }
 
 /**
- * The device groups of the newest release that carries the source: which
- * Pixels share a file today. Empty for timelines without devices (iOS).
+ * Which devices share a file today: the device groups of the newest release
+ * that carries `key`, each with its timeline entry, newest devices first.
+ * Empty when that release has one file for every device.
  */
-export function deviceGroups(timeline: readonly TimelineEntry[]): DeviceGroup[] {
-  const newest = timeline.find((e) => e.devices !== undefined && e.via === "image")?.releases.at(-1);
+export function deviceGroups(key: string, releases: readonly Release[], timeline: readonly TimelineEntry[]): DeviceGroup[] {
+  const newest = releases.filter((r) => (r.sources[key]?.length ?? 0) > 0).sort(compareReleases).at(-1);
   if (newest === undefined) return [];
-  return timeline.flatMap((e, index) =>
-    e.devices !== undefined && e.releases.includes(newest) ? [{ devices: [...e.devices].sort(byPixelRank), index }] : []);
+  const sources: readonly ReleaseSource[] = newest.sources[key] ?? [];
+  const groups = sources.flatMap((src): DeviceGroup[] => {
+    if (src.devices === undefined) return [];
+    const index = timeline.findIndex((e) => e.copies.some((c) => c.via === "image" && c.sha === src.sha && c.releases.includes(newest.id)));
+    return index < 0 ? [] : [{ devices: [...src.devices].sort(byPixelRank), index }];
+  });
+  return groups.sort((a, b) => byPixelRank(a.devices[0] ?? "", b.devices[0] ?? ""));
 }

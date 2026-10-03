@@ -11,7 +11,7 @@
 
 import { decodeCarrierList, decodeCarrierSettings, type CarrierList } from "../../../../src/lib/decode/android/index.ts";
 import { openIpcc } from "../../../../src/lib/decode/index.ts";
-import { androidProfile, iosProfile, type Profile } from "../../../../src/lib/schema/index.ts";
+import { androidProfile, decoderFamily, iosProfile, type Profile } from "../../../../src/lib/schema/index.ts";
 import { keys } from "../../../../src/lib/storage/keys.ts";
 import { fanOut } from "../../../src/fan-out.ts";
 import type { JobContext, JobOutput, R2Client } from "../job.ts";
@@ -54,18 +54,19 @@ export async function normalize(ctx: JobContext<"normalize">): Promise<JobOutput
   const uses = usesBySha(await loadCatalog(ctx.r2));
   const listOf = carrierLists(ctx.r2);
 
+  /** The mapper is the source's platform's; an artifact of another kind under it is not a settings file. */
   async function profileOf(sha: string, use: Use): Promise<Profile | null> {
     const meta = await readRecord(ctx.r2, keys.meta(sha), objMetaSchema);
     if (!meta) throw new Error(`${keys.meta(sha)}: missing`);
-    switch (meta.kind) {
-      case "ios.ipcc":
+    switch (decoderFamily(use.source.platform)) {
+      case "apple":
+        if (meta.kind !== "ios.ipcc") return null;
         return iosProfile(openIpcc(await bytesOf(ctx.r2, sha)), use.source, sha);
-      case "android.carrier_settings": {
+      case "android": {
+        if (meta.kind !== "android.carrier_settings") return null;
         const list = use.carrierList ? await listOf(use.carrierList) : undefined;
         return androidProfile(decodeCarrierSettings(await bytesOf(ctx.r2, sha)), use.source, sha, list);
       }
-      default:
-        return null;
     }
   }
 

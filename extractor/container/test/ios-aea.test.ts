@@ -45,9 +45,8 @@ describe("archiveKey", () => {
     expect(asked).toEqual([KEY_URL]);
   });
 
-  it("takes a key carried in the clear", async () => {
-    const meta = new Map([["encryption_key", new TextEncoder().encode("00ff")]]);
-    expect([...(await archiveKey(meta, () => Promise.reject(new Error("not fetched"))))]).toEqual([0, 255]);
+  it("refuses metadata without the wrapped key", async () => {
+    await expect(archiveKey(new Map(), () => Promise.reject(new Error("not fetched")))).rejects.toThrow(/lacks fcs-response/);
   });
 });
 

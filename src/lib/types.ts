@@ -4,33 +4,35 @@
  */
 
 import type { FileDiff } from "#lib/decode/index.ts";
-import type { Platform, TimelineEntry } from "#lib/schema/types.ts";
+import { KIND_SEGMENT, SOURCE_KINDS, type Platform, type SourceKind, type SourceRef, type TimelineEntry } from "#lib/schema/types.ts";
 
-/**
- * The three lists, and the first segment of every page URL: /carriers/<name>,
- * /countries/<name>, /watch/<name>. `<name>` is an iOS bundle name, or for a
- * carrier with no iOS bundle its Android name (index/carriers.json's slug).
- */
-export const KINDS = ["carriers", "countries", "watch"] as const;
-export type Kind = (typeof KINDS)[number];
+/** The first segment of every page URL, one per kind of source: /carriers, /countries, /defaults. */
+export type Kind = (typeof KIND_SEGMENT)[SourceKind];
+export const KINDS: readonly Kind[] = SOURCE_KINDS.map((k) => KIND_SEGMENT[k]);
 
-/** A page, and a version on it (a timeline slug of either platform). */
+/** The kind of source a URL's first segment names: KIND_SEGMENT the other way. */
+export const SOURCE_KIND = { carriers: "carrier", countries: "country", defaults: "default" } as const satisfies Record<Kind, SourceKind>;
+
+/** A source, and a version of it: what every page under /<kind>/<platform>/<name>/<version>/ is about. */
 export interface At {
-  readonly kind: Kind;
-  readonly name: string;
+  readonly ref: SourceRef;
+  /** The source key. */
+  readonly source: string;
+  /** The timeline slug. */
   readonly version: string;
 }
 
 /**
- * A timeline entry as pages show it: `os` is what its `releases` read as, the
- * OS versions of the images that carry it (an image entry's releases are build
- * ids) or the OTA minimum-OS keys it is published under.
+ * A timeline entry as pages show it, its copies' releases read as OS versions.
  */
 export interface Version extends TimelineEntry {
   readonly platform: Platform;
-  readonly os: readonly string[];
-  /** Android: the marketing names of `devices`, newest first. */
-  readonly phones?: readonly string[] | undefined;
+  /** The OS versions of the images carrying it, oldest first. */
+  readonly images: readonly string[];
+  /** The OS keys Apple's manifest publishes it under. */
+  readonly ota: readonly string[];
+  /** The names of `devices`, newest first; empty when it is for every device. */
+  readonly phones: readonly string[];
 }
 
 /** One part of a modem package diff, under the section it belongs to. */

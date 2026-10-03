@@ -262,50 +262,56 @@ export interface ReleaseSource {
 /* ---------------------------------------------------------------- timeline */
 
 /**
- * One version of a source: one distinct content, however many copies of it
- * exist. Newest first in a timeline. The URL segment is the source's own
- * version (`/carriers/ios/Verizon_LTE/72.0/`), see `slug`.
+ * A version's identity is what each platform actually versions:
+ *
+ * - Apple: the bundle's own version (what Settings › About › Carrier shows).
+ *   Measured on the OTA manifest: 4,434 (bundle, product, build) groups, one
+ *   reused for different content (Hutchison_uk 50.1, re-issued in 2025 with
+ *   five changed override files). Per-phone differences live inside the
+ *   bundle as override files (Profile.variants), so no device dimension.
+ * - Android: (device, CarrierSettings.version). The version is a counter per
+ *   device line, not a content id: across four Pixels of CP3A.260905.009, 479
+ *   of 1,544 (carrier, version) pairs carry different bytes per device.
+ *
+ * Within one line, a reused version keeps its bare form for the newest
+ * content; each older content under it is named by where it first appeared:
+ * `50.1@2022-04-12` (OTA publication date), `64.1@ios-26.0` (first image),
+ * `79000000004@cp3a.260905.009` (first Pixel build). See versionSlug().
  */
+
+/** One version of a source on one line: one distinct content, however many copies of it exist. */
 export interface TimelineEntry {
-  /**
-   * URL segment, unique within the source. The source's own version, as is
-   * (`72.0`, `79000000034`). Copies with the same content (equal cid, or equal
-   * sha) are one entry. Two different contents under one version are rare and
-   * real (an image's merged bundle vs the OTA file of the same build), so the
-   * newer-by-precedence keeps the bare version and each other gets
-   * `<version>+<first 8 hex of its sha or upstream sha1>`, semver's
-   * build-metadata form for "same version, different build".
-   */
-  slug: string;
-  version: string;
-  /** Every copy of this content, image and OTA alike. At least one. */
-  copies: TimelineCopy[];
-  /**
-   * The devices this content is for. Absent: every device of the platform.
-   * Android: the Pixels carrying this file. Apple: the handful of old
-   * model-specific manifest entries (iPhone7,1). `changed` compares against
-   * the previous entry for an overlapping device set, never across them.
-   */
-  devices?: string[];
+  /** URL segment, unique within its line: `72.0`, `50.1@2022-04-12`. */
+  readonly slug: string;
+  readonly version: string;
+  /** Every copy of this content. Non-empty. */
+  readonly copies: readonly TimelineCopy[];
   /** Only ever in beta images: newest, but not what a device on a release runs. */
-  beta: boolean;
-  changed: boolean;
+  readonly beta: boolean;
+  /** False when the content equals the previous entry's on this line. */
+  readonly changed: boolean;
 }
+
+/** Where a copy first appeared, which names a reused version. */
+export type FirstSeen =
+  | { readonly via: "ota"; readonly published: string }      // YYYY-MM-DD, or YYYY (publishedOn)
+  | { readonly via: "image"; readonly release: string };     // `ios-26.0`, `cp3a.260905.009`
 
 /** One place a version's bytes come from. */
 export type TimelineCopy =
   | {
       readonly via: "image";
-      /** Releases carrying it: iOS builds / Pixel builds. */
-      readonly releases: string[];
+      /** Release ids carrying it (iOS builds, Pixel builds), newest first. */
+      readonly releases: readonly string[];
       readonly sha: string;
       readonly cid?: string;
     }
   | {
       readonly via: "ota";
       /** OS keys the manifest lists it under. */
-      readonly os: string[];
+      readonly os: readonly string[];
       readonly url: string;
+      readonly published?: string;
       /** Set once archived to R2; until then the site fetches `url`. */
       readonly sha?: string;
       readonly cid?: string;
@@ -313,7 +319,42 @@ export type TimelineCopy =
       readonly sha384?: string;
     };
 
-/** v1 URL slugs (`ios-27.2`, `ota-58.1`, `ota-58.1-iPad`) -> where they live now, for the site's permanent redirects. */
+/**
+ * A source's history, shaped by its platform's identity (see above). Apple
+ * has one line; the rare model-specific manifest entries (iPhone7,1) are
+ * lines of their own. Android has one line per device.
+ */
+export type Timeline =
+  | {
+      readonly family: "apple";
+      readonly entries: readonly TimelineEntry[];
+      /** Product type -> its own line, for model-specific bundles. */
+      readonly models: Readonly<Record<string, readonly TimelineEntry[]>>;
+    }
+  | {
+      readonly family: "android";
+      /** Pixel codename -> its line. */
+      readonly devices: Readonly<Record<string, readonly TimelineEntry[]>>;
+      /**
+       * sha -> the codename whose URL is canonical for that content (several
+       * Pixels often carry the same file): the newest device carrying it.
+       */
+      readonly canonical: Readonly<Record<string, string>>;
+    };
+
+/** The version segment for an entry: the bare version, or `<version>@<first seen>` when the version is reused. */
+export const versionSlug = (version: string, firstSeen?: FirstSeen): string =>
+  firstSeen === undefined ? version : `${version}@${firstSeen.via === "ota" ? firstSeen.published : firstSeen.release}`;
+
+/**
+ * Where a version lives: `/carriers/ios/Verizon_LTE/72.0`,
+ * `/carriers/android/tmobile_us/tokay/79000000034`. `line` is the Pixel
+ * codename on Android, or the product type of a model-specific Apple bundle.
+ */
+export const versionPath = (s: SourceRef, slug: string, line?: string): string =>
+  [sourcePath(s), ...(line === undefined ? [] : [encodeURIComponent(line)]), encodeURIComponent(slug)].join("/");
+
+/** A v1 URL prefix and the v2 path it permanently redirects to. */
 export interface LegacyRoute {
   readonly from: string;
   readonly to: string;
@@ -323,7 +364,7 @@ export interface LegacyRoute {
 export interface CarrierDoc {
   carrier: Carrier;
   /** sourceKey -> timeline. */
-  timelines: Record<string, TimelineEntry[]>;
+  timelines: Record<string, Timeline>;
   /**
    * sourceKey -> feature states per device group at the head, so a page can say
    * "VoLTE: on for Pixel 8 and later, off on Pixel 6" without opening artifacts.
@@ -338,8 +379,9 @@ export interface DeviceStates {
    * no other group names (iOS: carrier.plist with the newest phone's overrides).
    */
   devices?: string[];
-  /** Timeline entry (slug) the states were read from. */
+  /** The version path segment (and Android line) the states were read from. */
   slug: string;
+  line?: string;
   /** Concept id -> state. */
   states: Record<string, FeatureState>;
 }

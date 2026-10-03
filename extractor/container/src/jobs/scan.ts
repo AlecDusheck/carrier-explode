@@ -17,7 +17,7 @@
 import * as v from "valibot";
 
 import { sha256Hex } from "../../../../src/lib/binary/index.ts";
-import { headIndex, parseSourceKey, PROFILE_SCHEMA, type Json, type Profile } from "../../../../src/lib/schema/index.ts";
+import { decoderFamily, headIndex, parseSourceKey, PROFILE_SCHEMA, type DecoderFamily, type Json, type Profile } from "../../../../src/lib/schema/index.ts";
 import { keys } from "../../../../src/lib/storage/keys.ts";
 import {
   CONCEPTS_FILE, packShards, rareSettings, scanKeys, SCAN_FORMAT, splitRawKey,
@@ -60,6 +60,9 @@ async function loadHeads(ctx: JobContext<"scan">): Promise<ScanSource[]> {
   return [...heads.values()].sort((a, b) => (a.source < b.source ? -1 : a.source > b.source ? 1 : 0));
 }
 
+/** Each decoder family's main settings file, where rarity is judged. */
+const MAIN_FILE = { apple: "carrier.plist", android: "config" } as const satisfies Record<DecoderFamily, string>;
+
 /** iOS signature hash lists and localisations are never worth comparing across sources (as in v1). */
 const scannable = (file: string): boolean => !file.startsWith("signatures/") && !file.includes(".lproj/");
 
@@ -75,11 +78,8 @@ function entryOf(profile: Profile, source: string): ScanEntry {
   }
   files[CONCEPTS_FILE] = Object.fromEntries(Object.entries(profile.concepts).map(([id, c]): [string, Json] =>
     [id, c.state !== undefined ? { value: c.value, state: c.state } : { value: c.value }]));
-  return { source, group: `${profile.source.platform}:${profile.source.kind}`, files };
+  return { source, group: `${profile.source.platform}:${profile.source.kind}`, main: MAIN_FILE[decoderFamily(profile.source.platform)], files };
 }
-
-/** Rarity is judged within each platform's main settings file. */
-const mainFile = (group: string): string => (group.startsWith("ios:") ? "carrier.plist" : "config");
 
 export async function scan(ctx: JobContext<"scan">): Promise<JobOutput<"scan">> {
   const pointer = await readRecord(ctx.r2, scanKeys.pointer(), scanPointerSchema);
@@ -106,7 +106,7 @@ export async function scan(ctx: JobContext<"scan">): Promise<JobOutput<"scan">> 
   const gen = generation(new Date());
   const objects: Array<{ key: string; body: string | Uint8Array }> = [
     { key: scanKeys.sources(gen), body: JSON.stringify({ sources: ok.map((r) => r.head) }) },
-    { key: scanKeys.rare(gen), body: JSON.stringify(rareSettings(ok.map((r) => r.entry), mainFile)) },
+    { key: scanKeys.rare(gen), body: JSON.stringify(rareSettings(ok.map((r) => r.entry))) },
   ];
   for (const [file, { index, data }] of packShards(ok.map((r) => r.entry))) {
     objects.push({ key: scanKeys.fileIndex(gen, file), body: JSON.stringify(index) });

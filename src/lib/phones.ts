@@ -30,12 +30,11 @@ export function phoneList(phones: readonly Phone[]): string {
 }
 
 /**
- * The phone a bundle version means when none is named: a per-model OTA file's
- * (its product type is a model, "iPhone17,1", not a family like "iPad"), else
- * the newest phone of the release it is read against.
+ * The phone a bundle version means when none is named: a model-specific copy's
+ * own model, else the newest phone of the release it is read against.
  */
-export function homePhone(entry: { readonly productType?: string | undefined }, devices: readonly string[]): string | undefined {
-  return entry.productType?.includes(",") ? entry.productType : [...devices].sort(compareProducts).at(-1);
+export function homePhone(entry: { readonly devices?: readonly string[] | undefined }, devices: readonly string[]): string | undefined {
+  return [...(entry.devices ?? devices)].sort(compareProducts).at(-1);
 }
 
 /** The newest named model among phones: the one a group of them is pictured by. */

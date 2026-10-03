@@ -17,23 +17,18 @@ export type BundleKind = "carrier" | "country";
 export interface StoredBundle {
   readonly source: string;
   readonly sha: string;
-  /** CFBundleVersion; empty when the bundle has none (logged). */
+  /** CFBundleVersion. */
   readonly version: string;
   readonly size: number;
   readonly cid: string;
 }
 
-export async function storeBundle(
-  r2: R2Client,
-  kind: BundleKind,
-  b: Bundle,
-  origin: ObjMeta["origin"],
-  log: (message: string) => void,
-): Promise<StoredBundle> {
+/** Every image bundle has an Info.plist with a CFBundleVersion; one without is not a bundle this understands. */
+export async function storeBundle(r2: R2Client, kind: BundleKind, b: Bundle, origin: ObjMeta["origin"]): Promise<StoredBundle> {
+  const version = bundleVersion(b);
+  if (version === undefined) throw new Error(`${b.name}.bundle: no CFBundleVersion in Info.plist`);
   const bytes = packIpcc(b);
   const cid = await contentId(openIpcc(bytes));
   const sha = await r2.putObj(bytes, { kind: "ios.ipcc", cid, origin });
-  const version = bundleVersion(b);
-  if (version === undefined) log(`${b.name}.bundle: no CFBundleVersion in Info.plist`);
-  return { source: sourceKey({ platform: "ios", kind, name: b.name }), sha, version: version ?? "", size: bytes.length, cid };
+  return { source: sourceKey({ platform: "ios", kind, name: b.name }), sha, version, size: bytes.length, cid };
 }
