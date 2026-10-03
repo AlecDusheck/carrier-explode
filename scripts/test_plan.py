@@ -1,5 +1,5 @@
 import unittest
-from plan_system_bundles import beta_candidates, plan, plan_betas
+from plan_system_bundles import beta_candidates, distinct_ipsws, plan, plan_betas, plan_rebuild
 from versions import merge, version_key
 
 fw = lambda v, b, d="iPhone17,1": {"version": v, "buildid": b, "identifier": d}
@@ -83,8 +83,8 @@ class Betas(unittest.TestCase):
     def test_plans_betas_oldest_first_with_apples_link(self):
         got = plan_betas([beta("27.2 beta 2", "24B5089g"), beta("27.2 beta 1", "24B5084k")], "iPhone17,1", 9)
         self.assertEqual([x["version"] for x in got], ["27.2 beta 1", "27.2 beta 2"])
-        self.assertEqual((got[0]["build"], got[0]["device"], got[0]["beta"]), ("24B5084k", "iPhone17,1", True))
-        self.assertEqual(got[0]["url"], "https://updates.cdn-apple.com/iPhone17,1_24B5084k.ipsw")
+        self.assertEqual((got[0]["build"], got[0]["device"], got[0]["label"]), ("24B5084k", "iPhone17,1", got[0]["version"]))
+        self.assertEqual(got[0]["ipsws"][0], {"device": "iPhone17,1", "url": "https://updates.cdn-apple.com/iPhone17,1_24B5084k.ipsw"})
 
     def test_falls_back_to_the_newest_iphone_the_beta_has(self):
         got = plan_betas([beta("28.0 beta 1", "25A5001a", ("iPhone18,1", "iPhone19,2", "iPad16,1"))], "iPhone17,1", 9)
@@ -105,6 +105,25 @@ class Versions(unittest.TestCase):
         got = merge([now, mine])
         self.assertEqual([b["build"] for b in got], ["24B5089g", "24A437"])
         self.assertEqual(got[1]["n"], 2)
+
+
+class Rebuild(unittest.TestCase):
+    def test_every_held_image_oldest_first_keeping_its_name_and_device(self):
+        held = [{"version": "27.2 beta 2", "build": "24C5", "product": "iPhone18,1"},
+                {"version": "27.0", "build": "24A437", "product": "iPhone17,1", "released": "2026-09-15"},
+                {"version": "26.0", "build": "gone", "product": "iPhone17,1"}]
+        urls = {"24C5": [("iPhone18,1", "x"), ("iPhone17,1", "y")], "24A437": [("iPhone17,1", "a"), ("iPhone18,1", "b")]}
+        got = plan_rebuild(held, lambda b: urls.get(b, []))
+        self.assertEqual([(g["version"], g["label"], g["device"]) for g in got], [("27.0", "27.0", "iPhone17,1"), ("27.2 beta 2", "27.2 beta 2", "iPhone18,1")])
+        self.assertEqual(got[0]["ipsws"], [{"device": "iPhone17,1", "url": "a"}, {"device": "iPhone18,1", "url": "b"}])
+        self.assertEqual(got[0]["released"], "2026-09-15")
+
+
+class Ipsws(unittest.TestCase):
+    def test_one_per_file_with_the_planned_device_first_then_newest(self):
+        pairs = [("iPhone16,1", "a"), ("iPhone17,1", "b"), ("iPhone17,2", "b"), ("iPhone18,1", "c"), ("iPhone15,2", "a")]
+        self.assertEqual(distinct_ipsws(pairs, "iPhone17,2"),
+                         [{"device": "iPhone17,2", "url": "b"}, {"device": "iPhone18,1", "url": "c"}, {"device": "iPhone16,1", "url": "a"}])
 
 
 if __name__ == "__main__":

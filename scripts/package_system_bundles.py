@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 """
-Turn the bundle directories pulled out of an IPSW into what the app reads from
-R2. Bundles are keyed by a hash of their contents, so one that did not change
+Turn the bundle directories pulled out of a build's IPSWs into what the app reads
+from R2. A bundle inside an image carries only the override files of the phones
+that image was cut for, so each bundle is the union of its copies in every iPhone
+IPSW of the build, the way an OTA copy carries every phone of its day. Bundles are keyed by a hash of their contents, so one that did not change
 between iOS releases is stored once and "what changed" is a comparison of two
 indexes:
 
@@ -10,7 +12,7 @@ indexes:
     system/<build>/countries.json   every country carrier.plist, decoded
     system/builds.json              every image held, newest first
 
-    package_system_bundles.py --carriers DIR --countries DIR --meta ipsw_metadata.json \
+    package_system_bundles.py --carriers DIR --countries DIR --meta ipsw_metadata.json [...again per IPSW] \
         --out DIR [--builds existing-builds.json] [--have sha1-list.txt] [--version "27.2 beta 2"]
 """
 
@@ -18,6 +20,8 @@ import argparse
 import hashlib
 import json
 import plistlib
+import sys
+import tempfile
 import zipfile
 from datetime import datetime, timezone
 from pathlib import Path
@@ -45,6 +49,26 @@ def content_id(bundle: Path) -> str:
     for f in bundle_files(bundle):
         h.update(f.relative_to(bundle).as_posix().encode() + b"\0" + hashlib.sha256(f.read_bytes()).hexdigest().encode() + b"\n")
     return h.hexdigest()
+
+
+def merge_images(dirs: list[Path], into: Path) -> Path:
+    """
+    One directory of bundles from the same directory in several images: each
+    bundle gets every file any image has. Only the phones' override files should
+    differ between images; any other file that does is reported, and the first
+    image's copy kept.
+    """
+    for d in dirs:
+        for b in sorted(p for p in d.iterdir() if p.is_dir() and p.suffix == ".bundle"):
+            for f in bundle_files(b):
+                rel = f.relative_to(d)
+                dest = into / rel
+                if not dest.exists():
+                    dest.parent.mkdir(parents=True, exist_ok=True)
+                    dest.write_bytes(f.read_bytes())
+                elif dest.read_bytes() != f.read_bytes():
+                    print(f"differs between images, kept the first: {rel}", file=sys.stderr)
+    return into
 
 
 def zip_bundle(bundle: Path, dest: Path) -> None:
@@ -104,9 +128,10 @@ def upload_list(out: Path, files: list[Path]) -> None:
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--carriers", type=Path, required=True)
-    ap.add_argument("--countries", type=Path, required=True)
-    ap.add_argument("--meta", type=Path, required=True, help="output of `ipsw info --json`")
+    # Once per IPSW, in the same order; the first names the image.
+    ap.add_argument("--carriers", type=Path, action="append", required=True)
+    ap.add_argument("--countries", type=Path, action="append", required=True)
+    ap.add_argument("--meta", type=Path, action="append", required=True, help="output of `ipsw info --json`")
     ap.add_argument("--out", type=Path, required=True)
     ap.add_argument("--builds", type=Path, help="current system/builds.json, if any")
     ap.add_argument("--have", type=Path, help="content ids already in the bucket, one per line")
@@ -115,8 +140,16 @@ def main() -> None:
     ap.add_argument("--released", default="", help="the day Apple released the image, YYYY-MM-DD; from the planner")
     a = ap.parse_args()
 
-    meta = json.loads(a.meta.read_text())
+    if not len(a.carriers) == len(a.countries) == len(a.meta):
+        ap.error("one --carriers, --countries and --meta per IPSW")
+    metas = [json.loads(m.read_text()) for m in a.meta]
+    if len({m["build"] for m in metas}) != 1:
+        ap.error("the IPSWs are of different builds")
+    meta = metas[0]
     device = (meta.get("devices") or [{}])[0]
+    work = Path(tempfile.mkdtemp())
+    carriers = merge_images(a.carriers, work / "carriers")
+    countries = merge_images(a.countries, work / "countries")
     index = {
         "scheme": SCHEME,
         "version": a.version or meta["version"],
@@ -125,14 +158,14 @@ def main() -> None:
         "product": device.get("product", ""),
         "extractedAt": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         **({"released": a.released} if a.released else {}),
-        "carriers": package(a.carriers, a.out / "blobs"),
-        "countries": package(a.countries, a.out / "blobs"),
+        "carriers": package(carriers, a.out / "blobs"),
+        "countries": package(countries, a.out / "blobs"),
         "modems": [],
     }
     sysdir = a.out / "system" / index["build"]
     sysdir.mkdir(parents=True, exist_ok=True)
     (sysdir / "index.json").write_text(json.dumps(index, separators=(",", ":")))
-    (sysdir / "countries.json").write_text(json.dumps(carrier_plists(a.countries), separators=(",", ":")))
+    (sysdir / "countries.json").write_text(json.dumps(carrier_plists(countries), separators=(",", ":")))
 
     builds = json.loads(a.builds.read_text()) if a.builds and a.builds.exists() and a.builds.stat().st_size else []
     keys = ("build", "version", "device", "product", "extractedAt", "released", "scheme")
