@@ -1,8 +1,4 @@
-/**
- * ios.plan: which iOS builds to extract, each with every iPhone IPSW, so the
- * Workflow can fan out one ios.ipsw per IPSW and one ios.release per build.
- * "Held" is releases/ios/<build>.json existing. Writes nothing.
- */
+/** ios.plan: the builds to extract, each with every iPhone IPSW. "Held" means releases/ios/<build>.json exists. */
 
 import * as v from "valibot";
 
@@ -12,11 +8,7 @@ import { appledbFirmware, appledbKeys, deviceFirmwares, iphoneCatalog, newestIph
 import { mapLimit } from "../map-limit.ts";
 import { betaCandidates, plan, planBetas, planRebuild, toBuild, type Held, type PlannedBuild } from "./plan.ts";
 
-/**
- * The phone whose IPSW names each image (v1's DEVICE variable): an iPhone 16
- * Pro, recent enough to receive releases for years. Releases it no longer gets
- * are named by the newest iPhone instead.
- */
+/** The phone whose IPSW names each image (v1's DEVICE). */
 export const PREFERRED_DEVICE = "iPhone17,1";
 const DEFAULT_MAX = 3;
 
@@ -24,48 +16,39 @@ const HeldRelease = v.looseObject({
   id: v.string(),
   version: v.string(),
   devices: v.array(v.string()),
-  released: v.optional(v.string()),
+  released: v.exactOptional(v.string()),
+  prerelease: v.boolean(),
 });
 
-/** Every image in the bucket, as the planner compares against. */
 export async function heldReleases(r2: R2Client): Promise<Held[]> {
-  const ids = (await r2.list(keys.releasesPrefix("ios"))).filter((k) => k.endsWith(".json"));
+  const ids = (await r2.list(keys.releases("ios"))).filter((k) => k.endsWith(".json"));
   return mapLimit(ids, 8, async (key) => {
     const r = v.parse(HeldRelease, await r2.getJson(key));
-    return { build: r.id, version: r.version, devices: r.devices, ...(r.released ? { released: r.released } : {}) };
+    return { build: r.id, version: r.version, devices: r.devices, prerelease: r.prerelease, ...(r.released ? { released: r.released } : {}) };
   });
 }
 
-/** The output shape: valibot's inferred types are mutable, PlannedBuild's are not. */
+/** valibot's inferred output is mutable; PlannedBuild is readonly. */
 const toOutput = (b: PlannedBuild): JobOutput<"ios.plan">["builds"][number] => ({ ...b, ipsws: [...b.ipsws] });
 
 async function rebuild(ctx: JobContext<"ios.plan">, held: readonly Held[]): Promise<PlannedBuild[]> {
   const cat = await iphoneCatalog();
-  // Betas are not on ipsw.me: their IPSWs come from AppleDB. One it no longer has is reported, not rebuilt.
+  // ipsw.me lists no betas; AppleDB has their IPSWs.
   const betas = new Map<string, AppleDbEntry>();
   await mapLimit(held.filter((h) => !cat.byBuild.has(h.build)), 4, async (h) => {
-    try {
-      betas.set(h.build, await appledbFirmware(h.build));
-    } catch (e) {
-      ctx.log(`${h.build}: no AppleDB record (${e instanceof Error ? e.message : String(e)})`);
-    }
+    betas.set(h.build, await appledbFirmware(h.build));
   });
   const { builds, missing } = planRebuild(
     held,
     (b) => cat.byBuild.get(b) ?? [...(betas.get(b)?.ipsws ?? [])].map(([device, url]) => ({ device, url })),
     PREFERRED_DEVICE,
   );
-  for (const b of missing) ctx.log(`${b}: no iPhone IPSW found, not rebuilt`);
+  for (const b of missing) ctx.log(`${b}: no iPhone IPSW listed any more, not rebuilt`);
   return builds;
 }
 
-export const runPlan: JobRunner<"ios.plan"> = async (ctx): Promise<JobOutput<"ios.plan">> => {
+async function newBuilds(ctx: JobContext<"ios.plan">, held: readonly Held[], max: number): Promise<PlannedBuild[]> {
   const p = ctx.spec.params;
-  const max = p.max ?? DEFAULT_MAX;
-  const held = await heldReleases(ctx.r2);
-  ctx.log(`${held.length} images held`);
-  if (p.rebuild) return { builds: (await rebuild(ctx, held)).map(toOutput) };
-
   const probe = await newestIphone();
   const preferred = (await deviceFirmwares(PREFERRED_DEVICE)).firmwares;
   const fallback = probe === PREFERRED_DEVICE ? [] : (await deviceFirmwares(probe)).firmwares;
@@ -74,25 +57,27 @@ export const runPlan: JobRunner<"ios.plan"> = async (ctx): Promise<JobOutput<"io
   const builds: PlannedBuild[] = [];
   if (chosen.length) {
     const cat = await iphoneCatalog();
-    for (const c of chosen) {
-      // Chosen from a device's firmware list, so the catalogue built from those lists has it.
-      const pairs = cat.byBuild.get(c.build);
-      if (!pairs) throw new Error(`${c.build}: in ${c.device}'s firmware list but not in the catalogue`);
-      builds.push(toBuild(c, pairs));
+    for (const fw of chosen) {
+      const pairs = cat.byBuild.get(fw.build);
+      if (!pairs) throw new Error(`${fw.build}: in ${fw.device}'s firmware list but not in the catalogue`);
+      builds.push(toBuild(fw, pairs));
     }
   }
+  // Not for one asked-for version; `since` floors releases only.
+  if (p.version !== undefined || p.betas === false || builds.length >= max) return builds;
+  // AppleDB being down must not cost the releases already planned.
+  try {
+    const candidates = betaCandidates(await appledbKeys(), held, [...preferred, ...fallback]);
+    builds.push(...planBetas(await mapLimit(candidates, 4, appledbFirmware), PREFERRED_DEVICE, max - builds.length));
+  } catch (e) {
+    ctx.log(`betas skipped: ${e instanceof Error ? e.message : String(e)}`);
+  }
+  return builds;
+}
 
-  // Not when one version was asked for; `since` is only a floor for releases, and betas are above it anyway.
-  if (p.version === undefined && p.betas !== false && builds.length < max) {
-    // AppleDB being down must never cost a release: betas are best effort, and a failure is logged.
-    try {
-      const candidates = betaCandidates(await appledbKeys(), held, [...preferred, ...fallback]);
-      const entries = await mapLimit(candidates, 4, appledbFirmware);
-      builds.push(...planBetas(entries, PREFERRED_DEVICE, max - builds.length));
-    } catch (e) {
-      ctx.log(`betas skipped: ${e instanceof Error ? e.message : String(e)}`);
-    }
-  }
-  for (const b of builds) ctx.log(`plan: ${b.label} (${b.build}), ${b.ipsws.length} IPSWs`);
+export const runPlan: JobRunner<"ios.plan"> = async (ctx): Promise<JobOutput<"ios.plan">> => {
+  const held = await heldReleases(ctx.r2);
+  const builds = ctx.spec.params.rebuild ? await rebuild(ctx, held) : await newBuilds(ctx, held, ctx.spec.params.max ?? DEFAULT_MAX);
+  for (const b of builds) ctx.log(`${b.label} (${b.build}): ${b.ipsws.length} IPSWs`);
   return { builds: builds.map(toOutput) };
 };

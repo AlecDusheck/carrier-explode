@@ -1,9 +1,4 @@
-/**
- * The firmware catalogues iOS ingest reads: ipsw.me for releases (dates,
- * every iPhone's IPSW links, board configs) and AppleDB for betas, which
- * ipsw.me does not list but AppleDB does, with Apple's own IPSW links. Every
- * response is validated: both are third-party JSON.
- */
+/** Firmware catalogues: ipsw.me for releases and board configs, AppleDB for the betas ipsw.me does not list. */
 
 import * as v from "valibot";
 
