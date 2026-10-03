@@ -1427,6 +1427,17 @@ describe("annotateNv", () => {
   it("recognises the modem's own record of which defaults it holds", () => {
     expect(annotateNv("/mav/bbcfg_file_hash_protocol_static_nv")?.meaning).toMatch(/^Baseband defaults digest:/);
   });
+
+  it("reads band bitmaps, RAT orders and satellite EARFCNs out of their bytes", () => {
+    const hex = (s: string) => Uint8Array.from(s.match(/../g)!, (x) => parseInt(x, 16));
+    const label = (path: string, s: string) => annotateNv(`/nv/item_files/modem/${path}`, undefined, hex(s))?.label;
+    expect(label("lte/rrc/cap/whitelist_ca_combos_with_ulca", "12280020" + "00800000" + "02000000" + "00".repeat(20))).toBe("B2 B5 B12 B14 B30 B48 B66");
+    expect(label("lte/rrc/cap/blacklist_ca_combos_with_nc_combos", "00".repeat(32))).toBe("none");
+    expect(label("nas/hplmn_rat_order", "04000c090503000000000000")).toBe("NR > LTE > WCDMA > GSM");
+    expect(label("nas/mav_pssi_reg_gfnh_allowed_frequencies_per_carrier", "01b80100001a000000e1000000")).toBe("440-26 EARFCN 225");
+    // Bytes that do not fit the layout keep no label rather than a wrong one.
+    expect(label("nas/mav_pssi_reg_gfnh_allowed_frequencies_per_carrier", "02f9010b00d70a00000b00d70af9010000")).toBeUndefined();
+  });
 });
 
 describe("leUint", () => {

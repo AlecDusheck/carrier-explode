@@ -19,6 +19,7 @@
 {:else if v.kind === "empty"}
   <span class="dimtext">empty</span>
 {:else}
+  {#if label}<span class="label">{label}</span>{" "}{/if}
   <button class="chip" onclick={() => (open = !open)}>{open ? "hide" : "hex"}, {v.len} bytes</button>
   {#if open}<pre class="code hex">{hexDump(v.hex)}</pre>{/if}
 {/if}

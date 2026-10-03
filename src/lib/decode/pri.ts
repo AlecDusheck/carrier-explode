@@ -276,8 +276,8 @@ const HEADER_KEYS = new Set(["Carrier ID", "PRI Revision", "PRI Name", "GRI Revi
 /** A decoded value's integer, when it is one that fits a double exactly. */
 const scalar = (v: PriValue) => (v.kind === "int" && v.exact === undefined ? v.int : undefined);
 
-function annotate(path: string, v: PriValue): Omit<PriPathEntry, "path" | "tag" | "value"> {
-  const a = annotateNv(path, scalar(v));
+function annotate(path: string, v: PriValue, raw: Uint8Array): Omit<PriPathEntry, "path" | "tag" | "value"> {
+  const a = annotateNv(path, scalar(v), raw);
   return a ? { ...a, meaning: a.meaning ?? a.name } : {};
 }
 
@@ -378,7 +378,7 @@ export function decodePri(buf: Uint8Array, kind: "der.pri" | "der.gri" = "der.pr
       // "%qu[N]:" / "%s[N]:" declare an N-byte NUL-padded string; without the hint an 8-byte one reads as an integer
       const v = decodeValue(paired ?? new Uint8Array(), path.startsWith("%qu[") || path.startsWith("%s["));
       if (paired) i++;
-      out.efs.push({ path, tag, value: v, ...annotate(path, v) });
+      out.efs.push({ path, tag, value: v, ...annotate(path, v, paired ?? new Uint8Array()) });
       continue;
     }
 

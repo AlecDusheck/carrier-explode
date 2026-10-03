@@ -6,8 +6,9 @@
  * NV number. `decodeNvValue(pathOrItem, n)` turns a scalar into its enum/bit label.
  */
 
-import { maskBits } from "./bytes";
+import { maskBits, u16le, u32le } from "./bytes";
 import type { Confidence } from "./confidence";
+import { bandList } from "./policy";
 
 export type NvType =
   | "bool" | "uint8" | "int8" | "uint16" | "uint32" | "uint64"
@@ -32,7 +33,11 @@ export interface NvInfo {
   family?: string;
 }
 
-type Entry = Omit<NvInfo, "key" | "item" | "family"> & { format?: (n: number) => string };
+type Entry = Omit<NvInfo, "key" | "item" | "family"> & {
+  format?: (n: number) => string;
+  /** Reads a structured value; undefined when the bytes do not fit the layout. */
+  decode?: (b: Uint8Array) => string | undefined;
+};
 
 const e = (
   name: string, meaning: string, type: NvType, confidence: Confidence, source: string,
@@ -52,6 +57,34 @@ const OFF_ON = { 0: "Off", 1: "On" };
 
 /** `[major, minor, patch, 0]` little-endian, e.g. 0x00a10100 -> "0.1.161". */
 const bytesVersion = (n: number) => `${n & 0xff}.${(n >>> 8) & 0xff}.${(n >>> 16) & 0xff}`;
+
+/** 256-bit LTE band bitmap as uint32-LE words: word w, bit b = band 32w + b + 1. */
+function lteBandBitmap(b: Uint8Array): string | undefined {
+  if (!b.length || b.length % 4) return undefined;
+  const bands: number[] = [];
+  for (let w = 0; w < b.length / 4; w++) for (const bit of maskBits(u32le(b, 4 * w))) bands.push(32 * w + bit + 1);
+  return bands.length ? bandList(bands, "lte") : "none";
+}
+
+/** Qualcomm sys_sys_mode_e_type, as RAT lists store it. */
+const SYS_MODE: Record<number, string> = { 2: "CDMA", 3: "GSM", 4: "HDR", 5: "WCDMA", 9: "LTE", 11: "TD-SCDMA", 12: "NR" };
+
+/** uint16 count, then one sys_sys_mode byte per RAT, zero-padded. */
+function ratOrder(b: Uint8Array): string | undefined {
+  const n = b.length >= 2 ? u16le(b, 0) : 0;
+  if (!n || 2 + n > b.length) return undefined;
+  return [...b.subarray(2, 2 + n)].map((x) => SYS_MODE[x] ?? `RAT ${x}`).join(" > ");
+}
+
+/** uint8 count, then {MCC u16, 0 u16, MNC u32, EARFCN u32}; a PLMN with two EARFCNs is two records. */
+function plmnEarfcns(b: Uint8Array): string | undefined {
+  const n = b[0];
+  if (!n || b.length !== 1 + 12 * n) return undefined;
+  return Array.from({ length: n }, (_, i) => {
+    const o = 1 + 12 * i;
+    return `${u16le(b, o)}-${String(u32le(b, o + 4)).padStart(2, "0")} EARFCN ${u32le(b, o + 8)}`;
+  }).join(", ");
+}
 
 /* ------------------------------------------------------------- exact paths */
 
@@ -84,7 +117,10 @@ export const NV_PATHS: Record<string, Entry> = {
   [`${NAS}lte_nas_ignore_mt_csfb_during_volte_call`]: e("Ignore MT CSFB during VoLTE", "Ignore a mobile-terminated CSFB page while a VoLTE call is active", "bool", "high", `${XQCN}; ${PLAIN}`, { values: OFF_ON }),
   [`${NAS}lte_nas_temp_fplmn_backoff_time`]: e("Temporary FPLMN backoff time", "EMM temporary-forbidden-PLMN backoff timer; 0xffffffff = disabled", "uint32", "med", EFST),
   [`${NAS}emm_nas_nv_items`]: e("EMM NAS items", "32-byte EMM configuration blob", "bytes", "med", EFST),
-  [`${NAS}hplmn_rat_order`]: e("HPLMN RAT order", "Home-PLMN RAT search order", "bytes", "low", "name only"),
+  // corpus: 04 00 0c 09 05 03 (T-Mobile); C1 hplmn_rat_order[] lists the same RATs in its own enum
+  [`${NAS}hplmn_rat_order`]: e("HPLMN RAT order", "Home-PLMN RAT search order: uint16 count, then sys_sys_mode RATs", "bytes", "med", `${CORPUS}; C1 apf.pssi.hplmn_rat_order`, { decode: ratOrder }),
+  // corpus: Docomo 01 b801 0000 1a000000 e1000000 = 440-26 on EARFCN 225, as C1 apf.sat.plmn_earfcn_list[] writes it
+  [`${NAS}mav_pssi_reg_gfnh_allowed_frequencies_per_carrier`]: e("Satellite EARFCNs per carrier", "LTE channels the carrier's satellite (GFNH) service may register on, per PLMN", "bytes", "med", `${CORPUS}; C1 apf.sat.plmn_earfcn_list`, { decode: plmnEarfcns }),
   [`${NAS}isr`]: e("ISR", "Idle-mode Signalling Reduction (TS 23.401)", "bool", "med", "name + 3GPP", { values: OFF_ON }),
   [`${NAS}csg_support_configuration`]: e("CSG support", "Closed Subscriber Group (femtocell) support", "uint8", "med", EFST),
   [`${NAS}irat_search_timer`]: e("IRAT search timer", "Inter-RAT search timer", "uint32", "med", EFST),
@@ -92,6 +128,9 @@ export const NV_PATHS: Record<string, Entry> = {
   [`${NAS}nas_lai_change_force_lau_for_emergency`]: e("Force LAU on LAI change (emergency)", "Force a location-area update on LAI change during an emergency call", "bool", "med", EFST, { values: OFF_ON }),
   [`${NAS}tdscdma_op_plmn_list`]: e("TD-SCDMA operator PLMN list", "Packed PLMN list", "bytes", "med", EFST),
   "/nv/item_files/jcdma/jcdma_mode": e("JCDMA mode", "Japan CDMA (KDDI) simplified feature set; plaintext key 'Enable JCDMA'", "bool", "high", PLAIN, { values: OFF_ON }),
+  // corpus: 32 bytes; C1 bc_filters.lte_ulca_band_bitmap[] / lte_disallowed_nc_ca_band_bitmap[] hold the same words in 26 of 28 carriers
+  "/nv/item_files/modem/lte/rrc/cap/whitelist_ca_combos_with_ulca": e("LTE bands with UL CA", "LTE bands allowed in uplink carrier-aggregation combos", "bytes", "med", `${CORPUS}; C1 bc_filters.lte_ulca_band_bitmap`, { decode: lteBandBitmap }),
+  "/nv/item_files/modem/lte/rrc/cap/blacklist_ca_combos_with_nc_combos": e("LTE bands without non-contiguous CA", "LTE bands left out of non-contiguous intra-band CA combos", "bytes", "med", `${CORPUS}; C1 bc_filters.lte_disallowed_nc_ca_band_bitmap`, { decode: lteBandBitmap }),
   "/nv/item_files/modem/lte/rrc/efs/lte_feature_enable": e("LTE feature enable", "LTE RRC capability feature-enable bitmap; bit list unpublished", "bytes", "med", "cacombos.com"),
   "/nv/item_files/modem/lte/rrc/efs/lte_feature_disable": e("LTE feature disable", "LTE RRC capability feature-disable bitmap", "bytes", "med", "cacombos.com"),
   "/nv/item_files/modem/lte/rrc/efs/band_priority_list_v2": e("LTE band priority list", "Prioritised band list for LFS/FFS scans (uint16 array)", "bytes", "med", XQCN),
@@ -366,7 +405,7 @@ function legacy(item: number): NvInfo | undefined {
   };
 }
 
-const strip = ({ format: _f, test: _t, family: _fam, ...rest }: Entry & { test?: RegExp; family?: string }) => rest;
+const strip = ({ format: _f, decode: _d, test: _t, family: _fam, ...rest }: Entry & { test?: RegExp; family?: string }) => rest;
 const base = (p: string) => p.replace(/^%q?u(\[\d+\])?:/, "").split("/").pop() || p;
 
 /** Look up an EFS path (exact, then by family) or a legacy NV item number. */
@@ -396,11 +435,12 @@ export interface NvAnnotation {
   confidence: Confidence;
 }
 
-/** What an NV item or EFS path is and, given its scalar value, what that value means. */
-export function annotateNv(key: string | number, n?: number): NvAnnotation | undefined {
+/** What an NV item or EFS path is and, given its value, what that value means. */
+export function annotateNv(key: string | number, n?: number, bytes?: Uint8Array): NvAnnotation | undefined {
   const d = describeNv(key);
   if (!d) return undefined;
-  const label = n !== undefined ? decodeNvValue(key, n) : undefined;
+  const structured = bytes && typeof key === "string" ? NV_PATHS[key]?.decode?.(bytes) : undefined;
+  const label = structured ?? (n !== undefined ? decodeNvValue(key, n) : undefined);
   return {
     name: d.name,
     ...(d.meaning !== d.name && { meaning: d.meaning }),
