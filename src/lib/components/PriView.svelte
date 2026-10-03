@@ -115,7 +115,7 @@
 {#if pri.featureGroups.length}
   <fieldset class="hgroup">
     <legend>Carrier Configuration Management feature groups</legend>
-    <p class="dimtext note">25 one-byte flags per group. No source names them; under each set flag is which carriers set it, across current bundles.</p>
+    <p class="dimtext note">25 one-byte flags per group. No source names them; under each set flag is which carriers set it, and what the modem does with it where its code shows. The EVDO, UIM and OMA groups are obsolete in the iPhone 17 modem.</p>
     <table class="grid">
       <thead><tr><th>Group</th><th>Flags</th></tr></thead>
       <tbody>
@@ -154,7 +154,7 @@
     <div>
       {#each pri.nvListed as n, i (i)}
         <span class="chip" class:good={n.set} title={n.set ? "value present in this file" : "listed, no value in this file"}
-          ><span class="mono">{n.item}</span>{#if n.name}{" "}{n.name}{/if}</span>
+          ><span class="mono">{n.item}</span>{#if n.name}<span class="sp">{n.name}</span>{/if}</span>
       {/each}
     </div>
   </details>

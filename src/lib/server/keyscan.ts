@@ -185,3 +185,87 @@ export function keyScan(targets: ScanTarget[], rows: TargetRow[], file: string, 
     hits: hits.sort((a, b) => rank(a) - rank(b) || a.name.localeCompare(b.name)),
   };
 }
+
+/* ------------------------------------------------------------------ rarity */
+
+/** `scan/<gen>/_rare.json`: per bundle src, its settings few other bundles of its kind share. */
+export const rareKey = (gen: string) => `scan/${gen}/_rare.json`;
+
+export interface RareSetting {
+  /** Leaf path with array positions as `[*]`, e.g. `apns[*].type-mask`. */
+  path: string;
+  /** The value as `stable()` writes it; absent when the key itself is what is rare. */
+  value?: string;
+  /** Bundles holding this value (or setting this key, for a rare key), this one included. */
+  holders: number;
+  /** Bundles of the same kind with the file. */
+  of: number;
+  /** The other bundles holding it. */
+  with: string[];
+}
+
+/** A path counts as a setting, not an identifier, when its values repeat: few distinct values for many holders. */
+const isSetting = (distinct: number, present: number) => present >= 15 && distinct <= Math.max(4, present / 10);
+
+/**
+ * For every bundle, the carrier.plist settings it shares with at most `max` others of
+ * its kind: keys almost nobody sets, and values almost nobody picks for a key many set.
+ * Identifiers (names, URLs, APNs) are skipped: their values never repeat.
+ */
+export function rareSettings(
+  bundles: Array<{ src: string; kind: string; name: string; flat: Record<string, Flat> }>,
+  file = "carrier.plist", max = 3, keep = 30,
+): Record<string, RareSetting[]> {
+  const norm = (p: string) => p.replace(/\[\d+\]/g, "[*]");
+  const out: Record<string, RareSetting[]> = {};
+  for (const kind of new Set(bundles.map((b) => b.kind))) {
+    const mine = bundles.filter((b) => b.kind === kind && b.flat[file]);
+    // Per bundle: normalised path → the set of values it holds there.
+    const leaves = mine.map((b) => {
+      const m = new Map<string, Set<string>>();
+      for (const [p, v] of Object.entries(b.flat[file])) {
+        const k = norm(p);
+        if (!m.has(k)) m.set(k, new Set());
+        m.get(k)!.add(stable(v));
+      }
+      return m;
+    });
+    // Holder names are kept only while they are few enough to be worth naming.
+    const present = new Map<string, string[]>(), held = new Map<string, string[]>(), distinct = new Map<string, Set<string>>();
+    const add = (m: Map<string, string[]>, k: string, name: string) => {
+      const l = m.get(k) ?? [];
+      if (!m.has(k)) m.set(k, l);
+      l.push(name);
+    };
+    leaves.forEach((m, i) => {
+      for (const [p, vs] of m) {
+        add(present, p, mine[i].name);
+        if (!distinct.has(p)) distinct.set(p, new Set());
+        for (const v of vs) { distinct.get(p)!.add(v); add(held, p + "\0" + v, mine[i].name); }
+      }
+    });
+    const of = mine.length;
+    mine.forEach((b, i) => {
+      const found: RareSetting[] = [];
+      const others = (names: string[]) => names.filter((n) => n !== b.name);
+      for (const [p, vs] of leaves[i]) {
+        const n = present.get(p)!;
+        if (n.length <= max && of >= 50) { found.push({ path: p, holders: n.length, of, with: others(n) }); continue; }
+        if (!isSetting(distinct.get(p)!.size, n.length)) continue;
+        for (const v of vs) {
+          const h = held.get(p + "\0" + v)!;
+          if (h.length <= max) found.push({ path: p, value: v, holders: h.length, of, with: others(h) });
+        }
+      }
+      // A rare key's leaves all say the same thing: keep its shortest path only.
+      found.sort((a, b) => a.holders - b.holders || a.path.length - b.path.length || a.path.localeCompare(b.path));
+      const tops = new Map<string, number>();
+      out[b.src] = found.filter((r) => {
+        const t = topKey(r.path), n = tops.get(t) ?? 0;
+        tops.set(t, n + 1);
+        return r.value !== undefined ? n < 3 : n < 1;
+      }).slice(0, keep);
+    });
+  }
+  return out;
+}

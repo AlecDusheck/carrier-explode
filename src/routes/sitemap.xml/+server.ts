@@ -5,12 +5,12 @@ import { ARTICLES } from "#lib/wiki.ts";
 export async function GET({ url }) {
   const [idx, bb] = await Promise.all([getIndex(), basebandBuilds()]);
   const paths = [
-    "/carriers", "/countries", "/watch", "/cell-broadcast", "/plmn", "/releases", "/wiki",
+    "/carriers", "/countries", "/watch", "/builds", "/compare", "/wiki",
     ...ARTICLES.map((a) => `/wiki/${a.slug}`),
     ...(["carriers", "countries", "watch"] as const).flatMap((kind) =>
       idx[kind].map((e) => `/${kind}/${encodeURIComponent(e.name)}`)),
-    ...idx.builds.map((b) => `/releases/${encodeURIComponent(b.build)}`),
-    ...bb.flatMap((b) => b.families.map((f) => `/baseband/${encodeURIComponent(b.build)}/${encodeURIComponent(f)}`)),
+    ...idx.builds.map((b) => `/builds/${encodeURIComponent(b.build)}`),
+    ...bb.flatMap((b) => b.families.map((f) => `/builds/${encodeURIComponent(b.build)}/${encodeURIComponent(f)}`)),
   ];
   const body = `<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">

@@ -29,7 +29,7 @@
     <span class="dimtext">{bundle.cc.toUpperCase()}</span>
   {/if}
   {#if bundle.related.carriers.length}
-    <a href="#carriers">{bundle.related.carriers.length} carriers</a>
+    <a href={bundleHref(bundle.kind, bundle.name, bundle.entry.slug) + "#carriers"}>{bundle.related.carriers.length} carriers</a>
   {/if}
 {/snippet}
 
@@ -44,14 +44,13 @@
 {#snippet tabs(bundle: Bundle)}
   {@const files = bundle.info.files}
   {@const pri = files.filter((f) => f.kind === "pri-der" || f.kind === "pri-plain").length}
-  {@const images = files.filter((f) => f.kind === "image").length}
+  {@const hasPlist = "carrier.plist" in bundle.quick}
   {@const items = [
-    ["", "Summary"],
-    ...("carrier.plist" in bundle.quick ? [["plist", "carrier.plist"]] : []),
-    ...(pri || bundle.kind === "carriers" ? [["baseband", "Baseband"]] : []),
+    ["", "Overview"],
+    ...(bundle.kind === "countries" && hasPlist && "CellBroadcast" in (bundle.quick["carrier.plist"] as object) ? [["alerts", "Emergency alerts"]] : []),
+    ...(hasPlist ? [["settings", "Settings"]] : []),
+    ...(pri || bundle.kind === "carriers" ? [["modem", "Modem"]] : []),
     ["files", `Files (${files.length})`],
-    ...(images ? [["assets", `Assets (${images})`]] : []),
-    ...(bundle.info.locales.length ? [["strings", `Strings (${bundle.info.locales.length})`]] : []),
     ...(bundle.previous ? [["changes", "Changes"]] : []),
   ]}
   {#each items as [seg, label] (seg)}

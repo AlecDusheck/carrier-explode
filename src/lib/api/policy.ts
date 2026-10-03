@@ -33,6 +33,9 @@ export const QUERIES: Record<QueryName, QueryPolicy> = {
   getBasebandDefaults: { rate: "bundle" },
   getBundleOverrides: { rate: "bundle" },
   getBasebandOverride: { rate: "bundle" },
+  getOverridePlist: { rate: "bundle" },
+  // One cached read of the index run's rarity file.
+  getRare: { rate: "base" },
   // Two bundles or packages and a full diff per miss.
   getComparison: { rate: "diff" },
   getBasebandDiff: { rate: "diff" },

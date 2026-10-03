@@ -1,20 +1,18 @@
 <script lang="ts">
   import type { Snippet } from "svelte";
   import { bandList, filterIntel, type IntelTree } from "#lib/decode/index.ts";
-  import { Folding } from "#lib/ui-state.svelte.ts";
+  import { TreeState } from "#lib/ui-state.svelte.ts";
   import IntelNode from "./IntelNode.svelte";
   import TreeToolbar from "./TreeToolbar.svelte";
 
   // `flat`: the key / value list as the file stores it.
   let { tree, flat }: { tree: IntelTree; flat: Snippet<[string]> } = $props();
 
-  let filter = $state("");
-  let notes = $state(false);
-  let raw = $state(false);
+  // `raw` here is "raw values", not JSON.
+  const st = new TreeState();
   let keys = $state(false);
-  const fold = new Folding();
 
-  const f = $derived(filter.trim().toLowerCase());
+  const f = $derived(st.filter.trim().toLowerCase());
   const nodes = $derived(filterIntel(tree.nodes, f));
   const lte = (b: number[] | undefined) => bandList(b ?? [], "lte");
   const nr = (b: number[] | undefined) => bandList(b ?? [], "nr");
@@ -32,13 +30,13 @@
   const unparsed = $derived(tree.unparsed.filter((u) => !f || (u.key + " " + u.value.raw).toLowerCase().includes(f)));
 </script>
 
-<TreeToolbar bind:filter bind:notes {fold} name="intel-filter" label="filter settings">
-  <button class="btn" class:on={raw} aria-pressed={raw} onclick={() => (raw = !raw)}>Raw values</button>
+<TreeToolbar state={st} json={false} label="filter settings">
+  <button class="btn" class:on={st.raw} aria-pressed={st.raw} onclick={() => (st.raw = !st.raw)}>Raw values</button>
   <button class="btn" class:on={keys} aria-pressed={keys} onclick={() => (keys = !keys)}>Key list</button>
 </TreeToolbar>
 
 {#if keys}
-  {@render flat(filter)}
+  {@render flat(st.filter)}
 {:else}
   {#if reg && (reg.mcc.length || reg.plmn.length)}
     <details class="reg" open>
@@ -76,7 +74,7 @@
 
   <div class="tree">
     {#each nodes as n (n.path)}
-      <IntelNode node={n} {notes} {raw} {fold} filtering={!!f} />
+      <IntelNode node={n} notes={st.notes} raw={st.raw} fold={st.fold} filtering={!!f} />
     {:else}
       <p class="dimtext">Nothing matches.</p>
     {/each}

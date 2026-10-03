@@ -1,30 +1,51 @@
 <script lang="ts">
   import { getRelease } from "#lib/api/bundles.remote.ts";
+  import { getModems } from "#lib/api/tables.remote.ts";
+  import { modemLabel } from "#lib/decode/index.ts";
   import { bundleHref, link } from "#lib/format.ts";
   import { imageSlug } from "#lib/names.ts";
+  import { phoneList } from "#lib/phones.ts";
   import Pane from "#lib/components/Pane.svelte";
 
   let { params } = $props();
 
-  const KINDS = [["carriers", "Carriers"], ["countries", "Countries"]] as const;
+  const KINDS = [["carriers", "Carrier bundles"], ["countries", "Country bundles"]] as const;
 </script>
 
 <div class="view">
   <div class="scroll pad">
     <Pane>
-      {@const r = await getRelease(params.build)}
+      {@const [r, mods] = await Promise.all([getRelease(params.build), getModems(params.build)])}
       {@const slug = imageSlug(r.image.version)}
-      <div class="rowflex">
-        <a class="btn" href={link("/releases")}>Releases</a>
+      <div class="filters">
+        <a class="btn" href={link("/builds")}>iOS builds</a>
         <b>iOS {r.image.version}</b>
         <span class="mono">{r.image.build}</span>
         {#if r.previous}
           <span class="dimtext">since</span>
-          <a href={link("/releases/" + r.previous.build)}>iOS {r.previous.version} ({r.previous.build})</a>
+          <a href={link("/builds/" + r.previous.build)}>iOS {r.previous.version} ({r.previous.build})</a>
         {:else}
           <span class="dimtext">oldest image held</span>
         {/if}
       </div>
+
+      <fieldset class="hgroup">
+        <legend>Modem packages ({mods.modems.length})</legend>
+        <p class="dimtext note">The modem defaults each iPhone starts from before its carrier bundle's modem file.</p>
+        <table class="grid">
+          <thead><tr><th>Modem</th><th>iPhones</th></tr></thead>
+          <tbody>
+            {#each mods.modems as m (m.family)}
+              <tr>
+                <td class="k"><a href={link(`/builds/${params.build}/${m.family}`)}>{modemLabel(m.family)}</a></td>
+                <td>{phoneList(m.devices)}</td>
+              </tr>
+            {:else}
+              <tr><td colspan="2" class="dimtext">No modem packages extracted from this image yet.</td></tr>
+            {/each}
+          </tbody>
+        </table>
+      </fieldset>
 
       {#each KINDS as [kind, title] (kind)}
         {@const d = r[kind]}
@@ -42,7 +63,7 @@
           {/if}
           {#if d.changed.length}
             <table class="grid">
-              <thead><tr><th>Changed</th><th class="num">From</th><th class="num">To</th><th></th></tr></thead>
+              <thead><tr><th>Bundle</th><th class="num">From</th><th class="num">To</th><th></th></tr></thead>
               <tbody>
                 {#each d.changed as c (c.name)}
                   <tr>
@@ -54,6 +75,8 @@
                 {/each}
               </tbody>
             </table>
+          {:else if !d.added.length && !d.removed.length}
+            <p class="dimtext note">Same as the image before.</p>
           {/if}
         </fieldset>
       {/each}

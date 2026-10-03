@@ -1,14 +1,17 @@
 <script module lang="ts">
-  // The guess is for the first look at a list only; never again in the same session.
-  const guessSpent = new Set<string>();
+  // The IP guess is for the first look at each list in a page load; later visits start empty.
+  // Not reactive state: it is read once per guess and written when a guess is shown.
+  const guessShown: Partial<Record<string, true>> = {};
 </script>
 
 <script lang="ts">
-  import { browser } from "$app/env";
+  import { untrack } from "svelte";
+  import { MediaQuery } from "svelte/reactivity";
   import { goto } from "$app/navigation";
   import { page, navigating } from "$app/state";
   import type { Attachment } from "svelte/attachments";
   import { getIndex, guessCarrier, guessCountry } from "#lib/api/bundles.remote.ts";
+  import type { Kind } from "#lib/types.ts";
   import { bundleHref, link } from "#lib/format.ts";
   import { menuTrigger, copyText } from "#lib/ui-state.svelte.ts";
   import Pane from "#lib/components/Pane.svelte";
@@ -20,52 +23,43 @@
 
   // Carriers come from the network the request arrived on, countries from where
   // it arrived from. Watch bundles have neither.
-  async function firstQuery() {
-    const wanted = !params.name && !guessSpent.has(params.kind) && params.kind !== "watch";
-    if (browser) guessSpent.add(params.kind);
-    if (!wanted) return "";
-    const guess = params.kind === "countries" ? await guessCountry() : await guessCarrier();
+  async function guessFor(kind: Kind): Promise<string> {
+    if (kind === "watch" || guessShown[kind]) return "";
+    const guess = kind === "countries" ? await guessCountry() : await guessCarrier();
     if (!guess) return "";
-    const list = (await getIndex())[params.kind];
+    const list = (await getIndex())[kind];
     // The box keeps the bundle's own spelling ("UnitedStates"); the filter lowercases.
     return list.some((c) => matches(c, guess.toLowerCase())) ? guess : "";
   }
 
-  const first = await firstQuery();
-  let guessed = $state(first);
-  let query = $state(first);
+  // Only a list that is the page gets a guess; beside an open bundle it is navigation.
+  // Depends on the kind alone, so moving between bundles keeps whatever was typed.
+  const guess = $derived(untrack(() => params.name) ? "" : await guessFor(params.kind));
+  // The box starts from the guess and resets with it when the list changes; typing overrides it.
+  let query = $derived(guess);
   // Says why the box is not empty, and gets out of the way on the first edit.
-  const fromIp = $derived(!!guessed && query === guessed);
+  const fromIp = $derived(!!guess && query === guess);
+  /** Once a guess has been on screen, that list is not guessed again. */
+  const spend: Attachment = () => {
+    if (fromIp) guessShown[params.kind] = true;
+  };
 
-  // This layout survives the move between two lists, so nothing re-runs on its
-  // own. A carrier search means nothing in the country list: drop it and guess
-  // again for the list now on screen.
-  let listed = "";
-  $effect(() => {
-    const kind = params.kind;
-    if (!listed) return void (listed = kind); // the guess above already covered this one
-    if (kind === listed) return;
-    listed = kind;
-    query = "";
-    guessed = "";
-    firstQuery().then((next) => {
-      if (next && listed === kind) (guessed = next), (query = next);
-    });
-  });
   let drawerOpen = $state(false);
-
   // With nothing selected the list is the page. With a bundle open it is
   // navigation — and on a phone it sits in a closed drawer — so 782 links are
-  // neither rendered nor serialised into the page until something wants them.
-  let wanted = $state(false);
-  $effect(() => {
-    const wide = window.matchMedia("(min-width: 761px)");
-    const check = () => (wanted ||= drawerOpen || wide.matches);
-    check();
-    wide.addEventListener("change", check);
-    return () => wide.removeEventListener("change", check);
-  });
-  const showList = $derived(!params.name || wanted);
+  // neither rendered nor serialised into the page until something wants them:
+  // a wide screen, or the drawer opened once.
+  const wide = new MediaQuery("min-width: 761px", false);
+  let drawerUsed = $state(false);
+  const showList = $derived(!params.name || wide.current || drawerUsed);
+
+  // On a phone the list is the page until a landing view is asked for: the SIM
+  // lookup (`?q=`) or the alerts table (`?view=`). On a wide screen both show at once.
+  const landing = $derived(page.url.searchParams.has("q") || page.url.searchParams.has("view"));
+  const LANDING: Partial<Record<Kind, [string, string]>> = {
+    carriers: ["?q=", "Find the bundle for a SIM"],
+    countries: ["?view=country", "Emergency alerts by country"],
+  };
 
   // Carrier and Watch lists can put the most recently changed bundles first; countries stay A-Z.
   let byUpdated = $state(true);
@@ -94,10 +88,21 @@
 </script>
 
 <!-- With nothing selected, a phone shows the list as the page instead of hiding it in the drawer. -->
-<div class="split" class:browsing={!params.name}>
+<div class="split" class:browsing={!params.name && !landing}>
   <div class="pane-left" class:open={drawerOpen}>
+    {#if params.kind !== "countries"}
+      <!-- Watch bundles are carrier bundles for another device: one list, two families. -->
+      <div class="family">
+        <a class="btn" href={link("/carriers")} aria-current={params.kind === "carriers" ? "page" : undefined}>iPhone</a>
+        <a class="btn" href={link("/watch")} aria-current={params.kind === "watch" ? "page" : undefined}>Apple Watch</a>
+      </div>
+    {/if}
+    {#if !params.name && LANDING[params.kind]}
+      {@const [q, text] = LANDING[params.kind]!}
+      <a class="btn landing-link" href={link("/" + params.kind) + q}>{text}</a>
+    {/if}
     <div class="find">
-      <input class="grow" type="search" name="find" placeholder="find" aria-label="find in {params.kind}" bind:value={query} />
+      <input class="grow" type="search" name="find" placeholder="find" aria-label="find in {params.kind}" bind:value={query} {@attach spend} />
       {#if fromIp}<span class="dimtext from-ip" title="Guessed from your IP address">from IP</span>{/if}
       <button class="btn drawer-btn" onclick={() => (drawerOpen = false)}>Close</button>
     </div>
@@ -147,7 +152,7 @@
 
   <div class="pane-right">
     <div class="toolbar drawer-bar">
-      <button class="btn drawer-btn drawer-open" onclick={() => (drawerOpen = true)}>{label}</button>
+      <button class="btn drawer-btn drawer-open" onclick={() => ((drawerOpen = true), (drawerUsed = true))}>{label}</button>
     </div>
     {@render children()}
   </div>
@@ -155,6 +160,13 @@
 
 <style>
   .find { padding: 6px; display: flex; gap: 6px; }
+  .family { display: flex; gap: 4px; padding: 6px 6px 0; }
+  .family .btn { flex: 1; text-align: center; }
+  /* Wide screens show the landing view beside the list already. */
+  .landing-link { display: none; margin: 6px 6px 0; text-align: center; }
+  @media (max-width: 760px) {
+    .landing-link { display: block; }
+  }
   .from-ip { align-self: center; }
   .list-box { margin: 0 6px 6px; }
   .list-status { padding: 2px 6px 6px; }

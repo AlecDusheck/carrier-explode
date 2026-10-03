@@ -48,7 +48,7 @@
   {#if others.length}
     <div class="rowflex elsewhere">
       <span class="dimtext">{family} in</span>
-      {#each others as b (b.build)}<a class="chip" href={link(`/baseband/${b.build}/${family}`)}>iOS {b.version}</a>{/each}
+      {#each others as b (b.build)}<a class="chip" href={link(`/builds/${b.build}/${family}`)}>iOS {b.version}</a>{/each}
     </div>
   {/if}
 </fieldset>

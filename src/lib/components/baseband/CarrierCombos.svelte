@@ -71,7 +71,6 @@
 
 <style>
   .carrier { border-top: 1px solid var(--shadow); padding: 6px 0; scroll-margin-top: 8px; }
-  .carrier h3 { margin: 0 0 4px; font-size: 13px; }
   .carrier .rowflex { margin-bottom: 4px; }
   .carrier details { margin-bottom: 4px; }
   @media (max-width: 760px) {

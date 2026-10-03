@@ -29,7 +29,7 @@
 <fieldset class="hgroup" id="networks">
   <legend>Network databases</legend>
   {#each scans as d (d.sha1)}
-    <h4>Where 5G looks, by country <span class="dimtext mono">{dbName(d.path)}</span></h4>
+    <h3>Where 5G looks, by country <span class="dimtext mono">{dbName(d.path)}</span></h3>
     <p class="dimtext note">NR frequency ranges the modem scans per country. A band is named where one band holds every range.</p>
     <div class="hscroll">
       <table class="grid">
@@ -54,7 +54,7 @@
     <div class="rowflex dimtext"><span>Key: meaning unknown, not a band number.</span><Confidence c="unknown" /> <span>Serves</span> <Variants variants={d.variants} configs={d.configs} /></div>
   {/each}
   {#if feats.length}
-    <h4>Features per network <Confidence c="unknown" /></h4>
+    <h3>Features per network <Confidence c="unknown" /></h3>
     <p class="dimtext note">plmn2features: feature id = value per network. The ids are unnamed.</p>
     <div class="hscroll">
       <table class="grid">
@@ -81,7 +81,7 @@
     </div>
   {/if}
   {#if mdb.settings.length}
-    <h4>Modem settings</h4>
+    <h3>Modem settings</h3>
     <div class="hscroll">
       <table class="grid">
         <thead><tr><th>Setting</th><th>Value</th><th>Serves</th></tr></thead>

@@ -8,7 +8,7 @@
 
 {#snippet fields(line: SsgccsLine, keyed: boolean)}
   {@const one = line.fields.every((f) => f.confidence === line.fields[0]?.confidence)}
-  <h4>{line.title}{#if keyed}<span class="dimtext mono sp">{line.key}</span>{/if}{#if one}{" "}<Confidence c={line.fields[0]?.confidence} />{/if}</h4>
+  <h3>{line.title}{#if keyed}<span class="dimtext mono sp">{line.key}</span>{/if}{#if one}<span class="sp"><Confidence c={line.fields[0]?.confidence} /></span>{/if}</h3>
   <div class="hscroll">
     <table class="grid fit">
       <tbody>

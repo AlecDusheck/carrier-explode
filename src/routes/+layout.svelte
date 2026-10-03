@@ -14,12 +14,8 @@
   const MENU: Array<[string, string]> = [
     ["/carriers", "Carriers"],
     ["/countries", "Countries"],
-    ["/watch", "Watch"],
-    ["/cell-broadcast", "Cell Broadcast"],
-    ["/plmn", "PLMN"],
-    ["/baseband", "Baseband"],
+    ["/builds", "iOS builds"],
     ["/compare", "Compare"],
-    ["/releases", "Releases"],
     ["/wiki", "Wiki"],
   ];
 
@@ -52,7 +48,7 @@
     <nav class="menubar">
       {#each MENU as [href, label] (href)}
         <!-- Compared unresolved: during SSR link() is relative to the page. -->
-        <a href={link(href)} aria-current={here === href || here.startsWith(href + "/") ? "page" : undefined}>{label}</a>
+        <a href={link(href)} aria-current={here === href || here.startsWith(href + "/") || (href === "/carriers" && (here === "/watch" || here.startsWith("/watch/"))) ? "page" : undefined}>{label}</a>
       {/each}
     </nav>
 

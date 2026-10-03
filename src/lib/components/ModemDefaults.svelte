@@ -26,15 +26,13 @@
   {#if d.missing}
     {#if d.build}<p class="dimtext note">No {phone} modem package stored for {d.build}.</p>{/if}
   {:else if d.tags.length || d.overrides.length}
-    {@const pkg = link(`/baseband/${d.build}/${d.family}`)}
-    <fieldset class="hgroup" id="modem">
-      <legend>Modem defaults</legend>
-      <p class="dimtext note">
-        From the <a href={pkg}>iOS {d.version} {modemLabel(d.family)} package</a>, before this bundle's .der.pri.
-      </p>
-
-      {#if d.tags.length}
-        <h4>Band combos</h4>
+    {@const pkg = link(`/builds/${d.build}/${d.family}`)}
+    {#if d.tags.length}
+      <fieldset class="hgroup" id="modem">
+        <legend>Band combos</legend>
+        <p class="dimtext note">
+          What the <a href={pkg}>iOS {d.version} {modemLabel(d.family)} package</a> advertises on this carrier's networks.
+        </p>
         {#each d.tags as t (t.tag)}
           <div class="rowflex">
             <a class="chip" href="{pkg}#{t.tag}"><b>{t.tag}</b></a>
@@ -42,10 +40,13 @@
           </div>
           <ComboStatsTable rows={t.sets} />
         {/each}
-      {/if}
+      </fieldset>
+    {/if}
 
+    <fieldset class="hgroup">
+      <legend>Modem defaults this file replaces</legend>
+      <p class="dimtext note">Files the <a href={pkg}>package</a> ships at the EFS paths this bundle's .der.pri writes.</p>
       {#if d.overrides.length}
-        <h4>Package files this bundle replaces</h4>
         <!-- The .der.pri column only earns its place when more than one file is in play. -->
         {@const several = new Set(d.overrides.map((o) => o.pri)).size > 1}
         <div class="hscroll">
@@ -68,6 +69,8 @@
             </tbody>
           </table>
         </div>
+      {:else}
+        <p class="dimtext note">It writes none of the package's files.</p>
       {/if}
       {#if d.otherXml}<p class="dimtext note">{d.otherXml} more XML values set paths the package leaves unset.</p>{/if}
 
@@ -105,7 +108,6 @@
 </Pane>
 
 <style>
-  h4 { margin: 8px 0 4px; }
   .rowflex { margin: 4px 0; }
   .override { margin-top: 8px; scroll-margin-top: 8px; }
   .sides { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 6px 0; }

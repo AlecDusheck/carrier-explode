@@ -13,19 +13,21 @@
   {#if open}<pre class="code">{v.xml}</pre>{/if}
 {:else if v.kind === "int"}
   <!-- The stored bytes stay a hover away; hex is shown only where it reads better than decimal (bitmaps). -->
-  <span class="mono" title="0x{v.hex}, {v.len} bytes little-endian">{v.exact ?? v.int}{#if label}{" "}<span class="label">= {label}</span>{/if}{#if wide(v)}{" "}<span class="dimtext">0x{v.hex}</span>{/if}</span>
+  <span class="mono" title="0x{v.hex}, {v.len} bytes little-endian">{v.exact ?? v.int}{#if label}<span class="label after">= {label}</span>{/if}{#if wide(v)}<span class="dimtext after">0x{v.hex}</span>{/if}</span>
 {:else if v.kind === "string"}
-  <span class="mono">"{v.text}"</span>{#if label}{" "}<span class="label">= {label}</span>{/if}
+  <span class="mono">"{v.text}"</span>{#if label}<span class="label after">= {label}</span>{/if}
 {:else if v.kind === "empty"}
   <span class="dimtext">empty</span>
 {:else}
-  {#if label}<span class="label">{label}</span>{" "}{/if}
+  {#if label}<span class="label before">{label}</span>{/if}
   <button class="chip" onclick={() => (open = !open)}>{open ? "hide" : "hex"}, {v.len} bytes</button>
   {#if open}<pre class="code hex">{hexDump(v.hex)}</pre>{/if}
 {/if}
 
 <style>
   .label { font-family: var(--ui); color: var(--meaning); }
+  .after { margin-left: 0.5ch; }
+  .before { margin-right: 0.5ch; }
   /* Strings can be whole XML documents or long tokens; they wrap inside the cell. */
   .mono { overflow-wrap: anywhere; }
 </style>

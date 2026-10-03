@@ -10,7 +10,7 @@
 <fieldset class="hgroup" id="configs">
   <legend>Modem configs and containers</legend>
   {#if bb.modemConfigs}
-    <h4>Built into the modem image (qdsp6sw.mbn)</h4>
+    <h3>Built into the modem image (qdsp6sw.mbn)</h3>
     <div class="hscroll">
       <table class="grid">
         <thead><tr><th>Label</th><th>Type</th><th>Version</th><th>Capability</th><th>Files</th></tr></thead>

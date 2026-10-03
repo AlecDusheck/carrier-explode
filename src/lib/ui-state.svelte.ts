@@ -82,6 +82,14 @@ export class Folding {
   }
 }
 
+/** What one toolbar controls; several trees on a page can share it. */
+export class TreeState {
+  filter = $state("");
+  notes = $state(false);
+  raw = $state(false);
+  fold = new Folding();
+}
+
 /** Adds `key` to the set, or removes it when it is there. */
 export function toggleIn<T>(set: Set<T>, key: T) {
   if (!set.delete(key)) set.add(key);

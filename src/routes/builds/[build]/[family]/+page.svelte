@@ -39,6 +39,7 @@
     {@const others = builds.filter((b) => b.families.includes(params.family) && b.build !== params.build)}
     {@const modem = mods.modems.find((x) => x.family === params.family)}
     <div class="toolbar">
+      <a class="btn" href={link(`/builds/${params.build}`)}>iOS {mods.version}</a>
       <label class="lbl">
         Image
         <select
@@ -46,7 +47,7 @@
           value={params.build}
           onchange={(e) => {
             const b = builds.find((x) => x.build === e.currentTarget.value);
-            if (b) goto(link(`/baseband/${b.build}` + (b.families.includes(params.family) ? `/${params.family}` : "")));
+            if (b) goto(link(`/builds/${b.build}` + (b.families.includes(params.family) ? `/${params.family}` : "")));
           }}
         >
           {#if !builds.some((b) => b.build === params.build)}<option value={params.build}>{params.build}</option>{/if}

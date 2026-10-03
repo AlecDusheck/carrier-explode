@@ -247,6 +247,14 @@ th.sticky-col { z-index: 3; }
 /* Long camel-case keys break inside the pane instead of running past it. */
 .tree .row > span { min-width: 0; }
 .tree .key { overflow-wrap: anywhere; text-align: left; }
+/* Where a value came from, or how rare it is, beside its key. */
+.badge {
+  display: inline-block; margin-left: 5px; padding: 0 4px; font: 10px/14px var(--ui); font-weight: normal;
+  border: 1px solid var(--shadow); background: var(--face-hi); color: var(--text-dim); vertical-align: 1px; white-space: nowrap;
+}
+.badge.phone { border-color: #7d98c4; background: #e8eef8; color: #1e3d6e; }
+.badge.rare { border-color: var(--warn-border); background: var(--warn-bg); color: #6b4a00; }
+.badge.country { border-color: var(--good-border); background: var(--good-bg); color: #1f5130; }
 .tree .val { color: #14442a; word-break: break-word; }
 .tree .val.str { color: #7a2f2f; }
 .tree .val.num { color: #1f3f8a; }
@@ -287,9 +295,10 @@ fieldset.hgroup {
 fieldset.hgroup > legend { font-weight: bold; padding: 0 4px; }
 /* Sections linked from a page's toolbar. */
 fieldset.hgroup[id] { scroll-margin-top: 8px; }
-fieldset.hgroup h4 { margin: 8px 0 4px; }
+/* A section holding several tables: one level of subheading, the same everywhere. */
+fieldset.hgroup h3 { font-size: 12px; margin: 10px 0 4px; }
+fieldset.hgroup h3:first-of-type { margin-top: 2px; }
 .prose { margin: 0 0 6px; max-width: 70ch; line-height: 1.45; }
-.sp { margin-left: 0.6ch; }
 .chip {
   display: inline-block; border: 1px solid var(--shadow); background: var(--face-hi);
   padding: 0 5px; margin: 1px 3px 1px 0; font-size: 11px; white-space: nowrap;
@@ -297,6 +306,8 @@ fieldset.hgroup h4 { margin: 8px 0 4px; }
 .chip.good { background: var(--good-bg); border-color: var(--good-border); }
 .chip.bad { background: var(--bad-bg); border-color: var(--bad-border); }
 .chip.warn { background: var(--warn-bg); border-color: var(--warn-border); }
+/* A gap before an inline item; after .chip so a chip can have one too. */
+.sp { margin-left: 0.6ch; }
 button.chip { cursor: pointer; font-family: inherit; }
 a.chip { color: inherit; text-decoration: none; }
 a.chip:hover { border-color: var(--dark); }

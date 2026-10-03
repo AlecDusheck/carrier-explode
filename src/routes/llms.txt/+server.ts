@@ -17,13 +17,10 @@ ${CARRIERS.map(entry).join("\n")}
 
 ## Data
 
-- [Carrier bundles](${url.origin}/carriers): every carrier bundle, each with its full version history and decoded files
-- [Country bundles](${url.origin}/countries): per-country bundles, mostly emergency alert settings
+- [Carrier bundles](${url.origin}/carriers): every carrier bundle, and a lookup from MCC-MNC, ICCID prefix or carrier ID to the bundle a SIM loads (\`/carriers?q=310410\`)
+- [Country bundles](${url.origin}/countries): per-country bundles, and every country's emergency alerts side by side
 - [Apple Watch bundles](${url.origin}/watch)
-- [Cell broadcast](${url.origin}/cell-broadcast): emergency alert channels and names by country
-- [PLMN](${url.origin}/plmn): MCC/MNC to network
-- [Baseband](${url.origin}/baseband): modem firmware in each iOS image
-- [Releases](${url.origin}/releases): bundles added and changed in each iOS build
+- [iOS builds](${url.origin}/builds): bundles added and changed in each iOS build, and the modem firmware each one ships
 - [Sitemap](${url.origin}/sitemap.xml)
 
 ## Bundle pages
@@ -31,7 +28,10 @@ ${CARRIERS.map(entry).join("\n")}
 Every bundle file is shown decoded. \`<kind>\` is \`carriers\`, \`countries\` or \`watch\`; \`<version>\` is \`ota-<build>\` for a published download (\`ota-72.1\`) or \`ios-<iOS version>\` for the copy inside an iOS image (\`ios-27.0.1\`, \`ios-27.2-beta-2\`).
 
 - \`/<kind>/<name>\`: versions, newest first
-- \`/<kind>/<name>/<version>/plist\`: carrier.plist
+- \`/<kind>/<name>/<version>/settings\`: carrier.plist with a phone's overrides (\`?file=overrides_<phones>.der.pri\`), marking what few other bundles share
+- \`/<kind>/<name>/<version>/modem\`: a phone's modem override file decoded, and the modem defaults it replaces
+- \`/countries/<name>/<version>/alerts\`: a country's emergency alert switches and message IDs
+- \`/<kind>/<name>/<tab>\`: a tab of the current version, e.g. \`/carriers/ATT_US/settings\`
 - \`/<kind>/<name>/<version>/files\`: every file, with the phones each overrides pair is for
 - \`/<kind>/<name>/<version>/files/<path>\`: one file, e.g. \`files/overrides_D93_D94_D47_D48.plist\`
 - \`/<kind>/<name>/<version>/changes\`: what changed since the previous version

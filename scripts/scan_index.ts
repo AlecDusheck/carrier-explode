@@ -22,7 +22,7 @@ import { parseArgs } from "node:util";
 import { flattenBundle, openIpcc } from "#lib/decode/index.ts";
 import { MANIFEST_URL, manifestTables, parseManifest } from "#lib/server/manifest.ts";
 import { buildTimeline, headIndex, type ImageIndex } from "#lib/server/timeline.ts";
-import { POINTER_KEY, bundlesKey, fileDataKey, fileIndexKey, packShards, type ScanPointer } from "#lib/server/keyscan.ts";
+import { POINTER_KEY, bundlesKey, fileDataKey, fileIndexKey, packShards, rareKey, rareSettings, type ScanPointer } from "#lib/server/keyscan.ts";
 
 interface Head { kind: "carriers" | "countries"; name: string; src: string }
 
@@ -121,13 +121,15 @@ async function build() {
     return bytes;
   };
 
-  const flats: Array<{ src: string; flat: ReturnType<typeof flattenBundle> }> = [];
+  const headOf = new Map(heads.map((h) => [h.src, h]));
+  const flats: Array<{ src: string; kind: string; name: string; flat: ReturnType<typeof flattenBundle> }> = [];
   const failed: string[] = [];
   const queue = [...new Set(heads.map((h) => h.src))];
   await Promise.all(Array.from({ length: 12 }, async () => {
     for (let src = queue.shift(); src; src = queue.shift()) {
       try {
-        flats.push({ src, flat: scannable(flattenBundle(openIpcc(await load(src)))) });
+        const { kind, name } = headOf.get(src)!;
+        flats.push({ src, kind, name, flat: scannable(flattenBundle(openIpcc(await load(src)))) });
       } catch (e) {
         failed.push(src);
         console.error(`skip ${src}: ${e instanceof Error ? e.message : e}`);
@@ -139,6 +141,7 @@ async function build() {
   const objects: Array<{ key: string; body: string | Uint8Array }> = [
     { key: bundlesKey(gen), body: JSON.stringify({ srcs: flats.map((f) => f.src) }) },
   ];
+  objects.push({ key: rareKey(gen), body: JSON.stringify(rareSettings(flats)) });
   for (const [file, { index, data }] of packShards(flats)) {
     objects.push({ key: fileIndexKey(gen, file), body: JSON.stringify(index) });
     objects.push({ key: fileDataKey(gen, file), body: data });

@@ -7,5 +7,5 @@ export const load = async () => {
   if (!b) error(404, "No images held.");
   const { modems } = await getModems(b.build);
   const m = defaultModem(modems);
-  redirect(307, m ? `/baseband/${b.build}/${m.family}` : `/baseband/${b.build}`);
+  redirect(307, m ? `/builds/${b.build}/${m.family}` : `/builds/${b.build}`);
 };

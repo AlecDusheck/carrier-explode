@@ -16,7 +16,7 @@ import { buildLabel, carrierName, countryDisplay, versionLabel } from "./names";
 
 export const SITE = "carrier-explode";
 
-type Params = { kind?: string; name?: string; version?: string; path?: string; build?: string; family?: string; country?: string };
+type Params = { kind?: string; name?: string; version?: string; path?: string; build?: string; family?: string };
 type Meta = { title: string; description: string };
 
 // Google shows about 60 characters of title and 155 of description, and
@@ -60,13 +60,18 @@ function who(p: Params) {
 
 // `what` runs straight into `terms` when there are any.
 const TABS: Record<string, { title: string; what: string; terms?: string[] }> = {
-  plist: { title: "carrier.plist", what: "carrier.plist, every key decoded" },
-  baseband: {
-    title: "baseband .pri overrides", what: "modem overrides (.der.pri) per iPhone decoded into ",
-    terms: ["NV items", "EFS paths", "carrier configuration bitfields"],
+  settings: {
+    title: "settings", what: "carrier.plist with each iPhone's overrides, every key decoded: ",
+    terms: ["APN", "VoLTE", "5G", "Wi-Fi Calling", "what only this carrier sets"],
   },
-  assets: { title: "status bar logos", what: "status bar logos and images, as PNG" },
-  strings: { title: "localized strings", what: "localized carrier strings in every language it ships" },
+  modem: {
+    title: "modem settings", what: "modem overrides (.der.pri) per iPhone decoded into ",
+    terms: ["NV items", "EFS paths", "band combos", "carrier configuration bitfields"],
+  },
+  alerts: {
+    title: "emergency alerts", what: "emergency alert switches and ",
+    terms: ["cell broadcast message IDs", "which alerts you can turn off", "alert titles"],
+  },
   changes: { title: "what changed", what: "every setting changed since the version before, key by key" },
   files: { title: "files", what: "every file in the bundle" },
 };
@@ -77,7 +82,7 @@ function bundle(id: string, p: Params): Meta {
 
   if (p.version) {
     const v = versionLabel(p.version);
-    const tab = /\/\[version\]\/(\w+)/.exec(id)?.[1];
+    const tab = /\/\[version=version\]\/(\w+)/.exec(id)?.[1];
 
     if (p.path) {
       return {
@@ -88,7 +93,7 @@ function bundle(id: string, p: Params): Meta {
     const t = tab && TABS[tab];
     if (t) {
       return {
-        title: fit(TITLE_MAX, `${n} ${t.title} — ${v}`, `${n} ${t.title}`, `${n} — ${t.title}`),
+        title: fit(TITLE_MAX, `${n} ${t.title} — ${v}`, `${n} ${t.title}`, `${n} — ${t.title}`, n),
         description: listing(`${w.full} ${w.noun} ${n}, ${v}: ${t.what}`, t.terms ? t.terms : [], "."),
       };
     }
@@ -113,7 +118,7 @@ function bundle(id: string, p: Params): Meta {
 export function seo(id: string | null, p: Params): Meta {
   if (p.name) return bundle(id ?? "", p);
 
-  if (p.build && p.family && id?.startsWith("/baseband")) {
+  if (p.build && p.family && id?.startsWith("/builds")) {
     const ios = buildLabel(p.build);
     const f = p.family;
     const named = modemName(f);
@@ -129,28 +134,11 @@ export function seo(id: string | null, p: Params): Meta {
           : `The ${short} modem package in ${ios} build ${p.build}: its version, the iPhones it serves, and why it holds no plaintext config.`,
     };
   }
-  if (p.build && id?.startsWith("/baseband")) {
-    const ios = buildLabel(p.build);
-    return {
-      title: fit(TITLE_MAX, `${ios} (${p.build}) baseband modem config`, `${ios} baseband modem config`, `${p.build} baseband`),
-      description: listing(`Every modem package in ${ios} build ${p.build}, one per iPhone modem, decoded: `,
-        ["band combos per carrier", "policyman rules", "A-MPR power tables", "modem configs", "what changed"]),
-    };
-  }
   if (p.build) {
     const ios = buildLabel(p.build);
     return {
-      title: `${ios} (${p.build}) carrier bundle changes`,
-      description: `Carrier and country bundles added, removed and changed in ${ios} build ${p.build}, with the settings that changed in each.`,
-    };
-  }
-  if (p.country) {
-    const c = countryDisplay(p.country);
-    return {
-      title: fit(TITLE_MAX, `${c} emergency alerts & cell broadcast`, `${c} cell broadcast settings`, c),
-      description: listing(`Emergency alert settings iOS ships for ${c}: `,
-        ["cell broadcast message IDs", "alert levels", "which alerts you can turn off", "test alerts"],
-        ", from its country bundle."),
+      title: fit(TITLE_MAX, `${ios} (${p.build}) carrier bundles and modems`, `${ios} carrier bundles and modems`, `${p.build} carrier bundles`),
+      description: `Carrier and country bundles added, removed and changed in ${ios} build ${p.build}, and the modem package for each iPhone in it.`,
     };
   }
 
@@ -158,9 +146,9 @@ export function seo(id: string | null, p: Params): Meta {
     case "/[kind=kind]":
       return p.kind === "countries"
         ? {
-            title: "iOS country bundles (emergency alerts)",
+            title: "iPhone emergency alerts by country",
             description:
-              "Every iPhone country bundle, decoded: emergency alert and cell broadcast settings, emergency numbers and the carriers in each country.",
+              "Every iPhone country bundle, decoded: emergency alert and cell broadcast settings, which alerts you can't turn off, and the carriers in each country.",
           }
         : p.kind === "watch"
           ? {
@@ -171,20 +159,8 @@ export function seo(id: string | null, p: Params): Meta {
           : {
               title: "iPhone carrier bundles (.ipcc) — all carriers",
               description:
-                "Every iPhone carrier bundle (.ipcc) Apple ships, decoded and downloadable: APN, VoLTE, 5G, Wi-Fi Calling, RCS and MCC/MNC for every carrier.",
+                "Every iPhone carrier bundle (.ipcc) Apple ships, decoded: APN, VoLTE, 5G, Wi-Fi Calling and RCS for every carrier, and which bundle a SIM's MCC/MNC loads.",
             };
-    case "/plmn":
-      return {
-        title: "MCC/MNC (PLMN) to carrier bundle lookup",
-        description:
-          "Look up any mobile country code and network code (MCC/MNC, PLMN), ICCID prefix or SIM GID1/GID2 and find the iOS carrier bundle it loads.",
-      };
-    case "/cell-broadcast":
-      return {
-        title: "iPhone emergency alerts by country",
-        description:
-          "Emergency alert and cell broadcast settings as iOS ships them, country by country: message IDs, alert levels, and which alerts you can't turn off.",
-      };
     case "/compare":
       return {
         title: "Compare carrier bundles",
@@ -195,11 +171,11 @@ export function seo(id: string | null, p: Params): Meta {
         title: "Carrier bundle wiki",
         description: "How iOS carrier and country bundles are built, matched to a SIM, signed and delivered, and what the modem override files inside them do.",
       };
-    case "/releases":
+    case "/builds":
       return {
-        title: "iOS releases and betas — carrier bundle changes",
+        title: "iOS builds — carrier bundle and modem changes",
         description:
-          "Every iOS release and beta, with the carrier and country bundles each one added, removed or changed. See carrier settings updates before they ship.",
+          "Every iOS release and beta, with the carrier and country bundles it added, removed or changed, and the modem firmware it ships for each iPhone.",
       };
     default:
       return {

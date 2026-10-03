@@ -60,3 +60,32 @@ export const knowsPhone = <F extends Pick<BundleFile, "kind" | "devices">>(files
 /** Modem files named for no phone: global_setting_*.der.gri, an MVNO set. */
 export const sharedPri = <F extends Pick<BundleFile, "kind" | "devices">>(files: F[]) =>
   files.filter((f) => isPri(f) && !f.devices?.some((d) => d.ids));
+
+/** One phone group's modem override file, and the copy of the bundle it was read from when not this one. */
+export interface PhoneRow {
+  slug: string;
+  path: string;
+  /** Set when the file comes from another copy of the bundle (an OTA copy for an image's missing phones). */
+  copy?: string;
+  phones: Array<Phone & { family?: string }>;
+  source?: "ota" | "image";
+  ios?: string[];
+  build?: string;
+}
+
+/** Files named for phones first, then the ones named for none (global_setting_*, MVNO sets). */
+export function phoneRows(
+  here: { slug: string; source?: "ota" | "image"; ios?: string[]; build?: string },
+  files: Array<Pick<BundleFile, "kind" | "devices" | "path">>,
+  ov: { files: Array<{ slug: string; path: string; phones: Array<Phone & { family?: string }> }> } | null,
+): PhoneRow[] {
+  return [
+    ...(ov?.files ?? []).map((f) => ({ ...f, copy: f.slug === here.slug ? undefined : f.slug })),
+    ...sharedPri(files).map((f) => ({ ...here, path: f.path, copy: undefined, phones: [] })),
+  ];
+}
+
+/** The row a `?file=&copy=` selection names, else the version's own phone, else the first. */
+export const pickPhoneRow = (rows: PhoneRow[], sel: { file: string | null; copy?: string }, home?: string) =>
+  (sel.file ? rows.find((r) => r.path === sel.file && r.copy === sel.copy) : undefined)
+  ?? rows.find((r) => r.phones.some((p) => p.id === home)) ?? rows[0];

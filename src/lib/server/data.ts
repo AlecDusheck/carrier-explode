@@ -26,7 +26,7 @@ import { cached, digestHex, fetchApple, perRequest } from "./cache";
 import { buildMergedCbsMatrix } from "./cbs";
 import { guessCarrierQuery } from "./guess";
 import {
-  POINTER_KEY, bundlesKey, fileDataKey, fileIndexKey, keyScan, topKey,
+  POINTER_KEY, bundlesKey, fileDataKey, fileIndexKey, keyScan, rareKey, topKey, type RareSetting,
   type ScanFileIndex, type ScanPointer, type ScanShard, type ScanTarget, type TargetRow,
 } from "./keyscan";
 import { MANIFEST_URL, countryName, manifestTables, parseManifest, publishedOn, splitName, type BundleRef } from "./manifest";
@@ -730,6 +730,31 @@ export async function scanKey(path: string, file: string, scope: string) {
     }
     return keyScan(targets, rows, file, path, scope);
   });
+}
+
+/**
+ * A version's carrier.plist settings that at most a few other bundles of its kind share,
+ * from the last index run. Only head versions are indexed; others get `indexed: false`.
+ */
+export async function getRare(kind: Kind, name: string, slug?: string) {
+  const [{ entry }, pointer] = await Promise.all([resolve(kind, name, slug), r2json<ScanPointer>(POINTER_KEY)]);
+  // "pending": the index run that writes the rarity file has not happened yet; "old": not a head version.
+  if (!pointer) return { indexed: false as const, why: "pending" as const };
+  const got = await cached(`rare:v1:${pointer.gen}:${entry.src}`, 86400, async () => {
+    const all = await r2json<Record<string, RareSetting[]>>(rareKey(pointer.gen));
+    return { built: !!all, rows: all?.[entry.src] ?? null };
+  });
+  if (!got.built) return { indexed: false as const, why: "pending" as const };
+  return got.rows ? { indexed: true as const, rows: got.rows } : { indexed: false as const, why: "old" as const };
+}
+
+/** A phone's override plist next to its modem file (same stem), decoded; null when the copy has none. */
+export async function getOverridePlist(kind: Kind, name: string, slug: string, priPath: string) {
+  const path = priPath.replace(/(\.der)?\.pri$/, ".plist");
+  const { entry } = await resolve(kind, name, slug);
+  const { opened } = await open(entry.src);
+  if (!opened.info.files.some((f) => f.path === path)) return null;
+  try { return { path, plist: decodedPlist(decodeFile(opened, path)) }; } catch { return null; }
 }
 
 /**

@@ -66,7 +66,7 @@ http://dm.wo.com.cn:%d       China Unicom (wo.com.cn is Unicom's "WO" brand)
 coap://m.fxltsbl.com:%d      ???
 ```
 
-`json_report_cmcc.json` is the China Mobile dialect and `json_report_cu.json` the China Unicom one. None of this reaches the [baseband](/baseband/24A446/Mav24) decode on this site: the strings sit in the `qdsp6sw.mbn` code image, which the decoder does not decompress, so they do not appear in a package's file list.
+`json_report_cmcc.json` is the China Mobile dialect and `json_report_cu.json` the China Unicom one. None of this reaches the [baseband](/builds/24A446/Mav24) decode on this site: the strings sit in the `qdsp6sw.mbn` code image, which the decoder does not decompress, so they do not appear in a package's file list.
 
 ## zzhc
 

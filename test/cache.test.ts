@@ -13,7 +13,7 @@ const event = (opts: { method?: string; remote?: boolean; version?: string; perV
 const maxAge = (v?: string) => Number(/(?:^|[ ,])max-age=(\d+)/.exec(v ?? "")?.[1]);
 
 describe("cachePolicy", () => {
-  const edge = (o: Parameters<typeof event>[0] = {}, status = 200) => cachePolicy({ ...event(o), route: { id: "/[kind=kind]/[name]" } }, status);
+  const edge = (o: Parameters<typeof event>[0] = {}, status = 200) => cachePolicy({ ...event(o), route: { id: "/[kind=kind]/[name]/[version=version]/changes" } }, status);
 
   it("addresses the edge, and tells browsers to revalidate", () => {
     // s-maxage would disable stale-while-revalidate, and a plain public
@@ -31,9 +31,9 @@ describe("cachePolicy", () => {
 
   it("tags pages rendered from modem package summaries so a rebuild can purge them", () => {
     const at = (id: RequestEvent["route"]["id"], version?: string) => cachePolicy({ ...event({ version }), route: { id } }, 200).tags;
-    expect(at("/baseband/[build]")).toContain("baseband");
-    expect(at("/[kind=kind]/[name]/[version]/baseband", "ios-27.0")).toEqual(["pinned", "baseband"]);
-    expect(at("/[kind=kind]/[name]/[version]/changes", "ios-27.0")).not.toContain("baseband");
+    expect(at("/builds/[build]")).toContain("baseband");
+    expect(at("/[kind=kind]/[name]/[version=version]/modem", "ios-27.0")).toEqual(["pinned", "baseband"]);
+    expect(at("/[kind=kind]/[name]/[version=version]/changes", "ios-27.0")).not.toContain("baseband");
     // It lists every image's modem packages.
     expect(at("/sitemap.xml")).toContain("baseband");
   });
@@ -63,7 +63,7 @@ describe("cachePolicy", () => {
   });
 
   it("lets a browser hold a bundle member, but no cache it cannot purge", () => {
-    const p = cachePolicy({ ...event({ version: "ios-27.0" }), route: { id: "/raw/[kind=kind]/[name]/[version]/[...path]" } }, 200);
+    const p = cachePolicy({ ...event({ version: "ios-27.0" }), route: { id: "/raw/[kind=kind]/[name]/[version=version]/[...path]" } }, 200);
     expect(p.browser).toMatch(/^private, /);
     expect(maxAge(p.browser)).toBeGreaterThan(0);
     expect(maxAge(p.edge)).toBeGreaterThan(0);
@@ -92,9 +92,9 @@ describe("rateClass", () => {
     expect(rate(remote("getFile"))).toBe("bundle");
     expect(rate(remote("getBasebandDefaults"))).toBe("bundle");
     expect(rate(remote("getBundleOverrides"))).toBe("bundle");
-    expect(rate(page("/raw/[kind=kind]/[name]/[version]/[...path]", "ios-27.0"))).toBe("bundle");
+    expect(rate(page("/raw/[kind=kind]/[name]/[version=version]/[...path]", "ios-27.0"))).toBe("bundle");
     expect(rate(page("/compare"))).toBe("bundle");
-    expect(rate(page("/[kind=kind]/[name]/[version]", "ios-27.0"))).toBe("bundle");
+    expect(rate(page("/[kind=kind]/[name]/[version=version]", "ios-27.0"))).toBe("bundle");
   });
 
   it("leaves the cached tables and the plain lists on the base budget", () => {

@@ -4,7 +4,7 @@
   import { describeField, describeValue, isBigInt, isBlob, isDate, isJsonDict, isUid } from "#lib/decode/index.ts";
   import { menuTrigger, copyText, scan, type Folding, type FoldToggle, type MenuItem } from "#lib/ui-state.svelte.ts";
   import { hexDump, plainJson } from "#lib/format.ts";
-  import type { TreeCtx } from "./Tree.svelte";
+  import type { KeyBadge, TreeCtx } from "./Tree.svelte";
 
   let {
     name,
@@ -16,6 +16,7 @@
     notes = false,
     ctx,
     onfilter,
+    badges,
   }: {
     name: string;
     value: unknown;
@@ -26,6 +27,7 @@
     notes?: boolean;
     ctx: TreeCtx;
     onfilter?: (p: string) => void;
+    badges?: KeyBadge[];
   } = $props();
 
   let toggled = $state<FoldToggle | null>(null);
@@ -106,6 +108,7 @@
         {:else}
           <span class="key">{name}</span>
         {/if}
+        {#each badges ?? [] as b (b.text)}<span class="badge {b.tone ?? ''}" title={b.title}>{b.text}</span>{/each}
         {#if container}
           <span class="type"> {isJsonDict(value) ? "{}" : "[]"} {count}</span>
         {:else}

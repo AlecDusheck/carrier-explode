@@ -14,7 +14,7 @@
 
 <nav class="modems" aria-label="Modem packages in iOS {mods.version}">
   {#each mods.modems as x (x.family)}
-    <a class="btn" href={link(`/baseband/${mods.build}/${x.family}`)} aria-current={x.family === family ? "page" : undefined}>
+    <a class="btn" href={link(`/builds/${mods.build}/${x.family}`)} aria-current={x.family === family ? "page" : undefined}>
       <b>{modemLabel(x.family)}</b>
       <span class="phones">{phoneList(x.devices)}</span>
     </a>
@@ -23,7 +23,7 @@
 <div class="which">
   <h2>
     {#if modem}<span class="mono">{modem.package.name}</span>{:else}No {modemLabel(family)} package{/if}
-    <span class="dimtext">in <a href={link("/releases/" + mods.build)}>iOS {mods.version} ({mods.build})</a></span>
+    <span class="dimtext">in <a href={link("/builds/" + mods.build)}>iOS {mods.version} ({mods.build})</a></span>
   </h2>
 </div>
 

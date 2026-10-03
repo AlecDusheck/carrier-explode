@@ -19,7 +19,7 @@
     <input type="search" name="diff-filter" placeholder="filter" aria-label="filter differences" bind:value={query} />
   </div>
   {#each sections as [section, ps] (section)}
-    <h4>{section} <span class="dimtext">({ps.length})</span></h4>
+    <h3>{section} <span class="dimtext">({ps.length})</span></h3>
     {#each ps as p (p.path)}
       <details class="part" open={ps.length <= 4 && p.rows.length > 0}>
         <summary>
@@ -44,7 +44,6 @@
 {/if}
 
 <style>
-  h4 { margin: 8px 0 2px; }
   .part { margin: 2px 0; }
   .part > summary { cursor: pointer; padding: 3px 0; display: flex; gap: 6px; align-items: baseline; flex-wrap: wrap; }
   .more-rows { margin: 2px 0; }

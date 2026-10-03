@@ -8,27 +8,25 @@ const CASES: Array<[string, Parameters<typeof seo>[1]]> = [
   ["/[kind=kind]", { kind: "countries" }],
   ["/[kind=kind]", { kind: "watch" }],
   ["/[kind=kind]/[name]", { kind: "carriers", name: "ATT_US" }],
-  ["/[kind=kind]/[name]/[version]", { kind: "carriers", name: "ATT_US", version: "ios-27.0" }],
-  ["/[kind=kind]/[name]/[version]/files/[...path]", { kind: "carriers", name: "ATT_US", version: "ios-27.0", path: "carrier.plist" }],
-  ["/plmn", {}],
-  ["/cell-broadcast", {}],
-  ["/cell-broadcast/[country]", { country: "India" }],
+  ["/[kind=kind]/[name]/[version=version]", { kind: "carriers", name: "ATT_US", version: "ios-27.0" }],
+  ["/[kind=kind]/[name]/[version=version]/files/[...path]", { kind: "carriers", name: "ATT_US", version: "ios-27.0", path: "carrier.plist" }],
   ["/compare", {}],
-  ["/releases", {}],
+  ["/builds", {}],
   ["/wiki", {}],
-  ["/releases/[build]", { build: "24A437" }],
-  ["/baseband/[build]", { build: "24A437" }],
-  ["/baseband/[build]", { build: "24B5089g" }],
-  ["/baseband/[build]/[family]", { build: "24A437", family: "Mav25" }],
-  ["/baseband/[build]/[family]", { build: "24A437", family: "Mav21" }],
-  ["/baseband/[build]/[family]", { build: "24A437", family: "C1" }],
-  ["/baseband/[build]/[family]", { build: "24B5089g", family: "c4020" }],
-  ["/baseband/[build]/[family]", { build: "24A437", family: "ICE19" }],
+  ["/builds/[build]", { build: "24A437" }],
+  ["/builds/[build]", { build: "24B5089g" }],
+  ["/builds/[build]/[family]", { build: "24A437", family: "Mav25" }],
+  ["/builds/[build]/[family]", { build: "24A437", family: "Mav21" }],
+  ["/builds/[build]/[family]", { build: "24A437", family: "C1" }],
+  ["/builds/[build]/[family]", { build: "24B5089g", family: "c4020" }],
+  ["/builds/[build]/[family]", { build: "24A437", family: "ICE19" }],
   ["/[kind=kind]/[name]", { kind: "watch", name: "Verizon_LTE_US" }],
   ["/[kind=kind]/[name]", { kind: "carriers", name: "Verizon_Core_Visible_LTE_US" }],
   ["/[kind=kind]/[name]", { kind: "countries", name: "SaintHelenaAscensionAndTristanDaCunha" }],
-  ["/[kind=kind]/[name]/[version]/baseband", { kind: "carriers", name: "KDDI_BIGLOBE_LTE_only_jp", version: "ios-27.2-beta-10" }],
-  ["/[kind=kind]/[name]/[version]/files/[...path]", { kind: "carriers", name: "ATT_US", version: "ios-27.0", path: "" }],
+  ["/[kind=kind]/[name]/[version=version]/modem", { kind: "carriers", name: "KDDI_BIGLOBE_LTE_only_jp", version: "ios-27.2-beta-10" }],
+  ["/[kind=kind]/[name]/[version=version]/settings", { kind: "carriers", name: "KDDI_BIGLOBE_LTE_only_jp", version: "ios-27.2-beta-10" }],
+  ["/[kind=kind]/[name]/[version=version]/alerts", { kind: "countries", name: "SaintHelenaAscensionAndTristanDaCunha", version: "ios-27.2-beta-10" }],
+  ["/[kind=kind]/[name]/[version=version]/files/[...path]", { kind: "carriers", name: "ATT_US", version: "ios-27.0", path: "" }],
 ];
 
 describe("seo", () => {
@@ -47,8 +45,8 @@ describe("seo", () => {
     const p = { kind: "carriers", name: "ATT_US", version: "ios-27.0" };
     const title = (id: Parameters<typeof seo>[0], params: Parameters<typeof seo>[1]) => seo(id, params).title;
     for (const t of ["ATT_US", "AT&T", "United States"]) expect(title("/[kind=kind]/[name]", { kind: "carriers", name: "ATT_US" })).toContain(t);
-    for (const t of ["ATT_US", "iOS 27.0", "AT&T"]) expect(title("/[kind=kind]/[name]/[version]", p)).toContain(t);
-    expect(title("/[kind=kind]/[name]/[version]/files/[...path]", { ...p, path: "carrier.plist" })).toMatch(/^carrier\.plist .*ATT_US/);
+    for (const t of ["ATT_US", "iOS 27.0", "AT&T"]) expect(title("/[kind=kind]/[name]/[version=version]", p)).toContain(t);
+    expect(title("/[kind=kind]/[name]/[version=version]/files/[...path]", { ...p, path: "carrier.plist" })).toMatch(/^carrier\.plist .*ATT_US/);
     for (const t of ["UnitedStates", "United States"]) expect(title("/[kind=kind]/[name]", { kind: "countries", name: "UnitedStates" })).toContain(t);
   });
 
@@ -58,7 +56,7 @@ describe("seo", () => {
       expect(d).toContain(term);
     }
     expect(seo("/[kind=kind]", { kind: "carriers" }).description).toMatch(/\.ipcc|APN|VoLTE/);
-    expect(seo("/plmn", {}).title).toContain("MCC/MNC");
+    expect(seo("/[kind=kind]", { kind: "carriers" }).description).toContain("MCC/MNC");
   });
 
   it("keeps the brand when a long bundle name crowds the title", () => {
@@ -69,10 +67,11 @@ describe("seo", () => {
 
   it("names each tab and each kind of version", () => {
     const p = { kind: "carriers", name: "ATT_US", version: "ios-27.2-beta-2" };
-    expect(seo("/[kind=kind]/[name]/[version]", p).description).toContain("iOS 27.2 beta 2");
-    expect(seo("/[kind=kind]/[name]/[version]/baseband", p).title).toContain("baseband");
-    expect(seo("/[kind=kind]/[name]/[version]/changes", { ...p, version: "ota-58.1-iPad" }).description).toContain("build 58.1 (iPad)");
-    expect(seo("/releases/[build]", { build: "24B5089g" }).title).toMatch(/iOS 27 beta.*24B5089g/);
+    expect(seo("/[kind=kind]/[name]/[version=version]", p).description).toContain("iOS 27.2 beta 2");
+    expect(seo("/[kind=kind]/[name]/[version=version]/modem", p).title).toContain("modem");
+    expect(seo("/[kind=kind]/[name]/[version=version]/settings", p).title).toContain("settings");
+    expect(seo("/[kind=kind]/[name]/[version=version]/changes", { ...p, version: "ota-58.1-iPad" }).description).toContain("build 58.1 (iPad)");
+    expect(seo("/builds/[build]", { build: "24B5089g" }).title).toMatch(/iOS 27 beta.*24B5089g/);
   });
 });
 

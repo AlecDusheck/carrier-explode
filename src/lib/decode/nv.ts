@@ -387,14 +387,16 @@ export const CCM_ITEMS: Record<number, string> = {
 };
 
 /**
- * Who sets each CCM flag. No source names a flag, so this is only what the bundles show:
- * corpus: 365 Qualcomm overrides in 94 current bundles (October 2026); every other flag is never set.
+ * Who sets each CCM flag, and what the modem does with it where its code shows.
+ * Bundles: 365 Qualcomm overrides in 94 current bundles (October 2026); every other flag is never set.
+ * Modem: Mav25 qdsp6sw.mbn, mav_ccm.c. A flag is feature (group base + index), read with
+ * mav_ccm_is_feature_enabled_for_subs(feature, sub); EVDO, UIM and OMA are marked obsolete there and never loaded.
  */
 export const CCM_FLAG_NOTES: Record<number, Record<number, string>> = {
   62009: { 4: "Set only by Appalachian Wireless and C Spire, both former CDMA carriers" },
   62011: {
     6: "Set only by former CDMA regional carriers in the US (US Cellular, C Spire, Appalachian, Cellcom, Carolina West, AppWire)",
-    17: "Set only by Optus and Telstra",
+    17: "Set only by Optus and Telstra. The modem's out-of-service system scan then keeps its default band mask instead of the stored band set (medium confidence)",
   },
   62012: {
     0: "Set only by SoftBank, Y!mobile and Iusacell, on older iPhones",
@@ -410,8 +412,11 @@ export const CCM_FLAG_NOTES: Record<number, Record<number, string>> = {
     3: "Set only on Verizon's network: Verizon, its MVNOs and the LTE in Rural America partners on its core",
     5: "Set only by former CDMA carriers not on Verizon's core (US Cellular, C Spire, Carolina West)",
   },
-  62015: { 6: "Set only on Verizon's network" },
-  62035: { 2: "Set only by T-Mobile US", 3: "Set only on AT&T's network, always with Call Manager flag 12" },
+  62015: { 6: "Set only on Verizon's network; the UIM group is obsolete in the iPhone 17 modem, so it does nothing there" },
+  62035: {
+    2: "Set only by T-Mobile US",
+    3: "Set only on AT&T's network, always with Call Manager flag 12. The modem checks it in its geo-MCC attach logic, alongside a home-network check (medium confidence)",
+  },
 };
 
 function legacy(item: number): NvInfo | undefined {

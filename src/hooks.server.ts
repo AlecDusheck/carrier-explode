@@ -42,7 +42,7 @@ const BUDGET: Record<RateClass, "RL_SCAN" | "RL_DIFF" | "RL_BUNDLE" | "RL_BASE">
   base: "RL_BASE",
 };
 
-const RAW: RouteId = "/raw/[kind=kind]/[name]/[version]/[...path]";
+const RAW: RouteId = "/raw/[kind=kind]/[name]/[version=version]/[...path]";
 
 /** Pages that open a bundle whether or not they name a version: a member as-is, and a diff. */
 const BUNDLE_ROUTES: ReadonlySet<RouteId> = new Set<RouteId>([RAW, "/compare"]);
@@ -50,9 +50,12 @@ const BUNDLE_ROUTES: ReadonlySet<RouteId> = new Set<RouteId>([RAW, "/compare"]);
 /**
  * Pages rendered from modem package summaries or an image index's modems, both
  * of which baseband.yml can rewrite; it purges the "baseband" tag when it does.
+ * A bundle's Overview, Settings and Modem tabs all list its phones by modem.
  */
 const BASEBAND_ROUTES: ReadonlySet<RouteId> = new Set<RouteId>([
-  "/baseband", "/baseband/[build]", "/baseband/[build]/[family]", "/[kind=kind]/[name]/[version]/baseband", "/sitemap.xml",
+  "/builds", "/builds/[build]", "/builds/[build]/[family]", "/sitemap.xml",
+  "/[kind=kind]/[name]", "/[kind=kind]/[name]/[version=version]",
+  "/[kind=kind]/[name]/[version=version]/settings", "/[kind=kind]/[name]/[version=version]/modem",
 ]);
 
 const routeIn = (routes: ReadonlySet<RouteId>, id: RouteId | null) => id !== null && routes.has(id);
