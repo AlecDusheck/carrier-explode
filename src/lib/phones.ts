@@ -69,12 +69,10 @@ export const sharedPri = <F extends Pick<BundleFile, "kind" | "devices">>(files:
 export const unrecognisedPri = <F extends Pick<BundleFile, "kind" | "devices">>(files: F[]) =>
   files.filter((f) => isPri(f) && !f.devices?.some((d) => d.ids) && unknownBoards(f).length);
 
-/** One phone group's modem override file, and the copy of the bundle it was read from when not this one. */
+/** One phone group's modem override file in a bundle version. */
 export interface PhoneRow {
   slug: string;
   path: string;
-  /** Set when the file comes from another copy of the bundle (an OTA copy for an image's missing phones). */
-  copy?: string;
   phones: Array<Phone & { family?: string }>;
   source?: "ota" | "image";
   ios?: string[];
@@ -90,22 +88,21 @@ export function phoneRows(
   // Newest phone first, whichever modem it uses.
   const newestIn = (f: { phones: Phone[] }) => f.phones.map((p) => p.id).sort(compareProducts).at(-1) ?? "";
   return [
-    ...[...(ov?.files ?? [])].sort((x, y) => compareProducts(newestIn(y), newestIn(x)))
-      .map((f) => ({ ...f, copy: f.slug === here.slug ? undefined : f.slug })),
+    ...[...(ov?.files ?? [])].sort((x, y) => compareProducts(newestIn(y), newestIn(x))),
     ...unrecognisedPri(files).map((f) => ({
-      ...here, path: f.path, copy: undefined,
+      ...here, path: f.path,
       phones: unknownBoards(f).map((code) => ({ id: code, name: `Unrecognised phone (${code})` })),
     })),
-    ...sharedPri(files).map((f) => ({ ...here, path: f.path, copy: undefined, phones: [] })),
+    ...sharedPri(files).map((f) => ({ ...here, path: f.path, phones: [] })),
   ];
 }
 
 /**
- * The row a `?file=&copy=` selection names, else the newest phone's. `missing` says a named
+ * The row a `?file=` selection names, else the newest phone's. `missing` says a named
  * file is not read by any phone in this version, so the page can say so instead of quietly
  * showing another phone.
  */
-export function pickPhoneRow(rows: PhoneRow[], sel: { file: string | null; copy?: string }) {
-  const named = sel.file ? rows.find((r) => r.path === sel.file && (r.copy === sel.copy || !sel.copy)) : undefined;
+export function pickPhoneRow(rows: PhoneRow[], sel: { file: string | null }) {
+  const named = sel.file ? rows.find((r) => r.path === sel.file) : undefined;
   return { row: named ?? rows[0], missing: !!sel.file && !named ? sel.file : undefined };
 }

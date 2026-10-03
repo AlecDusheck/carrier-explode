@@ -44,8 +44,8 @@
     {@const carrier = asDict(bundle.quick["carrier.plist"])}
     {@const ov = bundle.kind === "countries" ? null : await getBundleOverrides(args)}
     {@const rows = phoneRows(bundle.entry, bundle.info.files, ov).filter((r) => r.phones.length)}
-    {@const { row, missing } = pickPhoneRow(rows, { file: sp.get("file"), copy: sp.get("copy") ?? undefined })}
-    {@const over = row ? await getOverridePlist({ ...args, slug: row.copy ?? bundle.entry.slug, path: row.path }) : null}
+    {@const { row, missing } = pickPhoneRow(rows, { file: sp.get("file") })}
+    {@const over = row ? await getOverridePlist({ ...args, slug: bundle.entry.slug, path: row.path }) : null}
     {@const phoneDict = asDict(over?.plist)}
     {@const rare = await getRare(args)}
     {@const home = bundle.related.country ? await getBundle({ kind: "countries", name: bundle.related.country }) : null}

@@ -20,7 +20,7 @@ import {
   type BasebandSummary, type BundleFile, type DiffCounts, type DiffRow, type ModemKind, type ModemSummary, type OpenedBundle,
   type PriReplacement,
 } from "#lib/decode/index.ts";
-import { compareVersions, countryName, fold, imageSlug, isPrerelease, splitName } from "#lib/names.ts";
+import { countryName, fold, imageSlug, isPrerelease, splitName } from "#lib/names.ts";
 import { byNewest, compareProducts, homePhone, isPri, knowsPhone, overridesFor, sharedPri } from "#lib/phones.ts";
 import { FEATURES, featureBySlug } from "#lib/features.ts";
 import { featuresKey, phoneFeature, type FeatureIndex } from "./featureindex";
@@ -33,7 +33,7 @@ import {
   type ScanFileIndex, type ScanPointer, type ScanShard, type ScanTarget, type TargetRow,
 } from "./keyscan";
 import { MANIFEST_URL, manifestTables, parseManifest, publishedOn, type BundleRef } from "./manifest";
-import { firstCopyWith, modemView, overrideCandidates, summaryKey, type ModemView } from "./modems";
+import { modemView, summaryKey, type ModemView } from "./modems";
 import { carriersOf, homeCountry, isoIndex, type CountryPlists } from "./related";
 import { buildTimeline, headIndex, imageDate, type ImageBuild, type ImageIndex } from "./timeline";
 
@@ -401,12 +401,10 @@ export interface PhoneFileChange {
 export interface PhoneChange {
   phones: Array<{ id: string; name?: string; family?: string }>;
   /**
-   * "compared": against the version compared against itself. "older": that version's copy has no files for
-   * this phone, so against `from`, the newest copy before it that does; the difference spans more than one update.
-   * "new": copies from then knew the phone and gave it no files. "unknown": no copy that old has a file for it.
+   * "compared": the version compared against has files for these phones. "new": it was made while the phone
+   * existed and gave it none (carrier.plist alone). "unknown": it is older than the phone.
    */
-  status: "compared" | "older" | "new" | "unknown";
-  from?: PublicEntry;
+  status: "compared" | "new" | "unknown";
   plist?: PhoneFileChange;
   modem?: PhoneFileChange;
 }
@@ -424,23 +422,18 @@ function fileChange(A: OpenedBundle | null, before: string | undefined, B: Opene
 }
 
 /**
- * A version's phone groups, each one's override plist and modem file against what that phone
- * had at the version compared against: that version's own files when it carries them, else the
- * newest copy no newer than it that does. An image copy carries only its own phones' files, so
- * comparing two copies file by file reports every other phone as added; this compares per phone.
+ * A version's phone groups, each one's override plist and modem file against what that phone had at the
+ * version compared against. Comparing the two copies file by file would show a phone moving to another
+ * group's file as one file removed and another added; this compares per phone.
  */
 export async function getPhoneChanges(kind: Kind, name: string, slug: string, against?: string) {
-  const { timeline, entry: b, previous } = await resolve(kind, name, slug);
+  const { entry: b, previous } = await resolve(kind, name, slug);
   const a = against ? (await resolve(kind, name, against)).entry : previous;
   const vb = await phoneCopies(kind, name, slug);
   if (!a || !vb) return null;
-  // What a phone could have had at `a`: `a`, then OTA copies no newer than it, newest first.
-  const candidates = [a, ...timeline
-    .filter((e) => e !== a && e.source === "ota" && !e.beta && compareVersions(e.build || "0", a.build || "0") <= 0)
-    .sort((x, y) => compareVersions(y.build || "0", x.build || "0"))].slice(0, OTA_COPIES + 1);
-  const key = `phonechanges:v2:${b.src}|${fingerprint(candidates.map((e) => e.src))}|${fingerprint(vb.phones.map((p) => p.id))}`;
+  const key = `phonechanges:v3:${b.src}|${a.src}|${fingerprint(vb.phones.map((p) => p.id))}`;
   return cached(key, KEEP, async () => {
-    const B = (await open(b.src)).opened;
+    const [A, B] = await Promise.all([open(a.src), open(b.src)]).then((x) => x.map((o) => o.opened));
     /** A phone's override files in a copy: its plist and its modem file, by the boards in their names. */
     const filesFor = (o: OpenedBundle, phone: string) => o.info.files.filter((f) => f.devices?.some((d) => d.ids === phone));
     // Phone groups as this version files them: phones that read the same files.
@@ -453,29 +446,18 @@ export async function getPhoneChanges(kind: Kind, name: string, slug: string, ag
       g.phones.push({ id: p.id, name: p.name, family: p.family });
       groups.set(k, g);
     }
-    const out: PhoneChange[] = [];
-    for (const { files, phones } of groups.values()) {
+    return [...groups.values()].map(({ files, phones }): PhoneChange => {
       const phone = phones[0].id;
-      let found: { entry: TimelineEntry; files: BundleFile[]; opened: OpenedBundle } | undefined;
-      let knew = false;
-      for (const e of candidates) {
-        // A per-model copy only speaks for its own model.
-        if (e.productType && e.productType !== phone) continue;
-        const opened = (await open(e.src)).opened;
-        const mine = filesFor(opened, phone);
-        if (mine.length) { found = { entry: e, files: mine, opened }; break; }
-        knew ||= knowsPhone(opened.info.files, phone);
-      }
-      const before = found?.files ?? [];
-      out.push({
+      // A per-model copy only speaks for its own model.
+      const before = a.productType && a.productType !== phone ? [] : filesFor(A, phone);
+      const known = before.length > 0 || knowsPhone(A.info.files, phone);
+      return {
         phones,
-        status: found ? (found.entry === a ? "compared" : "older") : knew ? "new" : "unknown",
-        from: found && publicEntry(found.entry),
-        plist: fileChange(found?.opened ?? null, before.find(isPhonePlist)?.path, B, files.find(isPhonePlist)?.path),
-        modem: fileChange(found?.opened ?? null, before.find(isPri)?.path, B, files.find(isPri)?.path),
-      });
-    }
-    return { from: publicEntry(a), groups: out };
+        status: before.length ? "compared" : known ? "new" : "unknown",
+        plist: fileChange(before.length ? A : null, before.find(isPhonePlist)?.path, B, files.find(isPhonePlist)?.path),
+        modem: fileChange(before.length ? A : null, before.find(isPri)?.path, B, files.find(isPri)?.path),
+      };
+    });
   });
 }
 
@@ -648,46 +630,26 @@ async function bundleImage(kind: Kind, name: string, slug?: string) {
 type PhoneFile = Pick<BundleFile, "path" | "kind" | "devices">;
 type Phone = ModemView["devices"][number] & { family: string };
 
-/** OTA copies one phone's lookup may open before settling on "none". */
-const OTA_COPIES = 8;
-
 /**
- * Every phone of a bundle version's image, newest family first, with the copy
- * that carries its modem override files: the version itself when it has them,
- * else the OTA copy found by overrideCandidates. Without one, `known` says
- * whether a copy made while the phone existed was read (so it has none), and
- * null means a copy could not be read. `slug` is empty for the head.
- *
- * Kept per version, head (a new one can bring new OTA copies) and phone list
- * (baseband.yml can change it), once no unreadable copy could change an answer.
+ * Every phone of a bundle version's image, newest family first, with its modem override files in that
+ * version. A phone without any is `known` when the version was made while it existed (so it has none
+ * and runs the defaults); otherwise the version is older than the phone. `slug` is empty for the head.
  */
 const phoneCopies = perRequest(async (kind: Kind, name: string, slug: string) => {
-  const { timeline, entry, build, idx } = await bundleImage(kind, name, slug || undefined);
+  const { entry, build, idx } = await bundleImage(kind, name, slug || undefined);
   if (!build || !idx) return null;
   const phones: Phone[] = byNewest(idx.modems.map(modemView)).flatMap((m) => m.devices.map((d) => ({ ...d, family: m.family })));
-  const head = timeline[headIndex(timeline)];
-  const key = `phonecopies:v2:${head.src}|${entry.src}|${fingerprint(phones.map((p) => `${p.family}/${p.id}`))}`;
-  const { found } = await cached(key, 7 * 86400, async () => {
-    const found = await Promise.all(phones.map((p) => firstCopyWith(
-      overrideCandidates(timeline, entry, p.id, OTA_COPIES),
-      async (e) => (await open(e.src)).opened.info.files,
-      (files) => overridesFor(files, p.id),
-      (files) => knowsPhone(files, p.id),
-    )));
-    return {
-      found: found.map((f) => !f ? null : f.entry
-        ? { slug: f.entry.slug, files: f.files.map(({ path, kind, devices }): PhoneFile => ({ path, kind, devices })), known: true }
-        : { slug: null, files: [], known: f.known }),
-      settled: found.every((f) => f && (!f.entry || f.settled)),
-    };
-  }, (v) => v.settled);
-  const copies = found.map((f) => f && { ...f, entry: timeline.find((e) => e.slug === f.slug) });
+  const files = (await open(entry.src)).opened.info.files;
+  const copies = phones.map((p) => {
+    const mine = overridesFor(files, p.id).map(({ path, kind, devices }): PhoneFile => ({ path, kind, devices }));
+    return { files: mine, known: mine.length > 0 || knowsPhone(files, p.id) };
+  });
   return { entry, build, idx, phones, copies };
 });
 
 /**
- * A bundle version's modem override files, each with the phones that read it
- * and the copy it was read from (see phoneCopies), and the phones left over:
+ * A bundle version's modem override files, each with the phones that read it,
+ * and the phones left over:
  * `defaults` have none, `unknown` have no copy of this bundle made for them.
  * Phones newest family first; `home` is the phone the version means.
  */
@@ -696,14 +658,13 @@ export async function getBundleOverrides(kind: Kind, name: string, slug?: string
   if (!v) return null;
   const files = new Map<string, { slug: string; source: PublicEntry["source"]; ios: string[]; build: string; path: string; phones: Phone[] }>();
   const defaults: Phone[] = [], unknown: Phone[] = [];
+  const { slug: s, source, ios, build: b } = v.entry;
   v.phones.forEach((p, i) => {
     const c = v.copies[i];
-    if (!c?.entry) return void (c?.known ? defaults : unknown).push(p);
+    if (!c.files.length) return void (c.known ? defaults : unknown).push(p);
     for (const f of c.files) {
-      const key = `${c.entry.slug}\0${f.path}`;
-      const { slug: s, source, ios, build: b } = c.entry;
-      if (!files.has(key)) files.set(key, { slug: s, source, ios, build: b, path: f.path, phones: [] });
-      files.get(key)!.phones.push(p);
+      if (!files.has(f.path)) files.set(f.path, { slug: s, source, ios, build: b, path: f.path, phones: [] });
+      files.get(f.path)!.phones.push(p);
     }
   });
   return { build: v.build, home: homePhone(v.entry, v.idx), files: [...files.values()], defaults, unknown };
@@ -720,10 +681,7 @@ export async function getBasebandDefaults(kind: Kind, name: string, slug?: strin
   const phone = idx && (device ?? homePhone(entry, idx));
   const m = idx && phone ? idx.modems.find((x) => x.devices.includes(phone) && x.package.kind === "bbfw") : undefined;
   if (!build || !idx || !phone || !m) return { build, missing: true as const };
-  // The phone's .der.pri may only be in another copy of the bundle; compare against that one.
-  const v = await phoneCopies(kind, name, slug ?? "");
-  const copy = v?.copies[v.phones.findIndex((p) => p.id === phone)]?.entry ?? entry;
-  const [s, { opened }] = await Promise.all([modemSummary(m.package.id), open(copy.src)]);
+  const [s, { opened }] = await Promise.all([modemSummary(m.package.id), open(entry.src)]);
   if (s?.kind !== "bbfw") return { build, missing: true as const };
 
   const tags = Object.entries(s.carrierMap ?? {})
@@ -743,8 +701,8 @@ export async function getBasebandDefaults(kind: Kind, name: string, slug?: strin
   }
   return {
     build, missing: false as const, version: idx.version, family: m.family, id: m.package.id, phone, tags, overrides, otherXml,
-    /** The copy the .der.pri files were read from, for getBasebandOverride. */
-    slug: copy.slug,
+    /** The version the .der.pri files were read from, for getBasebandOverride. */
+    slug: entry.slug,
   };
 }
 

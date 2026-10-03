@@ -64,7 +64,7 @@
           <p class="note"><b>No change</b> in carrier.plist or any other file every phone reads.</p>
         {/if}
         {@const phones = await getPhoneChanges({ kind: params.kind, name: params.name, slug: params.version, against: against ?? undefined })}
-        {#if phones?.groups.length}<PhoneChanges changes={phones} />{/if}
+        {#if phones?.length}<PhoneChanges changes={phones} />{/if}
       {/if}
       <BundleCompare
         diff={cmp.diff}

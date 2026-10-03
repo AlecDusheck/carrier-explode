@@ -23,12 +23,13 @@ import { flattenBundle, openIpcc } from "#lib/decode/index.ts";
 import { MANIFEST_URL, manifestTables, parseManifest } from "#lib/server/manifest.ts";
 import { buildTimeline, headIndex, type ImageIndex } from "#lib/server/timeline.ts";
 import { POINTER_KEY, bundlesKey, fileDataKey, fileIndexKey, packShards, rareKey, rareSettings, type ScanPointer } from "#lib/server/keyscan.ts";
-import { homePhone } from "#lib/phones.ts";
 import { featureCopy, featureSlugs, featuresKey, type FeatureIndex } from "#lib/server/featureindex.ts";
 
-interface Copy { src: string; build: string; source: "ota" | "image"; phone?: string }
-/** A bundle's current version, and for a carrier its newest OTA copy, which carries every phone's files of its day. */
-interface Head extends Copy { kind: "carriers" | "countries"; name: string; ota?: Copy }
+/**
+ * A bundle's current version: what every phone running a release loads. Image copies carry every
+ * iPhone's files (the images of a release are merged); `phone` is set only for a per-model OTA copy.
+ */
+interface Head { kind: "carriers" | "countries"; name: string; src: string; build: string; source: "ota" | "image"; phone?: string }
 
 const { positionals, values: arg } = parseArgs({
   allowPositionals: true,
@@ -96,13 +97,8 @@ async function plan() {
       const t = buildTimeline(kind, name, images, Object.hasOwn(refs, name) ? refs[name] : [], index.countries);
       const head = t[headIndex(t)];
       if (!head) continue;
-      const copy = (e: typeof head): Copy => {
-        const phone = homePhone(e, images.find((i) => i.build === e.image) ?? {});
-        return { src: e.src, build: e.build, source: e.source, ...(phone ? { phone } : {}) };
-      };
-      // The timeline runs newest first; a per-model copy speaks for one phone only.
-      const ota = kind === "carriers" ? t.find((e) => e.source === "ota" && !e.productType && !e.beta) : undefined;
-      heads.push({ kind, name, ...copy(head), ...(ota && ota.src !== head.src ? { ota: copy(ota) } : {}) });
+      const phone = head.productType?.includes(",") ? head.productType : undefined;
+      heads.push({ kind, name, src: head.src, build: head.build, source: head.source, ...(phone ? { phone } : {}) });
     }
   }
   writeFileSync(opt.out, JSON.stringify(heads));
@@ -149,14 +145,13 @@ async function build() {
   }));
   flats.sort((a, b) => a.src.localeCompare(b.src));
 
-  // Features per phone: each carrier's current copy, with its newest OTA for the phones the current one lacks.
+  // Features per phone: each carrier's current copy.
   const features: FeatureIndex = { features: featureSlugs(), bundles: {} };
   const fq = heads.filter((h) => h.kind === "carriers");
   await Promise.all(Array.from({ length: 12 }, async () => {
     for (let h = fq.shift(); h; h = fq.shift()) {
       try {
-        const ota = h.ota && openIpcc(await load(h.ota.src));
-        const fc = featureCopy(openIpcc(await load(h.src)), h.build, h.phone, ota);
+        const fc = featureCopy(openIpcc(await load(h.src)), h.build, h.phone);
         if (fc) features.bundles[h.name] = fc;
       } catch (e) {
         console.error(`features: skip ${h.name}: ${e instanceof Error ? e.message : e}`);
