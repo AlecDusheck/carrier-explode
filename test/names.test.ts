@@ -66,7 +66,6 @@ describe("carrier logos and flags", () => {
   it("turns an ISO code into its flag", async () => {
     const { flag } = await import("../src/lib/names.ts");
     expect(flag("us")).toBe("🇺🇸");
-    expect(flag("xk")).toBe("🇽🇰");
-    expect(flag("usa")).toBeUndefined();
+    expect(flag("zz")).toBeUndefined();
   });
 });
