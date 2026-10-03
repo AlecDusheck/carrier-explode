@@ -23,29 +23,26 @@
   {#if !e.changed && e.slug !== current}<span class="flag">same content</span>{/if}
 {/snippet}
 
-{#snippet rows()}
-  <ol class="timeline">
-    {#each timeline as e (e.slug)}
-      <li>
-        {#if e.slug === current}
-          <a href={href(e.slug)} aria-current="true" onclick={() => (open = false)} {@attach reveal}>
-            <span class="what">{entryLabel(e)}</span>{@render flags(e)}
-          </a>
-        {:else}
-          <a href={href(e.slug)} onclick={() => (open = false)}>
-            <span class="what">{entryLabel(e)}</span>{@render flags(e)}
-          </a>
-        {/if}
-      </li>
-    {/each}
-  </ol>
-{/snippet}
-
-<div class="versions wide" aria-label="versions">
-  <div class="scroll">{@render rows()}</div>
+<!-- One list: wide screens show it as a strip, narrow ones drop it down from the button. -->
+<div class="versions" class:open aria-label="versions">
+  <button class="btn toggle" aria-expanded={open} onclick={() => (open = !open)}>
+    {active ? entryLabel(active) : "Versions"} <span class="dimtext">({timeline.length})</span>
+  </button>
+  <div class="scroll">
+    <ol class="timeline">
+      {#each timeline as e (e.slug)}
+        <li>
+          {#if e.slug === current}
+            <a href={href(e.slug)} aria-current="true" onclick={() => (open = false)} {@attach reveal}>
+              <span class="what">{entryLabel(e)}</span>{@render flags(e)}
+            </a>
+          {:else}
+            <a href={href(e.slug)} onclick={() => (open = false)}>
+              <span class="what">{entryLabel(e)}</span>{@render flags(e)}
+            </a>
+          {/if}
+        </li>
+      {/each}
+    </ol>
+  </div>
 </div>
-
-<details class="versions narrow" bind:open>
-  <summary class="btn">{active ? entryLabel(active) : "Versions"} <span class="dimtext">({timeline.length})</span></summary>
-  <div class="scroll">{@render rows()}</div>
-</details>

@@ -7,9 +7,6 @@
   const range = (r: { from: number; to: number }) => (r.from === r.to ? String(r.from) : r.from + "-" + r.to);
   const yes = (v?: boolean) => (v === undefined ? "" : v ? "yes" : "no");
 
-  /** The ranges routed to one alert type. */
-  const idsFor = (row: CbsRow, type: string) => row.mappings.filter((m) => m.alertType === type).map(range).join(", ");
-
   function sound(row: CbsRow, configuration?: string) {
     const cfg = row.alertConfigurations.find((c) => c.name === configuration);
     return cfg ? (cfg.sound ?? "") + " / " + (cfg.vibration ?? "") : (configuration ?? "");
@@ -40,6 +37,8 @@
   const types = $derived(row.alertTypes);
   const muted = $derived(types.some((a) => a.soundAlertDeviceInMute !== undefined));
   const dnd = $derived(types.some((a) => a.soundIsMutableInDND !== undefined));
+  // Most titles are the switch name again.
+  const titled = $derived(types.some((a) => a.notificationTitle && a.notificationTitle !== (a.switchName || a.name)));
 </script>
 
 {#if row.error}<div class="banner err">{row.error}</div>{/if}
@@ -54,10 +53,10 @@
       <table class="grid">
         <thead>
           <tr>
-            <th>Switch</th><th>User can turn off</th><th>On by default</th><th>Message IDs</th>
+            <th>Switch</th><th>User can turn off</th><th>On by default</th>
             {#if muted}<th>Sounds when muted</th>{/if}
             {#if dnd}<th>Muted by Do Not Disturb</th>{/if}
-            <th>Notification title</th>
+            {#if titled}<th>Notification title</th>{/if}
           </tr>
         </thead>
         <tbody>
@@ -66,10 +65,9 @@
               <td class="k" title={a.name}>{a.switchName || a.name}</td>
               <td>{#if a.userConfigurable === false}<span class="chip bad">no off switch</span>{:else}{yes(a.userConfigurable)}{/if}</td>
               <td>{yes(a.enabledByDefault)}</td>
-              <td class="mono">{idsFor(row, a.name)}</td>
               {#if muted}<td>{yes(a.soundAlertDeviceInMute)}</td>{/if}
               {#if dnd}<td>{yes(a.soundIsMutableInDND)}</td>{/if}
-              <td>{a.notificationTitle ?? ""}</td>
+              {#if titled}<td>{a.notificationTitle ?? ""}</td>{/if}
             </tr>
           {/each}
         </tbody>

@@ -4,7 +4,11 @@
   import Confidence from "./Confidence.svelte";
   import IntelView from "./IntelView.svelte";
 
-  let { pri }: { pri: PriDecoded } = $props();
+  let { pri, devices = true }: {
+    pri: PriDecoded;
+    /** Off where a phone picker already names the modem. */
+    devices?: boolean;
+  } = $props();
 
   let filter = $state("");
 
@@ -21,7 +25,7 @@
   const header = $derived(Object.entries(pri.header).filter(([, v]) => v !== ""));
   const unknown = $derived(pri.unknown.filter((u) => u.nv === undefined));
   // Items the NV tables do not describe carry only a placeholder name.
-  const modem = $derived(dialectLabel(pri.dialect));
+  const modem = $derived(devices ? dialectLabel(pri.dialect) : undefined);
 </script>
 
 {#if pri.error}<div class="banner err">{pri.error}</div>{/if}

@@ -2,7 +2,7 @@
   import { page } from "$app/state";
   import { getBundle, getOverridePlist, getRare } from "#lib/api/bundles.remote.ts";
   import { getBundleOverrides } from "#lib/api/tables.remote.ts";
-  import { bundleArgs, bundleHref, withParams } from "#lib/format.ts";
+  import { bundleArgs, withParams } from "#lib/format.ts";
   import { phoneList, phoneRows, pickPhoneRow } from "#lib/phones.ts";
   import { asDict, effective, groupSettings, rareBadges } from "#lib/settings.ts";
   import { TreeState } from "#lib/ui-state.svelte.ts";
@@ -17,8 +17,8 @@
 
   const args = $derived(bundleArgs(params));
   const sp = $derived(page.url.searchParams);
-  const show = $derived(sp.get("show") === "unique" ? "unique" : sp.get("show") === "phone" ? "phone" : "all");
-  const VIEWS = [["all", "All"], ["unique", "Unique"], ["phone", "This phone's overrides"]] as const;
+  const show = $derived(sp.get("show") === "phone" ? "phone" : "all");
+  const VIEWS = [["all", "All"], ["phone", "This phone's overrides"]] as const;
 
   const tree = new TreeState();
   // A link from the Overview names the key to show.
@@ -70,18 +70,22 @@
       {@const rareTop = rare.indexed ? rareBadges(rare.rows) : {}}
       {@const country = new Set(Object.keys(homeDict ?? {}))}
       {@const phoneName = row ? phoneList(row.phones) : ""}
-      {@const keep = (k: string) => show === "all" || (show === "unique" ? k in rareTop : eff.fromPhone.has(k))}
+      {@const keep = (k: string) => show === "all" || eff.fromPhone.has(k)}
       {@const shown = Object.fromEntries(Object.entries(eff.merged).filter(([k]) => keep(k)))}
       {@const badges = badgesFor(Object.keys(shown), eff.fromPhone, rareTop, country, phoneName)}
 
-      <p class="dimtext note">
+      {#if phoneDict || rows.length || rare.indexed || (homeDict && show === "all")}<p class="dimtext note">
         {#if phoneDict}
-          carrier.plist with <span class="mono">{over?.path}</span> on top, as {phoneName} get{row && row.phones.length === 1 ? "s" : ""} it: the override's keys replace carrier.plist's.
-        {:else}
-          carrier.plist as every phone gets it{rows.length ? "; this phone group has no override plist" : ""}.
+          carrier.plist with <span class="mono">{over?.path}</span> on top.
+        {:else if rows.length}
+          No override plist for these phones.
         {/if}
         {#if rare.indexed}Keys marked <span class="badge rare">n of N</span> hold a value at most three other bundles share.{/if}
-      </p>
+        {#if homeDict && show === "all"}
+          Keys marked <span class="badge country">country too</span> are also set by the home country bundle, which the network the phone is on picks,
+          not the SIM; where both set a key, which one wins is not documented.
+        {/if}
+      </p>{/if}
 
       {#each groupSettings(shown) as [title, picked] (title)}
         <fieldset class="hgroup">
@@ -91,17 +95,6 @@
       {:else}
         <p class="dimtext note">No keys in this view.</p>
       {/each}
-
-      {#if homeDict && home && show === "all"}
-        <fieldset class="hgroup">
-          <legend>Home country bundle: <a href={bundleHref("countries", home.name)}>{home.name}</a></legend>
-          <p class="dimtext note">
-            Picked by the network the phone is on, not the SIM, so abroad it is that country's bundle instead.
-            Where both bundles set a key, which one wins is not documented.
-          </p>
-          <Tree value={homeDict} ctx={{ file: "carrier.plist", cc: home.cc }} state={tree} />
-        </fieldset>
-      {/if}
     {/if}
 
     {#if bundle.info.locales.length && show === "all"}

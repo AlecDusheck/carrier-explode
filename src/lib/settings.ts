@@ -78,7 +78,7 @@ export function selectionRules(t: MccMncTable, bundle: string): SelectionRule[] 
       out.push({ via: "MCC-MNC", key: e.plmn, match });
     }
   }
-  for (const [prefix, b] of t.iccids) if (b === bundle) out.push({ via: "ICCID", key: prefix + "…", match: "SIM cards numbered from this prefix" });
+  for (const [prefix, b] of t.iccids) if (b === bundle) out.push({ via: "ICCID", key: prefix + "…" });
   for (const [id, b] of t.carrierIds) if (b === bundle) out.push({ via: "Carrier ID", key: id, match: "CDMA carrier ID" });
   return out;
 }

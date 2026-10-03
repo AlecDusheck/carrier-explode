@@ -29,7 +29,7 @@
         {:else if s.package.chipId}
           <tr><td class="k">Chip ID</td><td class="mono">{s.package.chipId}</td></tr>
         {/if}
-        <tr><td class="k">Package</td><td class="mono wrap">{modem.package.name} <span class="dimtext size">{humanBytes(modem.package.size)}</span></td></tr>
+        <tr><td class="k">Size</td><td>{humanBytes(modem.package.size)}</td></tr>
       </tbody>
     </table>
   </div>
@@ -43,7 +43,3 @@
     <p class="prose">No plaintext config in the package: carrier settings come from the bundles' <span class="mono">.der.pri</span> files.</p>
   {/if}
 </fieldset>
-
-<style>
-  .size { white-space: nowrap; }
-</style>

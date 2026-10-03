@@ -9,7 +9,8 @@
 
   let { params } = $props();
 
-  const KINDS = [["carriers", "Carrier bundles"], ["countries", "Country bundles"]] as const;
+  const KINDS = [["carriers", "Carrier bundles", "carrier"], ["countries", "Country bundles", "country"]] as const;
+  const same = (d: { changed: unknown[]; added: unknown[]; removed: unknown[] }) => !d.changed.length && !d.added.length && !d.removed.length;
 </script>
 
 <div class="view">
@@ -18,7 +19,6 @@
       {@const [r, mods] = await Promise.all([getRelease(params.build), getModems(params.build)])}
       {@const slug = imageSlug(r.image.version)}
       <div class="filters">
-        <a class="btn" href={link("/builds")}>iOS builds</a>
         <b>iOS {r.image.version}</b>
         <span class="mono">{r.image.build}</span>
         {#if r.previous}
@@ -47,39 +47,45 @@
         </table>
       </fieldset>
 
-      {#each KINDS as [kind, title] (kind)}
-        {@const d = r[kind]}
-        <fieldset class="hgroup">
-          <legend>{title}: {d.changed.length} changed, {d.added.length} added, {d.removed.length} removed</legend>
-          {#if d.added.length}
-            <p class="names"><b>Added</b>
-              {#each d.added as name (name)}<a class="chip good" href={bundleHref(kind, name, slug)}>{name}</a>{/each}
-            </p>
+      {#if KINDS.every(([k]) => same(r[k]))}
+        <p class="note">No carrier or country bundle changes.</p>
+      {:else}
+        {#each KINDS as [kind, title, noun] (kind)}
+          {@const d = r[kind]}
+          {#if same(d)}
+            <p class="note">No {noun} bundle changes.</p>
+          {:else}
+            <fieldset class="hgroup">
+              <legend>{title}: {d.changed.length} changed, {d.added.length} added, {d.removed.length} removed</legend>
+              {#if d.added.length}
+                <p class="names"><b>Added</b>
+                  {#each d.added as name (name)}<a class="chip good" href={bundleHref(kind, name, slug)}>{name}</a>{/each}
+                </p>
+              {/if}
+              {#if d.removed.length}
+                <p class="names"><b>Removed</b>
+                  {#each d.removed as name (name)}<a class="chip bad" href={bundleHref(kind, name)}>{name}</a>{/each}
+                </p>
+              {/if}
+              {#if d.changed.length}
+                <table class="grid">
+                  <thead><tr><th>Bundle</th><th class="num">From</th><th class="num">To</th><th></th></tr></thead>
+                  <tbody>
+                    {#each d.changed as c (c.name)}
+                      <tr>
+                        <td class="k"><a href={bundleHref(kind, c.name, slug)}>{c.name}</a></td>
+                        <td class="num mono">{c.from}</td>
+                        <td class="num mono">{c.to}</td>
+                        <td><a href={bundleHref(kind, c.name, slug, "changes")}>Changes</a></td>
+                      </tr>
+                    {/each}
+                  </tbody>
+                </table>
+              {/if}
+            </fieldset>
           {/if}
-          {#if d.removed.length}
-            <p class="names"><b>Removed</b>
-              {#each d.removed as name (name)}<a class="chip bad" href={bundleHref(kind, name)}>{name}</a>{/each}
-            </p>
-          {/if}
-          {#if d.changed.length}
-            <table class="grid">
-              <thead><tr><th>Bundle</th><th class="num">From</th><th class="num">To</th><th></th></tr></thead>
-              <tbody>
-                {#each d.changed as c (c.name)}
-                  <tr>
-                    <td class="k"><a href={bundleHref(kind, c.name, slug)}>{c.name}</a></td>
-                    <td class="num mono">{c.from}</td>
-                    <td class="num mono">{c.to}</td>
-                    <td><a href={bundleHref(kind, c.name, slug, "changes")}>Changes</a></td>
-                  </tr>
-                {/each}
-              </tbody>
-            </table>
-          {:else if !d.added.length && !d.removed.length}
-            <p class="dimtext note">Same as the image before.</p>
-          {/if}
-        </fieldset>
-      {/each}
+        {/each}
+      {/if}
     </Pane>
   </div>
 </div>

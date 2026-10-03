@@ -86,7 +86,6 @@
             onchange={(e) => set({ file: e.currentTarget.value.trim() })}
           />
         </label>
-        {#if file}<button class="btn" onclick={() => set({ file: null })}>Whole bundle</button>{/if}
       </div>
 
       {#if a && b}

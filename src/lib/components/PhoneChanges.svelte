@@ -13,8 +13,6 @@
   const families = (g: PhoneChange) =>
     [...new Set(g.phones.map((p) => p.family).filter((f): f is string => !!f))].map(modemLabel).join(", ");
   const changed = $derived(changes.groups.filter((g) => [g.plist, g.modem].some((c) => c?.kind === "changed")));
-  /** "build 58.1": the older copy a group was compared with, short enough for a table cell. */
-  const short = (e: PhoneChange["from"]) => (e ? `build ${e.build}` : "");
 </script>
 
 {#snippet cell(g: PhoneChange, c: PhoneFileChange | undefined, which: string)}
@@ -24,16 +22,6 @@
     new for this phone
   {:else if g.status === "unknown"}
     <span class="dimtext">no earlier copy</span>
-  {:else if g.status === "older"}
-    <!-- The compared version has no copy of this phone's files: say so, then what the older copy shows. -->
-    <span class="dimtext">not in that version's copy;</span>
-    {#if c.kind === "changed"}
-      <a href="#{anchor(g, which)}">{total(c)} {total(c) === 1 ? "difference" : "differences"} from {short(g.from)}</a>
-    {:else if c.kind === "same"}
-      same as {short(g.from)}
-    {:else}
-      {c.kind} since {short(g.from)}
-    {/if}
   {:else if c.kind === "same"}
     <span class="dimtext">no change</span>
   {:else if c.kind === "changed"}
@@ -66,9 +54,9 @@
     {#if c?.kind === "changed"}
       <fieldset class="hgroup" id={anchor(g, which)}>
         <legend>{phoneList(g.phones)}: <span class="mono">{c.path}</span></legend>
-        {#if g.status === "older" && g.from}
+        {#if g.status === "older"}
           <p class="dimtext note">
-            Against {entryLabel(g.from)}, the newest earlier copy with these phones' files; the compared version's copy has none,
+            Against the older copy named above, the newest earlier one with these phones' files; the compared version's copy has none,
             so this spans every update since.
           </p>
         {/if}

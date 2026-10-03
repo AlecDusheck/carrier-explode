@@ -2,9 +2,9 @@
   import { getRare, type getBundle } from "#lib/api/bundles.remote.ts";
   import { getBundleOverrides, getPlmn } from "#lib/api/tables.remote.ts";
   import { modemLabel } from "#lib/decode/index.ts";
-  import { bundleArgs, bundleHref, entryLabel, humanBytes, link } from "#lib/format.ts";
+  import { bundleArgs, bundleHref, humanBytes, link } from "#lib/format.ts";
   import { phoneList, phoneRows } from "#lib/phones.ts";
-  import { asDict, rareLabel, selectionRules } from "#lib/settings.ts";
+  import { asDict, selectionRules } from "#lib/settings.ts";
 
   let { bundle }: { bundle: Awaited<ReturnType<typeof getBundle>> } = $props();
 
@@ -21,30 +21,27 @@
   <legend>Bundle</legend>
   <table class="grid fit">
     <tbody>
-      {#if typeof carrier?.CarrierName === "string"}<tr><td class="k">Name shown</td><td>{carrier.CarrierName}</td></tr>{/if}
-      {#if bundle.info.bundleName !== bundle.name}<tr><td class="k">Bundle</td><td class="mono">{bundle.info.bundleName}</td></tr>{/if}
-      {#if bundle.related.country}
-        <tr><td class="k">Country bundle</td><td><a href={bundleHref("countries", bundle.related.country)}>{bundle.related.country}</a></td></tr>
-      {/if}
-      {#if typeof carrier?.CarrierName === "string" && bundle.entry.build}
+      {#if typeof carrier?.CarrierName === "string"}
         <tr>
           <td class="k">On the iPhone</td>
-          <td>{carrier.CarrierName} {bundle.entry.build} <span class="dimtext">in Settings › General › About › Carrier</span></td>
+          <td>{[carrier.CarrierName, bundle.entry.build].filter(Boolean).join(" ")} <span class="dimtext">in Settings › General › About › Carrier</span></td>
         </tr>
       {/if}
-      <tr>
-        <td class="k">Version</td>
-        <td>
-          {entryLabel(bundle.entry)}
-          {#if !bundle.entry.build && info?.CFBundleVersion !== undefined}<span class="mono">({String(info.CFBundleVersion)})</span>{/if}
-          {#if bundle.verified === true}<span class="chip good" title="{fromImage ? 'Content ID' : 'SHA-1'} matches the published digest">verified</span>
-          {:else if bundle.verified === false}<span class="chip bad">digest mismatch</span>{/if}
-        </td>
-      </tr>
-      {#if bundle.previous}
-        <tr><td class="k">Previous</td><td><a href={tab("changes")}>Changes since build {bundle.previous.build}</a></td></tr>
+      {#if bundle.info.bundleName !== bundle.name}<tr><td class="k">Bundle</td><td class="mono">{bundle.info.bundleName}</td></tr>{/if}
+      <!-- The version strip above names the version; only a bundle without a build number needs its own. -->
+      {#if !bundle.entry.build && info?.CFBundleVersion !== undefined}
+        <tr><td class="k">CFBundleVersion</td><td class="mono">{String(info.CFBundleVersion)}</td></tr>
       {/if}
-      <tr><td class="k">Size</td><td>{humanBytes(bundle.downloadSize)} packed, {humanBytes(bundle.info.totalSize)} unpacked, <a href={tab("files")}>{bundle.info.files.length} files</a></td></tr>
+      {#if bundle.verified !== null}
+        <tr>
+          <td class="k">Digest</td>
+          <td>
+            {#if bundle.verified}<span class="chip good" title="{fromImage ? 'Content ID' : 'SHA-1'} matches the published digest">verified</span>
+            {:else}<span class="chip bad">mismatch</span>{/if}
+          </td>
+        </tr>
+      {/if}
+      <tr><td class="k">Size</td><td>{humanBytes(bundle.downloadSize)} packed, {humanBytes(bundle.info.totalSize)} unpacked</td></tr>
     </tbody>
   </table>
   <details class="more">
@@ -54,9 +51,6 @@
         <tr><td class="k">Content ID</td><td class="mono wrap">{bundle.contentId}</td></tr>
         <tr><td class="k">SHA-1</td><td class="mono wrap">{bundle.sha1}</td></tr>
         <tr><td class="k">SHA-384</td><td class="mono wrap">{bundle.sha384}</td></tr>
-        {#if bundle.entry.url}
-          <tr><td class="k">URL</td><td class="mono wrap"><a href={bundle.entry.url} rel="noreferrer">{bundle.entry.url}</a></td></tr>
-        {/if}
         {#if version}
           <tr><td class="k">version.plist</td><td class="mono wrap">{Object.entries(version).map(([k, v]) => k + "=" + String(v)).join("  ")}</td></tr>
         {/if}
@@ -73,7 +67,10 @@
   <fieldset class="hgroup">
     <legend>Selected by ({rules.length})</legend>
     {#if rules.length}
-      <p class="dimtext note">The SIMs Apple's manifest sends to this bundle. An MVNO rule is checked before the plain MCC-MNC entry.</p>
+      <p class="dimtext note">
+        The SIMs Apple's manifest sends to this bundle. An MVNO rule is checked before the plain MCC-MNC entry.
+        {#if rules.some((r) => r.via === "ICCID")}An ICCID rule takes every SIM card numbered from its prefix.{/if}
+      </p>
       <table class="grid">
         <thead><tr><th>By</th><th>Value</th><th>Which SIMs</th></tr></thead>
         <tbody>
@@ -110,13 +107,12 @@
     {:else}
       <p class="dimtext note">carrier.plist settings at most three other {bundle.kind === "countries" ? "country bundles" : "bundles"} share.</p>
       <table class="grid">
-        <thead><tr><th>Setting</th><th>Value</th><th class="num">Bundles</th><th>Also in</th></tr></thead>
+        <thead><tr><th>Setting</th><th>Value</th><th>Also in</th></tr></thead>
         <tbody>
           {#each rare.rows as r (r.path + (r.value ?? ""))}
             <tr>
               <td class="mono wrap"><a href={tab("settings", "?filter=" + encodeURIComponent(r.path.split(/[.[]/, 1)[0]))}>{r.path}</a></td>
               <td class="mono wrap">{r.value ?? "set"}</td>
-              <td class="num">{rareLabel(r)}</td>
               <td>{#each r.with as w (w)}<a class="chip" href={bundleHref(bundle.kind, w)}>{w}</a>{:else}<span class="dimtext">none</span>{/each}</td>
             </tr>
           {/each}
@@ -132,7 +128,6 @@
   {#if rows.length || ov?.defaults.length}
     <fieldset class="hgroup">
       <legend>Phones</legend>
-      <p class="dimtext note">Each phone group gets carrier.plist with its own overrides on top, and its own modem file.</p>
       <table class="grid">
         <thead><tr><th>Phones</th><th>Modem</th><th>Overrides</th></tr></thead>
         <tbody>

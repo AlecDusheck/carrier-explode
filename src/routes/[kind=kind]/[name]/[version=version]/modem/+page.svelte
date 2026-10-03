@@ -2,7 +2,7 @@
   import { page } from "$app/state";
   import { getBundle, getFile } from "#lib/api/bundles.remote.ts";
   import { getBundleOverrides } from "#lib/api/tables.remote.ts";
-  import { modemCapabilities, modemLabel } from "#lib/decode/index.ts";
+  import { modemCapabilities } from "#lib/decode/index.ts";
   import { bundleArgs, link, rawHref } from "#lib/format.ts";
   import { phoneList, phoneRows, pickPhoneRow } from "#lib/phones.ts";
   import Pane from "#lib/components/Pane.svelte";
@@ -43,7 +43,7 @@
         <b class="mono wrap">{sel.path}</b>
         <span class="dimtext">
           {#if phone?.family}
-            for the <a href={link(`/builds/${ov?.build}/${phone.family}`)}>{modemLabel(phone.family)}</a> modem{caps?.carrierConfigIn === "bundle" ? ", and its whole carrier config" : ""}.
+            <a href={link(`/builds/${ov?.build}/${phone.family}`)}>Modem package</a>{caps?.carrierConfigIn === "bundle" ? "; this file is its whole carrier config" : ""}.
           {:else if sel.phones.length}
             for board {sel.phones.map((p) => p.id).join(", ")}, a phone this site cannot name yet.
           {:else}

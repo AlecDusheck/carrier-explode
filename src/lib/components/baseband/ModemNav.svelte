@@ -23,7 +23,6 @@
 <div class="which">
   <h2>
     {#if modem}<span class="mono">{modem.package.name}</span>{:else}No {modemLabel(family)} package{/if}
-    <span class="dimtext">in <a href={link("/builds/" + mods.build)}>iOS {mods.version} ({mods.build})</a></span>
   </h2>
 </div>
 
@@ -32,7 +31,6 @@
   .modems .btn { flex-direction: column; align-items: flex-start; gap: 0; max-width: 100%; text-align: left; }
   .modems .phones { font-size: 10.5px; color: var(--text-dim); }
   .which h2 { font-size: 14px; margin: 10px 0 2px; }
-  .which h2 .dimtext { font-weight: normal; font-size: 12px; }
   @media (max-width: 760px) {
     .modems .phones { display: none; }
     .modems .btn { min-height: 40px; justify-content: center; }

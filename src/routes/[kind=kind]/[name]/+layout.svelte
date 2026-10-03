@@ -28,9 +28,6 @@
   {:else if bundle.cc}
     <span class="dimtext">{bundle.cc.toUpperCase()}</span>
   {/if}
-  {#if bundle.related.carriers.length}
-    <a href={bundleHref(bundle.kind, bundle.name, bundle.entry.slug) + "#carriers"}>{bundle.related.carriers.length} carriers</a>
-  {/if}
 {/snippet}
 
 {#snippet versions(bundle: Bundle)}
@@ -62,7 +59,8 @@
 <!-- Name, version strip and tab row keep their height while the bundle loads, so the pane below never jumps. -->
 <div class="bundle-head">
   <div class="ident"><b>{params.name}</b>{@render withBundle(ident)}</div>
-  <div class="versions-slot">{@render withBundle(versions)}</div>
+  <!-- Emergency alerts come from the current copy whatever the version, so that tab has no strip. -->
+  {#if tab !== "alerts"}<div class="versions-slot">{@render withBundle(versions)}</div>{/if}
 </div>
 <nav class="tabs tabs-slot">{@render withBundle(tabs)}</nav>
 

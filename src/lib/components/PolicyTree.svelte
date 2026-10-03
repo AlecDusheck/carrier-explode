@@ -7,6 +7,7 @@
   let comments = $state(false);
   let notes = $state(false);
   const nodes = $derived(parsePolicyXml(xml));
+  const hasComments = $derived(walkPolicy(nodes).some((n) => n.kind === "comment"));
   // "Show notes" explains each element and attribute once, where it first appears.
   const firsts = $derived.by((): NoteFirsts => {
     const el: Record<string, PolicyNode> = {}, attr: Record<string, PolicyNode> = {};
@@ -19,7 +20,7 @@
 </script>
 
 <div class="filters">
-  <label class="lbl"><input type="checkbox" bind:checked={comments} /> Comments</label>
+  {#if hasComments}<label class="lbl"><input type="checkbox" bind:checked={comments} /> Comments</label>{/if}
   <button class="btn" class:on={notes} aria-pressed={notes} onclick={() => (notes = !notes)}>{notes ? "Hide notes" : "Show notes"}</button>
   <span class="dimtext legend">
     <span class="k cond">condition</span> <span class="k act">action</span> <span class="k def">definition</span>

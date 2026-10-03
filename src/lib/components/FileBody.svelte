@@ -13,7 +13,7 @@
     file: DecodedFile;
     cc?: string;
     raw: string;
-    /** Off where a file picker already names the devices. */
+    /** Off where a phone picker already names the devices and their modem. */
     devices?: boolean;
   } = $props();
 
@@ -55,7 +55,7 @@
 {/if}
 
 {#if file.kind === "pri-der"}
-  <PriView pri={file.pri} />
+  <PriView pri={file.pri} {devices} />
 {:else if file.kind === "prl"}
   {#if file.prl}<PrlView prl={file.prl} />{@render rawToggle()}{:else}{@render rawBody()}{/if}
 {:else if file.kind === "certificate"}

@@ -1,6 +1,6 @@
 <script lang="ts">
   import { getBundle, getFile } from "#lib/api/bundles.remote.ts";
-  import { bundleArgs, bundleHref, fileHref, humanBytes, rawHref } from "#lib/format.ts";
+  import { bundleArgs, fileHref, humanBytes, rawHref } from "#lib/format.ts";
   import Pane from "#lib/components/Pane.svelte";
   import FileBody from "#lib/components/FileBody.svelte";
 
@@ -11,10 +11,7 @@
   <Pane>
     {@const bundle = await getBundle(bundleArgs(params))}
     {#if params.path}
-      <div class="filters">
-        <a class="btn" href={bundleHref(params.kind, params.name, params.version, "files")}>All files</a>
-        <span class="mono breakall">{params.path}</span>
-      </div>
+      <div class="filters"><span class="mono breakall">{params.path}</span></div>
       <FileBody
         file={await getFile({ kind: params.kind, name: params.name, slug: params.version, path: params.path })}
         cc={bundle.cc}

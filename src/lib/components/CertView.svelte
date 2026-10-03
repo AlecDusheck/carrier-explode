@@ -1,7 +1,7 @@
 <script lang="ts">
   import type { CertInfo } from "#lib/decode/index.ts";
 
-  let { certs, signer, legend = "Certificate" }: { certs: CertInfo[]; signer?: number; legend?: string } = $props();
+  let { certs, signer }: { certs: CertInfo[]; signer?: number } = $props();
 
   const now = new Date().toISOString();
   const status = (c: CertInfo) => (c.notAfter < now ? "expired" : c.notBefore > now ? "not yet valid" : "valid now");
@@ -11,7 +11,7 @@
 
 {#each certs as c, i (i)}
   <fieldset class="hgroup">
-    <legend>{legend}{certs.length > 1 ? " " + (i + 1) + " of " + certs.length : ""}{i === signer ? " (signer)" : ""}</legend>
+    <legend>Certificate{certs.length > 1 ? " " + (i + 1) + " of " + certs.length : ""}{i === signer ? " (signer)" : ""}</legend>
     <table class="grid">
       <tbody>
         <tr><td class="k">Subject</td><td class="dn">{c.subject}</td></tr>

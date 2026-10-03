@@ -11,10 +11,9 @@
   import TreeNode from "./TreeNode.svelte";
   import TreeToolbar from "./TreeToolbar.svelte";
 
-  let { value, ctx, root = "", state, badges }: {
+  let { value, ctx, state, badges }: {
     value: unknown;
     ctx: TreeCtx;
-    root?: string;
     /** Shared with a toolbar elsewhere on the page; without it the tree has its own. */
     state?: TreeState;
     badges?: Record<string, KeyBadge[]>;
@@ -24,7 +23,6 @@
   const st = $derived(state ?? own);
 
   const entries = $derived(isJsonDict(value) ? Object.entries(value) : null);
-  const prefix = $derived(root ? root + "." : "");
   const onfilter = (p: string) => (st.filter = p);
 </script>
 
@@ -38,10 +36,10 @@
     <div class="tree">
       {#if entries}
         {#each entries as [k, v] (k)}
-          <TreeNode name={k} value={v} path={prefix + k} filter={st.filter} fold={st.fold} notes={st.notes} {ctx} {onfilter} badges={badges?.[k]} />
+          <TreeNode name={k} value={v} path={k} filter={st.filter} fold={st.fold} notes={st.notes} {ctx} {onfilter} badges={badges?.[k]} />
         {/each}
       {:else}
-        <TreeNode name={root || "value"} {value} path={root || "value"} filter={st.filter} fold={st.fold} notes={st.notes} {ctx} {onfilter} />
+        <TreeNode name="value" {value} path="value" filter={st.filter} fold={st.fold} notes={st.notes} {ctx} {onfilter} />
       {/if}
     </div>
   {/if}

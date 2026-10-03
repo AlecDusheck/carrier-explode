@@ -59,14 +59,16 @@
 
 {#if diff.files.length}
   <div class="filters">
-    {#each KINDS as k (k)}
+    {#each KINDS.filter((k) => byKind[k]) as k (k)}
       <button class="btn" class:on={kinds.has(k)} aria-pressed={kinds.has(k)} onclick={() => toggleIn(kinds, k)}>
         {k[0].toUpperCase() + k.slice(1)} ({byKind[k]})
       </button>
     {/each}
     <input type="search" name="diff-filter" placeholder="filter by path" aria-label="Filter by path" bind:value={query} />
-    <button class="btn" onclick={() => fold.expandAll()}>Expand all</button>
-    <button class="btn" onclick={() => fold.collapseAll()}>Collapse all</button>
+    {#if visible.length > 1}
+      <button class="btn" onclick={() => fold.expandAll()}>Expand all</button>
+      <button class="btn" onclick={() => fold.collapseAll()}>Collapse all</button>
+    {/if}
   </div>
 
   {#if folded.length}
