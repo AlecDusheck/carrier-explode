@@ -63,11 +63,10 @@ describe("carrier logos and flags", () => {
     expect(carrierLogo("Nonexistent_Carrier")).toBeUndefined();
   });
 
-  it("turns an ISO code into its flag and a country bundle name into its code", async () => {
-    const { flag, countryCode } = await import("../src/lib/names.ts");
+  it("turns an ISO code into its flag", async () => {
+    const { flag } = await import("../src/lib/names.ts");
     expect(flag("us")).toBe("🇺🇸");
-    expect(flag("zz")).toBeUndefined();
-    expect(countryCode("UnitedStates")).toBe("us");
-    expect(countryCode("UnitedKingdom")).toBe("gb");
+    expect(flag("xk")).toBe("🇽🇰");
+    expect(flag("usa")).toBeUndefined();
   });
 });
