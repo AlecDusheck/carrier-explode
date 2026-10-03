@@ -22,6 +22,8 @@ export interface Feature {
   where?: string;
   /** The keys it is decided by, for the "why" link. */
   keys: string[];
+  /** Needs a 5G modem: a carrier can switch it on for every phone, but an LTE-only iPhone cannot use it. */
+  needs5G?: true;
   decide: (e: Settings) => { state: FeatureState; because: string[] };
 }
 
@@ -62,6 +64,7 @@ function rules(...r: Rule[]) {
 
 const DEFINITIONS: Record<FeatureSlug, Omit<Feature, "slug">> = {
   "5g": {
+    needs5G: true,
     name: "5G",
     what: "Your iPhone can use your carrier's 5G network instead of LTE.",
     where: "Settings › Cellular › Cellular Data Options › Voice & Data",
@@ -78,6 +81,7 @@ const DEFINITIONS: Record<FeatureSlug, Omit<Feature, "slug">> = {
     ),
   },
   "5g-standalone": {
+    needs5G: true,
     name: "5G Standalone",
     what: "5G without an LTE anchor: lower latency and, on some networks, faster speeds and better coverage indoors.",
     where: "Settings › Cellular › Cellular Data Options › Voice & Data › 5G Standalone",
@@ -89,6 +93,7 @@ const DEFINITIONS: Record<FeatureSlug, Omit<Feature, "slug">> = {
     ),
   },
   "voice-over-5g": {
+    needs5G: true,
     name: "Voice over 5G (VoNR)",
     what: "Calls stay on 5G instead of dropping your connection to LTE while you talk.",
     where: "Settings › Cellular › Cellular Data Options › Voice & Data › Voice over 5G",

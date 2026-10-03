@@ -29,7 +29,9 @@
               <a href={featureHref(f.slug)}><b>{f.name}</b></a>
               <span>{f.what}</span>
               {#if s && phone}
-                <span class="dimtext">{s.counts.on + s.counts.available} carriers offer it on the {phone.name}.</span>
+                <span class="dimtext">
+                  {s.unusable ? `Not on the ${phone.name}: it has no 5G modem.` : `${s.counts.on + s.counts.available} carriers offer it on the ${phone.name}.`}
+                </span>
               {/if}
             </li>
           {/each}
