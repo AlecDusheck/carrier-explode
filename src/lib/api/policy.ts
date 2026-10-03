@@ -20,7 +20,6 @@ export type QueryName = keyof typeof bundles | keyof typeof tables;
 
 export const QUERIES: Record<QueryName, QueryPolicy> = {
   getIndex: { rate: "base", shared: true },
-  getStats: { rate: "base", shared: true },
   getManifestFacts: { rate: "base", shared: true },
   guessCarrier: { rate: "base" },
   guessCountry: { rate: "base" },

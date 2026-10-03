@@ -1,13 +1,11 @@
 <script lang="ts">
   import "#lib/ui.css";
-  import { page, navigating } from "$app/state";
-  import { getStats } from "#lib/api/bundles.remote.ts";
+  import { page } from "$app/state";
   import { link } from "#lib/format.ts";
   import { SITE, seo } from "#lib/seo.ts";
   import { scan } from "#lib/ui-state.svelte.ts";
   import ContextMenu from "#lib/components/ContextMenu.svelte";
   import ScanDialog from "#lib/components/ScanDialog.svelte";
-  import Pane from "#lib/components/Pane.svelte";
 
   let { children } = $props();
 
@@ -26,7 +24,6 @@
   // One address per page: the compare tool is the only page with meaningful
   // search params, and its results are not what should be indexed.
   const canonical = $derived(page.url.origin + page.url.pathname);
-  const busy = $derived($effect.pending() > 0 || !!navigating.to);
 </script>
 
 <svelte:head>
@@ -44,6 +41,7 @@
       <span>carrier-explode</span>
       <span class="spacer"></span>
       <span class="sub">iOS carrier and country bundles</span>
+      <a class="github" href="https://github.com/AlecDusheck/carrier-explode" rel="noreferrer">GitHub</a>
     </div>
 
     <nav class="menubar">
@@ -54,25 +52,9 @@
     </nav>
 
     <div class="body">{@render children()}</div>
-
-    <div class="statusbar">
-      <span class="cell grow">
-        <Pane quiet>
-          {@const stats = await getStats()}
-          {stats.carriers} carriers, {stats.countries} countries
-          {#if stats.build}&middot; iOS {stats.version} ({stats.build}){/if}
-          {#if stats.beta}&middot; beta iOS {stats.beta.version} ({stats.beta.build}){/if}
-        </Pane>
-      </span>
-      <a class="cell" href="https://github.com/AlecDusheck/carrier-explode" rel="noreferrer">GitHub</a>
-      <span class="cell busy" aria-live="polite">{busy ? "Working…" : "Ready"}</span>
-    </div>
   </div>
 </div>
 
 <ContextMenu />
 {#if scan.open}<ScanDialog />{/if}
 
-<style>
-  .busy { width: 64px; }
-</style>

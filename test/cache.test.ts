@@ -112,7 +112,7 @@ describe("rateClass", () => {
 
 describe("remoteQuery", () => {
   it("lets only the queries that read nobody be shared", () => {
-    expect(remoteQuery(remote("getStats"))?.shared).toBe(true);
+    expect(remoteQuery(remote("getIndex"))?.shared).toBe(true);
     expect(remoteQuery(remote("guessCarrier"))?.shared).toBeUndefined();
     expect(remoteQuery(page("/[kind=kind]"))).toBeNull();
   });
