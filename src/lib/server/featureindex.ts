@@ -9,7 +9,7 @@
  */
 
 import { decodeFile, decodedPlist, isJsonDict, type OpenedBundle } from "#lib/decode/index.ts";
-import { DEVICE_CODENAMES } from "#lib/decode/devices.ts";
+import { describeDevices } from "#lib/decode/devices.ts";
 import { FEATURES, decodeFeature, encodeFeatures, type FeatureState } from "#lib/features.ts";
 import { compareProducts } from "#lib/phones.ts";
 import { mergeSettings } from "#lib/settings.ts";
@@ -73,10 +73,6 @@ export function featureCopy(head: OpenedBundle, build: string, phone?: string, o
   return { build, ...(phone ? { phone } : {}), ...(newest ? { newest } : {}), groups, base: encodeFeatures(carrier) };
 }
 
-/** Board codes a product type goes by ("iPhone19,3" -> V64). */
-const boardsOf = (productType: string) =>
-  Object.entries(DEVICE_CODENAMES).filter(([, d]) => d.ids === productType).map(([code]) => code);
-
 /**
  * A feature on one phone with one bundle: its group's answer; else carrier.plist alone when the
  * phone is known to have no override file (it is the copy's own model, a complete copy made after
@@ -85,8 +81,8 @@ const boardsOf = (productType: string) =>
 export function phoneFeature(index: FeatureIndex, bundle: string, slug: string, productType: string): FeatureState | "unknown" {
   const c = index.bundles[bundle];
   if (!c) return "unknown";
-  const boards = new Set(boardsOf(productType));
-  const g = c.groups.find((x) => x.boards.some((b) => boards.has(b)));
+  // describeDevices also reads a board the table lacks by its family (V63s as V63), as bundle pages do.
+  const g = c.groups.find((x) => describeDevices(x.boards.join("_")).some((d) => d.ids === productType));
   const known = c.phone === productType || !c.groups.length || (!!c.newest && compareProducts(c.newest, productType) >= 0);
   const code = g?.code ?? (known ? c.base : undefined);
   return (code && decodeFeature(code, index.features, slug)) || "unknown";

@@ -30,7 +30,7 @@
     for (const k of keys) {
       const b: KeyBadge[] = [];
       if (phone.has(k)) b.push({ text: "phone", tone: "phone", title: `Set by ${phoneName}'s override file` });
-      if (country.has(k)) b.push({ text: "country too", tone: "country", title: "The home country bundle sets this key as well" });
+      if (country.has(k)) b.push({ text: "country too", tone: "country", title: "The home country bundle sets this too; which one wins is not documented" });
       b.push(...(rare[k] ?? []));
       if (b.length) out[k] = b;
     }
@@ -74,18 +74,11 @@
       {@const shown = Object.fromEntries(Object.entries(eff.merged).filter(([k]) => keep(k)))}
       {@const badges = badgesFor(Object.keys(shown), eff.fromPhone, rareTop, country, phoneName)}
 
-      {#if phoneDict || rows.length || rare.indexed || (homeDict && show === "all")}<p class="dimtext note">
-        {#if phoneDict}
-          carrier.plist with <span class="mono">{over?.path}</span> on top.
-        {:else if rows.length}
-          No override plist for these phones.
-        {/if}
-        {#if rare.indexed}Keys marked <span class="badge rare">n of N</span> hold a value at most three other bundles share.{/if}
-        {#if homeDict && show === "all"}
-          Keys marked <span class="badge country">country too</span> are also set by the home country bundle, which the network the phone is on picks,
-          not the SIM; where both set a key, which one wins is not documented.
-        {/if}
-      </p>{/if}
+      {#if phoneDict}
+        <p class="dimtext note">carrier.plist + <span class="mono">{over?.path}</span></p>
+      {:else if rows.length}
+        <p class="dimtext note">No override plist for these phones.</p>
+      {/if}
 
       {#each groupSettings(shown) as [title, picked] (title)}
         <fieldset class="hgroup">

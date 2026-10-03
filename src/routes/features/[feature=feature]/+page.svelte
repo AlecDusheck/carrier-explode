@@ -12,7 +12,7 @@
   let { params } = $props();
 
   const feature = $derived(featureBySlug(params.feature)!);
-  let offeredOnly = $state(true);
+  let hideNo = $state(true);
 
   const FAQ = $derived([
     {
@@ -80,16 +80,16 @@
             <h2>Carriers</h2>
             <p>
               <b>{offered} carrier{offered === 1 ? "" : "s"}</b> offer {feature.name} on the {phone.name}, and {notOffered} don't.
-              {#if unknown}<span class="dimtext">For {unknown} more there are no settings for the {phone.name} to read yet.</span>{/if}
+              {#if unknown}<span class="dimtext">For {unknown} more we don't have the carrier's settings for the {phone.name} yet, so they show as unknown.</span>{/if}
             </p>
             <CarrierList
-              rows={offeredOnly ? t.rows.filter((r) => offers(r.state)) : t.rows}
+              rows={hideNo ? t.rows.filter((r) => r.state !== "no") : t.rows}
               home={await getVisitorCountry()}
               href={(name) => bundleHref("carriers", name)}
               column={feature.name}
             >
               {#snippet filters()}
-                <label class="lbl"><input type="checkbox" bind:checked={offeredOnly} /> Only carriers that offer it</label>
+                <label class="lbl"><input type="checkbox" bind:checked={hideNo} /> Hide carriers that don't offer it</label>
               {/snippet}
             </CarrierList>
           {/if}

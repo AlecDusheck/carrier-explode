@@ -6,7 +6,6 @@
 
 <script lang="ts">
   import { isJsonDict } from "#lib/decode/index.ts";
-  import { plainJson } from "#lib/format.ts";
   import { TreeState } from "#lib/ui-state.svelte.ts";
   import TreeNode from "./TreeNode.svelte";
   import TreeToolbar from "./TreeToolbar.svelte";
@@ -30,17 +29,13 @@
   <p class="dimtext">Nothing to show.</p>
 {:else}
   {#if !state}<TreeToolbar state={own} />{/if}
-  {#if st.raw}
-    <pre class="code">{plainJson(value, 2)}</pre>
-  {:else}
-    <div class="tree">
-      {#if entries}
-        {#each entries as [k, v] (k)}
-          <TreeNode name={k} value={v} path={k} filter={st.filter} fold={st.fold} notes={st.notes} {ctx} {onfilter} badges={badges?.[k]} />
-        {/each}
-      {:else}
-        <TreeNode name="value" {value} path="value" filter={st.filter} fold={st.fold} notes={st.notes} {ctx} {onfilter} />
-      {/if}
-    </div>
-  {/if}
+  <div class="tree">
+    {#if entries}
+      {#each entries as [k, v] (k)}
+        <TreeNode name={k} value={v} path={k} filter={st.filter} {ctx} {onfilter} badges={badges?.[k]} />
+      {/each}
+    {:else}
+      <TreeNode name="value" {value} path="value" filter={st.filter} {ctx} {onfilter} />
+    {/if}
+  </div>
 {/if}

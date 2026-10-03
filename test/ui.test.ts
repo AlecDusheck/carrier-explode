@@ -1,6 +1,5 @@
 import { describe, it, expect } from "vitest";
 import { cbsEntryLabel, comboPart, entryLabel, plainJson } from "../src/lib/format.ts";
-import { Folding } from "../src/lib/ui-state.svelte.ts";
 
 describe("plainJson", () => {
   it("matches JSON.stringify for plain values, compact and indented", () => {
@@ -32,21 +31,6 @@ describe("comboPart", () => {
   it("writes a component with its uplink class", () => {
     expect(comboPart({ rat: "lte", band: 66, dl: "A", ul: "A" })).toBe("B66A↑A");
     expect(comboPart({ rat: "nr", band: 77, dl: "C", ul: "A" }, false)).toBe("n77C");
-  });
-});
-
-describe("Folding", () => {
-  it("lets a node's own toggle win until the next expand or collapse all", () => {
-    const f = new Folding();
-    expect(f.openFor(true, null)).toBe(true);
-    f.collapseAll();
-    expect(f.openFor(true, null)).toBe(false);
-    const t = f.toggle(true);
-    expect(f.openFor(false, t)).toBe(true);
-    f.expandAll();
-    expect(f.openFor(false, t)).toBe(true);
-    f.collapseAll();
-    expect(f.openFor(true, t)).toBe(false);
   });
 });
 

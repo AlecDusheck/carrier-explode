@@ -50,12 +50,14 @@ const BUNDLE_ROUTES: ReadonlySet<RouteId> = new Set<RouteId>([RAW, "/compare"]);
 /**
  * Pages rendered from modem package summaries or an image index's modems, both
  * of which baseband.yml can rewrite; it purges the "baseband" tag when it does.
- * A bundle's Overview, Settings and Modem tabs all list its phones by modem.
+ * A bundle's Overview, Settings, Modem and Changes tabs all list its phones by modem, and the
+ * Features pages offer the current release's phones.
  */
 const BASEBAND_ROUTES: ReadonlySet<RouteId> = new Set<RouteId>([
   "/builds", "/builds/[build]", "/builds/[build]/[family]", "/sitemap.xml",
   "/[kind=kind]/[name]", "/[kind=kind]/[name]/[version=version]",
   "/[kind=kind]/[name]/[version=version]/settings", "/[kind=kind]/[name]/[version=version]/modem",
+  "/[kind=kind]/[name]/[version=version]/changes", "/features", "/features/[feature=feature]",
 ]);
 
 const routeIn = (routes: ReadonlySet<RouteId>, id: RouteId | null) => id !== null && routes.has(id);

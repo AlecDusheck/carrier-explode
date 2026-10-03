@@ -10,35 +10,29 @@
   import IntelValueView from "./IntelValue.svelte";
   import Confidence from "./Confidence.svelte";
   import { isIntelNode, type IntelList, type IntelNode, type IntelTable } from "#lib/decode/index.ts";
-  import type { Folding, FoldToggle } from "#lib/ui-state.svelte.ts";
 
   let {
     node,
     depth = 0,
-    notes = false,
     raw = false,
-    fold,
     filtering = false,
     nested = false,
   }: {
     node: IntelNode;
     depth?: number;
-    notes?: boolean;
     raw?: boolean;
-    fold: Folding;
     filtering?: boolean;
     /** Inside a table cell: no twist, lists and PLMN tables inline. */
     nested?: boolean;
   } = $props();
 
-  let toggled = $state<FoldToggle | null>(null);
+  let toggled = $state<boolean | null>(null);
   let showNote = $state(false);
 
   const big = $derived(node.kind === "table" ? node.rows.length > BIG : node.kind === "list" ? node.items.length > BIG : false);
   const auto = $derived(filtering || (node.kind === "group" ? depth < 2 : depth < 4 && !big));
-  const open = $derived(fold.openFor(auto, toggled));
+  const open = $derived(toggled ?? auto);
   const note = $derived(node.kind === "group" ? node.note : undefined);
-  const noteOn = $derived(notes || showNote);
 
   // A list of short values reads as one line; a decoded bitmap reads as its bands.
   const inlineList = $derived(node.kind === "list" && (nested || !!node.value || (node.items.length <= INLINE && node.items.every((x) => !x.value.decoded || x.value.decoded.kind === "band"))));
@@ -52,7 +46,7 @@
 </script>
 
 {#snippet twist()}
-  <button type="button" class="twist" aria-expanded={open} onclick={() => (toggled = fold.toggle(!open))}>{open ? "▾" : "▸"}</button>
+  <button type="button" class="twist" aria-expanded={open} onclick={() => (toggled = !open)}>{open ? "▾" : "▸"}</button>
 {/snippet}
 
 {#snippet unused(l: IntelList)}
@@ -78,7 +72,7 @@
                 {#if !cell}
                   <span class="dimtext">·</span>
                 {:else if isIntelNode(cell)}
-                  <Self node={cell} depth={depth + 1} {notes} {raw} {fold} {filtering} nested />
+                  <Self node={cell} depth={depth + 1} {raw} {filtering} nested />
                 {:else}
                   <IntelValueView v={cell} {raw} bare />
                 {/if}
@@ -103,7 +97,7 @@
       {#if node.kind === "leaf" || inlineList}<span class="twist" aria-hidden="true">·</span>{:else}{@render twist()}{/if}
       <span>
         {#if note}
-          <button type="button" class="key doc" class:on={noteOn} aria-expanded={noteOn} onclick={() => (showNote = !showNote)}>{node.name}</button>
+          <button type="button" class="key doc" class:on={showNote} aria-expanded={showNote} onclick={() => (showNote = !showNote)}>{node.name}</button>
         {:else}
           <span class="key">{node.name}</span>
         {/if}
@@ -125,14 +119,14 @@
       </span>
     </div>
 
-    {#if note && noteOn}
+    {#if note && showNote}
       <span class="note">{note.text}<Confidence c={note.confidence} /></span>
     {/if}
 
     {#if open && node.kind === "group"}
       <div class="children">
         {#each node.children as c (c.path)}
-          <Self node={c} depth={depth + 1} {notes} {raw} {fold} {filtering} />
+          <Self node={c} depth={depth + 1} {raw} {filtering} />
         {/each}
       </div>
     {:else if open && node.kind === "table"}

@@ -20,7 +20,7 @@ import {
   type BasebandSummary, type BundleFile, type DiffCounts, type DiffRow, type ModemKind, type ModemSummary, type OpenedBundle,
   type PriReplacement,
 } from "#lib/decode/index.ts";
-import { compareVersions, imageSlug, isPrerelease } from "#lib/names.ts";
+import { compareVersions, fold, imageSlug, isPrerelease } from "#lib/names.ts";
 import { byNewest, compareProducts, homePhone, knowsPhone, overridesFor, sharedPri } from "#lib/phones.ts";
 import { FEATURES, featureBySlug } from "#lib/features.ts";
 import { featuresKey, phoneFeature, type FeatureIndex } from "./featureindex";
@@ -941,12 +941,9 @@ export async function guessCountry(): Promise<string | null> {
   const hit = isoIndex(plists).get(cc);
   if (hit && countries.some((c) => c.name === hit)) return hit;
   // Territories and, without countries.json, everything else: Apple's bundle
-  // names are the English name with the spaces taken out. Accents are folded
-  // rather than dropped, or Réunion would not reach Reunion.
-  const flat = (s: string) =>
-    s.normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9]/gi, "").toLowerCase();
+  // names are the English name with the spaces taken out.
   const name = countryName(cc);
-  return (name && countries.find((c) => flat(c.name) === flat(name))?.name) || null;
+  return (name && countries.find((c) => fold(c.name) === fold(name))?.name) || null;
 }
 
 /** On a phone, the carrier bundle the visitor's network most likely is. */

@@ -4,7 +4,7 @@
   import { ROUTINE_LABEL, type RoutineReason } from "#lib/changes.ts";
   import type { Kind, PublicEntry } from "#lib/types.ts";
   import { DIFF_CHIP, fileHref } from "#lib/format.ts";
-  import { Folding, toggleIn, type FoldToggle } from "#lib/ui-state.svelte.ts";
+  import { toggleIn } from "#lib/ui-state.svelte.ts";
   import DiffRows from "./DiffRows.svelte";
 
   interface Side { kind: Kind; name: string; entry: PublicEntry }
@@ -24,8 +24,8 @@
   const KINDS = ["changed", "added", "removed"] as const satisfies DiffKind[];
 
   const kinds = new SvelteSet<DiffKind>(KINDS);
-  const fold = new Folding();
-  const toggled = new SvelteMap<string, FoldToggle>();
+  // Files opened or closed by hand.
+  const toggled = new SvelteMap<string, boolean>();
   let query = $state("");
 
   const q = $derived(query.trim().toLowerCase());
@@ -46,8 +46,8 @@
   );
   // Few files open by default; a text filter opens whatever it matched.
   const auto = $derived(!!q || visible.length <= 6);
-  const isOpen = (path: string) => fold.openFor(auto, toggled.get(path));
-  const toggle = (path: string) => toggled.set(path, fold.toggle(!isOpen(path)));
+  const isOpen = (path: string) => toggled.get(path) ?? auto;
+  const toggle = (path: string) => toggled.set(path, !isOpen(path));
 
   const total = (c: BundleDiff["counts"]) => c.added + c.removed + c.changed;
   const anchor = (path: string) => "file-" + path.replace(/[^\w.-]/g, "_");
@@ -65,10 +65,6 @@
       </button>
     {/each}
     <input type="search" name="diff-filter" placeholder="filter by path" aria-label="Filter by path" bind:value={query} />
-    {#if visible.length > 1}
-      <button class="btn" onclick={() => fold.expandAll()}>Expand all</button>
-      <button class="btn" onclick={() => fold.collapseAll()}>Collapse all</button>
-    {/if}
   </div>
 
   {#if folded.length}

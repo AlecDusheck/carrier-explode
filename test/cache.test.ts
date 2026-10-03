@@ -13,7 +13,7 @@ const event = (opts: { method?: string; remote?: boolean; version?: string; perV
 const maxAge = (v?: string) => Number(/(?:^|[ ,])max-age=(\d+)/.exec(v ?? "")?.[1]);
 
 describe("cachePolicy", () => {
-  const edge = (o: Parameters<typeof event>[0] = {}, status = 200) => cachePolicy({ ...event(o), route: { id: "/[kind=kind]/[name]/[version=version]/changes" } }, status);
+  const edge = (o: Parameters<typeof event>[0] = {}, status = 200) => cachePolicy({ ...event(o), route: { id: "/[kind=kind]/[name]/[version=version]/files/[...path]" } }, status);
 
   it("addresses the edge, and tells browsers to revalidate", () => {
     // s-maxage would disable stale-while-revalidate, and a plain public
@@ -33,7 +33,9 @@ describe("cachePolicy", () => {
     const at = (id: RequestEvent["route"]["id"], version?: string) => cachePolicy({ ...event({ version }), route: { id } }, 200).tags;
     expect(at("/builds/[build]")).toContain("baseband");
     expect(at("/[kind=kind]/[name]/[version=version]/modem", "ios-27.0")).toEqual(["pinned", "baseband"]);
-    expect(at("/[kind=kind]/[name]/[version=version]/changes", "ios-27.0")).not.toContain("baseband");
+    // The Changes tab lists each phone's override file by modem, so it is one of them.
+    expect(at("/[kind=kind]/[name]/[version=version]/changes", "ios-27.0")).toEqual(["pinned", "baseband"]);
+    expect(at("/[kind=kind]/[name]/[version=version]/files/[...path]", "ios-27.0")).not.toContain("baseband");
     // It lists every image's modem packages.
     expect(at("/sitemap.xml")).toContain("baseband");
   });

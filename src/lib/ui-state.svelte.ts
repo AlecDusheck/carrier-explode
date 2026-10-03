@@ -51,43 +51,9 @@ class ScanState {
 
 export const scan = new ScanState();
 
-/** A node's own open/closed choice, stamped with the expand-all or collapse-all it was made after. */
-export interface FoldToggle { epoch: number; open: boolean }
-
-/**
- * Expand all / collapse all over a tree whose nodes also open one by one. A
- * node's own toggle counts until the next expand-all or collapse-all.
- */
-export class Folding {
-  #epoch = $state(0);
-  #all = $state<boolean | null>(null);
-
-  expandAll() { this.#set(true); }
-  collapseAll() { this.#set(false); }
-
-  #set(open: boolean) {
-    this.#all = open;
-    this.#epoch++;
-  }
-
-  /** The toggle a node stores when it is opened or closed by hand. */
-  toggle(open: boolean): FoldToggle {
-    return { epoch: this.#epoch, open };
-  }
-
-  /** Whether a node is open: its own toggle, else the last expand/collapse-all, else `auto`. */
-  openFor(auto: boolean, toggled: FoldToggle | null | undefined): boolean {
-    if (toggled?.epoch === this.#epoch) return toggled.open;
-    return this.#all ?? auto;
-  }
-}
-
 /** What one toolbar controls; several trees on a page can share it. */
 export class TreeState {
   filter = $state("");
-  notes = $state(false);
-  raw = $state(false);
-  fold = new Folding();
 }
 
 /** Adds `key` to the set, or removes it when it is there. */

@@ -8,8 +8,8 @@
   // `flat`: the key / value list as the file stores it.
   let { tree, flat }: { tree: IntelTree; flat: Snippet<[string]> } = $props();
 
-  // `raw` here is "raw values", not JSON.
   const st = new TreeState();
+  let raw = $state(false);
   let keys = $state(false);
 
   const f = $derived(st.filter.trim().toLowerCase());
@@ -30,8 +30,8 @@
   const unparsed = $derived(tree.unparsed.filter((u) => !f || (u.key + " " + u.value.raw).toLowerCase().includes(f)));
 </script>
 
-<TreeToolbar state={st} json={false} label="filter settings">
-  <button class="btn" class:on={st.raw} aria-pressed={st.raw} onclick={() => (st.raw = !st.raw)}>Raw values</button>
+<TreeToolbar state={st} label="filter settings">
+  <button class="btn" class:on={raw} aria-pressed={raw} onclick={() => (raw = !raw)}>Raw values</button>
   <button class="btn" class:on={keys} aria-pressed={keys} onclick={() => (keys = !keys)}>Key list</button>
 </TreeToolbar>
 
@@ -74,7 +74,7 @@
 
   <div class="tree">
     {#each nodes as n (n.path)}
-      <IntelNode node={n} notes={st.notes} raw={st.raw} fold={st.fold} filtering={!!f} />
+      <IntelNode node={n} {raw} filtering={!!f} />
     {:else}
       <p class="dimtext">Nothing matches.</p>
     {/each}

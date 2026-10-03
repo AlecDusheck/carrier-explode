@@ -6,7 +6,7 @@
     on: { label: "On", tone: "good", hint: "Available and on by default" },
     available: { label: "Available", tone: "info", hint: "Offered: turn it on in Settings, or your plan decides" },
     no: { label: "Not offered", tone: "bad", hint: "This carrier does not offer it on this iPhone" },
-    unknown: { label: "No data", tone: "", hint: "No copy of this carrier's settings for this iPhone yet" },
+    unknown: { label: "Unknown", tone: "", hint: "We don't have this carrier's settings for this iPhone yet" },
   };
 </script>
 

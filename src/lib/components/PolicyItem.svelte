@@ -1,20 +1,11 @@
-<script lang="ts" module>
-  import type { PolicyNode } from "#lib/decode/index.ts";
-
-  /** The first node of each tag, and of each tag@attribute, in document order. */
-  export interface NoteFirsts { el: Record<string, PolicyNode>; attr: Record<string, PolicyNode> }
-</script>
-
 <script lang="ts">
   import { SvelteSet } from "svelte/reactivity";
-  import { describePolicyAttr, describePolicyElement } from "#lib/decode/index.ts";
+  import { describePolicyAttr, describePolicyElement, type PolicyNode } from "#lib/decode/index.ts";
   import { toggleIn } from "#lib/ui-state.svelte.ts";
   import Confidence from "./Confidence.svelte";
   import PolicyItem from "./PolicyItem.svelte";
 
-  let { node, depth = 0, comments, notes = false, firsts }: {
-    node: PolicyNode; depth?: number; comments: boolean; notes?: boolean; firsts?: NoteFirsts;
-  } = $props();
+  let { node, depth = 0, comments }: { node: PolicyNode; depth?: number; comments: boolean } = $props();
 
   const WORD: Record<string, string> = {
     if: "IF", then: "THEN", else: "ELSE", select: "SELECT", case: "CASE", actions: "ACTIONS",
@@ -35,17 +26,12 @@
   // The element whose name this row shows.
   const shown = $derived(inline ?? node);
   const doc = $derived(PLAIN.has(shown.tag) ? undefined : describePolicyElement(shown.tag));
-  const attrs = $derived(Object.entries(shown.attrs).map(([k, v]) => ({
-    k, v, note: describePolicyAttr(shown.tag, k), first: !firsts || firsts.attr[shown.tag + "@" + k] === shown,
-  })));
-  // With notes on, repeats stay tappable but only the first of each is explained.
-  const noteOn = $derived(showNote || (notes && (!firsts || firsts.el[shown.tag] === shown)));
-  const attrOn = (a: { k: string; first: boolean }) => attrOpen.has(a.k) || (notes && a.first);
+  const attrs = $derived(Object.entries(shown.attrs).map(([k, v]) => ({ k, v, note: describePolicyAttr(shown.tag, k) })));
 </script>
 
 {#snippet name(label: string, cls: string)}
   {#if doc}
-    <button type="button" class="{cls} doc" class:on={noteOn} aria-expanded={noteOn}
+    <button type="button" class="{cls} doc" class:on={showNote} aria-expanded={showNote}
       onclick={() => (showNote = !showNote)}>{label}</button>
   {:else}
     <span class={cls}>{label}</span>
@@ -54,21 +40,21 @@
 
 {#snippet rest(n: PolicyNode)}
   {#each attrs as a (a.k)}
-    <span class="a">{#if a.note}<button type="button" class="an doc" class:on={attrOn(a)} aria-expanded={attrOn(a)}
+    <span class="a">{#if a.note}<button type="button" class="an doc" class:on={attrOpen.has(a.k)} aria-expanded={attrOpen.has(a.k)}
         onclick={() => toggleIn(attrOpen, a.k)}>{a.k}</button>{:else}{a.k}{/if}=<span class="v">{a.v}</span></span>
   {/each}
   {#if n.text}<span class="x">{n.text}</span>{/if}
 {/snippet}
 
 {#snippet explain()}
-  {#if doc && noteOn}
+  {#if doc && showNote}
     <span class="note">
       {doc.note}{#if doc.values?.length}<span class="vals">Values: {doc.values.join(", ")}.</span>{/if}
       <Confidence c={doc.confidence} />
     </span>
   {/if}
   {#each attrs as a (a.k)}
-    {#if a.note && attrOn(a)}<span class="note"><span class="ak">{a.k}</span>: {a.note}</span>{/if}
+    {#if a.note && attrOpen.has(a.k)}<span class="note"><span class="ak">{a.k}</span>: {a.note}</span>{/if}
   {/each}
 {/snippet}
 
@@ -95,7 +81,7 @@
   {@render explain()}
   {#if open}
     <div class="children">
-      {#each kids as k, i (i)}<PolicyItem node={k} depth={depth + 1} {comments} {notes} {firsts} />{/each}
+      {#each kids as k, i (i)}<PolicyItem node={k} depth={depth + 1} {comments} />{/each}
     </div>
   {/if}
 {/if}

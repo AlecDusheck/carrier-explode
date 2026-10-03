@@ -99,12 +99,19 @@ export function splitName(name: string): { cc?: string; display: string } {
   // Apple also writes UK, which is not an ISO code, and some names end in the country itself
   // (O2_Germany, TIM_Italy). Those keep the word: it is part of how the carrier is named.
   const last = /_([A-Za-z]+)$/.exec(name)?.[1].toLowerCase();
-  const cc = last === "uk" ? "gb" : last && ISO_BY_NAME.get(last);
+  const cc = last === "uk" ? "gb" : last && ISO_BY_NAME.get(fold(last));
   return { ...(cc ? { cc } : {}), display: name.replace(/_/g, " ") };
 }
 
-/** "germany" -> "de": ISO_NAMES the other way, spaces and punctuation dropped as Apple's names drop them. */
-const ISO_BY_NAME = new Map(Object.entries(ISO_NAMES).map(([cc, n]) => [n.toLowerCase().replace(/[^a-z]/g, ""), cc]));
+/**
+ * A name reduced for matching: accents folded (Réunion reaches Reunion), then letters and digits
+ * only, so "AT&T" finds ATT_US and "Red Pocket" finds ATT_RedPocket_US.
+ */
+export const fold = (s: string) =>
+  s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]/g, "");
+
+/** "germany" -> "de": ISO_NAMES the other way, folded as Apple's names run the words together. */
+const ISO_BY_NAME = new Map(Object.entries(ISO_NAMES).map(([cc, n]) => [fold(n), cc]));
 
 
 // The bundle names Apple uses are internal: ATT, TMobile, CMCC, Hutchison.

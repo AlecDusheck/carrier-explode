@@ -2,7 +2,7 @@
   import Self from "./TreeNode.svelte";
   import Confidence from "./Confidence.svelte";
   import { describeField, describeValue, isBigInt, isBlob, isDate, isJsonDict, isUid } from "#lib/decode/index.ts";
-  import { menuTrigger, copyText, scan, type Folding, type FoldToggle, type MenuItem } from "#lib/ui-state.svelte.ts";
+  import { menuTrigger, copyText, scan, type MenuItem } from "#lib/ui-state.svelte.ts";
   import { hexDump, plainJson } from "#lib/format.ts";
   import { searchTerms } from "#lib/settings.ts";
   import type { KeyBadge, TreeCtx } from "./Tree.svelte";
@@ -13,8 +13,6 @@
     depth = 0,
     path,
     filter = "",
-    fold,
-    notes = false,
     ctx,
     onfilter,
     badges,
@@ -24,14 +22,12 @@
     depth?: number;
     path: string;
     filter?: string;
-    fold: Folding;
-    notes?: boolean;
     ctx: TreeCtx;
     onfilter?: (p: string) => void;
     badges?: KeyBadge[];
   } = $props();
 
-  let toggled = $state<FoldToggle | null>(null);
+  let toggled = $state<boolean | null>(null);
   let showHex = $state(false);
   let showNote = $state(false);
 
@@ -48,7 +44,7 @@
   const mask = $derived(!!valueDoc && (valueDoc.format === "bitmask" || (!!valueDoc.bits && !valueDoc.format)));
   const unit = $derived(num !== undefined ? valueDoc?.unit : undefined);
 
-  const open = $derived(fold.openFor(depth < 2 || !!filter, toggled));
+  const open = $derived(toggled ?? (depth < 2 || !!filter));
 
   // The filter text and the key words of the feature it names ("VoNR", "Wi-Fi Calling").
   const terms = $derived(searchTerms(filter));
@@ -99,14 +95,14 @@
   <div>
     <div class="row" {@attach menuTrigger(buildMenu)}>
       {#if container}
-        <button type="button" class="twist" aria-expanded={open} onclick={() => (toggled = fold.toggle(!open))}
+        <button type="button" class="twist" aria-expanded={open} onclick={() => (toggled = !open)}
         >{open ? "▾" : "▸"}</button>
       {:else}
         <span class="twist" aria-hidden="true">·</span>
       {/if}
       <span>
         {#if doc}
-          <button type="button" class="key doc" class:on={notes || showNote} aria-expanded={notes || showNote}
+          <button type="button" class="key doc" class:on={showNote} aria-expanded={showNote}
             onclick={() => (showNote = !showNote)}>{name}</button>
         {:else}
           <span class="key">{name}</span>
@@ -162,7 +158,7 @@
       <pre class="code hex">{hexDump(value.__data)}</pre>
     {/if}
 
-    {#if doc && (notes || showNote)}
+    {#if doc && showNote}
       <span class="note">
         {doc.note}{doc.default !== undefined ? " Default " + doc.default + (doc.unit ? " " + doc.unit : "") + "." : ""}
         <Confidence c={doc.confidence} />
@@ -173,11 +169,11 @@
       <div class="children">
         {#if isJsonDict(value)}
           {#each Object.entries(value) as [k, v] (k)}
-            <Self name={k} value={v} depth={depth + 1} path={path + "." + k} {filter} {fold} {notes} {ctx} {onfilter} />
+            <Self name={k} value={v} depth={depth + 1} path={path + "." + k} {filter} {ctx} {onfilter} />
           {/each}
         {:else if asArray}
           {#each asArray as v, i (i)}
-            <Self name={"[" + i + "]"} value={v} depth={depth + 1} path={path + "[" + i + "]"} {filter} {fold} {notes} {ctx} {onfilter} />
+            <Self name={"[" + i + "]"} value={v} depth={depth + 1} path={path + "[" + i + "]"} {filter} {ctx} {onfilter} />
           {/each}
         {/if}
       </div>
