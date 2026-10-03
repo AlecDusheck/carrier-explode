@@ -14,11 +14,7 @@
   <div class="scroll pad">
     <article class="consumer">
       <h1>iPhone carrier features</h1>
-      <p class="lead">
-        Whether 5G Standalone, Wi-Fi Calling, RCS or satellite texting works on your iPhone depends on your carrier and on
-        your iPhone model, and sometimes on your plan. These answers come from the carrier settings Apple ships for each
-        carrier, read separately for each iPhone.
-      </p>
+      <p class="lead">What your carrier supports on your iPhone.</p>
 
       <Pane>
         {@const phones = await getFeaturePhones()}

@@ -59,7 +59,6 @@
       <Pane>
         {@const phones = await getFeaturePhones()}
         {@const phone = phones.find((p) => p.id === page.url.searchParams.get("phone")) ?? phones[0]}
-        <p>Whether you get it depends on your carrier and your iPhone model.</p>
         <FeaturePhonePicker {phones} {phone} />
         {@const carrier = await guessCarrierName()}
         {#if phone}
