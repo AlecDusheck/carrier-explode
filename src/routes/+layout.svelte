@@ -14,6 +14,7 @@
   const MENU: Array<[string, string]> = [
     ["/carriers", "Carriers"],
     ["/countries", "Countries"],
+    ["/features", "Features"],
     ["/builds", "iOS builds"],
     ["/compare", "Compare"],
     ["/wiki", "Wiki"],

@@ -23,8 +23,11 @@ import { flattenBundle, openIpcc } from "#lib/decode/index.ts";
 import { MANIFEST_URL, manifestTables, parseManifest } from "#lib/server/manifest.ts";
 import { buildTimeline, headIndex, type ImageIndex } from "#lib/server/timeline.ts";
 import { POINTER_KEY, bundlesKey, fileDataKey, fileIndexKey, packShards, rareKey, rareSettings, type ScanPointer } from "#lib/server/keyscan.ts";
+import { featureCopy, featureSlugs, featuresKey, type FeatureIndex } from "#lib/server/featureindex.ts";
 
-interface Head { kind: "carriers" | "countries"; name: string; src: string }
+interface Copy { src: string; build: string; source: "ota" | "image" }
+/** A bundle's current version, and for a carrier its newest OTA copy, which carries every phone's files of its day. */
+interface Head extends Copy { kind: "carriers" | "countries"; name: string; ota?: Copy }
 
 const { positionals, values: arg } = parseArgs({
   allowPositionals: true,
@@ -91,7 +94,11 @@ async function plan() {
     for (const name of [...names[kind]].sort()) {
       const t = buildTimeline(kind, name, images, Object.hasOwn(refs, name) ? refs[name] : [], index.countries);
       const head = t[headIndex(t)];
-      if (head) heads.push({ kind, name, src: head.src });
+      if (!head) continue;
+      const copy = (e: typeof head): Copy => ({ src: e.src, build: e.build, source: e.source });
+      // The timeline runs newest first; a per-model copy speaks for one phone only.
+      const ota = kind === "carriers" ? t.find((e) => e.source === "ota" && !e.productType && !e.beta) : undefined;
+      heads.push({ kind, name, ...copy(head), ...(ota && ota.src !== head.src ? { ota: copy(ota) } : {}) });
     }
   }
   writeFileSync(opt.out, JSON.stringify(heads));
@@ -138,10 +145,30 @@ async function build() {
   }));
   flats.sort((a, b) => a.src.localeCompare(b.src));
 
+  // Features per phone: each carrier's current copy, then its newest OTA for the phones the current one lacks.
+  const features: FeatureIndex = { features: featureSlugs(), bundles: {} };
+  const carriers = heads.filter((h) => h.kind === "carriers");
+  const fq = [...carriers];
+  await Promise.all(Array.from({ length: 12 }, async () => {
+    for (let h = fq.shift(); h; h = fq.shift()) {
+      const copies = [];
+      for (const c of [h, ...(h.ota ? [h.ota] : [])]) {
+        try {
+          const fc = featureCopy(openIpcc(await load(c.src)), c.build, c.source);
+          if (fc) copies.push(fc);
+        } catch (e) {
+          console.error(`features: skip ${c.src}: ${e instanceof Error ? e.message : e}`);
+        }
+      }
+      if (copies.length) features.bundles[h.name] = copies;
+    }
+  }));
+
   const objects: Array<{ key: string; body: string | Uint8Array }> = [
     { key: bundlesKey(gen), body: JSON.stringify({ srcs: flats.map((f) => f.src) }) },
   ];
   objects.push({ key: rareKey(gen), body: JSON.stringify(rareSettings(flats)) });
+  objects.push({ key: featuresKey(gen), body: JSON.stringify(features) });
   for (const [file, { index, data }] of packShards(flats)) {
     objects.push({ key: fileIndexKey(gen, file), body: JSON.stringify(index) });
     objects.push({ key: fileDataKey(gen, file), body: data });

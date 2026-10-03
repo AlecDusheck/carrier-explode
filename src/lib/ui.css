@@ -312,6 +312,7 @@ fieldset.hgroup h3:first-of-type { margin-top: 2px; }
 .chip.good { background: var(--good-bg); border-color: var(--good-border); }
 .chip.bad { background: var(--bad-bg); border-color: var(--bad-border); }
 .chip.warn { background: var(--warn-bg); border-color: var(--warn-border); }
+.chip.info { background: var(--info-bg); border-color: var(--info-border); color: var(--info-text); }
 /* A gap before an inline item; after .chip so a chip can have one too. */
 .sp { margin-left: 0.6ch; }
 button.chip { cursor: pointer; font-family: inherit; }
@@ -469,3 +470,20 @@ button.drawer-btn { display: none; }
   .timeline a { padding: 7px 8px; }
   .drawer-bar { display: flex; }
 }
+
+/* -------------------------------------------------------------- consumer pages */
+
+/* Feature pages are read by people who just want an answer: larger type, one column. */
+article.consumer { max-width: 78ch; font-size: 13px; line-height: 1.5; }
+article.consumer h1 { font-size: 22px; font-weight: normal; margin: 4px 0 8px; }
+article.consumer h2 { font-size: 16px; font-weight: normal; margin: 18px 0 6px; padding-bottom: 2px; border-bottom: 1px solid var(--shadow); }
+article.consumer h3 { font-size: 13px; margin: 12px 0 2px; }
+article.consumer p { margin: 0 0 8px; }
+article.consumer .lead { font-size: 14px; }
+article.consumer .crumbs { margin: 0; font-size: 11.5px; }
+article.consumer .answer { font-size: 15px; }
+article.consumer table.grid { font-size: 12.5px; }
+article.consumer tr.group td { background: var(--face); font-weight: bold; }
+article.consumer ul.features { list-style: none; padding: 0; margin: 0; }
+article.consumer ul.features li { display: flex; flex-direction: column; gap: 1px; padding: 6px 0; border-bottom: 1px solid var(--shadow); }
+article.consumer ul.others { columns: 2 14em; padding-left: 18px; }

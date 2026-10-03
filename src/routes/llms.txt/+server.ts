@@ -18,6 +18,7 @@ ${CARRIERS.map(entry).join("\n")}
 ## Data
 
 - [Carrier bundles](${url.origin}/carriers): every carrier bundle
+- [iPhone carrier features](${url.origin}/features): which carriers offer 5G Standalone, Voice over 5G, Wi-Fi Calling, RCS, satellite and more, per iPhone model (\`/features/<feature>?phone=iPhone19,3\`)
 - [Find the bundle for a SIM](${url.origin}/sim): MCC-MNC, ICCID prefix or carrier ID to the bundle a SIM loads (\`/sim?q=310410\`)
 - [Country bundles](${url.origin}/countries): per-country bundles: each one's emergency alerts (\`/countries/<name>/alerts\`), emergency numbers and carriers
 - [Apple Watch bundles](${url.origin}/watch)

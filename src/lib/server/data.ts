@@ -21,7 +21,9 @@ import {
   type PriReplacement,
 } from "#lib/decode/index.ts";
 import { compareVersions, imageSlug, isPrerelease } from "#lib/names.ts";
-import { byNewest, homePhone, knowsPhone, overridesFor, sharedPri } from "#lib/phones.ts";
+import { byNewest, compareProducts, homePhone, knowsPhone, overridesFor, sharedPri } from "#lib/phones.ts";
+import { FEATURES, featureBySlug } from "#lib/features.ts";
+import { featuresKey, phoneFeature, type FeatureIndex } from "./featureindex";
 import type { BasebandDiffPart, Kind, PublicEntry, TimelineEntry } from "#lib/types.ts";
 import { cached, digestHex, fetchApple, perRequest } from "./cache";
 import { buildMergedCbsMatrix } from "./cbs";
@@ -842,6 +844,53 @@ export async function getRare(kind: Kind, name: string, slug?: string) {
   });
   if (!got.built) return { indexed: false as const, why: "pending" as const };
   return got.rows ? { indexed: true as const, rows: got.rows } : { indexed: false as const, why: "old" as const };
+}
+
+/** The last index run's feature index; null until a run has written one. */
+const featureIndex = perRequest(async () => {
+  const pointer = await r2json<ScanPointer>(POINTER_KEY);
+  if (!pointer) return null;
+  return cached(`features:v1:${pointer.gen}`, 86400, () => r2json<FeatureIndex>(featuresKey(pointer.gen)));
+});
+
+/** The phones a feature page can be asked about: the current release's iPhones that have a name, newest first. */
+export async function featurePhones() {
+  const b = release(await builds());
+  if (!b) return [];
+  const { modems } = await getModems(b.build);
+  const phones = new Map<string, string>();
+  for (const m of modems) for (const d of m.devices) if (d.name) phones.set(d.id, d.name);
+  return [...phones].map(([id, name]) => ({ id, name })).sort((x, y) => compareProducts(y.id, x.id));
+}
+
+/** One feature for every carrier bundle, on one phone. */
+export async function getFeatureTable(slug: string, phone: string) {
+  if (!featureBySlug(slug)) error(404, `no feature ${slug}`);
+  const [index, list] = await Promise.all([featureIndex(), getIndex()]);
+  if (!index) return { indexed: false as const };
+  const rows = list.carriers
+    .filter((c) => Object.hasOwn(index.bundles, c.name))
+    .map((c) => ({ name: c.name, display: c.display, cc: c.cc, ...phoneFeature(index, c.name, slug, phone) }));
+  return { indexed: true as const, rows };
+}
+
+/** How many carrier bundles offer each feature on one phone. */
+export async function getFeatureSummary(phone: string) {
+  const index = await featureIndex();
+  if (!index) return null;
+  const names = Object.keys(index.bundles);
+  return FEATURES.map((f) => {
+    const counts = { on: 0, available: 0, no: 0, unknown: 0 };
+    for (const n of names) counts[phoneFeature(index, n, f.slug, phone).state]++;
+    return { slug: f.slug, counts, of: names.length };
+  });
+}
+
+/** Every feature for one carrier bundle, on one phone. */
+export async function getCarrierFeatures(name: string, phone: string) {
+  const index = await featureIndex();
+  if (!index || !Object.hasOwn(index.bundles, name)) return null;
+  return FEATURES.map((f) => ({ slug: f.slug, ...phoneFeature(index, name, f.slug, phone) }));
 }
 
 /** A phone's override plist next to its modem file (same stem), decoded; null when the copy has none. */

@@ -12,11 +12,12 @@
  */
 
 import { modemLabel, modemName, modemVendor } from "./decode/modem";
+import { featureBySlug } from "./features";
 import { buildLabel, carrierName, countryDisplay, versionLabel } from "./names";
 
 export const SITE = "carrier-explode";
 
-type Params = { kind?: string; name?: string; version?: string; path?: string; build?: string; family?: string };
+type Params = { kind?: string; name?: string; version?: string; path?: string; build?: string; family?: string; feature?: string };
 type Meta = { title: string; description: string };
 
 // Google shows about 60 characters of title and 155 of description, and
@@ -118,6 +119,18 @@ function bundle(id: string, p: Params): Meta {
 export function seo(id: string | null, p: Params): Meta {
   if (p.name) return bundle(id ?? "", p);
 
+  if (p.feature) {
+    const f = featureBySlug(p.feature);
+    if (f) {
+      return {
+        title: fit(TITLE_MAX, `Which carriers support ${f.name} on iPhone?`, `${f.name} on iPhone: carriers`, f.name),
+        description: fit(DESC_MAX,
+          `Does your carrier support ${f.name} on your iPhone? Every carrier, checked for each iPhone model. ${f.what}`,
+          `Does your carrier support ${f.name} on your iPhone? Every carrier, checked for each iPhone model.`),
+      };
+    }
+  }
+
   if (p.build && p.family && id?.startsWith("/builds")) {
     const ios = buildLabel(p.build);
     const f = p.family;
@@ -161,6 +174,12 @@ export function seo(id: string | null, p: Params): Meta {
               description:
                 "Every iPhone carrier bundle (.ipcc) Apple ships, decoded: APN, VoLTE, 5G, Wi-Fi Calling and RCS for every carrier, and which bundle a SIM's MCC/MNC loads.",
             };
+    case "/features":
+      return {
+        title: "iPhone carrier features by carrier and model",
+        description:
+          "Does your carrier support 5G Standalone, Voice over 5G, Wi-Fi Calling, RCS or satellite texting on your iPhone? Check every carrier, for your iPhone model.",
+      };
     case "/sim":
       return {
         title: "Which iPhone carrier bundle does my SIM load?",
