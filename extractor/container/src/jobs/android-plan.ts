@@ -9,8 +9,11 @@
  * - per current device, its NEWEST_BUILDS newest general builds;
  * - general builds only: carrier/region variants (`CP2A.260805.005.A1,
  *   Rogers`) are skipped (see the report's open issues);
- * - builds already in releases/android/ are skipped unless `rebuild`.
+ * - builds already in releases/android/ are skipped unless `rebuild`, or
+ *   unless the page now lists a device the held release lacks.
  */
+
+import * as v from "valibot";
 
 import { keys } from "../../../../src/lib/storage/keys.ts";
 import type { JobContext, JobOutput } from "../job.ts";
@@ -35,33 +38,50 @@ function currentDevices(devices: readonly OtaDevice[]): OtaDevice[] {
   });
 }
 
-/** Builds by id, each with every current device that has it. */
-export function planBuilds(devices: readonly OtaDevice[], held: ReadonlySet<string>, rebuild: boolean): PlannedBuild[] {
+/**
+ * Builds by id. A build is picked by any device's newest few, then lists
+ * every current device that has it: Release.devices must be complete.
+ */
+export function planBuilds(devices: readonly OtaDevice[], held: ReadonlyMap<string, ReadonlySet<string>>, rebuild: boolean): PlannedBuild[] {
+  const current = currentDevices(devices);
+  const general = (d: OtaDevice): OtaBuild[] => d.builds.filter((b) => b.variant === undefined);
+  const picked = new Set(current.flatMap((d) => general(d).slice(-NEWEST_BUILDS).map((b) => b.build)));
   const byBuild = new Map<string, { first: OtaBuild; devices: Array<{ device: string; url: string }> }>();
-  for (const d of currentDevices(devices)) {
-    const general = d.builds.filter((b) => b.variant === undefined);
-    for (const b of general.slice(-NEWEST_BUILDS)) {
-      if (!rebuild && held.has(b.build)) continue;
+  for (const d of current) {
+    for (const b of general(d)) {
+      if (!picked.has(b.build)) continue;
       const entry = byBuild.get(b.build) ?? { first: b, devices: [] };
       entry.devices.push({ device: d.device, url: b.url });
       byBuild.set(b.build, entry);
     }
   }
+  const order = (x: string, y: string): number => (x < y ? -1 : x > y ? 1 : 0);
+  const complete = (build: string, list: ReadonlyArray<{ device: string }>): boolean => {
+    const has = held.get(build);
+    return has !== undefined && list.every((x) => has.has(x.device));
+  };
   return [...byBuild.values()]
+    .filter(({ first, devices: list }) => rebuild || !complete(first.build, list))
     .map(({ first, devices: list }) => ({
       build: first.build,
       version: androidVersion(first.android),
       patch: first.patch,
-      devices: list.sort((a, b) => (a.device < b.device ? -1 : 1)),
+      devices: list.sort((x, y) => order(x.device, y.device)),
     }))
-    .sort((a, b) => (a.patch === b.patch ? (a.build < b.build ? -1 : 1) : a.patch < b.patch ? -1 : 1));
+    .sort((x, y) => order(x.patch, y.patch) || order(x.build, y.build));
 }
 
-/** Build ids that already have releases/android/<id>.json. */
-async function heldBuilds(ctx: JobContext<"android.plan">): Promise<Set<string>> {
-  const prefix = keys.releasesPrefix("android");
-  const held = await ctx.r2.list(prefix);
-  return new Set(held.filter((k) => k.endsWith(".json")).map((k) => k.slice(prefix.length, -".json".length)));
+const heldRelease = v.object({ id: v.string(), devices: v.array(v.string()) });
+
+/** Held releases: build id -> the devices it was extracted from. */
+async function heldBuilds(ctx: JobContext<"android.plan">): Promise<Map<string, Set<string>>> {
+  const held = new Map<string, Set<string>>();
+  for (const key of await ctx.r2.list(keys.releasesPrefix("android"))) {
+    if (!key.endsWith(".json")) continue;
+    const release = v.parse(heldRelease, await ctx.r2.getJson(key));
+    held.set(release.id, new Set(release.devices));
+  }
+  return held;
 }
 
 export async function androidPlan(ctx: JobContext<"android.plan">): Promise<JobOutput<"android.plan">> {
