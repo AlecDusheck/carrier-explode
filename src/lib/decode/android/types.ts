@@ -1,105 +1,114 @@
 /**
- * Decoded shapes of Google's carrier settings protobufs (AOSP
- * tools/carrier_settings/proto/carrier_settings.proto and carrier_list.proto),
- * as plain JSON. Field names are the proto's, camel-cased. Contract file: the
- * schema mapper (src/lib/schema/android.ts) is written against these.
+ * Google's carrier settings protobufs (AOSP tools/carrier_settings/proto) as
+ * plain JSON. Field names are the proto's, camel-cased; proto2 `optional`
+ * fields are optional here and never defaulted.
  */
 
-/** CarrierConfig.Config value, tagged by which oneof member was set. */
+/** CarrierConfig.Config's oneof value. */
 export type CarrierConfigValue =
-  | { type: "text"; value: string }
-  | { type: "int"; value: number }
-  | { type: "long"; value: string } // int64, as a decimal string
-  | { type: "bool"; value: boolean }
-  | { type: "double"; value: number }
-  | { type: "text_array"; value: string[] }
-  | { type: "int_array"; value: number[] }
-  | { type: "bundle"; value: Record<string, CarrierConfigValue> };
+  | { readonly type: "text"; readonly value: string }
+  | { readonly type: "int"; readonly value: number }
+  /** int64, as a decimal string. */
+  | { readonly type: "long"; readonly value: string }
+  | { readonly type: "bool"; readonly value: boolean }
+  | { readonly type: "double"; readonly value: number }
+  | { readonly type: "text_array"; readonly value: readonly string[] }
+  | { readonly type: "int_array"; readonly value: readonly number[] }
+  | { readonly type: "bundle"; readonly value: Readonly<Record<string, CarrierConfigValue>> };
+
+/** Enum values newer than the proto this decoder knows come through as `UNKNOWN_<n>`. */
+export type UnknownEnum = `UNKNOWN_${number}`;
 
 export type AndroidApnType =
   | "ALL" | "DEFAULT" | "MMS" | "SUPL" | "DUN" | "HIPRI" | "FOTA" | "IMS" | "CBS" | "IA"
-  | "EMERGENCY" | "XCAP" | "UT" | "RCS" | `UNKNOWN_${number}`;
-export type AndroidProtocol = "IP" | "IPV6" | "IPV4V6" | "PPP" | `UNKNOWN_${number}`;
+  | "EMERGENCY" | "XCAP" | "UT" | "RCS" | UnknownEnum;
+export type AndroidProtocol = "IP" | "IPV6" | "IPV4V6" | "PPP" | UnknownEnum;
+export type Skip464Xlat = "SKIP_464XLAT_DEFAULT" | "SKIP_464XLAT_DISABLE" | "SKIP_464XLAT_ENABLE" | UnknownEnum;
 
-/** ApnItem. Fields the file does not set are absent (proto defaults are NOT filled in). */
 export interface ApnItem {
-  name?: string;
-  value?: string; // the APN itself
-  type: AndroidApnType[];
-  bearerBitmask?: string;
-  server?: string;
-  proxy?: string;
-  port?: string;
-  user?: string;
-  password?: string;
-  authtype?: number;
-  mmsc?: string;
-  mmscProxy?: string;
-  mmscProxyPort?: string;
-  protocol?: AndroidProtocol;
-  roamingProtocol?: AndroidProtocol;
-  mtu?: number;
-  profileId?: number;
-  maxConns?: number;
-  waitTime?: number;
-  maxConnsTime?: number;
-  modemCognitive?: boolean;
-  userVisible?: boolean;
-  userEditable?: boolean;
-  apnSetId?: number;
-  skip464xlat?: "SKIP_464XLAT_DEFAULT" | "SKIP_464XLAT_DISABLE" | "SKIP_464XLAT_ENABLE" | `UNKNOWN_${number}`;
+  readonly name?: string;
+  /** The APN itself. */
+  readonly value?: string;
+  readonly type: readonly AndroidApnType[];
+  readonly bearerBitmask?: string;
+  readonly server?: string;
+  readonly proxy?: string;
+  readonly port?: string;
+  readonly user?: string;
+  readonly password?: string;
+  readonly authtype?: number;
+  readonly mmsc?: string;
+  readonly mmscProxy?: string;
+  readonly mmscProxyPort?: string;
+  readonly protocol?: AndroidProtocol;
+  readonly roamingProtocol?: AndroidProtocol;
+  readonly mtu?: number;
+  readonly profileId?: number;
+  readonly maxConns?: number;
+  readonly waitTime?: number;
+  readonly maxConnsTime?: number;
+  readonly modemCognitive?: boolean;
+  readonly userVisible?: boolean;
+  readonly userEditable?: boolean;
+  readonly apnSetId?: number;
+  readonly skip464xlat?: Skip464Xlat;
 }
 
 export interface VendorConfigClient {
-  name: string;
+  readonly name: string;
   /** Opaque bytes, base64. */
-  value?: string;
+  readonly value?: string;
 }
 
-/** CarrierSettings: one <canonical_name>.pb. */
+/**
+ * A field the decoder has no name for, kept so nothing in a file goes unseen.
+ * `path` is where it sat (`apns[2]`, `configs.foo_bundle`, `` for the root);
+ * `value` is decimal for varints, little-endian hex for fixed32/64, base64 for bytes.
+ */
+export interface UnknownField {
+  readonly path: string;
+  readonly field: number;
+  readonly wire: "varint" | "fixed64" | "bytes" | "fixed32";
+  readonly value: string;
+}
+
+/** One <canonical_name>.pb. */
 export interface CarrierSettings {
-  canonicalName: string;
-  /** int64 as a decimal string. */
-  version?: string;
-  apns: ApnItem[];
-  configs: Record<string, CarrierConfigValue>;
-  vendorConfigs: VendorConfigClient[];
-  /** Fields this decoder does not know, anywhere in the file (additive; absent when there are none). */
-  unknown?: UnknownField[];
+  readonly canonicalName?: string;
+  /** int64, as a decimal string. */
+  readonly version?: string;
+  readonly apns: readonly ApnItem[];
+  readonly configs: Readonly<Record<string, CarrierConfigValue>>;
+  readonly vendorConfigs: readonly VendorConfigClient[];
+  readonly unknown: readonly UnknownField[];
 }
 
-/** MultiCarrierSettings: others.pb holds many CarrierSettings in one file. */
+/** others.pb: many CarrierSettings in one file. */
 export interface MultiCarrierSettings {
-  version?: string;
-  settings: CarrierSettings[];
-  unknown?: UnknownField[];
+  readonly version?: string;
+  readonly settings: readonly CarrierSettings[];
+  readonly unknown: readonly UnknownField[];
 }
 
-/** CarrierId: mcc_mnc plus at most one of spn / imsi (prefix pattern) / gid1 (prefix). */
+/** CarrierId's `mvno_data` oneof: spn exact, imsi prefix pattern, or gid1 prefix. */
+export type Mvno =
+  | { readonly kind: "spn"; readonly value: string }
+  | { readonly kind: "imsi"; readonly value: string }
+  | { readonly kind: "gid1"; readonly value: string };
+
 export interface CarrierId {
-  mccMnc: string;
-  spn?: string;
-  imsi?: string;
-  gid1?: string;
+  readonly mccMnc?: string;
+  readonly mvno?: Mvno;
+}
+
+export interface CarrierMap {
+  readonly canonicalName?: string;
+  readonly carrierIds: readonly CarrierId[];
 }
 
 /** carrier_list.pb */
 export interface CarrierList {
-  version?: string;
-  entries: Array<{ canonicalName: string; carrierIds: CarrierId[] }>;
-  unknown?: UnknownField[];
-}
-
-/**
- * A protobuf field the decoder has no name for (a newer proto, a vendor
- * extension), kept so nothing in the file goes unseen. Additive to the contract.
- * `path` is where it sat, in decoded terms (`apns[2]`, `configs.foo_bundle`,
- * `vendorConfigs[0]`, `` for the root). `value`: varint as a decimal string,
- * fixed32/fixed64 as little-endian hex, length-delimited as base64.
- */
-export interface UnknownField {
-  path: string;
-  field: number;
-  wire: "varint" | "fixed64" | "bytes" | "fixed32";
-  value: string;
+  readonly version?: string;
+  readonly entries: readonly CarrierMap[];
+  readonly unknown: readonly UnknownField[];
 }
