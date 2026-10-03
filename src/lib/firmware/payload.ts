@@ -4,7 +4,7 @@
  * operations, each producing whole blocks from its own compressed blob, so
  * any block can be had by fetching one blob.
  *
- *   "CrAU" | u64be version | u64be manifest size | u32be metadata signature size (v2+)
+ *   "CrAU" | u64be version (2) | u64be manifest size | u32be metadata signature size
  *   | DeltaArchiveManifest | metadata signature | blobs (op.data_offset is relative to here)
  */
 
@@ -41,7 +41,7 @@ export interface InstallOp {
 
 export interface PartitionUpdate {
   readonly name: string;
-  /** new_partition_info.size; absent in some payloads, then the extents' end. */
+  /** new_partition_info.size. */
   readonly size: number;
   readonly operations: readonly InstallOp[];
   readonly version?: string;
@@ -49,7 +49,6 @@ export interface PartitionUpdate {
 
 export interface Payload {
   readonly source: RangeSource;
-  readonly version: number;
   readonly blockSize: number;
   /** Absolute offset of the blob area in `source`. */
   readonly dataOffset: number;
@@ -87,39 +86,38 @@ function operation(f: readonly Field[]): InstallOp {
   };
 }
 
-function partitionUpdate(f: readonly Field[], blockSize: number): PartitionUpdate {
+function partitionUpdate(f: readonly Field[]): PartitionUpdate {
   const name = string(f, 1);
   if (name === undefined) throw new PayloadFormatError("partition without a name");
-  const operations = messages(f, 8).map(operation);
   const info = messages(f, 7)[0];
-  const extentsEnd = Math.max(0, ...operations.flatMap((op) => op.dstExtents.map((e) => (e.startBlock + e.numBlocks) * blockSize)));
+  const size = info && uint(info, 1);
+  if (size === undefined) throw new PayloadFormatError(`partition ${name} has no new_partition_info.size`);
   const version = string(f, 17);
   return {
     name,
-    size: (info && uint(info, 1)) ?? extentsEnd,
-    operations,
+    size,
+    operations: messages(f, 8).map(operation),
     ...(version === undefined ? {} : { version }),
   };
 }
 
-/** Header (24 bytes for v2) and manifest of a payload.bin held in `src`. */
+/** Header and manifest of a payload.bin held in `src`. Version 2 is the only one A/B devices have shipped since Android 8. */
 export async function openPayloadSource(src: RangeSource, opts: PayloadOptions = {}): Promise<Payload> {
   const head = await src.read(0, 24);
   if (!asciiAt(head, 0, "CrAU")) throw new PayloadFormatError(`${src.label}: not a payload (no CrAU magic)`);
   const version = safeU64be(head, 4);
-  if (version !== 1 && version !== 2) throw new PayloadFormatError(`${src.label}: payload version ${version} is not supported`);
+  if (version !== 2) throw new PayloadFormatError(`${src.label}: payload version ${version} is not supported`);
   const manifestSize = safeU64be(head, 12);
-  const signatureSize = version === 2 ? u32be(head, 20) : 0;
-  const headerSize = version === 2 ? 24 : 20;
+  const signatureSize = u32be(head, 20);
+  const headerSize = 24;
   const manifest = parseMessage(await src.read(headerSize, manifestSize));
   const blockSize = uint(manifest, 3) ?? 4096;
-  const partitions = messages(manifest, 13).map((m) => partitionUpdate(m, blockSize));
+  const partitions = messages(manifest, 13).map(partitionUpdate);
   const byName = new Map(partitions.map((p) => [p.name, p]));
   const spl = string(manifest, 18);
   const maxTimestamp = uint(manifest, 14);
   return {
     source: src,
-    version,
     blockSize,
     dataOffset: headerSize + manifestSize + signatureSize,
     partitions,

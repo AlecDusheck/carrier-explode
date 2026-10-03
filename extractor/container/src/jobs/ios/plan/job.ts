@@ -8,7 +8,8 @@ import * as v from "valibot";
 
 import { keys } from "../../../../../../src/lib/storage/keys.ts";
 import type { JobContext, JobOutput, JobRunner, R2Client } from "../../../job.ts";
-import { appledbFirmware, appledbKeys, deviceFirmwares, iphoneCatalog, mapLimit, newestIphone, type AppleDbEntry } from "../catalog.ts";
+import { appledbFirmware, appledbKeys, deviceFirmwares, iphoneCatalog, newestIphone, type AppleDbEntry } from "../catalog.ts";
+import { mapLimit } from "../map-limit.ts";
 import { betaCandidates, plan, planBetas, planRebuild, toBuild, type Held, type PlannedBuild } from "./plan.ts";
 
 /**

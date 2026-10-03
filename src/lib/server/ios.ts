@@ -3,8 +3,9 @@
  * and decoded file by file. The bytes are obj/<sha> when the extractor holds
  * them; an OTA file it has not archived yet comes straight from Apple.
  *
- * Every function takes a source key (`ios:carrier:ATT_US`) and a timeline slug;
- * no slug means the head version.
+ * Every function takes a version as its URL names it (catalog.ts Ver): a
+ * source key (`ios:carrier:ATT_US`), a line for a model-specific bundle, and a
+ * version; no version means the head.
  */
 
 import { error } from "@sveltejs/kit";
@@ -22,7 +23,7 @@ import { homePhone, isPri, knowsPhone, overridesFor, sharedPri, type GroupPhone,
 import type { CbsRow, Version } from "#lib/types.ts";
 import { bbfwSummary } from "./baseband";
 import { cached, fetchApple, perRequest } from "./cache";
-import { currentRelease, releaseList, resolve, sourceSlugs, versionOf, versionsOf, type Resolved } from "./catalog";
+import { archivedSha, currentRelease, releaseList, resolveVer, sourceSlugs, versionOf, type Resolved, type Ver } from "./catalog";
 import { cbsRow } from "./cbs";
 import { modemView } from "./modems";
 import type { ImageModem } from "./records";
@@ -32,17 +33,15 @@ import { readBytes } from "./store";
 /** Content never changes under a sha or an Apple URL, so what is derived from one is kept for a month. */
 const KEEP = 30 * 86400;
 
-/** A copy the bucket holds: an image copy always, an OTA copy once archived. */
-const archived = (e: TimelineEntry): string | undefined => e.copies.flatMap((c) => c.sha ?? [])[0];
 /** The Apple URL of an OTA copy, for content the bucket does not hold yet. */
 const upstream = (e: TimelineEntry): string | undefined => e.copies.flatMap((c) => (c.via === "ota" ? [c.url] : []))[0];
 
 /** What a version's derived views are cached by: its object, else its Apple URL. Content never changes under either. */
-const identity = (e: TimelineEntry): string => archived(e) ?? upstream(e) ?? e.slug;
+const identity = (e: TimelineEntry): string => archivedSha(e) ?? upstream(e) ?? e.slug;
 
 /** A version's bytes: from the bucket, or from Apple for an OTA file not archived yet. */
 async function bytesOf(e: TimelineEntry): Promise<Uint8Array<ArrayBuffer>> {
-  const sha = archived(e);
+  const sha = archivedSha(e);
   const held = sha === undefined ? null : await readBytes(keys.obj(sha));
   if (held) return held;
   const url = upstream(e);
@@ -69,13 +68,14 @@ interface Opened extends Resolved {
   readonly bytes: Uint8Array<ArrayBuffer>;
 }
 
-/** A version's bytes and zip index. Several queries of one page read the same bundle, so it is opened once per request. `slug` "" is the head. */
-const open = perRequest(async (key: string, slug: string): Promise<Opened> => {
-  const r = await resolve(key, slug || undefined);
-  if (decoderFamily(r.ref.platform) !== "apple") error(400, `${key} is not an Apple bundle.`);
+/** A version's bytes and zip index. Several queries of one page read the same bundle, so it is opened once per request. */
+const openOnce = perRequest(async (source: string, line: string, slug: string): Promise<Opened> => {
+  const r = await resolveVer({ source, line: line || undefined, slug: slug || undefined });
+  if (decoderFamily(r.ref.platform) !== "apple") error(400, `${source} is not an Apple bundle.`);
   const bytes = await bytesOf(r.entry);
   return { ...r, opened: openIpcc(bytes), bytes };
 });
+const open = (v: Ver): Promise<Opened> => openOnce(v.source, v.line ?? "", v.slug ?? "");
 
 /** A decoded .der.pri, or undefined when the file is not one: callers skip what does not decode, as the phone would. */
 function readPri(opened: OpenedBundle, path: string): PriDecoded | undefined {
@@ -112,11 +112,9 @@ export interface IosBundle {
   readonly ref: SourceRef;
   readonly cc: string | undefined;
   readonly countryName: string | undefined;
+  readonly line: string | undefined;
   readonly entry: Version;
   readonly previous: Version | null;
-  readonly timeline: readonly Version[];
-  /** The version phones on a release run: the newest plain, non-beta copy. */
-  readonly head: string;
   readonly info: BundleInfo;
   readonly downloadSize: number;
   readonly contentId: string;
@@ -130,10 +128,12 @@ export interface IosBundle {
   readonly home: string | null;
 }
 
-export async function getBundle(key: string, slug?: string): Promise<IosBundle> {
-  const o = await open(key, slug ?? "");
+export async function getBundle(v: Ver): Promise<IosBundle> {
+  const o = await open(v);
   const { entry, opened, bytes } = o;
-  const [id, sha256, timeline] = await Promise.all([contentId(opened), sha256Hex(bytes), versionsOf(o.ref.platform, o.timeline)]);
+  const [id, sha256, current, previous] = await Promise.all([
+    contentId(opened), sha256Hex(bytes), versionOf(o.ref.platform, entry), o.previous ? versionOf(o.ref.platform, o.previous) : null,
+  ]);
   const sha1 = sha1Hex(bytes);
   const quick: Record<string, unknown> = {};
   for (const f of ["carrier.plist", "Info.plist", "version.plist"]) {
@@ -141,15 +141,11 @@ export async function getBundle(key: string, slug?: string): Promise<IosBundle> 
     if (p) quick[f] = p;
   }
   const cc = o.doc.carrier.iso ?? splitName(o.ref.name).cc;
-  const current = timeline.find((e) => e.slug === entry.slug);
-  if (!current) error(500, `${key}: ${entry.slug} is not in its own timeline`);
   const verified = verify(entry, { cid: id, sha256, sha1 });
   return {
-    source: key, ref: o.ref, cc, countryName: countryName(cc),
+    source: o.key, ref: o.ref, cc, countryName: countryName(cc), line: o.line,
     entry: current,
-    previous: timeline.find((e) => e.slug === o.previous?.slug) ?? null,
-    timeline,
-    head: o.head.slug,
+    previous,
     info: opened.info,
     downloadSize: bytes.length,
     contentId: id, sha256, sha1, verified, quick,
@@ -157,8 +153,8 @@ export async function getBundle(key: string, slug?: string): Promise<IosBundle> 
   };
 }
 
-export async function getFile(key: string, slug: string, path: string): Promise<DecodedFile> {
-  const { opened } = await open(key, slug);
+export async function getFile(v: Ver, path: string): Promise<DecodedFile> {
+  const { opened } = await open(v);
   try {
     return decodeFile(opened, path);
   } catch (e) {
@@ -166,27 +162,22 @@ export async function getFile(key: string, slug: string, path: string): Promise<
   }
 }
 
-export async function getRaw(key: string, slug: string, path: string): Promise<Uint8Array> {
-  const { opened } = await open(key, slug);
+export async function getRaw(v: Ver, path: string): Promise<Uint8Array> {
+  const { opened } = await open(v);
   const bytes = opened.entries[opened.prefix + path];
   if (!bytes) error(404, `no such file: ${path}`);
   return bytes;
 }
 
 /** A country bundle's emergency alert settings at this version. */
-export async function getAlerts(key: string, slug: string): Promise<CbsRow | null> {
-  const { opened } = await open(key, slug);
+export async function getAlerts(v: Ver): Promise<CbsRow | null> {
+  const { opened } = await open(v);
   const plist = plistOf(opened, "carrier.plist");
   const locales = opened.info.files.filter((f) => f.path.endsWith("CBMessage.strings")).flatMap((f) => f.locale ?? []);
   return plist ? cbsRow(plist, locales) : null;
 }
 
 /* ----------------------------------------------------------------- compare */
-
-export interface Side {
-  readonly source: string;
-  readonly slug?: string | undefined;
-}
 
 export interface ComparedSide {
   readonly source: string;
@@ -204,8 +195,8 @@ export interface NativeComparison {
  * `b` against `a`, file by file; the one diff behind /compare and a version's
  * Changes tab. Without `a`, `b` is compared to the version before it.
  */
-export async function getComparison(a: Side | null, b: Side, path?: string): Promise<NativeComparison> {
-  const [rb, ra] = await Promise.all([resolve(b.source, b.slug), a ? resolve(a.source, a.slug) : null]);
+export async function getComparison(a: Ver | null, b: Ver, path?: string): Promise<NativeComparison> {
+  const [rb, ra] = await Promise.all([resolveVer(b), a ? resolveVer(a) : null]);
   const left = ra ? { r: ra, entry: ra.entry } : rb.previous ? { r: rb, entry: rb.previous } : null;
   const side = async (r: Resolved, entry: TimelineEntry): Promise<ComparedSide> =>
     ({ source: r.key, ref: r.ref, entry: await versionOf(r.ref.platform, entry) });
@@ -213,7 +204,10 @@ export async function getComparison(a: Side | null, b: Side, path?: string): Pro
   if (!left) return { a: null, b: right, diff: null };
   const leftSide = await side(left.r, left.entry);
   const diff = await cached(`compare:v2:${identity(left.entry)}|${identity(rb.entry)}|${path ?? ""}`, KEEP, async () => {
-    const [A, B] = await Promise.all([open(leftSide.source, left.entry.slug), open(right.source, rb.entry.slug)]);
+    const [A, B] = await Promise.all([
+      open({ source: leftSide.source, line: left.r.line, slug: left.entry.slug }),
+      open({ source: right.source, line: rb.line, slug: rb.entry.slug }),
+    ]);
     return compareBundles(A.opened, B.opened, { ...(path ? { path } : {}), maxRows: path ? 2000 : 400 });
   });
   return { a: leftSide, b: right, diff };
@@ -245,8 +239,8 @@ interface PhoneCopies {
  * version. A phone without any is `known` when the version was made while it existed (so it has none
  * and runs the defaults); otherwise the version is older than the phone.
  */
-const phoneCopies = perRequest(async (key: string, slug: string): Promise<PhoneCopies | null> => {
-  const { entry, opened, ref } = await open(key, slug);
+const phoneCopiesOnce = perRequest(async (source: string, line: string, slug: string): Promise<PhoneCopies | null> => {
+  const { entry, opened, ref } = await open({ source, line: line || undefined, slug: slug || undefined });
   const build = await releaseOf(ref.platform, entry);
   if (!build) return null;
   const { release, modems } = await releaseModems(build);
@@ -258,6 +252,7 @@ const phoneCopies = perRequest(async (key: string, slug: string): Promise<PhoneC
   });
   return { entry, build, devices: release.devices, modems, phones, copies };
 });
+const phoneCopies = (v: Ver): Promise<PhoneCopies | null> => phoneCopiesOnce(v.source, v.line ?? "", v.slug ?? "");
 
 export interface BundleOverrides {
   readonly build: string;
@@ -271,8 +266,8 @@ export interface BundleOverrides {
 }
 
 /** A version's modem override files, each with the phones that read it, and the phones left over. */
-export async function getBundleOverrides(key: string, slug?: string): Promise<BundleOverrides | null> {
-  const v = await phoneCopies(key, slug ?? "");
+export async function getBundleOverrides(at: Ver): Promise<BundleOverrides | null> {
+  const v = await phoneCopies(at);
   if (!v) return null;
   const files = new Map<string, { slug: string; path: string; phones: ReleasePhone[] }>();
   const defaults: ReleasePhone[] = [], unknown: ReleasePhone[] = [];
@@ -288,7 +283,7 @@ export async function getBundleOverrides(key: string, slug?: string): Promise<Bu
       files.set(f.path, row);
     }
   });
-  return { build: v.build, home: homePhone(v.entry, v.devices), files: [...files.values()], defaults, unknown };
+  return { build: v.build, home: homePhone(at.line ? [at.line] : v.devices), files: [...files.values()], defaults, unknown };
 }
 
 /** One override file of a phone group, against what that phone had before. */
@@ -337,14 +332,13 @@ function fileChange(A: OpenedBundle | null, before: string | undefined, B: Opene
  * version compared against. Comparing the two copies file by file would show a phone moving to another
  * group's file as one file removed and another added; this compares per phone.
  */
-export async function getPhoneChanges(key: string, slug: string, against?: string): Promise<PhoneChange[] | null> {
-  const { entry: b, previous } = await resolve(key, slug);
-  const a = against ? (await resolve(key, against)).entry : previous;
-  const vb = await phoneCopies(key, slug);
+export async function getPhoneChanges(v: Ver, against?: string): Promise<PhoneChange[] | null> {
+  const { entry: b, previous } = await resolveVer(v);
+  const a = against ? (await resolveVer({ ...v, slug: against })).entry : previous;
+  const vb = await phoneCopies(v);
   if (!a || !vb) return null;
   return cached(`phonechanges:v4:${identity(b)}|${identity(a)}|${vb.phones.map((p) => p.id).join(",")}`, KEEP, async () => {
-    const [A, B] = (await Promise.all([open(key, a.slug), open(key, slug)])).map((o) => o.opened);
-    if (!A || !B) error(500, "bundle did not open");
+    const [{ opened: A }, { opened: B }] = await Promise.all([open({ ...v, slug: a.slug }), open(v)]);
     /** A phone's override files in a copy: its plist and its modem file, by the boards in their names. */
     const filesFor = (o: OpenedBundle, phone: string): BundleFile[] => o.info.files.filter((f) => f.devices?.some((d) => d.ids === phone));
     // Phone groups as this version files them: phones that read the same files.
@@ -360,8 +354,7 @@ export async function getPhoneChanges(key: string, slug: string, against?: strin
     return [...groups.values()].flatMap(({ files, phones }): PhoneChange[] => {
       const phone = phones[0]?.id;
       if (!phone) return [];
-      // A per-model copy only speaks for its own model.
-      const before = a.devices && !a.devices.includes(phone) ? [] : filesFor(A, phone);
+      const before = filesFor(A, phone);
       const known = before.length > 0 || knowsPhone(A.info.files, phone);
       const had = before.length ? A : null;
       return [{
@@ -380,9 +373,9 @@ export interface OverridePlist {
 }
 
 /** A phone's override plist next to its modem file (same stem), decoded; null when the copy has none. */
-export async function getOverridePlist(key: string, slug: string, priPath: string): Promise<OverridePlist | null> {
+export async function getOverridePlist(v: Ver, priPath: string): Promise<OverridePlist | null> {
   const path = priPath.replace(/(\.der)?\.pri$/, ".plist");
-  const plist = plistOf((await open(key, slug)).opened, path);
+  const plist = plistOf((await open(v)).opened, path);
   return plist ? { path, plist } : null;
 }
 
@@ -417,12 +410,12 @@ export type ModemDefaults =
  * package files that phone's .der.pri replaces by EFS path. Without `device`,
  * the version's home phone.
  */
-export async function getBasebandDefaults(key: string, slug?: string, device?: string): Promise<ModemDefaults> {
-  const v = await phoneCopies(key, slug ?? "");
+export async function getBasebandDefaults(at: Ver, device?: string): Promise<ModemDefaults> {
+  const v = await phoneCopies(at);
   if (!v) return { missing: true, build: null };
-  const phone = device ?? homePhone(v.entry, v.devices);
+  const phone = device ?? homePhone(at.line ? [at.line] : v.devices);
   const m = phone ? v.modems.find((x) => x.devices.includes(phone) && x.package.kind === "bbfw") : undefined;
-  const [{ opened, ref }, s] = await Promise.all([open(key, slug ?? ""), m ? bbfwSummary(m.package.id) : null]);
+  const [{ opened, ref }, s] = await Promise.all([open(at), m ? bbfwSummary(m.package.id) : null]);
   if (!phone || !m || !s) return { missing: true, build: v.build };
 
   const name = ref.name;
@@ -460,8 +453,8 @@ export interface ModemOverride {
 }
 
 /** File `i` of modem package `id` next to the .der.pri value that replaces it, with the lines that differ. */
-export async function getBasebandOverride(key: string, slug: string | undefined, id: string, pri: string, efs: string, i: number): Promise<ModemOverride> {
-  const [{ opened }, s] = await Promise.all([open(key, slug ?? ""), bbfwSummary(id)]);
+export async function getBasebandOverride(v: Ver, id: string, pri: string, efs: string, i: number): Promise<ModemOverride> {
+  const [{ opened }, s] = await Promise.all([open(v), bbfwSummary(id)]);
   const base = s?.files[i];
   if (!base?.text || base.path !== efs) error(404, `no package file ${i} at ${efs}`);
   const value = readPri(opened, pri)?.efs.find((e) => e.path === efs)?.value;

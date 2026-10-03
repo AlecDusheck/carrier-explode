@@ -29,12 +29,9 @@ export function phoneList(phones: readonly Phone[]): string {
   return names.map((n, i) => (i && n.startsWith("iPhone ") ? n.slice(7) : n)).join(", ");
 }
 
-/**
- * The phone a bundle version means when none is named: a model-specific copy's
- * own model, else the newest phone of the release it is read against.
- */
-export function homePhone(entry: { readonly devices?: readonly string[] | undefined }, devices: readonly string[]): string | undefined {
-  return [...(entry.devices ?? devices)].sort(compareProducts).at(-1);
+/** The phone a bundle version means when none is named: the newest phone of the release it is read against. */
+export function homePhone(devices: readonly string[]): string | undefined {
+  return [...devices].sort(compareProducts).at(-1);
 }
 
 /** The newest named model among phones: the one a group of them is pictured by. */

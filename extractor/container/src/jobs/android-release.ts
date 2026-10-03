@@ -6,7 +6,7 @@
  * checked here, not assumed.
  */
 
-import type { Release, ReleaseSource } from "../../../../src/lib/schema/types.ts";
+import type { Release, ReleaseSource } from "../../../../src/lib/schema/index.ts";
 import { keys } from "../../../../src/lib/storage/keys.ts";
 import { readJobOutput } from "../job-records.ts";
 import type { JobContext, JobOutput } from "../job.ts";

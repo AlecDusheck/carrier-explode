@@ -13,11 +13,13 @@ export const KINDS: readonly Kind[] = SOURCE_KINDS.map((k) => KIND_SEGMENT[k]);
 /** The kind of source a URL's first segment names: KIND_SEGMENT the other way. */
 export const SOURCE_KIND = { carriers: "carrier", countries: "country", defaults: "default" } as const satisfies Record<Kind, SourceKind>;
 
-/** A source, and a version of it: what every page under /<kind>/<platform>/<name>/<version>/ is about. */
+/** A source, and a version of it on one of its lines: what every page under /<kind>/<platform>/<name>[/<line>]/<version>/ is about. */
 export interface At {
   readonly ref: SourceRef;
   /** The source key. */
   readonly source: string;
+  /** An Android device, or a model-specific Apple bundle's product type; undefined for Apple's main line. */
+  readonly line: string | undefined;
   /** The timeline slug. */
   readonly version: string;
 }
@@ -31,8 +33,6 @@ export interface Version extends TimelineEntry {
   readonly images: readonly string[];
   /** The OS keys Apple's manifest publishes it under. */
   readonly ota: readonly string[];
-  /** The names of `devices`, newest first; empty when it is for every device. */
-  readonly phones: readonly string[];
 }
 
 /** One part of a modem package diff, under the section it belongs to. */

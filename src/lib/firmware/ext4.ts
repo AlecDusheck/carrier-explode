@@ -1,7 +1,7 @@
 /**
  * Read-only ext4, enough to walk a path and read files from an Android
  * partition image: superblock, group descriptors (32- and 64-bit), inodes,
- * extent trees, the legacy block map, and inline data. Directories are read
+ * extent trees and inline data. Directories are read
  * linearly: in an htree directory the index blocks look like one empty
  * dirent spanning the block, so a linear walk skips them and still sees every
  * leaf entry.
@@ -134,35 +134,6 @@ export class Ext4 implements Filesystem {
     return out;
   }
 
-  /** Pre-extent block map: 12 direct pointers, then single, double and triple indirect. */
-  private async blockMap(ino: Inode): Promise<Extent[]> {
-    const bs = this.sb.blockSize;
-    const count = Math.ceil(ino.size / bs);
-    const out: Extent[] = [];
-    let logical = 0;
-    const add = (physical: number): void => {
-      if (logical < count) out.push({ logical, physical, length: 1, zero: physical === 0 });
-      logical++;
-    };
-    const indirect = async (block: number, level: number): Promise<void> => {
-      if (logical >= count) return;
-      if (block === 0) {
-        // A hole: skip as many logical blocks as this pointer would have covered.
-        logical += (bs / 4) ** (level + 1);
-        return;
-      }
-      const ptrs = await this.r.read(block * bs, bs);
-      for (let i = 0; i < bs / 4 && logical < count; i++) {
-        const p = u32le(ptrs, i * 4);
-        if (level === 0) add(p);
-        else await indirect(p, level - 1);
-      }
-    };
-    for (let i = 0; i < 12; i++) add(u32le(ino.block, i * 4));
-    for (let level = 0; level < 3; level++) await indirect(u32le(ino.block, 48 + level * 4), level);
-    return out;
-  }
-
   /**
    * Inline data: the first 60 bytes live in i_block, the rest in the
    * in-inode xattr `system.data` (name index 7, name "data").
@@ -192,10 +163,10 @@ export class Ext4 implements Filesystem {
 
   private async contents(ino: Inode): Promise<Uint8Array> {
     if (ino.flags & INLINE_DATA_FL) return this.inlineData(ino);
-    // Fast symlinks keep their target in i_block with no blocks at all.
-    if (kindOfMode(ino.mode) === "symlink" && ino.size < 60 && !(ino.flags & EXTENTS_FL)) return ino.block.slice(0, ino.size);
+    // Android's image builders (make_ext4fs, mke2fs + e2fsdroid) always use extents.
+    if (!(ino.flags & EXTENTS_FL)) throw new FsError(`${this.r.label}: inode ${ino.number} uses a block map, not extents`);
     const bs = this.sb.blockSize;
-    const extents = ino.flags & EXTENTS_FL ? await this.extents(ino.block) : await this.blockMap(ino);
+    const extents = await this.extents(ino.block);
     const out = new Uint8Array(ino.size);
     for (const e of extents) {
       const at = e.logical * bs;

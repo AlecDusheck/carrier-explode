@@ -21,7 +21,8 @@ import { openRemoteZip, type RemoteZip } from "../../../../../../src/lib/firmwar
 import { fetchWithRetry } from "../../../../../../src/lib/http/index.ts";
 import { keys } from "../../../../../../src/lib/storage/keys.ts";
 import type { JobContext, JobOutput, JobRunner, R2Client } from "../../../job.ts";
-import { appledbFirmware, iphoneCatalog, mapLimit } from "../catalog.ts";
+import { appledbFirmware, iphoneCatalog } from "../catalog.ts";
+import { mapLimit } from "../map-limit.ts";
 import { parseBuildManifest } from "../shared/build-manifest.ts";
 import { fetchMember } from "./fetch.ts";
 import { group, modemMembers, packageKey, type ModemGroup, type ModemMember } from "./group.ts";

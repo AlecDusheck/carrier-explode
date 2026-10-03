@@ -18,7 +18,7 @@ import { parseSourceKey, type Release, type ReleaseSource } from "../../../../..
 import { compareProducts } from "../../../../../../src/lib/decode/index.ts";
 import { readJobOutput } from "../../../job-records.ts";
 import type { JobContext, JobOutput, JobRunner } from "../../../job.ts";
-import { mapLimit } from "../catalog.ts";
+import { mapLimit } from "../map-limit.ts";
 import { unpackIpcc, type Bundle } from "../shared/ipcc.ts";
 import { storeBundle, type BundleKind } from "../store-bundle.ts";
 import { mergeCopies } from "./merge.ts";

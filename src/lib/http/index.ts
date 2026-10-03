@@ -74,11 +74,11 @@ export async function fetchWithRetry(url: string | URL, init: RequestInit = {}, 
   }
 }
 
-/** `bytes a-b/total` -> its parts; total is undefined for `*`. */
-function parseContentRange(header: string | null): { start: number; end: number; total?: number } | undefined {
-  const m = header?.match(/^bytes (\d+)-(\d+)\/(\d+|\*)$/);
-  if (!m?.[1] || !m[2] || !m[3]) return undefined;
-  return { start: Number(m[1]), end: Number(m[2]), ...(m[3] === "*" ? {} : { total: Number(m[3]) }) };
+/** `bytes a-b/total` -> the range it holds. */
+function parseContentRange(header: string | null): { start: number; end: number } | undefined {
+  const m = header?.match(/^bytes (\d+)-(\d+)\/(?:\d+|\*)$/);
+  if (!m?.[1] || !m[2]) return undefined;
+  return { start: Number(m[1]), end: Number(m[2]) };
 }
 
 /**
@@ -117,20 +117,12 @@ export async function fetchRange(url: string | URL, start: number, end: number, 
   }
 }
 
-/**
- * The resource's size. HEAD first; hosts that answer HEAD without a length
- * get a one-byte Range GET, whose Content-Range carries the total.
- */
+/** The resource's size, from a HEAD request. */
 export async function contentLength(url: string | URL, opts: RetryOptions = {}): Promise<number> {
   const head = await fetchWithRetry(url, { method: "HEAD" }, opts);
   const len = Number(head.headers.get("content-length") ?? NaN);
-  if (Number.isSafeInteger(len) && len > 0) return len;
-  const headers = new Headers({ range: "bytes=0-0" });
-  const res = await fetchWithRetry(url, { headers }, opts);
-  await res.body?.cancel();
-  const total = parseContentRange(res.headers.get("content-range"))?.total;
-  if (total === undefined) throw new RangeResponseError(`${url} reports no length (HEAD and Range both)`);
-  return total;
+  if (!Number.isSafeInteger(len) || len < 0) throw new RangeResponseError(`HEAD ${url} gave no usable Content-Length`);
+  return len;
 }
 
 /** Same URL with the other of http/https. */

@@ -21,7 +21,7 @@ import { decodeCarrierSettings, splitMultiCarrierSettings } from "../../../../sr
 import {
   FsNotFoundError, openFilesystem, openPayload, openRemoteZip, partitionReader, type Filesystem,
 } from "../../../../src/lib/firmware/index.ts";
-import { sourceKey } from "../../../../src/lib/schema/types.ts";
+import { sourceKey } from "../../../../src/lib/schema/index.ts";
 import type { JobContext, JobOutput } from "../job.ts";
 import { payloadCodecs } from "./android-codecs.ts";
 
@@ -68,27 +68,26 @@ export async function androidOta(ctx: JobContext<"android.ota">): Promise<OtaOut
 
   for (const [i, name] of names.entries()) {
     if (i % 100 === 0) await ctx.progress(i, names.length, name);
-    if (!name.endsWith(".pb")) {
-      ctx.log(`skipping ${name}: not a .pb`);
-      continue;
-    }
+    if (!name.endsWith(".pb")) throw new AndroidOtaError(`${DIR}/${name}: not a .pb; the directory's layout changed`);
     const bytes = await fs.readFile(`${DIR}/${name}`);
     if (name === "carrier_list.pb") {
       carrierList = await ctx.r2.putObj(bytes, { kind: "android.carrier_list", origin: origin(name) });
     } else if (name === "others.pb") {
       const others = splitMultiCarrierSettings(bytes);
-      const version = others.version ?? "";
+      if (others.version === undefined) throw new AndroidOtaError(`${name} has no version`);
       for (const part of others.settings) {
         const cs = decodeCarrierSettings(part);
         if (!cs.canonicalName) throw new AndroidOtaError(`${name}: a setting without a canonical name`);
-        await store(part, sourceKey({ platform: "android", kind: "carrier", name: cs.canonicalName }), cs.version ?? version, `${name}#${cs.canonicalName}`);
+        if (cs.version !== undefined) throw new AndroidOtaError(`${name}: ${cs.canonicalName} carries its own version`);
+        await store(part, sourceKey({ platform: "android", kind: "carrier", name: cs.canonicalName }), others.version, `${name}#${cs.canonicalName}`);
       }
     } else {
       const cs = decodeCarrierSettings(bytes);
-      const stem = name.slice(0, -".pb".length);
-      if (cs.canonicalName && cs.canonicalName !== stem) ctx.log(`${name} names itself ${cs.canonicalName}; keyed by the canonical name`);
+      // Every file is named after its canonical name; the source key relies on it.
+      if (`${cs.canonicalName}.pb` !== name) throw new AndroidOtaError(`${name} names itself "${cs.canonicalName}"`);
+      if (cs.version === undefined) throw new AndroidOtaError(`${name} has no version`);
       const kind = DEFAULTS.has(name) ? "default" : "carrier";
-      await store(bytes, sourceKey({ platform: "android", kind, name: cs.canonicalName || stem }), cs.version ?? "", name);
+      await store(bytes, sourceKey({ platform: "android", kind, name: cs.canonicalName }), cs.version, name);
     }
   }
 

@@ -92,8 +92,8 @@ export function plan(held: readonly Held[], preferred: readonly Fw[], fallback: 
     } else {
       if (builds.has(fw.build)) continue;
       if (floor !== undefined && compareVersions(fw.version, floor) < 0) continue;
-      const from = heldFrom.get(fw.version);
-      if (from && from.length && !from.includes(fw.device)) continue;
+      // Held as a build of other phones: this device's build of the version differs for that reason alone.
+      if (heldFrom.get(fw.version)?.includes(fw.device) === false) continue;
     }
     chosen.set(fw.version, { version: fw.version, build: fw.build, device: fw.device, ...(fw.released ? { released: fw.released } : {}) });
   }

@@ -1,123 +1,130 @@
 /**
- * v1 URLs -> v2 URLs, for the site's permanent redirects (index/legacy.json).
+ * v1 URL prefixes -> v2 paths, for the site's permanent redirects
+ * (index/legacy.json).
  *
- * v1 had one page per bundle name per kind (`/carriers/<Name>`, `/watch/<Name>`,
- * `/countries/<Name>`) with every copy in one version strip: iPhone images
- * (`ios-27.2`), OTA files (`ota-58.1`) and per-model OTA files
- * (`ota-58.1-iPad`, `ota-33.2-iPhone7,1`, `ota-1.1-iPhone` for the manifest's
- * CarrierBundles.iPhone family), disambiguated `-<image build>` or `-<n>`.
- * v2 splits those into sources per platform. To resolve every v1 slug, the v1
- * strip is rebuilt with v1's rules from the same releases and refs, and each
- * v1 entry is pointed at the v2 entry holding that copy.
+ * v1 had one page per bundle name and kind (`/carriers/<Name>`,
+ * `/watch/<Name>`, `/countries/<Name>`), its versions in one strip:
+ *   ios-<version>[-<image build>]   an iOS image's copy
+ *   ota-<build>[-<n>]               an OTA file; -2, -3 for more files of one build
+ *   ota-<build>-<productType>[-<n>] iPad (now ipados), a model (now that model's line),
+ *                                   iPhone (the manifest's CarrierBundles.iPhone family)
+ *   ota-legacy                      the 2009-2010 MobileDeviceCarrierBundles file
+ * Each is derived here from the v2 copy it named, not by replaying v1's
+ * ordering: an image copy answers to `ios-<version>-<build>` for every release
+ * carrying it and the bare `ios-<version>` from the newest entry with that iOS
+ * version; OTA files sharing a v1 slug are numbered in v1's order (OS key,
+ * then build, newest first).
  */
 
 import { compareVersions } from "#lib/decode/index.ts";
 import type { OtaRef } from "#lib/storage/keys.ts";
-import { compareReleases, modelOf } from "./timeline.ts";
-import { parseSourceKey, sourcePath, sourceKey, type LegacyRoute, type Release, type SourceRef, type TimelineEntry } from "./types.ts";
+import { modelOf } from "./timeline.ts";
+import {
+  parseSourceKey, sourceKey, sourcePath, versionPath,
+  type LegacyRoute, type Platform, type Release, type SourceKind, type SourceRef, type Timeline, type TimelineEntry,
+} from "./types.ts";
 
-type V1Kind = "carriers" | "countries" | "watch";
+interface Line { readonly source: SourceRef; readonly line: string | undefined; readonly entries: readonly TimelineEntry[] }
 
-/** One entry of a v1 strip, with what identifies its copy in v2. */
-interface V1Entry {
-  slug: string;
-  build: string;
-  /** Sinks in v1 order: a per-model or per-family OTA file. */
-  readonly variant: boolean;
-  readonly via: "image" | "ota";
-  /** image: the newest release carrying it; ota: the file. */
-  readonly release?: string;
-  readonly ref?: OtaRef;
+/** Every line of an Apple timeline, with its URL line segment. */
+function appleLines(source: SourceRef, t: Timeline | undefined): Line[] {
+  if (t?.family !== "apple") return [];
+  return [{ source, line: undefined, entries: t.entries }, ...Object.entries(t.models).map(([line, entries]) => ({ source, line, entries }))];
 }
 
-/** v1's per-model slug suffix: the product type, `iPad` for iPad entries, `iPhone` for CarrierBundles.iPhone ones (os `iPhone <n>`). */
-function v1Suffix(ref: OtaRef, source: SourceRef): string | undefined {
-  const model = modelOf(ref.productType);
-  if (model !== undefined) return model;
-  if (source.platform === "ipados") return "iPad";
-  if (source.platform === "ios" && ref.os.startsWith("iPhone ")) return "iPhone";
-  return undefined;
-}
+const pathOf = (l: Line, e: TimelineEntry): string => versionPath(l.source, e.slug, l.line);
 
-const imageSlugV1 = (version: string): string => `ios-${version.trim().replace(/\s+/g, "-")}`;
+const v1Image = (version: string): string => `ios-${version.trim().replace(/\s+/g, "-")}`;
 
-/** v1 buildTimeline (src/lib/server/timeline.ts on main): images, then refs, ordered and disambiguated as it did. */
-function v1Strip(imageKey: string | undefined, images: readonly Release[], refs: ReadonlyArray<{ ref: OtaRef; source: SourceRef }>, kind: V1Kind): V1Entry[] {
-  const out: V1Entry[] = [];
-  if (imageKey !== undefined) {
-    let lastId: string | undefined;
-    for (const r of [...images].sort((a, b) => compareReleases(b, a))) {
-      const src = r.sources[imageKey]?.[0];
-      if (!src) continue;
-      const id = src.cid ?? src.sha;
-      if (id !== lastId) out.push({ slug: imageSlugV1(r.version), build: src.version, variant: false, via: "image", release: r.id });
-      lastId = id;
+function imageRoutes(base: string, lines: readonly Line[], releases: ReadonlyMap<string, Release>): LegacyRoute[] {
+  const out: LegacyRoute[] = [];
+  const bare = new Set<string>();
+  for (const l of lines) {
+    for (const e of l.entries) {
+      for (const c of e.copies) {
+        if (c.via !== "image") continue;
+        for (const id of c.releases) {
+          const r = releases.get(id);
+          if (!r) continue;
+          const slug = v1Image(r.version);
+          out.push({ from: `${base}/${slug}-${r.id}`, to: pathOf(l, e) });
+          // Entries are newest first, so the first to claim a bare slug is the one v1 gave it to.
+          if (!bare.has(slug)) out.push({ from: `${base}/${slug}`, to: pathOf(l, e) });
+          bare.add(slug);
+        }
+      }
     }
-  }
-  const byUrl = new Set<string>();
-  for (const { ref, source } of refs) {
-    if (byUrl.has(ref.url)) continue;
-    byUrl.add(ref.url);
-    const suffix = kind === "carriers" ? v1Suffix(ref, source) : undefined;
-    const slug = ref.os === "legacy" ? "ota-legacy" : `ota-${ref.build}${suffix ? `-${suffix}` : ""}`;
-    out.push({ slug, build: ref.build, variant: suffix !== undefined, via: "ota", ref });
-  }
-  out.sort((a, b) => Number(a.variant) - Number(b.variant) || compareVersions(b.build || "0", a.build || "0") || Number(b.via === "image") - Number(a.via === "image"));
-  const seen = new Map<string, number>();
-  for (const e of out) {
-    const n = (seen.get(e.slug) ?? 0) + 1;
-    seen.set(e.slug, n);
-    if (n > 1) e.slug += e.release !== undefined ? `-${e.release}` : `-${n}`;
   }
   return out;
 }
 
-/** The v2 entry holding a v1 entry's copy. */
-function target(e: V1Entry, timelines: ReadonlyMap<string, readonly TimelineEntry[]>, imageKey: string | undefined): { key: string; slug: string } | undefined {
-  const key = e.via === "image" ? imageKey : e.ref?.source;
-  if (key === undefined) return undefined;
-  const found = timelines.get(key)?.find((t) => t.copies.some((c) =>
-    e.via === "image" ? c.via === "image" && e.release !== undefined && c.releases.includes(e.release) : c.via === "ota" && c.url === e.ref?.url));
-  return found ? { key, slug: found.slug } : undefined;
+/** v1's per-model suffix for a ref of `source`. */
+function v1Suffix(ref: OtaRef, source: SourceRef): string | undefined {
+  const model = modelOf(ref.productType);
+  if (model !== undefined) return model;
+  if (source.platform === "ipados") return "iPad";
+  // CarrierBundles.iPhone entries are listed under OS keys `iPhone <n>`.
+  return ref.os.startsWith("iPhone ") ? "iPhone" : undefined;
+}
+
+function otaRoutes(base: string, lines: readonly Line[], refs: readonly OtaRef[]): LegacyRoute[] {
+  const where = new Map<string, string>();
+  for (const l of lines) {
+    for (const e of l.entries) {
+      for (const c of e.copies) if (c.via === "ota") where.set(c.url, pathOf(l, e));
+    }
+  }
+  const sources = new Map(lines.map((l) => [sourceKey(l.source), l.source]));
+  // One v1 entry per URL, at its highest OS key: v1 listed refs newest OS first and kept a URL's first sighting.
+  const files = new Map<string, { slug: string; os: string; build: string }>();
+  for (const r of refs) {
+    const source = sources.get(r.source);
+    if (!source) continue;
+    const suffix = v1Suffix(r, source);
+    const slug = r.os === "legacy" ? "ota-legacy" : `ota-${r.build}${suffix === undefined ? "" : `-${suffix}`}`;
+    const known = files.get(r.url);
+    if (!known || compareVersions(r.os, known.os) > 0) files.set(r.url, { slug, os: r.os, build: r.build });
+  }
+  const bySlug = new Map<string, Array<{ url: string; os: string; build: string }>>();
+  for (const [url, f] of files) bySlug.set(f.slug, [...(bySlug.get(f.slug) ?? []), { url, os: f.os, build: f.build }]);
+  return [...bySlug].flatMap(([slug, list]) =>
+    list
+      .sort((a, b) => compareVersions(b.os, a.os) || compareVersions(b.build, a.build) || a.url.localeCompare(b.url))
+      .flatMap((f, i): LegacyRoute[] => {
+        const to = where.get(f.url);
+        return to === undefined ? [] : [{ from: `${base}/${i === 0 ? slug : `${slug}-${i + 1}`}`, to }];
+      }));
 }
 
 /**
- * Every v1 route: each name's base path, and each v1 version slug. `timelines`
+ * Every v1 prefix: each name's page, and each version it listed. `timelines`
  * holds every v2 source's timeline by sourceKey.
  */
-export function legacyRoutes(releases: readonly Release[], refs: readonly OtaRef[], timelines: ReadonlyMap<string, readonly TimelineEntry[]>): LegacyRoute[] {
-  const appleImages = releases.filter((r) => r.platform === "ios");
-  const sources = [...timelines.keys()].flatMap((k) => { const s = parseSourceKey(k); return s ? [s] : []; });
+export function legacyRoutes(releases: readonly Release[], refs: readonly OtaRef[], timelines: ReadonlyMap<string, Timeline>): LegacyRoute[] {
+  const byId = new Map(releases.map((r) => [r.id, r]));
+  const sources = [...timelines.keys()].flatMap((k) => parseSourceKey(k) ?? []);
+  const names = (platforms: readonly Platform[], kind: SourceKind): string[] =>
+    [...new Set(sources.filter((s) => platforms.includes(s.platform) && s.kind === kind).map((s) => s.name))].sort();
+  const timeline = (s: SourceRef): Timeline | undefined => timelines.get(sourceKey(s));
   const routes: LegacyRoute[] = [];
-  const refsOf = (keys: readonly string[]): Array<{ ref: OtaRef; source: SourceRef }> =>
-    refs.flatMap((ref) => { const source = parseSourceKey(ref.source); return source && keys.includes(ref.source) ? [{ ref, source }] : []; });
-
-  const strips: Array<{ kind: V1Kind; name: string; home: SourceRef; imageKey?: string; keys: string[] }> = [];
-  const names = (pred: (s: SourceRef) => boolean): string[] => [...new Set(sources.filter(pred).map((s) => s.name))].sort();
-  for (const name of names((s) => s.kind === "carrier" && (s.platform === "ios" || s.platform === "ipados"))) {
+  const strip = (base: string, home: SourceRef, members: readonly SourceRef[]): void => {
+    const lines = members.flatMap((s) => appleLines(s, timeline(s)));
+    routes.push({ from: base, to: sourcePath(home) });
+    routes.push(...imageRoutes(base, lines, byId), ...otaRoutes(base, lines, refs));
+  };
+  for (const name of names(["ios", "ipados"], "carrier")) {
     const ios: SourceRef = { platform: "ios", kind: "carrier", name };
     const ipados: SourceRef = { platform: "ipados", kind: "carrier", name };
-    // v1's page was the iPhone bundle's; a name only iPads ever had lands on the iPadOS source.
-    const home = timelines.has(sourceKey(ios)) ? ios : ipados;
-    strips.push({ kind: "carriers", name, home, imageKey: sourceKey(ios), keys: [sourceKey(ios), sourceKey(ipados)] });
+    // v1's page was the iPhone bundle's; a name only iPads ever had lands on its iPadOS source.
+    strip(`/carriers/${encodeURIComponent(name)}`, timeline(ios) ? ios : ipados, [ios, ipados]);
   }
-  for (const name of names((s) => s.kind === "carrier" && s.platform === "watchos")) {
-    const home: SourceRef = { platform: "watchos", kind: "carrier", name };
-    strips.push({ kind: "watch", name, home, keys: [sourceKey(home)] });
+  for (const name of names(["watchos"], "carrier")) {
+    const watch: SourceRef = { platform: "watchos", kind: "carrier", name };
+    strip(`/watch/${encodeURIComponent(name)}`, watch, [watch]);
   }
-  for (const name of names((s) => s.kind === "country" && s.platform === "ios")) {
-    const home: SourceRef = { platform: "ios", kind: "country", name };
-    strips.push({ kind: "countries", name, home, imageKey: sourceKey(home), keys: [sourceKey(home)] });
-  }
-
-  for (const s of strips) {
-    const base = `/${s.kind}/${encodeURIComponent(s.name)}`;
-    routes.push({ from: base, to: sourcePath(s.home) });
-    for (const e of v1Strip(s.imageKey, appleImages, refsOf(s.keys), s.kind)) {
-      const t = target(e, timelines, s.imageKey);
-      const ref = t === undefined ? undefined : parseSourceKey(t.key);
-      if (t && ref) routes.push({ from: `${base}/${e.slug}`, to: `${sourcePath(ref)}/${t.slug}` });
-    }
+  for (const name of names(["ios"], "country")) {
+    const country: SourceRef = { platform: "ios", kind: "country", name };
+    strip(`/countries/${encodeURIComponent(name)}`, country, [country]);
   }
   return routes;
 }

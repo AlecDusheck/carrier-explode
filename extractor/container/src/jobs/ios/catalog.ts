@@ -9,6 +9,7 @@ import * as v from "valibot";
 
 import { compareProducts } from "../../../../../src/lib/decode/index.ts";
 import { fetchWithRetry } from "../../../../../src/lib/http/index.ts";
+import { mapLimit } from "./map-limit.ts";
 
 const IPSW_ME = "https://api.ipsw.me/v4";
 const APPLEDB = "https://api.appledb.dev/ios/";
@@ -75,45 +76,27 @@ export async function deviceFirmwares(device: string): Promise<DeviceCatalog> {
   };
 }
 
-/** Runs `fn` over `items`, at most `limit` at a time, keeping order. */
-export async function mapLimit<T, R>(items: readonly T[], limit: number, fn: (item: T) => Promise<R>): Promise<R[]> {
-  const out = new Array<R>(items.length);
-  let next = 0;
-  const worker = async (): Promise<void> => {
-    for (let i = next++; i < items.length; i = next++) out[i] = await fn(items[i] as T);
-  };
-  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
-  return out;
-}
-
 export interface IphoneCatalog {
   /** build -> every (device, IPSW URL) ipsw.me lists for it. */
   readonly byBuild: ReadonlyMap<string, ReadonlyArray<{ readonly device: string; readonly url: string }>>;
   /** device -> its board configs. */
   readonly boards: ReadonlyMap<string, readonly string[]>;
-  /** device -> its firmwares. */
-  readonly byDevice: ReadonlyMap<string, readonly Firmware[]>;
 }
 
 /** Every iPhone's firmware list: what fills a build's IPSW list and which modem each phone has. */
 export async function iphoneCatalog(): Promise<IphoneCatalog> {
-  const devices = await iphones();
-  const lists = await mapLimit(devices, CONCURRENCY, deviceFirmwares);
+  const lists = await mapLimit(await iphones(), CONCURRENCY, async (device) => [device, await deviceFirmwares(device)] as const);
   const byBuild = new Map<string, Array<{ device: string; url: string }>>();
   const boards = new Map<string, readonly string[]>();
-  const byDevice = new Map<string, readonly Firmware[]>();
-  devices.forEach((device, i) => {
-    const d = lists[i];
-    if (!d) return;
-    byDevice.set(device, d.firmwares);
+  for (const [device, d] of lists) {
     if (d.boards.length) boards.set(device, d.boards);
     for (const f of d.firmwares) {
       const pairs = byBuild.get(f.build) ?? [];
       pairs.push({ device, url: f.url });
       byBuild.set(f.build, pairs);
     }
-  });
-  return { byBuild, boards, byDevice };
+  }
+  return { byBuild, boards };
 }
 
 /* ---------------------------------------------------------------- AppleDB */

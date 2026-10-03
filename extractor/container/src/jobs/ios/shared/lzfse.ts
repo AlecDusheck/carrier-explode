@@ -12,6 +12,8 @@
  * exactly that size is an error.
  */
 
+import { byteAt, u16le, u32le, u64le } from "../../../../../../src/lib/binary/index.ts";
+
 const MAGIC_END = 0x24787662; // bvx$
 const MAGIC_RAW = 0x2d787662; // bvx-
 const MAGIC_V1 = 0x31787662; // bvx1
@@ -56,12 +58,6 @@ const fail = (why: string): never => {
   throw new LzfseError(why);
 };
 
-const at = (b: Uint8Array, i: number): number => b[i] ?? fail(`read past the end at ${i}`);
-const u16 = (b: Uint8Array, i: number): number => at(b, i) | (at(b, i + 1) << 8);
-const u32 = (b: Uint8Array, i: number): number => (u16(b, i) | (u16(b, i + 2) << 16)) >>> 0;
-/** Bytes past the end read as zero: the bit reader loads whole words near the stream's edges and masks them. */
-const u32Loose = (b: Uint8Array, i: number): number =>
-  ((b[i] ?? 0) | ((b[i + 1] ?? 0) << 8) | ((b[i + 2] ?? 0) << 16) | ((b[i + 3] ?? 0) << 24)) >>> 0;
 /** Low-bit masks, indexed by width: a table, because the bit reader masks on every pull. */
 const MASKS = Uint32Array.from({ length: 33 }, (_, n) => (n >= 32 ? 0xffffffff : 2 ** n - 1));
 const mask = (n: number): number => MASKS[n] ?? 0xffffffff;
@@ -74,12 +70,12 @@ class BitIn {
     if (n !== 0) {
       if (pos < start + 4) fail("bit stream shorter than its first word");
       this.pos -= 4;
-      this.accum = u32(src, this.pos);
+      this.accum = u32le(src, this.pos);
       this.bits = n + 32;
     } else {
       if (pos < start + 3) fail("bit stream shorter than its first word");
       this.pos -= 3;
-      this.accum = u32Loose(src, this.pos) & 0xffffff;
+      this.accum = u16le(src, this.pos) | (byteAt(src, this.pos + 2) << 16);
       this.bits = 24;
     }
     if (this.bits < 24 || this.bits >= 32 || this.accum >>> this.bits !== 0) fail("bad bit stream header");
@@ -105,8 +101,8 @@ class BitIn {
   }
 }
 
-/** Index of the highest set bit's complement, as __builtin_clz for 32-bit values. */
-const clz = (x: number): number => Math.clz32(x);
+/** Leading zero bits, as the reference's __builtin_clz. */
+const clz = Math.clz32;
 
 /** Literal decoder: per state, k | symbol << 8 | delta << 16 (fse_init_decoder_table). */
 function literalTable(freq: Uint16Array): Int32Array {
@@ -185,15 +181,12 @@ interface V2Header {
   readonly literalFreq: Uint16Array;
 }
 
-function u64(b: Uint8Array, i: number): bigint {
-  return BigInt(u32(b, i)) | (BigInt(u32(b, i + 4)) << 32n);
-}
 const field = (v: bigint, offset: number, nbits: number): number => Number((v >> BigInt(offset)) & ((1n << BigInt(nbits)) - 1n));
 
 function v2Header(src: Uint8Array, p: number): V2Header {
-  const v0 = u64(src, p + 8);
-  const v1 = u64(src, p + 16);
-  const v2 = u64(src, p + 24);
+  const v0 = u64le(src, p + 8);
+  const v1 = u64le(src, p + 16);
+  const v2 = u64le(src, p + 24);
   const size = field(v2, 0, 32);
   const freqs = new Uint16Array(L_SYMBOLS + M_SYMBOLS + D_SYMBOLS + LITERAL_SYMBOLS);
   const end = p + size;
@@ -203,7 +196,7 @@ function v2Header(src: Uint8Array, p: number): V2Header {
     let nbits = 0;
     for (let i = 0; i < freqs.length; i++) {
       while (q < end && nbits + 8 <= 32) {
-        accum = (accum | (at(src, q) << nbits)) >>> 0;
+        accum = (accum | (byteAt(src, q) << nbits)) >>> 0;
         nbits += 8;
         q++;
       }
@@ -352,7 +345,7 @@ function lzvnBlock(src: Uint8Array, p: number, end: number, dst: Uint8Array, pos
   };
   for (;;) {
     if (p >= end) fail("LZVN block ends without an end-of-stream op");
-    const op = at(src, p);
+    const op = byteAt(src, p);
     const lo = op & 7;
     if (op === 0x06) {
       if (p + 8 > end) fail("LZVN end-of-stream truncated");
@@ -361,15 +354,15 @@ function lzvnBlock(src: Uint8Array, p: number, end: number, dst: Uint8Array, pos
     if (op === 0x0e || op === 0x16) {
       p += 1;
     } else if (op === 0xe0 || (op > 0xe0 && op < 0xf0)) {
-      const [len, l] = op === 0xe0 ? [2, at(src, p + 1) + 16] : [1, op & 15];
+      const [len, l] = op === 0xe0 ? [2, byteAt(src, p + 1) + 16] : [1, op & 15];
       literal(p + len, l);
       p += len + l;
     } else if (op === 0xf0 || op > 0xf0) {
-      const [len, m] = op === 0xf0 ? [2, at(src, p + 1) + 16] : [1, op & 15];
+      const [len, m] = op === 0xf0 ? [2, byteAt(src, p + 1) + 16] : [1, op & 15];
       p += len;
       match(m);
     } else if (op >= 0xa0 && op < 0xc0) {
-      const w = u16(src, p + 1);
+      const w = u16le(src, p + 1);
       const l = (op >> 3) & 3;
       literal(p + 3, l);
       p += 3 + l;
@@ -384,8 +377,8 @@ function lzvnBlock(src: Uint8Array, p: number, end: number, dst: Uint8Array, pos
       literal(p + len, l);
       const dAt = p + 1;
       p += len + l;
-      if (lo === 7) d = u16(src, dAt);
-      else if (lo !== 6) d = (lo << 8) | at(src, dAt);
+      if (lo === 7) d = u16le(src, dAt);
+      else if (lo !== 6) d = (lo << 8) | byteAt(src, dAt);
       match(m);
     }
   }
@@ -397,17 +390,17 @@ export function lzfseDecode(src: Uint8Array, size: number): Uint8Array {
   let p = 0;
   let pos = 0;
   for (;;) {
-    const magic = u32(src, p);
+    const magic = u32le(src, p);
     if (magic === MAGIC_END) break;
     if (magic === MAGIC_RAW) {
-      const n = u32(src, p + 4);
+      const n = u32le(src, p + 4);
       if (p + 8 + n > src.length || pos + n > size) fail("stored block overruns");
       dst.set(src.subarray(p + 8, p + 8 + n), pos);
       pos += n;
       p += 8 + n;
     } else if (magic === MAGIC_LZVN) {
-      const raw = u32(src, p + 4);
-      const payload = u32(src, p + 8);
+      const raw = u32le(src, p + 4);
+      const payload = u32le(src, p + 8);
       const start = p + 12;
       const out = lzvnBlock(src, start, start + payload, dst, pos, Math.min(size, pos + raw));
       if (out !== pos + raw) fail(`LZVN block decoded ${out - pos} of ${raw} bytes`);

@@ -9,6 +9,7 @@ const EVERY_MS = 60_000;
 
 export async function withHeartbeat<T>(ctx: Pick<JobContext, "progress" | "log">, note: string, fn: () => Promise<T>): Promise<T> {
   let beats = 0;
+  // A step of unknown length: `done` counts minutes, `total` stays one ahead so it never reads as finished.
   const timer = setInterval(() => {
     beats++;
     ctx.progress(beats, beats + 1, note).catch((e: unknown) => ctx.log(`progress failed: ${e instanceof Error ? e.message : String(e)}`));
