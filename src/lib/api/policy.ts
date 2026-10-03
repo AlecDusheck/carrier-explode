@@ -24,6 +24,8 @@ export const QUERIES: Record<QueryName, QueryPolicy> = {
   getManifestFacts: { rate: "base", shared: true },
   guessCarrier: { rate: "base" },
   guessCountry: { rate: "base" },
+  getVisitorCountry: { rate: "base" },
+  guessCarrierName: { rate: "base" },
   getRelease: { rate: "base" },
   // A bundle's current version, for the wiki's links: one cached timeline read.
   getHead: { rate: "base", shared: true },

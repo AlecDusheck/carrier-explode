@@ -24,3 +24,13 @@ export function guessCarrierQuery(org: string | undefined, carriers: Array<{ nam
   }
   return null;
 }
+
+/**
+ * The one bundle a search like that most likely means: of the bundles it matches, one from the
+ * visitor's country, then the plainest name (ATT_US over ATT_FirstNet_US).
+ */
+export function guessCarrierBundle(query: string, carriers: Array<{ name: string; display: string; cc?: string }>, cc: string | null): string | null {
+  const hits = carriers.filter((c) => norm(c.display).replace(/ /g, "").includes(query));
+  hits.sort((a, b) => Number(b.cc === cc) - Number(a.cc === cc) || a.name.length - b.name.length || a.name.localeCompare(b.name));
+  return hits[0]?.name ?? null;
+}

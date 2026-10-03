@@ -96,8 +96,15 @@ export function splitName(name: string): { cc?: string; display: string } {
   if (m && Object.hasOwn(ISO_NAMES, m[2].toLowerCase())) {
     return { cc: m[2].toLowerCase(), display: m[1].replace(/_/g, " ") };
   }
-  return { display: name.replace(/_/g, " ") };
+  // Apple also writes UK, which is not an ISO code, and some names end in the country itself
+  // (O2_Germany, TIM_Italy). Those keep the word: it is part of how the carrier is named.
+  const last = /_([A-Za-z]+)$/.exec(name)?.[1].toLowerCase();
+  const cc = last === "uk" ? "gb" : last && ISO_BY_NAME.get(last);
+  return { ...(cc ? { cc } : {}), display: name.replace(/_/g, " ") };
 }
+
+/** "germany" -> "de": ISO_NAMES the other way, spaces and punctuation dropped as Apple's names drop them. */
+const ISO_BY_NAME = new Map(Object.entries(ISO_NAMES).map(([cc, n]) => [n.toLowerCase().replace(/[^a-z]/g, ""), cc]));
 
 
 // The bundle names Apple uses are internal: ATT, TMobile, CMCC, Hutchison.
@@ -125,13 +132,13 @@ const GENERIC = /(?<=[a-z])(?=(?:Wireless|Telecom|Telekom|Mobile|Mobility|Networ
  */
 export function carrierName(name: string): { brand: string; country?: string } {
   const { cc, display } = splitName(name);
-  // Apple writes UK, which is not an ISO code, so splitName leaves it on.
-  const uk = !cc && /_uk$/i.test(name);
+  // Apple writes UK, which is not an ISO code, so splitName leaves it on the display name.
+  const uk = /_uk$/i.test(name);
   const words = display.split(" ").slice(0, uk ? -1 : undefined).filter((w) => w && !TECH.has(w))
     .map((w) => BRANDS[w] ?? w.replace(GENERIC, " "));
   // TMobile_MetroPCS is "Metro by T-Mobile", not "T-Mobile Metro by T-Mobile".
   const brand = words.filter((w, i) => !words.some((o, j) => j !== i && o.length > w.length && o.includes(w))).join(" ") || display;
-  const tail = uk ? "United Kingdom" : countryName(cc);
+  const tail = countryName(cc);
   // O2_Germany, TIM_Italy: the country is already the last word.
   return { brand, country: tail && !brand.endsWith(tail) ? tail : undefined };
 }

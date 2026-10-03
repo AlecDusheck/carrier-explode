@@ -27,7 +27,7 @@ import { featuresKey, phoneFeature, type FeatureIndex } from "./featureindex";
 import type { BasebandDiffPart, Kind, PublicEntry, TimelineEntry } from "#lib/types.ts";
 import { cached, digestHex, fetchApple, perRequest } from "./cache";
 import { buildMergedCbsMatrix } from "./cbs";
-import { guessCarrierQuery } from "./guess";
+import { guessCarrierBundle, guessCarrierQuery } from "./guess";
 import {
   POINTER_KEY, bundlesKey, fileDataKey, fileIndexKey, keyScan, rareKey, topKey, type RareSetting,
   type ScanFileIndex, type ScanPointer, type ScanShard, type ScanTarget, type TargetRow,
@@ -954,6 +954,19 @@ export async function guessCountry(): Promise<string | null> {
     s.normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9]/gi, "").toLowerCase();
   const name = countryName(cc);
   return (name && countries.find((c) => flat(c.name) === flat(name))?.name) || null;
+}
+
+/** On a phone, the carrier bundle the visitor's network most likely is. */
+export async function guessCarrierName(): Promise<string | null> {
+  const query = await guessCarrier();
+  return query && guessCarrierBundle(query, (await getIndex()).carriers, visitorCountry());
+}
+
+/** The visitor's country as an ISO code ("us"), from where the request came from. */
+export function visitorCountry(): string | null {
+  const { request, locals } = getRequestEvent();
+  locals.perVisitor = true;
+  return (request as IncomingRequest).cf?.country?.toLowerCase() ?? null;
 }
 
 /** On a phone, a carrier search guessed from the network the request came in on. */

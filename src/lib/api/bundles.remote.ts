@@ -8,6 +8,8 @@ export const getStats = query(() => data.getStats());
 export const getManifestFacts = query(() => data.getManifestFacts());
 export const guessCarrier = query(() => data.guessCarrier());
 export const guessCountry = query(() => data.guessCountry());
+export const getVisitorCountry = query(() => data.visitorCountry());
+export const guessCarrierName = query(() => data.guessCarrierName());
 export const getBundle = query(v.object(bundle), (a) => data.getBundle(a.kind, a.name, a.slug));
 export const getHead = query(v.object({ kind: bundle.kind, name: bundle.name }), (a) => data.getHead(a.kind, a.name));
 export const getFile = query(v.object({ ...pinned, path: v.string() }), (a) =>

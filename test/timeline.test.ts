@@ -150,6 +150,15 @@ describe("guessCarrierQuery", () => {
       expect(guessCarrierQuery(org, list)).toBe(want);
     });
   }
+
+  it("names the plainest bundle, the visitor's country first", async () => {
+    const { guessCarrierBundle } = await import("../src/lib/server/guess.ts");
+    const withCc = [...list, { name: "Vodafone_UK", display: "Vodafone UK" }].map((c) => ({ ...c, cc: /_(\w\w)$/.exec(c.name)?.[1].toLowerCase().replace("uk", "gb") }));
+    expect(guessCarrierBundle("att", withCc, "us")).toBe("ATT_US");
+    expect(guessCarrierBundle("verizon", withCc, "us")).toBe("Verizon_LTE_US");
+    expect(guessCarrierBundle("vodafone", withCc, "gb")).toBe("Vodafone_UK");
+    expect(guessCarrierBundle("vodafone", withCc, "de")).toBe("Vodafone_de");
+  });
 });
 
 describe("carrier and country links", () => {

@@ -23,9 +23,10 @@ import { flattenBundle, openIpcc } from "#lib/decode/index.ts";
 import { MANIFEST_URL, manifestTables, parseManifest } from "#lib/server/manifest.ts";
 import { buildTimeline, headIndex, type ImageIndex } from "#lib/server/timeline.ts";
 import { POINTER_KEY, bundlesKey, fileDataKey, fileIndexKey, packShards, rareKey, rareSettings, type ScanPointer } from "#lib/server/keyscan.ts";
+import { homePhone } from "#lib/phones.ts";
 import { featureCopy, featureSlugs, featuresKey, type FeatureIndex } from "#lib/server/featureindex.ts";
 
-interface Copy { src: string; build: string; source: "ota" | "image" }
+interface Copy { src: string; build: string; source: "ota" | "image"; phone?: string }
 /** A bundle's current version, and for a carrier its newest OTA copy, which carries every phone's files of its day. */
 interface Head extends Copy { kind: "carriers" | "countries"; name: string; ota?: Copy }
 
@@ -95,7 +96,10 @@ async function plan() {
       const t = buildTimeline(kind, name, images, Object.hasOwn(refs, name) ? refs[name] : [], index.countries);
       const head = t[headIndex(t)];
       if (!head) continue;
-      const copy = (e: typeof head): Copy => ({ src: e.src, build: e.build, source: e.source });
+      const copy = (e: typeof head): Copy => {
+        const phone = homePhone(e, images.find((i) => i.build === e.image) ?? {});
+        return { src: e.src, build: e.build, source: e.source, ...(phone ? { phone } : {}) };
+      };
       // The timeline runs newest first; a per-model copy speaks for one phone only.
       const ota = kind === "carriers" ? t.find((e) => e.source === "ota" && !e.productType && !e.beta) : undefined;
       heads.push({ kind, name, ...copy(head), ...(ota && ota.src !== head.src ? { ota: copy(ota) } : {}) });
@@ -154,7 +158,7 @@ async function build() {
       const copies = [];
       for (const c of [h, ...(h.ota ? [h.ota] : [])]) {
         try {
-          const fc = featureCopy(openIpcc(await load(c.src)), c.build, c.source);
+          const fc = featureCopy(openIpcc(await load(c.src)), c.build, c.source, c.phone);
           if (fc) copies.push(fc);
         } catch (e) {
           console.error(`features: skip ${c.src}: ${e instanceof Error ? e.message : e}`);
