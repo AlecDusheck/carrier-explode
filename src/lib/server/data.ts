@@ -886,13 +886,6 @@ export async function getFeatureSummary(phone: string) {
   });
 }
 
-/** Every feature for one carrier bundle, on one phone. */
-export async function getCarrierFeatures(name: string, phone: string) {
-  const index = await featureIndex();
-  if (!index || !Object.hasOwn(index.bundles, name)) return null;
-  return FEATURES.map((f) => ({ slug: f.slug, state: phoneFeature(index, name, f.slug, phone) }));
-}
-
 /** A phone's override plist next to its modem file (same stem), decoded; null when the copy has none. */
 export async function getOverridePlist(kind: Kind, name: string, slug: string, priPath: string) {
   const path = priPath.replace(/(\.der)?\.pri$/, ".plist");

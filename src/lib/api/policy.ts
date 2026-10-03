@@ -41,7 +41,6 @@ export const QUERIES: Record<QueryName, QueryPolicy> = {
   // One cached read of the index run's feature file, the same for everybody.
   getFeaturePhones: { rate: "base", shared: true },
   getFeatureTable: { rate: "base", shared: true },
-  getCarrierFeatures: { rate: "base", shared: true },
   getFeatureSummary: { rate: "base", shared: true },
   // Two bundles or packages and a full diff per miss.
   getComparison: { rate: "diff" },

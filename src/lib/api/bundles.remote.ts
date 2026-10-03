@@ -26,7 +26,6 @@ export const getRare = query(v.object(bundle), (a) => data.getRare(a.kind, a.nam
 export const getFeaturePhones = query(() => data.featurePhones());
 export const getFeatureTable = query(v.object({ slug: v.string(), phone: v.string() }), (a) => data.getFeatureTable(a.slug, a.phone));
 export const getFeatureSummary = query(v.string(), (phone) => data.getFeatureSummary(phone));
-export const getCarrierFeatures = query(v.object({ name: v.string(), phone: v.string() }), (a) => data.getCarrierFeatures(a.name, a.phone));
 /** A version's phone groups against what each phone had at the version compared against. */
 export const getPhoneChanges = query(v.object({ ...pinned, against: v.optional(v.string()) }), (a) =>
   data.getPhoneChanges(a.kind, a.name, a.slug, a.against));

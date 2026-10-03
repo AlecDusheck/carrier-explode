@@ -2,7 +2,7 @@
   import { page } from "$app/state";
   import { getFeaturePhones, getFeatureTable, getVisitorCountry, guessCarrierName } from "#lib/api/bundles.remote.ts";
   import { FEATURES, featureBySlug } from "#lib/features.ts";
-  import { link } from "#lib/format.ts";
+  import { bundleHref, link } from "#lib/format.ts";
   import { carrierName } from "#lib/names.ts";
   import Pane from "#lib/components/Pane.svelte";
   import CarrierList from "#lib/components/features/CarrierList.svelte";
@@ -42,13 +42,6 @@
   ]).replace(/</g, "\\u003c"));
 
   const offers = (state: string) => state === "on" || state === "available";
-
-  /** A carrier's own features page, keeping the phone picked. */
-  function carrierHref(name: string) {
-    const q = new URLSearchParams(page.url.search);
-    q.set("carrier", name);
-    return `${link("/features")}?${q}`;
-  }
 </script>
 
 <svelte:head>
@@ -68,8 +61,7 @@
         {@const phone = phones.find((p) => p.id === page.url.searchParams.get("phone")) ?? phones[0]}
         <p>Whether you get it depends on your carrier and your iPhone model.</p>
         <FeaturePhonePicker {phones} {phone} />
-        {@const picked = page.url.searchParams.get("carrier")}
-        {@const carrier = picked ?? (await guessCarrierName())}
+        {@const carrier = await guessCarrierName()}
         {#if phone}
           {@const t = await getFeatureTable({ slug: feature.slug, phone: phone.id })}
           {#if !t.indexed}
@@ -80,10 +72,7 @@
               <p class="answer">
                 {carrierName(mine.name).brand} on the {phone.name}: <FeatureStatus state={mine.state} />
               </p>
-              <p class="dimtext">
-                {#if !picked}Guessed from the network you are on. Not yours? Find it below.{/if}
-                <a href={carrierHref(mine.name)}>Every feature on {carrierName(mine.name).brand}</a>
-              </p>
+              <p class="dimtext">Guessed from the network you are on. Not yours? Find it below.</p>
             {/if}
 
             {@const offered = t.rows.filter((r) => offers(r.state)).length}
@@ -97,7 +86,7 @@
             <CarrierList
               rows={offeredOnly ? t.rows.filter((r) => offers(r.state)) : t.rows}
               home={await getVisitorCountry()}
-              href={carrierHref}
+              href={(name) => bundleHref("carriers", name)}
               column={feature.name}
             >
               {#snippet filters()}
