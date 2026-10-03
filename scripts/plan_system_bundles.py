@@ -128,12 +128,12 @@ def plan_betas(entries: list[dict], device: str, cap: int) -> list[dict]:
 
 def plan_rebuild(held: list[dict], ipsws_of) -> list[dict]:
     """
-    Every image held, again, oldest first: for when what an extraction keeps has
-    changed. Each keeps its recorded version as its label (a beta's or RC's name
+    Every image held, again, newest first, so what phones run now is fixed first:
+    for when what an extraction keeps has changed. Each keeps its recorded version as its label (a beta's or RC's name
     is the planner's, not the image's) and the device that named it.
     """
     out = []
-    for b in sorted(held, key=lambda x: version_key(x["version"])):
+    for b in sorted(held, key=lambda x: version_key(x["version"]), reverse=True):
         pairs = ipsws_of(b["build"])
         if not pairs:
             print(f"{b['version']} ({b['build']}): no iPhone IPSW found", file=sys.stderr)

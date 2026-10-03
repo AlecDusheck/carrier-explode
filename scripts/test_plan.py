@@ -108,15 +108,15 @@ class Versions(unittest.TestCase):
 
 
 class Rebuild(unittest.TestCase):
-    def test_every_held_image_oldest_first_keeping_its_name_and_device(self):
+    def test_every_held_image_newest_first_keeping_its_name_and_device(self):
         held = [{"version": "27.2 beta 2", "build": "24C5", "product": "iPhone18,1"},
                 {"version": "27.0", "build": "24A437", "product": "iPhone17,1", "released": "2026-09-15"},
                 {"version": "26.0", "build": "gone", "product": "iPhone17,1"}]
         urls = {"24C5": [("iPhone18,1", "x"), ("iPhone17,1", "y")], "24A437": [("iPhone17,1", "a"), ("iPhone18,1", "b")]}
         got = plan_rebuild(held, lambda b: urls.get(b, []))
-        self.assertEqual([(g["version"], g["label"], g["device"]) for g in got], [("27.0", "27.0", "iPhone17,1"), ("27.2 beta 2", "27.2 beta 2", "iPhone18,1")])
-        self.assertEqual(got[0]["ipsws"], [{"device": "iPhone17,1", "url": "a"}, {"device": "iPhone18,1", "url": "b"}])
-        self.assertEqual(got[0]["released"], "2026-09-15")
+        self.assertEqual([(g["version"], g["label"], g["device"]) for g in got], [("27.2 beta 2", "27.2 beta 2", "iPhone18,1"), ("27.0", "27.0", "iPhone17,1")])
+        self.assertEqual(got[1]["ipsws"], [{"device": "iPhone17,1", "url": "a"}, {"device": "iPhone18,1", "url": "b"}])
+        self.assertEqual(got[1]["released"], "2026-09-15")
 
 
 class Ipsws(unittest.TestCase):
