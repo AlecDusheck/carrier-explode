@@ -51,8 +51,11 @@ export function modemVendor(family: string): ModemVendor | undefined {
 
 const VENDOR_NAMES: Record<ModemVendor, string> = { qualcomm: "Qualcomm", intel: "Intel", apple: "Apple" };
 
-/** Marketing names, only where the family is known for certain to be that modem. */
-const MODEM_NAMES: Record<string, string> = { Mav25: "X80", Mav24: "X75" };
+/**
+ * Marketing names, only where the family is known for certain to be that modem. Mav24 is the
+ * iPhone 16 family's: TechInsights' teardown found an SDX71M, not the X75 first reported.
+ */
+const MODEM_NAMES: Record<string, string> = { Mav25: "X80", Mav24: "X71M" };
 
 /** "Qualcomm X80", "Apple C1", "Intel": the modem as sold, as far as it is known. */
 export function modemName(family: string): string | undefined {
