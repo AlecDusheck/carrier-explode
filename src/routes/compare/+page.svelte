@@ -2,7 +2,7 @@
   import { goto } from "$app/navigation";
   import { page } from "$app/state";
   import { getBundle, getComparison, getIndex } from "#lib/api/bundles.remote.ts";
-  import type { Kind } from "#lib/types.ts";
+  import { KINDS } from "#lib/types.ts";
   import { withParams } from "#lib/format.ts";
   import Pane from "#lib/components/Pane.svelte";
   import BundleCompare from "#lib/components/BundleCompare.svelte";
@@ -18,7 +18,6 @@
   const swap = () => set({ a: sp.get("b"), av: sp.get("bv"), b: sp.get("a"), bv: sp.get("av") });
 
   type Index = Awaited<ReturnType<typeof getIndex>>;
-  const KINDS: Kind[] = ["carriers", "countries", "watch"];
 
   function side(idx: Index, name: string | null, slug: string | null) {
     if (!name) return null;

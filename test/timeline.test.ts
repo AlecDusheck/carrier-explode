@@ -158,6 +158,8 @@ describe("guessCarrierQuery", () => {
     expect(guessCarrierBundle("verizon", withCc, "us")).toBe("Verizon_LTE_US");
     expect(guessCarrierBundle("vodafone", withCc, "gb")).toBe("Vodafone_UK");
     expect(guessCarrierBundle("vodafone", withCc, "de")).toBe("Vodafone_de");
+    // Brands count: "China Mobile" names CMCC.
+    expect(guessCarrierBundle("chinamobile", [{ name: "CMCC_cn", display: "CMCC", cc: "cn" }], "cn")).toBe("CMCC_cn");
   });
 });
 

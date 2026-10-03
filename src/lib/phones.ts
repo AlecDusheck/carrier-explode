@@ -47,7 +47,8 @@ export function phoneList(phones: Phone[]): string {
 export const homePhone = (entry: { productType?: string }, image: { product?: string }) =>
   entry.productType?.includes(",") ? entry.productType : image.product;
 
-const isPri = (f: Pick<BundleFile, "kind">) => f.kind === "pri-der" || f.kind === "pri-plain";
+/** A bundle file that is a modem override (.der.pri or plain .pri). */
+export const isPri = (f: Pick<BundleFile, "kind">) => f.kind === "pri-der" || f.kind === "pri-plain";
 
 /** The bundle's modem override files for one phone, by the device codenames in their `overrides_<stem>` names. */
 export const overridesFor = <F extends Pick<BundleFile, "kind" | "devices">>(files: F[], productType: string) =>

@@ -14,19 +14,20 @@
   import type { Kind } from "#lib/types.ts";
   import { bundleHref, link } from "#lib/format.ts";
   import { menuTrigger, copyText } from "#lib/ui-state.svelte.ts";
+  import { carrierName, fold } from "#lib/names.ts";
   import Pane from "#lib/components/Pane.svelte";
   import BundleIcon from "#lib/components/BundleIcon.svelte";
 
   let { params, children } = $props();
 
   type Row = { name: string; display: string; cc?: string };
-  // Letters and digits only, so "AT&T" finds ATT_US and "Red Pocket" finds ATT_RedPocket_US.
-  const fold = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, "");
+
   // A country's flag already says where it is.
   const code = (c: Row) => (params.kind === "countries" ? "" : (c.cc?.toUpperCase() ?? ""));
   const matches = (c: Row, q: string) => {
     const f = fold(q);
-    return c.cc === q || (!!f && (fold(c.name).includes(f) || fold(c.display).includes(f)));
+    // The brand too: "China Mobile" finds CMCC_cn.
+    return c.cc === q || (!!f && [c.name, c.display, carrierName(c.name).brand].some((n) => fold(n).includes(f)));
   };
 
   // Carriers come from the network the request arrived on, countries from where

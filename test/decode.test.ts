@@ -8,7 +8,7 @@ import { openIpcc, decodeFile, decodedPlist, decodedPri } from "../src/lib/decod
 import { decodePri, flattenDer } from "../src/lib/decode/pri.ts";
 import { describeDevices } from "../src/lib/decode/devices.ts";
 import { diffValues } from "../src/lib/decode/compare.ts";
-import { splitName, compareVersions } from "../src/lib/server/manifest.ts";
+import { splitName, compareVersions } from "../src/lib/names.ts";
 import { maskBits } from "../src/lib/decode/bytes.ts";
 import { describeMessageId } from "../src/lib/decode/cbs.ts";
 
