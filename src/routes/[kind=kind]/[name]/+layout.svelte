@@ -3,9 +3,8 @@
   import { page } from "$app/state";
   import { getBundle } from "#lib/api/bundles.remote.ts";
   import { bundleArgs, bundleHref } from "#lib/format.ts";
-  import { flag } from "#lib/names.ts";
   import Pane from "#lib/components/Pane.svelte";
-  import CarrierLogo from "#lib/components/CarrierLogo.svelte";
+  import BundleIcon from "#lib/components/BundleIcon.svelte";
   import VersionTimeline from "#lib/components/VersionTimeline.svelte";
 
   type Bundle = Awaited<ReturnType<typeof getBundle>>;
@@ -22,16 +21,8 @@
   <Pane quiet>{@render body(await getBundle(args))}</Pane>
 {/snippet}
 
-{#snippet ident(bundle: Bundle)}
-  {#if bundle.kind === "countries"}
-    {#if flag(bundle.cc)}<span class="flag" aria-hidden="true">{flag(bundle.cc)}</span>{/if}
-  {:else if bundle.related.country}
-    <a href={bundleHref("countries", bundle.related.country)}>{bundle.related.country} country bundle</a>
-  {:else if bundle.countryName}
-    <span class="dimtext">{bundle.countryName}</span>
-  {:else if bundle.cc}
-    <span class="dimtext">{bundle.cc.toUpperCase()}</span>
-  {/if}
+{#snippet icon(bundle: Bundle)}
+  <BundleIcon kind={bundle.kind} name={bundle.name} cc={bundle.cc} />
 {/snippet}
 
 {#snippet versions(bundle: Bundle)}
@@ -63,8 +54,8 @@
 <!-- Name, version strip and tab row keep their height while the bundle loads, so the pane below never jumps. -->
 <div class="bundle-head">
   <div class="ident">
-    {#if params.kind !== "countries"}<CarrierLogo name={params.name} />{/if}
-    <b>{params.name}</b>{@render withBundle(ident)}
+    {@render withBundle(icon)}
+    <b>{params.name}</b>
   </div>
   <!-- Emergency alerts come from the current copy whatever the version, so that tab has no strip. -->
   {#if tab !== "alerts"}<div class="versions-slot">{@render withBundle(versions)}</div>{/if}

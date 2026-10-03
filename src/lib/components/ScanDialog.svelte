@@ -1,8 +1,9 @@
 <script lang="ts">
   import { scanKey } from "#lib/api/tables.remote.ts";
-  import { bundleHref, shortValue } from "#lib/format.ts";
+  import { shortValue } from "#lib/format.ts";
   import { scan, copyText, type ScanScope } from "#lib/ui-state.svelte.ts";
   import Pane from "./Pane.svelte";
+  import BundleChip from "./BundleChip.svelte";
 
   let mode = $state<"values" | "bundles">("values");
   let anyIndex = $state(false);
@@ -22,7 +23,7 @@
 <svelte:window onkeydown={(e) => e.key === "Escape" && close()} />
 
 {#snippet bundleLink(name: string)}
-  <a class="chip" href={bundleHref(kind, name)} onclick={close}>{name}</a>
+  <BundleChip {kind} {name} onclick={close} />
 {/snippet}
 
 <div class="dialog-back" onclick={(e) => e.target === e.currentTarget && close()} role="presentation">

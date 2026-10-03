@@ -1,9 +1,10 @@
 <script lang="ts">
   import type { ArfcnRange, BasebandSummary, MccScanEntry } from "#lib/decode/index.ts";
-  import { bundleHref, shortHex } from "#lib/format.ts";
+  import { shortHex } from "#lib/format.ts";
   import Confidence from "../Confidence.svelte";
   import Variants from "../Variants.svelte";
   import type { Baseband } from "./types";
+  import BundleChip from "../BundleChip.svelte";
 
   let { mdb, mccs }: { mdb: NonNullable<BasebandSummary["mdb"]>; mccs: Baseband["mccs"] } = $props();
 
@@ -66,7 +67,7 @@
               <tr>
                 <td class="countries">
                   {#each x.plmns as p (p)}<span class="chip mono">{p}</span>{/each}
-                  {#if bundles.length}<div>{#each bundles as n (n)}<a class="chip" href={bundleHref("carriers", n)}>{n}</a>{/each}</div>{/if}
+                  {#if bundles.length}<div>{#each bundles as n (n)}<BundleChip kind="carriers" name={n} />{/each}</div>{/if}
                 </td>
                 <td class="mono">{dbName(d.path)}</td>
                 <td class="mono wrap">

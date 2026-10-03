@@ -2,7 +2,7 @@
   import type { Snippet } from "svelte";
   import type { FeatureState } from "#lib/features.ts";
   import { carrierName, countryName, flag } from "#lib/names.ts";
-  import CarrierLogo from "#lib/components/CarrierLogo.svelte";
+  import BundleIcon from "#lib/components/BundleIcon.svelte";
   import FeatureStatus from "./FeatureStatus.svelte";
 
   type Row = { name: string; cc?: string; state?: FeatureState | "unknown" };
@@ -60,7 +60,7 @@
       {/if}
       <tr>
         <td>
-          <CarrierLogo name={r.name} />
+          <BundleIcon kind="carriers" name={r.name} />
           <a href={href(r.name)}>{r.brand}</a>
           {#if twins.has(r.brand)}<span class="dimtext">{r.name.replace(/_/g, " ")}</span>{/if}
         </td>

@@ -2,11 +2,11 @@
   import { SvelteSet } from "svelte/reactivity";
   import { getBasebandCombos } from "#lib/api/tables.remote.ts";
   import { mergeComboSets, type BandComboSet, type CarrierMapping } from "#lib/decode/index.ts";
-  import { bundleHref } from "#lib/format.ts";
   import { toggleIn } from "#lib/ui-state.svelte.ts";
   import Pane from "../Pane.svelte";
   import ComboTable from "../ComboTable.svelte";
   import ComboStatsTable from "../ComboStatsTable.svelte";
+  import BundleChip from "../BundleChip.svelte";
 
   let { id, bandCombos, carrierMap }: {
     /** The package, for fetching one carrier's combo list. */
@@ -41,12 +41,12 @@
       {#if map}
         <div class="rowflex">
           <span class="dimtext">Bundles</span>
-          {#each map.bundles as n (n)}<a class="chip" href={bundleHref("carriers", n)}>{n}</a>{:else}<span class="dimtext">none mapped</span>{/each}
+          {#each map.bundles as n (n)}<BundleChip kind="carriers" name={n} />{:else}<span class="dimtext">none mapped</span>{/each}
         </div>
         {#if map.mvnoBundles.length}
           <details>
             <summary class="dimtext">{map.mvnoBundles.length} MVNO bundles on these PLMNs</summary>
-            {#each map.mvnoBundles as n (n)}<a class="chip" href={bundleHref("carriers", n)}>{n}</a>{/each}
+            {#each map.mvnoBundles as n (n)}<BundleChip kind="carriers" name={n} />{/each}
           </details>
         {/if}
       {/if}
