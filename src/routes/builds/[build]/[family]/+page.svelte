@@ -41,7 +41,7 @@
     <div class="toolbar">
       <a class="btn" href={link(`/builds/${params.build}`)}>iOS {mods.version}</a>
       <label class="lbl">
-        Image
+        iOS version
         <select
           name="build"
           value={params.build}
@@ -83,7 +83,7 @@
         </Pane>
       {:else if modem}
         <Pane>
-          <ModemFirmware {modem} {caps} version={mods.version} {others} />
+          <ModemFirmware {modem} {caps} version={mods.version} />
         </Pane>
       {/if}
     </div>

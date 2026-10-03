@@ -1,20 +1,17 @@
 <script lang="ts">
   import { getModemPackageHeader } from "#lib/api/tables.remote.ts";
   import type { ModemCapabilities } from "#lib/decode/index.ts";
-  import { fileHref, humanBytes, link } from "#lib/format.ts";
+  import { fileHref, humanBytes } from "#lib/format.ts";
   import { imageSlug } from "#lib/names.ts";
-  import type { BasebandBuild, ImageModem } from "./types";
+  import type { ImageModem } from "./types";
 
-  let { modem, caps, version, others }: {
+  // Other iOS versions with this modem are one pick away in the page's iOS picker.
+  let { modem, caps, version }: {
     modem: ImageModem;
     caps: ModemCapabilities | undefined;
     /** iOS version of the image. */
     version: string;
-    /** Other images carrying a package of this family. */
-    others: BasebandBuild[];
   } = $props();
-
-  const family = $derived(modem.family);
   const s = $derived(await getModemPackageHeader(modem.package.id));
 </script>
 
@@ -45,18 +42,8 @@
   {:else}
     <p class="prose">No plaintext config in the package: carrier settings come from the bundles' <span class="mono">.der.pri</span> files.</p>
   {/if}
-  {#if others.length}
-    <div class="rowflex elsewhere">
-      <span class="dimtext">{family} in</span>
-      {#each others as b (b.build)}<a class="chip" href={link(`/builds/${b.build}/${family}`)}>iOS {b.version}</a>{/each}
-    </div>
-  {/if}
 </fieldset>
 
 <style>
   .size { white-space: nowrap; }
-  .elsewhere { margin-top: 6px; }
-  @media (max-width: 760px) {
-    .elsewhere .chip { padding: 6px 8px; }
-  }
 </style>

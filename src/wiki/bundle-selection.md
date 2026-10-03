@@ -86,7 +86,7 @@ Two bundles have `_Exclude` at the top level of `carrier.plist` (`Telus_PublicMo
 
 ## Per-phone overrides
 
-A bundle can carry `overrides_<boards>.plist` files. The file name lists the board IDs (`D93`, `V53`) of the phones it is for, and its keys take the place of the same keys in `carrier.plist` on those phones. Each one usually comes with a `.der.pri` for the modem (see [.der.pri](/wiki/der-pri)).
+A bundle can carry `overrides_<boards>.plist` files. The file name lists the board IDs (`D93`, `V53`) of the phones it is for, and on those phones it is merged into `carrier.plist`: a dictionary is combined key by key with the same dictionary there, and any other value replaces it. The files only make sense that way. <Bundle name="ATT_US" />'s per-phone `IMSConfig` sets three keys; replacing the whole dictionary would leave those phones without the rest of their IMS settings, VoLTE included. Lists such as `apns` are always given in full. Each one usually comes with a `.der.pri` for the modem (see [.der.pri](/wiki/der-pri)).
 
 | File (ATT_US 72.1) | Phones |
 |--------------------|--------|

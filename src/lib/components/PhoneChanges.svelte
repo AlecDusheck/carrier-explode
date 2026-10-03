@@ -45,10 +45,7 @@
 
 <fieldset class="hgroup">
   <legend>Phones ({changes.groups.length})</legend>
-  <p class="dimtext note">
-    Each phone's own files, against what that phone had at {entryLabel(changes.from)}, or the newest copy before it that has
-    its files: a copy inside an iOS image carries only that image's phones.
-  </p>
+  <p class="dimtext note">Each phone's own settings and modem file, against what that phone had before.</p>
   <table class="grid">
     <thead><tr><th>Phones</th><th>Settings</th><th>Modem file</th><th>Compared with</th></tr></thead>
     <tbody>

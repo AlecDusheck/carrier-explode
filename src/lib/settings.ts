@@ -47,13 +47,22 @@ export function groupSettings(d: Record<string, unknown>): Array<[string, Record
 export const asDict = (v: unknown) => (isJsonDict(v) ? v : undefined);
 
 /**
- * carrier.plist with a phone's override plist laid over it: its keys take the place
- * of the same keys (wiki: Bundle Selection, Per-phone overrides).
+ * carrier.plist with a phone's override plist merged in: a dictionary in the override is combined
+ * key by key with the same dictionary in carrier.plist, and anything else replaces carrier.plist's
+ * value. The files only make sense that way: AT&T's per-phone IMSConfig sets three keys, so
+ * replacing the whole dictionary would leave those phones without the rest of their IMS settings.
  */
 export function effective(carrier: Record<string, unknown>, phone?: Record<string, unknown>) {
-  const merged = { ...carrier, ...(phone ?? {}) };
-  const fromPhone = new Set(Object.keys(phone ?? {}));
-  return { merged, fromPhone };
+  return { merged: phone ? mergeSettings(carrier, phone) : carrier, fromPhone: new Set(Object.keys(phone ?? {})) };
+}
+
+export function mergeSettings(base: Record<string, unknown>, over: Record<string, unknown>): Record<string, unknown> {
+  const out: Record<string, unknown> = { ...base };
+  for (const [k, v] of Object.entries(over)) {
+    const b = out[k];
+    out[k] = isJsonDict(b) && isJsonDict(v) ? mergeSettings(b, v) : v;
+  }
+  return out;
 }
 
 /** How a SIM gets this bundle: by MCC-MNC alone, an MCC-MNC plus GID or ICCID, an ICCID prefix, or a carrier ID. */
