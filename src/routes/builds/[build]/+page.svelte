@@ -23,7 +23,7 @@
       {@const [r, mods, builds] = await Promise.all([getRelease(params.build), getModems(params.build), getBasebandBuilds()])}
       {@const slug = imageSlug(r.image.version)}
       <div class="filters">
-        <BuildPicker {builds} current={params.build} href={(b) => link("/builds/" + b.build)} />
+        <BuildPicker label="iOS version" {builds} current={params.build} href={(b) => link("/builds/" + b.build)} />
         {#if r.previous}
           <span class="dimtext">since</span>
           <a class="picker-opt" href={link("/builds/" + r.previous.build)}><IosIcon version={r.previous.version} />iOS {r.previous.version} ({r.previous.build})</a>

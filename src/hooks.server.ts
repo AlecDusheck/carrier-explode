@@ -54,7 +54,9 @@ const BUNDLE_ROUTES: ReadonlySet<RouteId> = new Set<RouteId>([RAW, "/compare"]);
  * Features pages offer the current release's phones.
  */
 const BASEBAND_ROUTES: ReadonlySet<RouteId> = new Set<RouteId>([
-  "/builds", "/builds/[build]", "/builds/[build]/[family]", "/sitemap.xml",
+  "/builds", "/builds/[build]", "/builds/[build]/[family]", "/builds/[build]/[family]/carriers",
+  "/builds/[build]/[family]/policy", "/builds/[build]/[family]/policy/[i]", "/builds/[build]/[family]/networks",
+  "/builds/[build]/[family]/configs", "/builds/[build]/[family]/changes", "/sitemap.xml",
   "/[kind=kind]/[name]", "/[kind=kind]/[name]/[version=version]",
   "/[kind=kind]/[name]/[version=version]/settings", "/[kind=kind]/[name]/[version=version]/modem",
   "/[kind=kind]/[name]/[version=version]/changes", "/features", "/features/[feature=feature]",

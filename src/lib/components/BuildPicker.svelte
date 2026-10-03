@@ -5,11 +5,11 @@
   type Build = { build: string; version: string; families: string[] };
 
   /** The iOS images held, as a picker; images with no modem packages extracted are left out. */
-  let { builds, current, href }: { builds: Build[]; current: string; href: (b: Build) => string } = $props();
+  let { builds, current, href, label }: { builds: Build[]; current: string; href: (b: Build) => string; label?: string } = $props();
 </script>
 
 <Picker
-  label="iOS version"
+  {label}
   items={builds.filter((b) => b.families.length || b.build === current)}
   selected={builds.find((b) => b.build === current)}
   key={(b) => b.build}

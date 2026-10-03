@@ -3,7 +3,7 @@
   import { getBasebandDefaults, getBasebandOverride } from "#lib/api/tables.remote.ts";
   import { modemLabel } from "#lib/decode/index.ts";
   import type { Kind } from "#lib/types.ts";
-  import { link, withParams } from "#lib/format.ts";
+  import { modemHref, withParams } from "#lib/format.ts";
   import Pane from "./Pane.svelte";
   import Variants from "./Variants.svelte";
   import ComboStatsTable from "./ComboStatsTable.svelte";
@@ -26,7 +26,7 @@
   {#if d.missing}
     {#if d.build}<p class="dimtext note">No {phone} modem package stored for {d.build}.</p>{/if}
   {:else if d.tags.length || d.overrides.length}
-    {@const pkg = link(`/builds/${d.build}/${d.family}`)}
+    {@const pkg = modemHref(d.build, d.family)}
     {#if d.tags.length}
       <fieldset class="hgroup" id="modem">
         <legend>Band combos</legend>
@@ -35,7 +35,7 @@
         </p>
         {#each d.tags as t (t.tag)}
           <div class="rowflex">
-            <a class="chip" href="{pkg}#{t.tag}"><b>{t.tag}</b></a>
+            <a class="chip" href="{modemHref(d.build, d.family, 'carriers')}#{t.tag}"><b>{t.tag}</b></a>
             <span class="dimtext">{t.primary ? "default bundle on" : "MVNO on"} {t.plmns.join(" ")}</span>
           </div>
           <ComboStatsTable rows={t.sets} />

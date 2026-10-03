@@ -83,6 +83,10 @@ const segs = (path: string) => path.split("/").map(seg).join("/");
 /** Every internal link goes through here so a configured base path is honoured. */
 export const link = (path: string) => resolve(path.slice(1) as Path);
 
+/** A modem package page of an iOS build, or one of its tabs. */
+export const modemHref = (build: string, family: string, tab?: string) =>
+  link(`/builds/${seg(build)}/${seg(family)}` + (tab ? `/${tab}` : ""));
+
 export const bundleHref = (kind: Kind, name: string, slug?: string, tab?: string) =>
   link(`/${kind}/${seg(name)}` + (slug ? `/${seg(slug)}` + (tab ? `/${tab}` : "") : ""));
 
