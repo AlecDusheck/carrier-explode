@@ -4,9 +4,7 @@
  */
 
 import { parsePlist, isPlistDict, type PlistDict, type PlistValue, bytesToHex } from "#lib/decode/index.ts";
-import { compareVersions, countryName, splitName, versionKey } from "#lib/names.ts";
-
-export { compareVersions, countryName, splitName, versionKey };
+import { compareVersions, splitName } from "#lib/names.ts";
 
 export const MANIFEST_URL =
   "https://itunes.apple.com/WebObjects/MZStore.woa/wa/com.apple.jingle.appserver.client.MZITunesClientCheck/version";

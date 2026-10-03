@@ -13,6 +13,7 @@
 
 import { modemLabel, modemName, modemVendor } from "./decode/modem";
 import { featureBySlug } from "./features";
+import type { Tab } from "../params";
 import { buildLabel, carrierName, countryDisplay, versionLabel } from "./names";
 
 export const SITE = "carrier-explode";
@@ -60,7 +61,7 @@ function who(p: Params) {
 }
 
 // `what` runs straight into `terms` when there are any.
-const TABS: Record<string, { title: string; what: string; terms?: string[] }> = {
+const TABS: Record<Tab, { title: string; what: string; terms?: string[] }> = {
   settings: {
     title: "settings", what: "carrier.plist with each iPhone's overrides, every key decoded: ",
     terms: ["APN", "VoLTE", "5G", "Wi-Fi Calling", "what only this carrier sets"],
@@ -91,7 +92,7 @@ function bundle(id: string, p: Params): Meta {
         description: listing(`${p.path} from the ${w.full} ${w.noun} (${n}, ${v}), decoded key by key`, [], "."),
       };
     }
-    const t = tab && TABS[tab];
+    const t = tab && Object.hasOwn(TABS, tab) ? TABS[tab as Tab] : undefined;
     if (t) {
       return {
         title: fit(TITLE_MAX, `${n} ${t.title} — ${v}`, `${n} ${t.title}`, `${n} — ${t.title}`, n),

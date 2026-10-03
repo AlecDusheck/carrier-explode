@@ -20,8 +20,8 @@ import {
   type BasebandSummary, type BundleFile, type DiffCounts, type DiffRow, type ModemKind, type ModemSummary, type OpenedBundle,
   type PriReplacement,
 } from "#lib/decode/index.ts";
-import { compareVersions, fold, imageSlug, isPrerelease } from "#lib/names.ts";
-import { byNewest, compareProducts, homePhone, knowsPhone, overridesFor, sharedPri } from "#lib/phones.ts";
+import { compareVersions, countryName, fold, imageSlug, isPrerelease, splitName } from "#lib/names.ts";
+import { byNewest, compareProducts, homePhone, isPri, knowsPhone, overridesFor, sharedPri } from "#lib/phones.ts";
 import { FEATURES, featureBySlug } from "#lib/features.ts";
 import { featuresKey, phoneFeature, type FeatureIndex } from "./featureindex";
 import type { BasebandDiffPart, Kind, PublicEntry, TimelineEntry } from "#lib/types.ts";
@@ -32,7 +32,7 @@ import {
   POINTER_KEY, bundlesKey, fileDataKey, fileIndexKey, keyScan, rareKey, topKey, type RareSetting,
   type ScanFileIndex, type ScanPointer, type ScanShard, type ScanTarget, type TargetRow,
 } from "./keyscan";
-import { MANIFEST_URL, countryName, manifestTables, parseManifest, publishedOn, splitName, type BundleRef } from "./manifest";
+import { MANIFEST_URL, manifestTables, parseManifest, publishedOn, type BundleRef } from "./manifest";
 import { firstCopyWith, modemView, overrideCandidates, summaryKey, type ModemView } from "./modems";
 import { carriersOf, homeCountry, isoIndex, type CountryPlists } from "./related";
 import { buildTimeline, headIndex, imageDate, type ImageBuild, type ImageIndex } from "./timeline";
@@ -79,7 +79,7 @@ const isoOf = (plists: CountryPlists, country: string) => {
 const releasePlists = perRequest(async (): Promise<CountryPlists> => {
   const newest = release(await builds());
   if (!newest) return {};
-  const cut = await cached(`countryiso:v1:${newest.build}@${newest.extractedAt}`, 30 * 86400, async () => {
+  const cut = await cached(`countryiso:v1:${newest.build}@${newest.extractedAt}`, KEEP, async () => {
     const all = await countryPlists(newest.build);
     return all && Object.fromEntries(Object.entries(all).map(([c, p]) => [c, { ISOAlpha2CountryCode: p.ISOAlpha2CountryCode }]));
   });
@@ -380,7 +380,7 @@ export async function getComparison(a: Side | null, b: Side, path?: string) {
   const left = a && ra ? { ...a, entry: ra.entry } : rb.previous ? { ...b, entry: rb.previous } : null;
   const side = (s: typeof right) => ({ kind: s.kind, name: s.name, entry: publicEntry(s.entry) });
   if (!left) return { a: null, b: side(right), diff: null };
-  return cached(`compare:v1:${left.entry.src}|${right.entry.src}|${path ?? ""}`, 30 * 86400, async () => {
+  return cached(`compare:v1:${left.entry.src}|${right.entry.src}|${path ?? ""}`, KEEP, async () => {
     const [A, B] = await Promise.all([open(left.entry.src), open(right.entry.src)]);
     const diff = compareBundles(A.opened, B.opened, { path, maxRows: path ? 2000 : 400 });
     return { a: side(left), b: side(right), diff };
@@ -413,7 +413,6 @@ export interface PhoneChange {
 
 const PHONE_ROWS = 300;
 const isPhonePlist = (f: Pick<BundleFile, "path">) => /^overrides_.+\.plist$/.test(f.path);
-const isPhoneModem = (f: Pick<BundleFile, "kind">) => f.kind === "pri-der" || f.kind === "pri-plain";
 
 function fileChange(A: OpenedBundle | null, before: string | undefined, B: OpenedBundle, path: string | undefined): PhoneFileChange | undefined {
   const value = (o: OpenedBundle, p: string) => { try { return comparable(decodeFile(o, p)); } catch { return null; } };
@@ -440,7 +439,7 @@ export async function getPhoneChanges(kind: Kind, name: string, slug: string, ag
     .filter((e) => e !== a && e.source === "ota" && !e.beta && compareVersions(e.build || "0", a.build || "0") <= 0)
     .sort((x, y) => compareVersions(y.build || "0", x.build || "0"))].slice(0, OTA_COPIES + 1);
   const key = `phonechanges:v2:${b.src}|${fingerprint(candidates.map((e) => e.src))}|${fingerprint(vb.phones.map((p) => p.id))}`;
-  return cached(key, 30 * 86400, async () => {
+  return cached(key, KEEP, async () => {
     const B = (await open(b.src)).opened;
     /** A phone's override files in a copy: its plist and its modem file, by the boards in their names. */
     const filesFor = (o: OpenedBundle, phone: string) => o.info.files.filter((f) => f.devices?.some((d) => d.ids === phone));
@@ -473,7 +472,7 @@ export async function getPhoneChanges(kind: Kind, name: string, slug: string, ag
         status: found ? (found.entry === a ? "compared" : "older") : knew ? "new" : "unknown",
         from: found && publicEntry(found.entry),
         plist: fileChange(found?.opened ?? null, before.find(isPhonePlist)?.path, B, files.find(isPhonePlist)?.path),
-        modem: fileChange(found?.opened ?? null, before.find(isPhoneModem)?.path, B, files.find(isPhoneModem)?.path),
+        modem: fileChange(found?.opened ?? null, before.find(isPri)?.path, B, files.find(isPri)?.path),
       });
     }
     return { from: publicEntry(a), groups: out };
@@ -627,7 +626,7 @@ export async function getBasebandCombos(id: string, sha1: string, tag: string) {
 export async function getBasebandDiff(a: string, b: string, family: string) {
   const [A, B] = await Promise.all([imageModem(a, family, "bbfw"), imageModem(b, family, "bbfw")]);
   const side = (x: typeof A) => ({ build: x.idx.build, version: x.idx.version, id: x.m.package.id });
-  const diff = await cached(`bbdiff:v${MODEM_SUMMARY_SCHEMA}:${A.m.package.id}|${B.m.package.id}`, 30 * 86400, async () => {
+  const diff = await cached(`bbdiff:v${MODEM_SUMMARY_SCHEMA}:${A.m.package.id}|${B.m.package.id}`, KEEP, async () => {
     const [ca, cb] = (await Promise.all([mustBbfw(A.m.package.id), mustBbfw(B.m.package.id)])).map(basebandComparable);
     const parts: BasebandDiffPart[] = Object.keys(cb).flatMap((section) =>
       diffKeyed(ca[section] ?? {}, cb[section], { maxRows: 300 }).map((p) => ({ section, ...p })));

@@ -3,6 +3,7 @@
   import { page } from "$app/state";
   import { getBundle } from "#lib/api/bundles.remote.ts";
   import { bundleArgs, bundleHref } from "#lib/format.ts";
+  import { isPri } from "#lib/phones.ts";
   import Pane from "#lib/components/Pane.svelte";
   import BundleIcon from "#lib/components/BundleIcon.svelte";
   import VersionPicker from "#lib/components/VersionPicker.svelte";
@@ -36,7 +37,7 @@
 
 {#snippet tabs(bundle: Bundle)}
   {@const files = bundle.info.files}
-  {@const pri = files.filter((f) => f.kind === "pri-der" || f.kind === "pri-plain").length}
+  {@const pri = files.filter(isPri).length}
   {@const hasPlist = "carrier.plist" in bundle.quick}
   {@const items = [
     ["", "Overview"],

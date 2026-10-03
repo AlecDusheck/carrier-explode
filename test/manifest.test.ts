@@ -1,8 +1,13 @@
-import { describe, it, expect } from "vitest";
+import {
+  describe,
+  it,
+  expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { dirname, join } from "node:path";
-import { zipSync, unzlibSync } from "fflate";
+import { dirname,
+  join } from "node:path";
+import { zipSync,
+  unzlibSync } from "fflate";
 
 import * as manifestModule from "../src/lib/server/manifest.ts";
 import {
@@ -10,12 +15,9 @@ import {
   buildIndex,
   buildMccMnc,
   carrierRefs,
-  compareVersions,
-  countryName,
   parseManifest,
-  splitName,
-  versionKey,
 } from "../src/lib/server/manifest.ts";
+import { compareVersions, countryName, splitName, versionKey } from "../src/lib/names.ts";
 import type { CountrySummary, ManifestIndex } from "../src/lib/server/manifest.ts";
 import type { PlistValue } from "../src/lib/decode/plist.ts";
 import { openIpcc, decodeFile, base64Of, contentTypeOf, decodedPlist, decodedPri } from "../src/lib/decode/bundle.ts";

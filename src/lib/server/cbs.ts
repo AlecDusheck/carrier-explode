@@ -8,7 +8,8 @@
 
 import { openIpcc, decodeFile, decodedPlist, isRecord } from "#lib/decode/index.ts";
 import type { CbsAlertType, CbsMapping, CbsRow } from "#lib/types.ts";
-import { compareVersions, type CountrySummary } from "./manifest";
+import { compareVersions } from "#lib/names.ts";
+import type { CountrySummary } from "./manifest";
 
 type Rec = Record<string, unknown>;
 
