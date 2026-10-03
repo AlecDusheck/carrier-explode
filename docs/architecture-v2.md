@@ -42,6 +42,49 @@ Change a contract only together with every user of it, and say so in your report
    - The slug comes from the display name plus ISO (`t-mobile-us`). Slugs are stable: the index job reuses an existing slug for a carrier with the same members.
 6. **Country**: ISO code. iOS country bundles plus every carrier whose ISO matches.
 
+## Repository layout (pnpm workspace)
+
+```
+apps/site                 SvelteKit worker (carrierexplode.com)
+apps/extractor            extractor worker, Workflows, container image
+packages/decode-ios       iOS decoder: .ipcc, plists, PRI, modem packages, Apple OTA manifest
+packages/decode-android   Android decoder: CarrierSettings / CarrierList protobufs, CarrierConfig docs
+packages/firmware         remote zip, payload.bin, ext4/EROFS readers (decoder-agnostic)
+packages/schema           unified model, concepts, per-platform mappers, identity, compare, index builder
+packages/storage          R2 v2 layout and record shapes
+```
+
+The dependency rules are enforced, not merely followed:
+
+| Package | May import |
+|---|---|
+| `decode-ios`, `decode-android`, `firmware`, `storage` | each other: never. Plus no SvelteKit or Workers APIs. |
+| `schema` | the only package that sees both decoders. Its platform-neutral core imports neither; `schema/ios/*` imports only `decode-ios`, and `schema/android/*` only `decode-android`. |
+| `apps/*` | anything, through package entry points only. |
+
+The packages are developed in `src/lib/{decode,decode/android,firmware,schema,storage}` until the move. Code imports across them only through their `index.ts` (or `storage/keys.ts`).
+
+## Code quality bar
+
+These rules are strict TypeScript, held to without exceptions:
+- **Compiler settings:** `strict`, `noUncheckedIndexedAccess`, `exactOptionalPropertyTypes`.
+- **Types:**
+  - No `any`.
+  - No `as` except at a validated boundary.
+  - No `!` without an adjacent proof.
+  - `unknown` plus valibot or narrowing for every external input.
+  - Discriminated unions, not optional-field soup.
+  - `readonly` public types.
+  - `satisfies` for tables.
+  - Explicit return types on exports.
+  - `import type`.
+- **Code hygiene:**
+  - Small, single-purpose modules.
+  - Pure functions by default.
+  - No dead code, no commented-out code, no stray logging.
+  - Errors are never swallowed silently.
+- **Svelte:** Svelte 5 runes, with typed props. Platform differences live in a per-platform view registry, not in scattered conditionals.
+
 ## Module ownership (who writes what)
 
 | Area | Paths | Owner |
