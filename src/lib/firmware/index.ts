@@ -20,7 +20,7 @@ export {
 export { PartitionError, PartitionReader, partitionReader, type BlockReader, type PartitionReaderOptions } from "./partition.ts";
 export { Ext4, openExt4 } from "./ext4.ts";
 export { Erofs, ErofsCompressedError, EROFS_MAGIC, openErofs } from "./erofs.ts";
-export { FsError, type DirEntry, type FileKind, type Filesystem } from "./fs.ts";
+export { FsError, FsNotFoundError, type DirEntry, type FileKind, type Filesystem } from "./fs.ts";
 
 /** ext4 or EROFS, by the superblock at 1024. */
 export async function openFilesystem(r: BlockReader): Promise<Filesystem> {

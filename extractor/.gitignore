@@ -1,0 +1,5 @@
+node_modules/
+container/dist/
+.r2/
+.wrangler/
+.dev.vars

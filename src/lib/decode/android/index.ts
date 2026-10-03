@@ -6,7 +6,10 @@
  */
 
 export type * from "./types.ts";
-export { decodeCarrierSettings, decodeMultiCarrierSettings } from "./carrier-settings.ts";
+export {
+  decodeCarrierSettings, decodeMultiCarrierSettings, splitMultiCarrierSettings, withCarrierSettingsVersion,
+  type SplitMultiCarrierSettings,
+} from "./carrier-settings.ts";
 export { decodeCarrierList } from "./carrier-list.ts";
 export { ProtobufError } from "./wire.ts";
 export { configDoc, type ConfigDoc, type ConfigType } from "./docs.ts";

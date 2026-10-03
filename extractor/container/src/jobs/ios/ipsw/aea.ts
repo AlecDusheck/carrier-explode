@@ -130,7 +130,7 @@ interface RootHeader {
   readonly segmentsPerCluster: number;
   readonly compression: string;
   /** 0 none, 1 murmur64, 2 sha256: bytes per segment header after its two sizes. */
-  readonly checksum: number;
+  readonly checksum: keyof typeof CHECKSUM_SIZE;
 }
 
 const CHECKSUM_SIZE = { 0: 0, 1: 8, 2: 32 } as const satisfies Record<number, number>;

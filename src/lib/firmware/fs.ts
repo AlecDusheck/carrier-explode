@@ -4,6 +4,11 @@ export class FsError extends Error {
   override name = "FsError";
 }
 
+/** A path component that does not exist: callers can tell "absent" from "unreadable". */
+export class FsNotFoundError extends FsError {
+  override name = "FsNotFoundError";
+}
+
 export type FileKind = "file" | "dir" | "symlink" | "other";
 
 export interface DirEntry {

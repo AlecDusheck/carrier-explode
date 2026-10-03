@@ -13,7 +13,7 @@ export const PIPELINES = {
   "ios-images": { binding: "IOS_IMAGES", params: JOB_SCHEMAS["ios.plan"].params, cron: "17 5 * * *" },
   /** ios.ota-archive → normalize (new shas) → index → scan, when anything changed */
   "ios-ota": { binding: "IOS_OTA", params: JOB_SCHEMAS["ios.ota-archive"].params, cron: "*/30 * * * *" },
-  /** android.plan → android.ota ×N → normalize → index → scan */
+  /** android.plan → android.ota per device → android.release per build → normalize → index → scan */
   android: { binding: "ANDROID", params: JOB_SCHEMAS["android.plan"].params, cron: "47 5 * * *" },
   /** normalize {all} sharded → index → scan. By hand, after a PROFILE_SCHEMA bump. */
   reindex: {

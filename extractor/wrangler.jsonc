@@ -1,0 +1,64 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  // The extractor: Workflows that run ingest jobs in Cloudflare Containers. The only
+  // writer of the v2 bucket; the site (../wrangler.jsonc) only reads it.
+  "name": "carrier-explode-extractor",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-09-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "observability": { "enabled": true },
+  // No public routes: /run, /runs and /jobs are bearer-authed on the workers.dev URL.
+  "workers_dev": true,
+
+  "r2_buckets": [{ "binding": "BUCKET", "bucket_name": "carrier-explode-v2" }],
+
+  // One image, two sizes. max_instances must equal MAX_INSTANCES in src/worker/instances.ts.
+  "containers": [
+    {
+      "class_name": "HeavyExtractor",
+      "image": "./container/Dockerfile",
+      "image_build_context": "..",
+      "instance_type": "standard-4",
+      "max_instances": 6
+    },
+    {
+      "class_name": "LightExtractor",
+      "image": "./container/Dockerfile",
+      "image_build_context": "..",
+      "instance_type": "standard-1",
+      "max_instances": 16
+    }
+  ],
+  "durable_objects": {
+    "bindings": [
+      { "name": "HEAVY", "class_name": "HeavyExtractor" },
+      { "name": "LIGHT", "class_name": "LightExtractor" }
+    ]
+  },
+  // Declarative Durable Object classes (instead of `migrations`; the two are mutually exclusive).
+  // Containers need SQLite-backed storage.
+  "exports": {
+    "HeavyExtractor": { "type": "durable-object", "storage": "sqlite" },
+    "LightExtractor": { "type": "durable-object", "storage": "sqlite" }
+  },
+
+  // One Workflow per pipeline (src/worker/pipelines.ts). concurrency 1: two runs of a
+  // pipeline would race on what it writes (refs.json, releases), so a second one queues.
+  "workflows": [
+    { "binding": "IOS_IMAGES", "name": "ios-images", "class_name": "IosImagesPipeline", "concurrency": { "limit": 1 } },
+    { "binding": "IOS_OTA", "name": "ios-ota", "class_name": "IosOtaPipeline", "concurrency": { "limit": 1 } },
+    { "binding": "ANDROID", "name": "android", "class_name": "AndroidPipeline", "concurrency": { "limit": 1 } },
+    { "binding": "REINDEX", "name": "reindex", "class_name": "ReindexPipeline", "concurrency": { "limit": 1 } },
+    { "binding": "INDEX", "name": "index", "class_name": "IndexPipeline", "concurrency": { "limit": 1 } }
+  ],
+
+  // Each must equal a PIPELINES[...].cron in src/worker/pipelines.ts; scheduled() only creates instances.
+  "triggers": { "crons": ["*/30 * * * *", "17 5 * * *", "47 5 * * *"] },
+
+  "vars": {
+    // The site's purge endpoint; with PURGE_TOKEN set (a secret, the site's own value), index runs purge its cache.
+    "PURGE_URL": "https://carrierexplode.com/internal/purge"
+  },
+  // RUN_TOKEN: bearer for /run, /runs, /jobs. PURGE_TOKEN: optional, see vars.
+  "secrets": { "required": ["RUN_TOKEN"] }
+}

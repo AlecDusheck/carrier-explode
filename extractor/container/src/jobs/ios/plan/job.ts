@@ -35,6 +35,9 @@ export async function heldReleases(r2: R2Client): Promise<Held[]> {
   });
 }
 
+/** The output shape: valibot's inferred types are mutable, PlannedBuild's are not. */
+const toOutput = (b: PlannedBuild): JobOutput<"ios.plan">["builds"][number] => ({ ...b, ipsws: [...b.ipsws] });
+
 /** Release days by build, from every firmware ipsw.me lists. */
 function releaseDays(cat: IphoneCatalog): Map<string, string> {
   const out = new Map<string, string>();
@@ -70,7 +73,7 @@ export const runPlan: JobRunner<"ios.plan"> = async (ctx): Promise<JobOutput<"io
   const max = p.max ?? DEFAULT_MAX;
   const held = await heldReleases(ctx.r2);
   ctx.log(`${held.length} images held`);
-  if (p.rebuild) return { builds: await rebuild(ctx, held) };
+  if (p.rebuild) return { builds: (await rebuild(ctx, held)).map(toOutput) };
 
   const probe = await newestIphone();
   const preferred = (await deviceFirmwares(PREFERRED_DEVICE)).firmwares;
@@ -95,5 +98,5 @@ export const runPlan: JobRunner<"ios.plan"> = async (ctx): Promise<JobOutput<"io
     }
   }
   for (const b of builds) ctx.log(`plan: ${b.label} (${b.build}), ${b.ipsws.length} IPSWs`);
-  return { builds: builds.map((b) => ({ ...b, ipsws: [...b.ipsws] })) };
+  return { builds: builds.map(toOutput) };
 };

@@ -9,7 +9,7 @@
 
 import { asciiAt, u16le, u32le, u8 } from "../binary/index.ts";
 import type { BlockReader } from "./partition.ts";
-import { FsError, type DirEntry, type FileKind, type Filesystem } from "./fs.ts";
+import { FsError, FsNotFoundError, type DirEntry, type FileKind, type Filesystem } from "./fs.ts";
 
 const MAGIC = 0xef53;
 const ROOT = 2;
@@ -232,7 +232,7 @@ export class Ext4 implements Filesystem {
     for (const part of path.split("/").filter((s) => s.length > 0)) {
       if (kindOfMode(ino.mode) !== "dir") throw new FsError(`${path}: ${part} is under a non-directory`);
       const hit = (await this.entries(ino)).find((e) => e.name === part);
-      if (!hit) throw new FsError(`${path}: no ${part}`);
+      if (!hit) throw new FsNotFoundError(`${path}: no ${part}`);
       ino = await this.inode(hit.inode);
     }
     return ino;

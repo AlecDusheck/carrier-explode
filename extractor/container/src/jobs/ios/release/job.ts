@@ -64,7 +64,7 @@ async function mergeSource(ctx: JobContext<"ios.release">, source: string, copie
   const bundles = await Promise.all(copies.map((c) => loadCopy(ctx, c.sha)));
   const { bundle, conflicts } = mergeCopies(bundles);
   for (const c of conflicts) ctx.log(`differs between images, kept the first: ${c}`);
-  const stored = await storeBundle(ctx.r2, kindOf(source), bundle, { release: ctx.spec.params.build, device, path: "merged" }, ctx.log);
+  const stored = await storeBundle(ctx.r2, kindOf(source), bundle, { release: ctx.spec.params.build, device }, ctx.log);
   return { sha: stored.sha, version: stored.version, size: stored.size, cid: stored.cid };
 }
 
@@ -81,7 +81,7 @@ export const runRelease: JobRunner<"ios.release"> = async (ctx): Promise<JobOutp
   const merged = await mapLimit([...sources], CONCURRENCY, async ([source, copies]) => {
     const r = await mergeSource(ctx, source, copies, lead);
     if (++done % 200 === 0) await ctx.progress(done, sources.size, "bundles merged");
-    return [source, r] as const;
+    return [source, [r]] as const;
   });
 
   let modems: unknown[] | undefined;
@@ -96,10 +96,11 @@ export const runRelease: JobRunner<"ios.release"> = async (ctx): Promise<JobOutp
     ...(p.prerelease ? { prerelease: true } : {}),
     devices: [...new Set(parts.flatMap((o) => o.devices))].sort(compareProducts),
     extractedAt: new Date().toISOString(),
-    sources: Object.fromEntries([...merged].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))),
+    // iOS: one entry per source, the merged bundle (types.ts Release.sources).
+    sources: Object.fromEntries([...merged].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)).map(([k, rs]) => [k, [...rs]])),
     ...(modems ? { modems } : {}),
   };
   await ctx.r2.putJson(keys.release("ios", p.build), release);
   ctx.log(`${p.label} (${p.build}): ${sources.size} bundles from ${parts.length} IPSWs, ${modems?.length ?? 0} modem packages`);
-  return { build: p.build, shas: [...new Set(merged.map(([, r]) => r.sha))].sort() };
+  return { build: p.build, shas: [...new Set(merged.flatMap(([, rs]) => rs.map((r) => r.sha)))].sort() };
 };

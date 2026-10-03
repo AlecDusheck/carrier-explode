@@ -270,4 +270,23 @@ export interface CarrierDoc {
   carrier: Carrier;
   /** sourceKey -> timeline. */
   timelines: Record<string, TimelineEntry[]>;
+  /**
+   * sourceKey -> feature states per device group at the head, so a page can say
+   * "VoLTE: on for Pixel 8 and later, off on Pixel 6" without opening artifacts.
+   * Optional only so documents written before it still parse; the index job always writes it.
+   */
+  states?: Record<string, DeviceStates[]>;
+}
+
+/** The `state` concepts of one device group of a source. */
+export interface DeviceStates {
+  /**
+   * Pixel codenames or iPhone product types it applies to. Absent: every device
+   * no other group names (iOS: carrier.plist with the newest phone's overrides).
+   */
+  devices?: string[];
+  /** Timeline entry (slug) the states were read from. */
+  slug: string;
+  /** Concept id -> state. */
+  states: Record<string, FeatureState>;
 }

@@ -1,0 +1,9 @@
+# Used by BuildKit for this Dockerfile (the context is the repository root).
+**/node_modules
+**/dist
+**/.r2
+**/.wrangler
+.git
+.svelte-kit
+static
+test

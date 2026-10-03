@@ -176,13 +176,15 @@ export const CONCEPTS: ConceptDef[];                                            
 
 ## Site
 
-- Reads only `carrier-explode-v2`. For iOS OTA files not archived yet, it still fetches Apple directly, which is the existing fallback.
-- URLs:
-  - `/` and `/carriers`: the merged list, searchable, filterable by platform.
-  - `/carriers/[slug]`: overview, with identity and SIMs, members per platform, head versions, and the concept comparison iOS ↔ Android (features first), plus APNs side by side.
-  - `/carriers/[slug]/[platform]/[source]/[version]/[tab]`: the native views. iOS keeps today's tabs: files, plist, settings, modem, baseband, changes. Android gets settings (config keys with docs), apns, raw and changes.
-  - `/countries/[iso]`.
-  - `/compare?a=<sourceKey>@<slug>&b=...`, across platforms or within one.
-  - `/releases`, `/releases/[platform]/[id]`.
-  - `/features` and `/features/[feature]`, across both platforms.
-  - Old v1 URLs (`/carriers/TMobile_us/...`, `/countries/...`) redirect.
+**The site's design and layout do not change. Android is added inside them.**
+
+- **Storage:** the site reads only `carrier-explode-v2`. iOS OTA files that aren't archived yet still come from Apple, which is the existing fallback.
+- **URLs and layout:** both stay as they are: `/carriers/<name>/<version>/<tab>`, the two-pane explorer, and the bundle head (icon, name, version strip, tabs). A carrier's `<name>` is its primary iOS bundle name (Carrier.slug), so existing URLs keep working. A carrier that only exists on Android uses its canonical name, with an `android-` prefix only if it collides with an iOS name.
+- **Versions:** Android versions sit in the same version strip as `android-<build>[-<group>]` slugs, whose grammar is exported by schema. At most, they carry a muted platform label.
+- **Tabs:** they come from a per-platform registry. iOS tabs are unchanged. Android gets Overview, Settings, APNs, Files and Changes, built from the existing components or same-markup counterparts. Android uses the existing phone picker, generalised to Pixels.
+- **Overview:** it gains one section, "iOS and Android": feature states and a few headline concepts for the chosen iPhone vs the chosen Pixel, with a link to Compare.
+- **Compare:** both sides can pick Android versions. Cross-platform comparisons show concept rows in the existing diff style.
+- **Features:** the phone picker gains a Pixel group.
+- **Builds:** "iOS builds" becomes "Builds", with an Android section.
+- **Titlebar:** the subtitle becomes "iOS and Android carrier settings".
+- **Countries:** unchanged, plus Android-only carriers in each country's list.

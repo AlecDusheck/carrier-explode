@@ -33,6 +33,7 @@ export interface ModemMember {
   readonly boards: readonly string[];
 }
 
+const ordinal = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0);
 const hex8 = (n: number): string => (n >>> 0).toString(16).padStart(8, "0");
 
 /** Modem packages among an IPSW's entries: only what its manifest names as a modem. */
@@ -91,7 +92,7 @@ export function group(
     const x = newest(a);
     const y = newest(b);
     // A package no listed phone uses sorts first, as v1's sort key put it.
-    if (x === undefined || y === undefined) return Number(x !== undefined) - Number(y !== undefined) || a.name.localeCompare(b.name);
-    return compareProducts(y, x) || (a.name < b.name ? -1 : a.name > b.name ? 1 : 0);
+    if (x === undefined || y === undefined) return Number(x !== undefined) - Number(y !== undefined) || ordinal(a.name, b.name);
+    return compareProducts(y, x) || ordinal(a.name, b.name);
   });
 }
