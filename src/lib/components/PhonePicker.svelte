@@ -8,7 +8,7 @@
 
   let { rows, selected }: { rows: PhoneRow[]; selected?: PhoneRow } = $props();
 
-  const key = (r: PhoneRow) => `${r.copy ?? ""}\0${r.path}`;
+  const key = (r: PhoneRow) => r.path;
   const label = (r: PhoneRow) => {
     if (!r.phones.length) return `${r.path} (not named for a phone)`;
     const modems = [...new Set(r.phones.map((p) => p.family).filter((f): f is string => !!f))].map(modemLabel).join(", ");
@@ -30,7 +30,7 @@
       {selected}
       {key}
       {option}
-      href={(r) => withParams(page.url, { file: r.path, copy: r.copy ?? null, pri: null, efs: null, base: null })}
+      href={(r) => withParams(page.url, { file: r.path, pri: null, efs: null, base: null })}
     />
   </div>
 {/if}

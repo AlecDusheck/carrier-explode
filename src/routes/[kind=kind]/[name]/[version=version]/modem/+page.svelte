@@ -21,7 +21,7 @@
     {@const bundle = await getBundle(args)}
     {@const ov = await getBundleOverrides(args)}
     {@const rows = phoneRows(bundle.entry, bundle.info.files, ov)}
-    {@const { row: sel, missing } = pickPhoneRow(rows, { file: sp.get("file"), copy: sp.get("copy") ?? undefined })}
+    {@const { row: sel, missing } = pickPhoneRow(rows, { file: sp.get("file") })}
 
     {#if rows.length}
       <PhonePicker {rows} selected={sel} />
@@ -49,7 +49,6 @@
           {:else}
             not named for a phone; read alongside each phone's own file where its modem uses this kind of file.
           {/if}
-          {#if sel.copy}Read from build {sel.build}, the newest copy of this bundle with a file for these phones.{/if}
         </span>
       </p>
       <FileBody

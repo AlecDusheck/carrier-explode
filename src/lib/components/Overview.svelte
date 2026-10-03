@@ -15,7 +15,7 @@
   const version = $derived(asDict(bundle.quick["version.plist"]));
   const fromImage = $derived(bundle.entry.source === "image");
   const tab = (seg: string, q = "") => bundleHref(bundle.kind, bundle.name, bundle.entry.slug, seg) + q;
-  const fileQuery = (path: string, copy?: string) => "?" + new URLSearchParams({ file: path, ...(copy ? { copy } : {}) });
+  const fileQuery = (path: string) => "?" + new URLSearchParams({ file: path });
 </script>
 
 <fieldset class="hgroup">
@@ -146,8 +146,7 @@
                 {#each [...new Set(r.phones.map((p) => p.family).filter((f): f is string => !!f))] as f, i (f)}{#if i}, {/if}<a href={link(`/builds/${ov?.build}/${f}`)}>{modemLabel(f)}</a>{/each}
               </td>
               <td>
-                <a href={tab("settings", fileQuery(r.path, r.copy))}>Settings</a> · <a href={tab("modem", fileQuery(r.path, r.copy))}>Modem</a>
-                {#if r.copy}<span class="dimtext">from build {r.build}</span>{/if}
+                <a href={tab("settings", fileQuery(r.path))}>Settings</a> · <a href={tab("modem", fileQuery(r.path))}>Modem</a>
               </td>
             </tr>
           {/each}
