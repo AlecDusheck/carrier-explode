@@ -3,6 +3,7 @@
   import { modemLabel } from "#lib/decode/index.ts";
   import { link } from "#lib/format.ts";
   import Pane from "#lib/components/Pane.svelte";
+  import IosIcon from "#lib/components/IosIcon.svelte";
 </script>
 
 <div class="view">
@@ -20,7 +21,7 @@
               {@const added = b.families.filter((f) => !before.includes(f))}
               {@const gone = b.families.length ? before.filter((f) => !b.families.includes(f)) : []}
               <tr>
-                <td class="k"><a href={link("/builds/" + b.build)}>iOS {b.version}</a></td>
+                <td class="k"><a class="picker-opt" href={link("/builds/" + b.build)}><IosIcon version={b.version} />iOS {b.version}</a></td>
                 <td class="mono">{b.build}</td>
                 <td>
                   {#if b.families.length}

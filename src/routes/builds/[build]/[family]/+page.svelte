@@ -3,8 +3,7 @@
   import { modemCapabilities } from "#lib/decode/index.ts";
   import { link } from "#lib/format.ts";
   import Pane from "#lib/components/Pane.svelte";
-  import Picker from "#lib/components/Picker.svelte";
-  import IosIcon from "#lib/components/IosIcon.svelte";
+  import BuildPicker from "#lib/components/BuildPicker.svelte";
   import ModemNav from "#lib/components/baseband/ModemNav.svelte";
   import FbsSection from "#lib/components/baseband/FbsSection.svelte";
   import CarrierCombos from "#lib/components/baseband/CarrierCombos.svelte";
@@ -40,17 +39,11 @@
     {@const others = builds.filter((b) => b.families.includes(params.family) && b.build !== params.build)}
     {@const modem = mods.modems.find((x) => x.family === params.family)}
     <div class="toolbar">
-      <Picker
-        label="iOS version"
-        items={builds.filter((b) => b.families.length || b.build === params.build)}
-        selected={builds.find((b) => b.build === params.build)}
-        key={(b) => b.build}
+      <BuildPicker
+        {builds}
+        current={params.build}
         href={(b) => link(`/builds/${b.build}` + (b.families.includes(params.family) ? `/${params.family}` : ""))}
-      >
-        {#snippet option(b)}
-          <span class="picker-opt"><IosIcon version={b.version} /><span class="text">iOS {b.version} ({b.build})</span></span>
-        {/snippet}
-      </Picker>
+      />
       <span class="grow"></span>
       {#if baseband}
         <Pane quiet>
