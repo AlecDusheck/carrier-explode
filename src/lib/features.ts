@@ -7,7 +7,7 @@
  * Feature names follow Apple's own list (support.apple.com/109526) where it has one.
  */
 
-import { isJsonDict } from "#lib/decode/plist.ts";
+import { isJsonDict, mergeSettings } from "#lib/decode/plist.ts";
 import { FEATURE_SLUGS, type FeatureSlug } from "../params.ts";
 
 /** on: available and on by default. available: a switch in Settings, or the carrier's server decides per plan. no: not offered. */
@@ -38,10 +38,24 @@ function entitled(e: Settings, bit: number): boolean {
   return typeof v === "number" && Math.floor(v / 2 ** bit) % 2 === 1;
 }
 
-/** The first rule that holds decides; none holding means not offered. */
-function rules(...r: Array<[FeatureState, string, (e: Settings) => boolean]>) {
+type Rule = [FeatureState, string, (e: Settings) => boolean];
+
+const first = (r: Rule[], e: Settings) => r.find(([, , test]) => test(e));
+
+/**
+ * The first rule that holds decides. When none does for the bundle's own settings but one does
+ * with an MVNOOverrides configuration on top, the feature depends on the SIM: available.
+ * None holding either way means not offered.
+ */
+function rules(...r: Rule[]) {
   return (e: Settings) => {
-    for (const [state, key, test] of r) if (test(e)) return { state, because: [key] };
+    const hit = first(r, e);
+    if (hit) return { state: hit[0], because: [hit[1]] };
+    for (const [name, c] of Object.entries(dict(e.MVNOOverrides) ?? {})) {
+      const conf = dict(dict(c)?.OverrideConfiguration);
+      const sim = conf && first(r, mergeSettings(e, conf));
+      if (sim && sim[0] !== "no") return { state: "available" as const, because: [`MVNOOverrides.${name}.OverrideConfiguration.${sim[1]}`] };
+    }
     return { state: "no" as const, because: [] };
   };
 }
@@ -51,8 +65,17 @@ const DEFINITIONS: Record<FeatureSlug, Omit<Feature, "slug">> = {
     name: "5G",
     what: "Your iPhone can use your carrier's 5G network instead of LTE.",
     where: "Settings › Cellular › Cellular Data Options › Voice & Data",
-    keys: ["Enable5GAutoByDefault", "Show5GSwitch"],
-    decide: rules(["on", "Enable5GAutoByDefault", (e) => yes(e, "Enable5GAutoByDefault")], ["available", "Show5GSwitch", (e) => yes(e, "Show5GSwitch")]),
+    keys: ["Enable5GAutoByDefault", "Show5GSwitch", "Enable5GStandaloneByDefault", "Show5GStandaloneSwitch", "DataIndicatorOverrideForNRMmwave"],
+    decide: rules(
+      ["on", "Enable5GAutoByDefault", (e) => yes(e, "Enable5GAutoByDefault")],
+      // 5G Standalone is 5G: some bundles set only its keys.
+      ["on", "Enable5GStandaloneByDefault", (e) => yes(e, "Enable5GStandaloneByDefault")],
+      ["available", "Show5GSwitch", (e) => yes(e, "Show5GSwitch")],
+      ["available", "Show5GStandaloneSwitch", (e) => yes(e, "Show5GStandaloneSwitch")],
+      ["available", "Supports5GStandalone", (e) => yes(e, "Supports5GStandalone")],
+      // The status bar's 5G+ icon is only drawn on a 5G network.
+      ["available", "DataIndicatorOverrideForNRMmwave", (e) => typeof e.DataIndicatorOverrideForNRMmwave === "string"],
+    ),
   },
   "5g-standalone": {
     name: "5G Standalone",
@@ -134,8 +157,9 @@ const DEFINITIONS: Record<FeatureSlug, Omit<Feature, "slug">> = {
   "satellite": {
     name: "Carrier satellite features",
     what: "Texting through satellites when there is no cell signal, provided by your carrier rather than by Apple.",
-    keys: ["SupportsSatellite", "ShowSatelliteSwitch", "CarrierEntitlements.SupportedEntitlements"],
+    keys: ["EnableSatelliteByDefault", "SupportsSatellite", "ShowSatelliteSwitch", "CarrierEntitlements.SupportedEntitlements"],
     decide: rules(
+      ["on", "EnableSatelliteByDefault", (e) => yes(e, "EnableSatelliteByDefault")],
       ["available", "SupportsSatellite", (e) => yes(e, "SupportsSatellite")],
       ["available", "ShowSatelliteSwitch", (e) => yes(e, "ShowSatelliteSwitch")],
       ["available", "CarrierEntitlements.SupportedEntitlements", (e) => entitled(e, 19)],
@@ -146,8 +170,9 @@ const DEFINITIONS: Record<FeatureSlug, Omit<Feature, "slug">> = {
     what: "See and play voicemails in the Phone app without calling your mailbox.",
     keys: ["VisualVoicemailServiceName", "com.apple.voicemail.imap"],
     decide: rules(
-      ["on", "VisualVoicemailServiceName", (e) => typeof e.VisualVoicemailServiceName === "string"],
-      ["on", "com.apple.voicemail.imap", (e) => !!dict(e["com.apple.voicemail.imap"])],
+      // 391 bundles say "none", which turns it off.
+      ["on", "VisualVoicemailServiceName", (e) => typeof e.VisualVoicemailServiceName === "string" && e.VisualVoicemailServiceName.toLowerCase() !== "none"],
+      ["on", "com.apple.voicemail.imap", (e) => e.VisualVoicemailServiceName === undefined && !!dict(e["com.apple.voicemail.imap"])],
     ),
   },
   "esim-transfer": {

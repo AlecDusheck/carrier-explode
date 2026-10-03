@@ -4,7 +4,7 @@
  * badges that say where a value came from or how rare it is.
  */
 
-import { isJsonDict } from "#lib/decode/index.ts";
+import { isJsonDict, mergeSettings } from "#lib/decode/plist.ts";
 import type { KeyBadge } from "#lib/components/Tree.svelte";
 import type { MccMncTable } from "#lib/server/manifest.ts";
 import type { RareSetting } from "#lib/server/keyscan.ts";
@@ -56,14 +56,6 @@ export function effective(carrier: Record<string, unknown>, phone?: Record<strin
   return { merged: phone ? mergeSettings(carrier, phone) : carrier, fromPhone: new Set(Object.keys(phone ?? {})) };
 }
 
-export function mergeSettings(base: Record<string, unknown>, over: Record<string, unknown>): Record<string, unknown> {
-  const out: Record<string, unknown> = { ...base };
-  for (const [k, v] of Object.entries(over)) {
-    const b = out[k];
-    out[k] = isJsonDict(b) && isJsonDict(v) ? mergeSettings(b, v) : v;
-  }
-  return out;
-}
 
 /** How a SIM gets this bundle: by MCC-MNC alone, an MCC-MNC plus GID or ICCID, an ICCID prefix, or a carrier ID. */
 export interface SelectionRule { via: string; key: string; match?: string }

@@ -3,23 +3,23 @@
  * gets. Written by scripts/scan_index.ts, read by the Features pages.
  *
  * Read the way the Settings page reads a phone: the current carrier.plist with the phone's own
- * override plist on top. A copy inside an iOS image carries only the override files of the phones
- * that image was cut for, so the others' come from the newest OTA copy, which carries every phone
- * of its day.
+ * override plist on top. The current copy carries every phone of its day (an image copy merges
+ * every iPhone IPSW of its release), unless it is a per-model OTA copy; the newest OTA copy fills
+ * in what it lacks.
  */
 
 import { decodeFile, decodedPlist, isJsonDict, type OpenedBundle } from "#lib/decode/index.ts";
+import { mergeSettings } from "#lib/decode/plist.ts";
 import { describeDevices } from "#lib/decode/devices.ts";
 import { FEATURES, decodeFeature, encodeFeatures, type FeatureState } from "#lib/features.ts";
 import { compareProducts } from "#lib/phones.ts";
-import { mergeSettings } from "#lib/settings.ts";
 
 // v2: one merged copy per bundle.
 export const featuresKey = (gen: string) => `scan/${gen}/_features_v2.json`;
 
 export interface FeatureCopy {
   build: string;
-  /** The one model an image or per-model copy is for (homePhone). */
+  /** The one model a per-model OTA copy is for. */
   phone?: string;
   /** The newest phone the OTA copy's override files name: it was made after every phone up to it. */
   newest?: string;
@@ -47,8 +47,8 @@ const plistOf = (o: OpenedBundle, path: string) => {
 const overrideFiles = (o: OpenedBundle) => o.info.files.filter((f) => /^overrides_.+\.plist$/.test(f.path) && f.devices);
 
 /**
- * A bundle's answers from its current copy `head` (for an image or per-model copy, `phone` is its
- * model) and its newest OTA copy `ota`, whose override files fill in the phones `head` lacks.
+ * A bundle's answers from its current copy `head` (for a per-model copy, `phone` is its model) and
+ * its newest OTA copy `ota`, whose override files fill in the phones `head` lacks.
  */
 export function featureCopy(head: OpenedBundle, build: string, phone?: string, ota?: OpenedBundle): FeatureCopy | undefined {
   const carrier = plistOf(head, "carrier.plist");

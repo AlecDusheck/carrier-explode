@@ -370,6 +370,16 @@ export const isTagged = (v: unknown): v is JsonBlob | JsonDate | JsonBigInt | Js
 /** A dict in toJsonSafe output: a record that is not a tagged scalar. */
 export const isJsonDict = (v: unknown): v is Record<string, unknown> => isRecord(v) && !isTagged(v);
 
+/** `over` on top of `base`: dictionaries are combined key by key, anything else replaces. */
+export function mergeSettings(base: Record<string, unknown>, over: Record<string, unknown>): Record<string, unknown> {
+  const out: Record<string, unknown> = { ...base };
+  for (const [k, v] of Object.entries(over)) {
+    const b = out[k];
+    out[k] = isJsonDict(b) && isJsonDict(v) ? mergeSettings(b, v) : v;
+  }
+  return out;
+}
+
 /**
  * Serialise a parsed plist to JSON-safe values, tagging binary and dates.
  * Integers beyond 2^53 become `{ __int: "<decimal>" }` and UIDs `{ __uid: n }`.
