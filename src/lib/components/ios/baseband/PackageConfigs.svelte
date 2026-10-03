@@ -2,7 +2,7 @@
   import { humanBytes, shortHex } from "#lib/format.ts";
   import Confidence from "../../Confidence.svelte";
   import Variants from "../Variants.svelte";
-  import type { Baseband } from "../../baseband/types";
+  import type { Baseband } from "./types";
 
   let { bb }: { bb: Pick<Baseband, "modemConfigs" | "containers" | "images" | "nv" | "members" | "package"> } = $props();
 </script>

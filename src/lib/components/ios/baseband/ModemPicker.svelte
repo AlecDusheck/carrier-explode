@@ -4,7 +4,7 @@
   import { newestNamed, phoneList } from "#lib/phones.ts";
   import Picker from "../../Picker.svelte";
   import PhoneImage from "../PhoneImage.svelte";
-  import type { ImageModems } from "../../baseband/types";
+  import type { ImageModems } from "./types";
 
   /**
    * The modem packages of an iOS image, as a picker: each with its newest phone and the phones it

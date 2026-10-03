@@ -3,7 +3,7 @@
   import type { ModemCapabilities } from "#lib/decode/index.ts";
   import { fileHref, humanBytes } from "#lib/format.ts";
   import { imageSlug } from "#lib/names.ts";
-  import type { ImageModem } from "../../baseband/types";
+  import type { ImageModem } from "./types";
 
   // Other iOS versions with this modem are one pick away in the page's iOS picker.
   let { modem, caps, version }: {

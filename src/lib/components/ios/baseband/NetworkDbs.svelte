@@ -3,7 +3,7 @@
   import { shortHex } from "#lib/format.ts";
   import Confidence from "../../Confidence.svelte";
   import Variants from "../Variants.svelte";
-  import type { Baseband } from "../../baseband/types";
+  import type { Baseband } from "./types";
   import BundleChip from "../../BundleChip.svelte";
 
   let { mdb, mccs }: { mdb: NonNullable<BasebandSummary["mdb"]>; mccs: Baseband["mccs"] } = $props();

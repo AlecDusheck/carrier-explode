@@ -12,7 +12,7 @@
 import { decodeFile, decodedPlist, flattenBundle, isJsonDict, type BundleFile, type OpenedBundle } from "#lib/decode/index.ts";
 import { compareProducts } from "#lib/phones.ts";
 import { canonical, toJson } from "../json.ts";
-import { PROFILE_SCHEMA, type Apn, type ConceptValue, type Json, type Profile, type ProfileVariant, type SourceRef } from "../types.ts";
+import { matcherKey, PROFILE_SCHEMA, type Apn, type ConceptValue, type Json, type Profile, type ProfileVariant, type SimMatcher, type SourceRef } from "../types.ts";
 import { iosApns } from "./apns.ts";
 import { iosDisplay, iosIso, supportedSims } from "./identity.ts";
 import { iosConcepts } from "./readers.ts";
@@ -99,14 +99,14 @@ function mvnoVariants(s: Settings, main: Mapped, kind: SourceRef["kind"]): Profi
 }
 
 /** Every SIM rule the bundle confirms: SupportedSIMs, and each MVNO configuration's. */
-function bundleSims(s: Settings): ReturnType<typeof supportedSims> {
-  const own = supportedSims(s.merged.SupportedSIMs);
+function bundleSims(s: Settings): SimMatcher[] {
   const overrides = s.merged.MVNOOverrides;
   const mvno = isJsonDict(overrides)
     ? Object.values(overrides).flatMap((e) => (isJsonDict(e) ? supportedSims(e.SupportedSIMs) : []))
     : [];
-  const seen = new Set<string>();
-  return [...own, ...mvno].filter((m) => { const k = canonical(toJson(m) ?? null); return !seen.has(k) && !!seen.add(k); });
+  const byKey = new Map<string, SimMatcher>();
+  for (const m of [...supportedSims(s.merged.SupportedSIMs), ...mvno]) if (!byKey.has(matcherKey(m))) byKey.set(matcherKey(m), m);
+  return [...byKey.values()];
 }
 
 /** Every leaf of every decodable member, keyed `<file>:<path>`. */

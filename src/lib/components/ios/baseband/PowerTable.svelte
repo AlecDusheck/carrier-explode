@@ -1,7 +1,7 @@
 <script lang="ts">
   import { bandList, type BasebandSummary } from "#lib/decode/index.ts";
   import Variants from "../Variants.svelte";
-  import type { Baseband } from "../../baseband/types";
+  import type { Baseband } from "./types";
 
   let { tables, mccs }: { tables: BasebandSummary["amprNs"]; mccs: Baseband["mccs"] } = $props();
 
