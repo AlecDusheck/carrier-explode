@@ -64,12 +64,15 @@ export interface CarrierSettings {
   apns: ApnItem[];
   configs: Record<string, CarrierConfigValue>;
   vendorConfigs: VendorConfigClient[];
+  /** Fields this decoder does not know, anywhere in the file (additive; absent when there are none). */
+  unknown?: UnknownField[];
 }
 
 /** MultiCarrierSettings: others.pb holds many CarrierSettings in one file. */
 export interface MultiCarrierSettings {
   version?: string;
   settings: CarrierSettings[];
+  unknown?: UnknownField[];
 }
 
 /** CarrierId: mcc_mnc plus at most one of spn / imsi (prefix pattern) / gid1 (prefix). */
@@ -84,4 +87,19 @@ export interface CarrierId {
 export interface CarrierList {
   version?: string;
   entries: Array<{ canonicalName: string; carrierIds: CarrierId[] }>;
+  unknown?: UnknownField[];
+}
+
+/**
+ * A protobuf field the decoder has no name for (a newer proto, a vendor
+ * extension), kept so nothing in the file goes unseen. Additive to the contract.
+ * `path` is where it sat, in decoded terms (`apns[2]`, `configs.foo_bundle`,
+ * `vendorConfigs[0]`, `` for the root). `value`: varint as a decimal string,
+ * fixed32/fixed64 as little-endian hex, length-delimited as base64.
+ */
+export interface UnknownField {
+  path: string;
+  field: number;
+  wire: "varint" | "fixed64" | "bytes" | "fixed32";
+  value: string;
 }

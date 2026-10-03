@@ -1,0 +1,34 @@
+{
+  "name": "carrier-explode-extractor",
+  "private": true,
+  "version": "2.0.0",
+  "type": "module",
+  "scripts": {
+    "build:container": "node container/build.mjs",
+    "check": "tsc -p tsconfig.json --noEmit && tsc -p container/tsconfig.json --noEmit",
+    "test": "vitest run",
+    "job": "tsx dev/job.ts",
+    "fake-r2": "tsx dev/server.ts",
+    "seed": "tsx dev/seed.ts",
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "types": "wrangler types"
+  },
+  "dependencies": {
+    "@cloudflare/containers": "^0.3.7",
+    "fflate": "^0.8.2"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^5.20261003.1",
+    "@types/node": "^22.20.3",
+    "esbuild": "^0.28.2",
+    "tsx": "^4.23.15",
+    "typescript": "^6.0.0",
+    "vitest": "^5.0.3",
+    "wrangler": "^4.147.0"
+  },
+  "packageManager": "pnpm@10.19.0",
+  "pnpm": {
+    "onlyBuiltDependencies": ["esbuild", "workerd"]
+  }
+}
