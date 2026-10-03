@@ -146,7 +146,7 @@ export function seo(id: string | null, p: Params): Meta {
     case "/[kind=kind]":
       return p.kind === "countries"
         ? {
-            title: "iPhone emergency alerts by country",
+            title: "iOS country bundles (emergency alerts)",
             description:
               "Every iPhone country bundle, decoded: emergency alert and cell broadcast settings, which alerts you can't turn off, and the carriers in each country.",
           }
@@ -161,6 +161,12 @@ export function seo(id: string | null, p: Params): Meta {
               description:
                 "Every iPhone carrier bundle (.ipcc) Apple ships, decoded: APN, VoLTE, 5G, Wi-Fi Calling and RCS for every carrier, and which bundle a SIM's MCC/MNC loads.",
             };
+    case "/sim":
+      return {
+        title: "Which iPhone carrier bundle does my SIM load?",
+        description:
+          "Look up an MCC/MNC (PLMN), ICCID prefix or SIM GID1/GID2 and find the iOS carrier bundle it loads, with the MVNO rules Apple matches first.",
+      };
     case "/compare":
       return {
         title: "Compare carrier bundles",

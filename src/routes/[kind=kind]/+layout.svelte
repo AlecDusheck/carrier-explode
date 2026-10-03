@@ -53,13 +53,6 @@
   let drawerUsed = $state(false);
   const showList = $derived(!params.name || wide.current || drawerUsed);
 
-  // On a phone the list is the page until a landing view is asked for: the SIM
-  // lookup (`?q=`) or the alerts table (`?view=`). On a wide screen both show at once.
-  const landing = $derived(page.url.searchParams.has("q") || page.url.searchParams.has("view"));
-  const LANDING: Partial<Record<Kind, [string, string]>> = {
-    carriers: ["?q=", "Find the bundle for a SIM"],
-    countries: ["?view=country", "Emergency alerts by country"],
-  };
 
   // Carrier and Watch lists can put the most recently changed bundles first; countries stay A-Z.
   let byUpdated = $state(true);
@@ -88,7 +81,7 @@
 </script>
 
 <!-- With nothing selected, a phone shows the list as the page instead of hiding it in the drawer. -->
-<div class="split" class:browsing={!params.name && !landing}>
+<div class="split" class:browsing={!params.name}>
   <div class="pane-left" class:open={drawerOpen}>
     {#if params.kind !== "countries"}
       <!-- Watch bundles are carrier bundles for another device: one list, two families. -->
@@ -97,9 +90,8 @@
         <a class="btn" href={link("/watch")} aria-current={params.kind === "watch" ? "page" : undefined}>Apple Watch</a>
       </div>
     {/if}
-    {#if !params.name && LANDING[params.kind]}
-      {@const [q, text] = LANDING[params.kind]!}
-      <a class="btn landing-link" href={link("/" + params.kind) + q}>{text}</a>
+    {#if !params.name && params.kind === "carriers"}
+      <a class="btn landing-link" href={link("/sim")}>Find the bundle for a SIM</a>
     {/if}
     <div class="find">
       <input class="grow" type="search" name="find" placeholder="find" aria-label="find in {params.kind}" bind:value={query} {@attach spend} />
@@ -162,7 +154,7 @@
   .find { padding: 6px; display: flex; gap: 6px; }
   .family { display: flex; gap: 4px; padding: 6px 6px 0; }
   .family .btn { flex: 1; text-align: center; }
-  /* Wide screens show the landing view beside the list already. */
+  /* Wide screens have the same link beside the list. */
   .landing-link { display: none; margin: 6px 6px 0; text-align: center; }
   @media (max-width: 760px) {
     .landing-link { display: block; }

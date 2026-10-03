@@ -6,8 +6,8 @@
 
   const LIMIT = 200;
 
-  // Follows the URL, and runs ahead of it while typing.
-  let q = $derived(page.url.searchParams.get("q") ?? "");
+  // The box owns what is typed; the URL only mirrors it, so a link shares the search.
+  let q = $state(page.url.searchParams.get("q") ?? "");
   const f = $derived(q.trim().toLowerCase().replace(/[\s-]/g, ""));
 
   const mvnoKey = (m: { iccid?: string; gid1?: string; gid2?: string }) =>
@@ -28,7 +28,7 @@
       placeholder="MCC-MNC, ICCID prefix or bundle name"
       aria-label="find a bundle by MCC-MNC, ICCID prefix or name"
       bind:value={q}
-      oninput={() => goto(withParams(page.url, { q: q || null }), { replace: true, reset: false })}
+      oninput={() => goto(withParams(page.url, { q: q || null }), { replace: true, shallow: true })}
     />
   </div>
   {#if f}

@@ -5,7 +5,7 @@ import { ARTICLES } from "#lib/wiki.ts";
 export async function GET({ url }) {
   const [idx, bb] = await Promise.all([getIndex(), basebandBuilds()]);
   const paths = [
-    "/carriers", "/countries", "/watch", "/builds", "/compare", "/wiki",
+    "/carriers", "/countries", "/watch", "/builds", "/sim", "/compare", "/wiki",
     ...ARTICLES.map((a) => `/wiki/${a.slug}`),
     ...(["carriers", "countries", "watch"] as const).flatMap((kind) =>
       idx[kind].map((e) => `/${kind}/${encodeURIComponent(e.name)}`)),

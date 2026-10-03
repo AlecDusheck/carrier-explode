@@ -11,6 +11,7 @@ const CASES: Array<[string, Parameters<typeof seo>[1]]> = [
   ["/[kind=kind]/[name]/[version=version]", { kind: "carriers", name: "ATT_US", version: "ios-27.0" }],
   ["/[kind=kind]/[name]/[version=version]/files/[...path]", { kind: "carriers", name: "ATT_US", version: "ios-27.0", path: "carrier.plist" }],
   ["/compare", {}],
+  ["/sim", {}],
   ["/builds", {}],
   ["/wiki", {}],
   ["/builds/[build]", { build: "24A437" }],

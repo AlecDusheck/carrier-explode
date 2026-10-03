@@ -17,8 +17,9 @@ ${CARRIERS.map(entry).join("\n")}
 
 ## Data
 
-- [Carrier bundles](${url.origin}/carriers): every carrier bundle, and a lookup from MCC-MNC, ICCID prefix or carrier ID to the bundle a SIM loads (\`/carriers?q=310410\`)
-- [Country bundles](${url.origin}/countries): per-country bundles, and every country's emergency alerts side by side
+- [Carrier bundles](${url.origin}/carriers): every carrier bundle
+- [Find the bundle for a SIM](${url.origin}/sim): MCC-MNC, ICCID prefix or carrier ID to the bundle a SIM loads (\`/sim?q=310410\`)
+- [Country bundles](${url.origin}/countries): per-country bundles: each one's emergency alerts (\`/countries/<name>/alerts\`), emergency numbers and carriers
 - [Apple Watch bundles](${url.origin}/watch)
 - [iOS builds](${url.origin}/builds): bundles added and changed in each iOS build, and the modem firmware each one ships
 - [Sitemap](${url.origin}/sitemap.xml)
