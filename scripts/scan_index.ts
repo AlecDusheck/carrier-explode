@@ -23,7 +23,6 @@ import { flattenBundle, openIpcc } from "#lib/decode/index.ts";
 import { MANIFEST_URL, manifestTables, parseManifest } from "#lib/server/manifest.ts";
 import { buildTimeline, headIndex, type ImageIndex } from "#lib/server/timeline.ts";
 import { POINTER_KEY, bundlesKey, fileDataKey, fileIndexKey, packShards, rareKey, rareSettings, type ScanPointer } from "#lib/server/keyscan.ts";
-import { homePhone } from "#lib/phones.ts";
 import { featureCopy, featureSlugs, featuresKey, type FeatureIndex } from "#lib/server/featureindex.ts";
 
 interface Copy { src: string; build: string; source: "ota" | "image"; phone?: string }
@@ -96,8 +95,9 @@ async function plan() {
       const t = buildTimeline(kind, name, images, Object.hasOwn(refs, name) ? refs[name] : [], index.countries);
       const head = t[headIndex(t)];
       if (!head) continue;
+      // An image copy merges every iPhone IPSW of its release; only a per-model OTA copy is one phone's.
       const copy = (e: typeof head): Copy => {
-        const phone = homePhone(e, images.find((i) => i.build === e.image) ?? {});
+        const phone = e.productType?.includes(",") ? e.productType : undefined;
         return { src: e.src, build: e.build, source: e.source, ...(phone ? { phone } : {}) };
       };
       // The timeline runs newest first; a per-model copy speaks for one phone only.

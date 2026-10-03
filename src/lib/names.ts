@@ -87,8 +87,7 @@ const ISO_NAMES: Record<string, string> = {
 
 /** A country's flag emoji from its ISO code: the two letters as regional indicator symbols. */
 export function flag(cc?: string): string | undefined {
-  // Any two letters: user-assigned codes such as Kosovo's xk have flags too.
-  if (!cc || !/^[a-z]{2}$/.test(cc)) return undefined;
+  if (!cc || !Object.hasOwn(ISO_NAMES, cc)) return undefined;
   return String.fromCodePoint(...[...cc.toUpperCase()].map((c) => 0x1f1e6 + c.charCodeAt(0) - 65));
 }
 
