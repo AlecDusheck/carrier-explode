@@ -1,14 +1,9 @@
 /**
- * Fan-out with a concurrency cap, for Workflows: at most `limit` jobs of a
- * kind in flight, so a run never asks for more containers than the class's
- * max_instances. Failures are collected, not thrown, so one bad IPSW does not
- * cancel its siblings; the pipeline decides what a failure means.
+ * Fan-out with a concurrency cap. Workflows use it to keep at most
+ * max_instances jobs of a class in flight; jobs use it to bound parallel R2
+ * reads. Failures are collected, not thrown, so one bad item does not cancel
+ * its siblings; the caller decides what a failure means.
  */
-
-import type { JobTraits } from "../jobs.ts";
-
-/** Keep equal to wrangler.jsonc containers[].max_instances. */
-export const MAX_INSTANCES = { heavy: 6, light: 16 } as const satisfies Record<JobTraits["size"], number>;
 
 export type Settled<O> = { readonly ok: true; readonly value: O } | { readonly ok: false; readonly error: string };
 

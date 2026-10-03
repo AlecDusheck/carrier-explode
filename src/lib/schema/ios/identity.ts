@@ -7,6 +7,7 @@
  * both.
  */
 
+import type { MccMncTable } from "#lib/decode/index.ts";
 import { carrierName, countryDisplay, splitName } from "#lib/names.ts";
 import { isoForCountryName, isoForMcc } from "../mcc.ts";
 import { simMatcher } from "../sims.ts";
@@ -37,21 +38,12 @@ export const supportedSims = (v: unknown): SimMatcher[] =>
     return m ? [m] : [];
   });
 
-/** The slice of Apple's manifest that routes SIMs (MobileDeviceCarriersByMccMnc), as decode-ios's buildMccMnc returns it. */
-export interface ManifestPlmnTable {
-  readonly entries: ReadonlyArray<{
-    readonly plmn: string;
-    readonly bundle?: string | undefined;
-    readonly mvnos: ReadonlyArray<{ readonly bundle: string; readonly iccid?: string | undefined; readonly gid1?: string | undefined; readonly gid2?: string | undefined }>;
-  }>;
-}
-
 /**
  * Manifest routes per iOS carrier source key. Bare ICCID prefixes
  * (MobileDeviceCarriers) are left out: a SimMatcher needs an MCC+MNC, and the
  * same bundles are reachable through their PLMN entries anyway.
  */
-export function manifestSims(table: ManifestPlmnTable): Record<string, SimMatcher[]> {
+export function manifestSims(table: Pick<MccMncTable, "entries">): Record<string, SimMatcher[]> {
   const out: Record<string, SimMatcher[]> = {};
   const add = (bundle: string, m: SimMatcher | undefined): void => {
     if (!bundle || !m) return;

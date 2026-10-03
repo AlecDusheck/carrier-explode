@@ -22,7 +22,7 @@ export function stateValue(state: FeatureState, because: readonly NativeRef[], f
 export const unset = (because: readonly NativeRef[] = []): ConceptValue => ({ value: null, because: [...because] });
 
 /** Sorted, de-duplicated strings: for sets whose native order carries no meaning. */
-export const stringSet = (xs: Iterable<string>): string[] => [...new Set(xs)].sort();
+export const stringSet = <T extends string>(xs: Iterable<T>): T[] => [...new Set(xs)].sort();
 
 export const numberSet = (xs: Iterable<number>): number[] => [...new Set(xs)].sort((a, b) => a - b);
 

@@ -43,6 +43,8 @@ async function control(req: Request, env: Env, ctx: OutboundHandlerContext): Pro
     return await handleControl(req, {
       progress: (p) => caller.heartbeat(p),
       async done(result) {
+        // The first /done wins: a late one (a SIGTERM racing the real result) must not overwrite the record.
+        if (launch.finishedAt !== undefined) return;
         await finishJob(env, launch, result);
         await caller.finished();
       },

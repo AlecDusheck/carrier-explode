@@ -2,6 +2,7 @@
 
 import type { Attachment } from "svelte/attachments";
 import { on } from "svelte/events";
+import type { Platform } from "#lib/schema/types.ts";
 
 export interface MenuItem {
   label: string;
@@ -32,19 +33,41 @@ class ContextMenuState {
 
 export const contextMenu = new ContextMenuState();
 
-/** Which bundles a scan reads: every country bundle, every carrier, or one country's carriers. */
-export type ScanScope = "countries" | "all" | `country:${string}`;
+/** Which sources a scan reads: every carrier of the platform, one country's carriers, or every iOS country bundle. */
+export type ScanScope = "carriers" | "countries" | `country:${string}`;
+
+/** A scan as the menu offers it: `country` stands for the tree's own country. */
+interface ScopeChoice {
+  readonly scope: "carriers" | "countries" | "country";
+  readonly label: (cc: string) => string;
+}
+
+/** What "compare across" offers on each platform: Android has no country bundles. */
+export const SCAN_SCOPES = {
+  ios: [
+    { scope: "country", label: (cc) => `Compare across ${cc.toUpperCase()} carriers` },
+    { scope: "carriers", label: () => "Compare across all carriers" },
+    { scope: "countries", label: () => "Compare across countries" },
+  ],
+  android: [
+    { scope: "country", label: (cc) => `Compare across ${cc.toUpperCase()} carriers` },
+    { scope: "carriers", label: () => "Compare across all carriers" },
+  ],
+} as const satisfies Record<Platform, readonly ScopeChoice[]>;
+
+export interface ScanQuery {
+  readonly platform: Platform;
+  readonly path: string;
+  readonly file: string;
+  readonly scope: ScanScope;
+}
 
 class ScanState {
   open = $state(false);
-  path = $state("");
-  file = $state("carrier.plist");
-  scope = $state<ScanScope>("countries");
+  query = $state<ScanQuery>({ platform: "ios", path: "", file: "carrier.plist", scope: "carriers" });
 
-  start(path: string, file: string, scope: ScanScope) {
-    this.path = path;
-    this.file = file;
-    this.scope = scope;
+  start(q: ScanQuery): void {
+    this.query = q;
     this.open = true;
   }
 }

@@ -4,10 +4,9 @@
  * badges that say where a value came from or how rare it is.
  */
 
-import { isJsonDict, mergeSettings } from "#lib/decode/plist.ts";
+import { isJsonDict, mergeSettings, type MccMncTable } from "#lib/decode/index.ts";
 import type { KeyBadge } from "#lib/components/Tree.svelte";
-import type { MccMncTable } from "#lib/server/manifest.ts";
-import type { RareSetting } from "#lib/server/keyscan.ts";
+import type { RareSetting } from "#lib/storage/scan.ts";
 
 export const SETTING_GROUPS: Array<[string, string[]]> = [
   ["Identity", ["CarrierName", "HomeBundleIdentifier", "CountryName", "ISOAlpha2CountryCode", "SupportedSIMs", "SupportedPLMNs", "SupportedCarrierIds", "SupportedCountryIds", "MVNOOverrides"]],
@@ -79,14 +78,14 @@ export function selectionRules(t: MccMncTable, bundle: string): SelectionRule[] 
 export const rareLabel = (r: RareSetting) => `${r.holders} of ${r.of}`;
 
 /** One badge per top-level key: the rarest thing under it. */
-export function rareBadges(rows: RareSetting[]): Record<string, KeyBadge[]> {
+export function rareBadges(rows: readonly RareSetting[]): Record<string, KeyBadge[]> {
   const out: Record<string, KeyBadge[]> = {};
   for (const r of rows) {
-    const top = r.path.split(/[.[]/, 1)[0];
+    const top = r.path.split(/[.[]/, 1)[0] ?? r.path;
     if (out[top]) continue;
     const what = r.value === undefined ? `${r.path} is set` : `${r.path} = ${r.value}`;
-    const also = r.with.length ? ` (also ${r.with.join(", ")})` : " (no other bundle)";
-    out[top] = [{ text: rareLabel(r), tone: "rare", title: `${what} in ${r.holders} of ${r.of} bundles${also}` }];
+    const also = r.with.length ? ` (also ${r.with.join(", ")})` : " (no other source)";
+    out[top] = [{ text: rareLabel(r), tone: "rare", title: `${what} in ${r.holders} of ${r.of} sources${also}` }];
   }
   return out;
 }

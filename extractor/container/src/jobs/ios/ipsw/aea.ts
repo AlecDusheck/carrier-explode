@@ -160,19 +160,20 @@ function inflate(compression: string, data: Uint8Array, size: number): Uint8Arra
   throw new Error(`AEA: segment compression '${compression}' is not supported`);
 }
 
-export interface AeaProgress { readonly written: number; readonly total: number }
+export interface DecryptHooks {
+  /** The plain bytes, in order. */
+  sink(plain: Uint8Array): Promise<void>;
+  /** The plain size, once the root header is read and before any segment; throw to refuse (disk budget). */
+  onSize?(size: number): void;
+  onProgress?(written: number, total: number): void;
+}
 
 /**
- * Decrypts the archive in `source` (its bytes from offset 0), handing the plain
- * bytes to `sink` in order. Resolves with the plain size once the padding's
- * HMAC proves the archive ended where its writer ended it.
+ * Decrypts the archive in `source` (its bytes from offset 0). Resolves with
+ * the plain size once the padding's HMAC proves the archive ended where its
+ * writer ended it.
  */
-export async function decryptAea(
-  source: AsyncIterable<Uint8Array>,
-  key: Uint8Array,
-  sink: (plain: Uint8Array) => Promise<void>,
-  onProgress?: (p: AeaProgress) => void,
-): Promise<number> {
+export async function decryptAea(source: AsyncIterable<Uint8Array>, key: Uint8Array, hooks: DecryptHooks): Promise<number> {
   const q = new ByteQueue(source);
   const prefix = await q.read(12);
   const hdr = parseAeaHeader(concat(prefix, await q.read(u32le(prefix, 8))));
@@ -188,6 +189,7 @@ export async function decryptAea(
   verify(rootMac, mac(rhk.mac, encRoot, concat(clusterMac, hdr.authData)), "root header");
   const root = rootHeader(ctr(rhk, encRoot));
   const segHdrSize = 8 + CHECKSUM_SIZE[root.checksum];
+  hooks.onSize?.(root.fileSize);
 
   let written = 0;
   for (let cluster = 0; written < root.fileSize; cluster++) {
@@ -215,9 +217,9 @@ export async function decryptAea(
       if (root.checksum === 2 && !timingSafeEqual(createHash("sha256").update(plain).digest(), h.subarray(8, 40))) {
         throw new Error(`AEA: cluster ${cluster} segment ${i} checksum mismatch`);
       }
-      await sink(plain);
+      await hooks.sink(plain);
       written += plain.length;
-      onProgress?.({ written, total: root.fileSize });
+      hooks.onProgress?.(written, root.fileSize);
     }
     clusterMac = nextMac;
   }

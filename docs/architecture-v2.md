@@ -27,7 +27,7 @@ Change a contract only together with every user of it, and say so in your report
  ipsw.me/AppleDB  ─plan─▶ ios.ipsw ×N (heavy) ─▶ ios.release ─┐           obj/ meta/  (artifacts)         reads index/,
  Apple OTA manifest ────▶ ios.ota-archive ────────────────────┼─normalize▶ norm/v1/   (Profiles)          norm/, obj/;
  IPSW modem members ────▶ ios.modems ─────────────────────────┤           releases/  feeds/               iOS OTA bytes not
- Pixel OTA list ─plan──▶ android.ota ×N (light, range reads)─┘           ─index─▶ index/  ─scan─▶ scan/  archived yet: Apple
+ Pixel OTA list ─plan──▶ android.ota ×device ─▶ android.release ─┘           ─index─▶ index/  ─scan─▶ scan/  archived yet: Apple
 ```
 
 ## Layers of the model
@@ -40,7 +40,8 @@ Change a contract only together with every user of it, and say so in your report
    - An iOS bundle and an Android canonical are linked when they share an exact `matcherKey`. A plain MCC+MNC links only to a plain MCC+MNC, and a GID1 rule only to the same GID1 rule.
    - Each source joins the carrier it shares the most matchers with. Ties and conflicts are resolved by `src/lib/schema/links.ts`, a hand-kept list of manual links and splits. Unmatched sources become their own carrier.
    - The slug comes from the display name plus ISO (`t-mobile-us`). Slugs are stable: the index job reuses an existing slug for a carrier with the same members.
-6. **Country**: ISO code. iOS country bundles plus every carrier whose ISO matches.
+6. **Android device lines**: a Pixel build ships different CarrierSettings per device generation, verified on CP3A.260905.009. Pixel 6, Fold, 9 and 10 Pro differ in 632 of 633 files, including VoLTE and Wi-Fi calling availability for over 100 carriers. Pixel 9 and 9 Pro Fold are identical, and `carrier_list.pb` is identical across devices. So every device is extracted, a release lists each source's distinct artifacts with the devices that carry them, and comparisons pick a device on each platform. This is the counterpart of iOS's per-phone override files.
+7. **Country**: ISO code. iOS country bundles plus every carrier whose ISO matches.
 
 ## Repository layout (pnpm workspace)
 
@@ -159,7 +160,7 @@ export const CONCEPTS: ConceptDef[];                                            
   |---|---|
   | `ios-images` | `ios.plan` → N× `ios.ipsw` → per build `ios.release` (calls `ios.modems`) → `normalize` → `index` → `scan` |
   | `ios-ota` | `ios.ota-archive` → `normalize` → `index`, every 30 min |
-  | `android` | `android.plan` → N× `android.ota` → `normalize` → `index` → `scan` |
+  | `android` | `android.plan` → per build, one `android.ota` per device → `android.release` per build → `normalize` → `index` → `scan` |
   | `reindex` | `normalize {all:true}` sharded → `index` → `scan` |
   | `index` | `index` alone |
 

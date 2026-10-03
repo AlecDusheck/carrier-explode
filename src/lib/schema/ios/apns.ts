@@ -9,7 +9,7 @@
 
 import { isJsonDict } from "#lib/decode/index.ts";
 import type { Apn, ApnAuth, ApnType, IpProtocol } from "../types.ts";
-import { num, text } from "../values.ts";
+import { num, stringSet, text } from "../values.ts";
 import { read, type Settings } from "./settings.ts";
 
 /** CTDataConnectionServiceType bit (fields.ts SERVICE_TYPES) -> the APN type Android names the same traffic. */
@@ -38,13 +38,13 @@ const bitsOf = (mask: number): number[] => {
 
 function types(mask: number | undefined): ApnType[] {
   if (mask === undefined) return [];
-  return [...new Set(bitsOf(mask).flatMap((b) => SERVICE_TYPE_APN.get(b) ?? []))].sort();
+  return stringSet(bitsOf(mask).flatMap((b) => SERVICE_TYPE_APN.get(b) ?? []));
 }
 
 function bearers(mask: number | undefined): string[] | undefined {
   if (mask === undefined) return undefined;
-  const set = new Set(bitsOf(mask).flatMap((b) => RAT.find(([bit]) => bit === b)?.[1] ?? []));
-  return set.size ? [...set].sort() : undefined;
+  const rats = stringSet(bitsOf(mask).flatMap((b) => RAT.find(([bit]) => bit === b)?.[1] ?? []));
+  return rats.length ? rats : undefined;
 }
 
 function auth(v: unknown): ApnAuth | undefined {
@@ -77,7 +77,7 @@ function mmsServer(s: Settings): MmsServer {
 function apnFrom(d: Readonly<Record<string, unknown>>, path: string, extra: { types?: ApnType[]; techMask?: number | undefined }, mms: MmsServer): Apn | undefined {
   const apn = typeof d.apn === "string" ? d.apn : undefined;
   if (apn === undefined) return undefined;
-  const t = [...new Set([...types(num(d["type-mask"])), ...(extra.types ?? [])])].sort();
+  const t = stringSet([...types(num(d["type-mask"])), ...(extra.types ?? [])]);
   const proto = protocol(d.AllowedProtocolMask);
   const roaming = protocol(d.AllowedProtocolMaskInRoaming ?? d.AllowedProtocolMaskInRoamingLTE);
   const au = auth(d.auth_type);

@@ -9,8 +9,7 @@
  * configurations become variants holding only what differs.
  */
 
-import { decodeFile, decodedPlist, flattenBundle, isJsonDict, type BundleFile, type OpenedBundle } from "#lib/decode/index.ts";
-import { compareProducts } from "#lib/phones.ts";
+import { compareProducts, decodeFile, decodedPlist, flattenBundle, isJsonDict, type BundleFile, type OpenedBundle } from "#lib/decode/index.ts";
 import { canonical, toJson } from "../json.ts";
 import { matcherKey, PROFILE_SCHEMA, type Apn, type ConceptValue, type Json, type Profile, type ProfileVariant, type SimMatcher, type SourceRef } from "../types.ts";
 import { iosApns } from "./apns.ts";

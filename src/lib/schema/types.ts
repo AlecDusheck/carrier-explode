@@ -208,9 +208,18 @@ export interface Release {
   /** iPhone product types / Pixel codenames whose images this was built from. */
   devices: string[];
   extractedAt: string;
-  /** sourceKey -> what the image carries for it. */
-  sources: Record<string, ReleaseSource>;
-  /** Android: sha of carrier_list.pb. */
+  /**
+   * sourceKey -> the distinct artifacts the release carries for it, each with
+   * the devices that carry it. iOS: always one entry without `devices` (a
+   * bundle is merged across every iPhone IPSW, and per-phone differences live
+   * inside it as override files -> Profile.variants). Android: one entry per
+   * distinct file. A build ships different CarrierSettings per device
+   * generation (CP3A.260905.009: Pixel 6, Fold, 9 and 10 Pro differ in 632 of
+   * 633 files, VoLTE and Wi-Fi calling among them), and content addressing
+   * collapses the devices that agree (Pixel 9 = 9 Pro Fold).
+   */
+  sources: Record<string, ReleaseSource[]>;
+  /** Android: sha of carrier_list.pb (one per build: identical across devices). */
   carrierList?: string;
   /** iOS: modem packages (unchanged shape from the v1 index, see src/lib/server/timeline.ts ImageModem). */
   modems?: unknown[];
@@ -223,6 +232,8 @@ export interface ReleaseSource {
   size: number;
   /** iOS: the bundle's file-set content id (src/lib/decode/bundle.ts contentId), equal across re-zips. */
   cid?: string;
+  /** Android: Pixel codenames carrying exactly this artifact. Absent on iOS. */
+  devices?: string[];
 }
 
 /* ---------------------------------------------------------------- timeline */
@@ -244,6 +255,12 @@ export interface TimelineEntry {
   sha384?: string;
   cid?: string;
   productType?: string;
+  /**
+   * Android: the devices this entry applies to. A source's Android timeline
+   * is per device line: `changed` compares against the previous entry for an
+   * overlapping device set, never against another generation's file.
+   */
+  devices?: string[];
   beta?: boolean;
   changed: boolean;
 }

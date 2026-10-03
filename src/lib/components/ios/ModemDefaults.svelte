@@ -1,15 +1,22 @@
 <script lang="ts">
   import { page } from "$app/state";
-  import { getBasebandDefaults, getBasebandOverride } from "#lib/api/tables.remote.ts";
+  import { getBasebandDefaults, getBasebandOverride } from "#lib/api/ios.remote.ts";
   import { modemLabel } from "#lib/decode/index.ts";
-  import type { Kind } from "#lib/types.ts";
+  import type { NativeAt } from "#lib/types.ts";
   import { modemHref, withParams } from "#lib/format.ts";
   import Pane from "../Pane.svelte";
   import Variants from "./Variants.svelte";
   import ComboStatsTable from "./ComboStatsTable.svelte";
   import DiffRows from "../DiffRows.svelte";
 
-  let { kind, name, slug, device, phone }: { kind: Kind; name: string; slug?: string; device: string; phone: string } = $props();
+  interface Props {
+    at: NativeAt;
+    /** The phone whose modem is read, and how to name it. */
+    device: string;
+    phone: string;
+  }
+
+  let { at, device, phone }: Props = $props();
 
   /** The package file opened next to the .der.pri value that replaces it: ?pri=&efs=&base=. */
   const selection = $derived.by(() => {
@@ -22,7 +29,7 @@
 </script>
 
 <Pane>
-  {@const d = await getBasebandDefaults({ kind, name, slug, device })}
+  {@const d = await getBasebandDefaults({ source: at.source, slug: at.version, device })}
   {#if d.missing}
     {#if d.build}<p class="dimtext note">No {phone} modem package stored for {d.build}.</p>{/if}
   {:else if d.tags.length || d.overrides.length}
@@ -77,7 +84,7 @@
       {#if selection}
         <div id="override" class="override">
           <Pane>
-            {@const o = await getBasebandOverride({ kind, name, slug: d.slug, id: d.id, ...selection })}
+            {@const o = await getBasebandOverride({ source: at.source, slug: d.slug, id: d.id, ...selection })}
             <div class="rowflex">
               <b class="mono wrap">{o.efs}</b>
               <span class="dimtext">{o.counts.changed + o.counts.added + o.counts.removed} lines differ</span>

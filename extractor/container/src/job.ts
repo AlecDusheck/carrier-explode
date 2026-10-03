@@ -43,6 +43,8 @@ export interface R2Client {
   /** A key under one of the job's writable prefixes (JOBS[type].writes). Bodies over 64 MB go multipart. */
   put(key: string, body: PutBody, contentType?: string): Promise<void>;
   putJson(key: string, value: unknown): Promise<void>;
+  /** A writable key, never under obj/ or meta/ (artifacts are immutable). Deleting a missing key is not an error. */
+  delete(key: string): Promise<void>;
   /**
    * Content-addressed artifact: writes obj/<sha256> (skipped if present) and
    * meta/<sha256>.json (skipped if present, so the first origin wins). Returns the sha256.

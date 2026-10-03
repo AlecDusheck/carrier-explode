@@ -4,7 +4,7 @@
  */
 
 import type { FileDiff } from "#lib/decode/index.ts";
-import type { TimelineEntry } from "#lib/schema/types.ts";
+import type { SourceRef, TimelineEntry } from "#lib/schema/types.ts";
 
 /** The two kinds of page a source lives under: its carrier, or (iOS country bundles) its country. */
 export const GROUPS = ["carriers", "countries"] as const;
@@ -74,4 +74,20 @@ export interface CbsRow {
   cbMessageLocales: string[];
   /** false = the bundle carries no CellBroadcast dictionary at all. */
   hasCellBroadcast: boolean;
+}
+
+/** One source at one version, where its pages live: what every native view is given. */
+export interface NativeAt {
+  readonly place: Place;
+  readonly ref: SourceRef;
+  /** The source key. */
+  readonly source: string;
+  /** The timeline slug. */
+  readonly version: string;
+}
+
+/** What a native view's tab body receives: the version, and the file a tab that takes one is on ("" for none). */
+export interface TabProps {
+  readonly at: NativeAt;
+  readonly path: string;
 }

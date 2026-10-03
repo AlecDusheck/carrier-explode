@@ -1,5 +1,5 @@
 {
-  "name": "carrier-explode-extractor",
+  "name": "@carrier-explode/extractor",
   "private": true,
   "version": "2.0.0",
   "type": "module",
@@ -17,7 +17,10 @@
   "dependencies": {
     "@cloudflare/containers": "^0.3.7",
     "fflate": "^0.8.2",
-    "valibot": "^1.5.0"
+    "fzstd": "^0.1.1",
+    "seek-bzip": "^2.0.0",
+    "valibot": "^1.5.0",
+    "xz-decompress": "^0.2.3"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^5.20261003.1",

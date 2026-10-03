@@ -4,7 +4,8 @@
  */
 
 import type { JobOutput } from "../jobs.ts";
-import { fanOut, failures, MAX_INSTANCES, succeeded, type Settled } from "../worker/fan-out.ts";
+import { fanOut, failures, succeeded, type Settled } from "../fan-out.ts";
+import { MAX_INSTANCES } from "../worker/instances.ts";
 import { purgeSite } from "../worker/purge.ts";
 import { runJob, type RunContext } from "../worker/run-job.ts";
 

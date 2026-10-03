@@ -1,19 +1,23 @@
-// apfs-extract copies directories out of a raw APFS image, with no FUSE and
-// no mount: Cloudflare Containers allow neither. It is go-apfs's `apfs cp`
-// for a raw container (an IPSW's decrypted .dmg.aea is one), which the
-// upstream CLI cannot open: it only takes UDIF images.
+// apfs-extract copies directories out of an APFS image with no FUSE and no
+// mount, which Cloudflare Containers allow neither of. It wraps go-apfs, as
+// its own `apfs cp` does, but takes both kinds of image an IPSW holds: a UDIF
+// .dmg (iOS 17 and older) and the raw APFS container a .dmg.aea decrypts to
+// (iOS 18 on), which the upstream CLI cannot open.
 //
 //	apfs-extract IMAGE SRC DEST [SRC DEST]...
 //
 // Each SRC is a directory inside the image; its contents land in DEST. A SRC
-// the image lacks is an error: the caller asked for it because it expects it.
+// the image lacks is an error: the caller asks for it because it expects it.
 package main
 
 import (
 	"fmt"
+	"io"
 	"os"
 
 	"github.com/blacktop/go-apfs"
+	"github.com/blacktop/go-apfs/pkg/disk"
+	"github.com/blacktop/go-apfs/pkg/disk/dmg"
 )
 
 func main() {
@@ -27,12 +31,49 @@ func main() {
 	}
 }
 
+// isUDIF reports whether the image ends in a UDIF trailer ("koly"), as every
+// .dmg does and a raw APFS container never does.
+func isUDIF(path string) (bool, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return false, err
+	}
+	defer f.Close()
+	st, err := f.Stat()
+	if err != nil {
+		return false, err
+	}
+	if st.Size() < 512 {
+		return false, fmt.Errorf("%s: %d bytes is too small for an image", path, st.Size())
+	}
+	magic := make([]byte, 4)
+	if _, err := f.ReadAt(magic, st.Size()-512); err != nil && err != io.EOF {
+		return false, err
+	}
+	return string(magic) == "koly", nil
+}
+
+func open(path string) (disk.Device, error) {
+	udif, err := isUDIF(path)
+	if err != nil {
+		return nil, err
+	}
+	if udif {
+		return dmg.Open(path, &dmg.Config{DisableCache: true})
+	}
+	return disk.Open(path)
+}
+
 func run(image string, pairs []string) error {
-	fs, err := apfs.Open(image)
+	dev, err := open(image)
 	if err != nil {
 		return fmt.Errorf("open %s: %w", image, err)
 	}
-	defer fs.Close()
+	defer dev.Close()
+	fs, err := apfs.NewAPFS(dev)
+	if err != nil {
+		return fmt.Errorf("read APFS in %s: %w", image, err)
+	}
 	for i := 0; i < len(pairs); i += 2 {
 		if err := fs.Copy(pairs[i], pairs[i+1]); err != nil {
 			return fmt.Errorf("copy %q: %w", pairs[i], err)

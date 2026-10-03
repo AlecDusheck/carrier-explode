@@ -52,7 +52,7 @@ const RELEASES = [
 ] as const satisfies ReadonlyArray<readonly [string, number]>;
 
 const OLDEST_API = RELEASES[0][1];
-const NEWEST_API = RELEASES[RELEASES.length - 1][1];
+const NEWEST_API = Math.max(...RELEASES.map(([, api]) => api));
 
 const url = (s: Source): string => `${GITILES}/${s.repo}/+/${s.ref}/${s.path}?format=TEXT`;
 

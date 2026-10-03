@@ -6,6 +6,7 @@
  *   GET    /o/<key>                         body, or 404
  *   HEAD   /o/<key>                         content-length, or 404
  *   PUT    /o/<key>                         Content-Length required, ≤ MAX_PUT; obj/ needs x-sha256
+ *   DELETE /o/<key>                         204; never under obj/ or meta/
  *   GET    /list?prefix=&cursor=            { keys, cursor? }
  *   POST   /mpu/<key>                       { uploadId }            obj/ needs x-sha256
  *   PUT    /mpu/<key>?uploadId=&part=N      { partNumber, etag }
@@ -53,6 +54,7 @@ function route(req: Request, store: Store, scope: R2Scope): Promise<Response> {
       case "GET": return get(key, store);
       case "HEAD": return head(key, store);
       case "PUT": return put(key, req, store, scope);
+      case "DELETE": return remove(key, store, scope);
     }
   }
   if (url.pathname.startsWith("/mpu/")) {
@@ -112,6 +114,13 @@ async function put(key: string, req: Request, store: Store, scope: R2Scope): Pro
   const contentType = req.headers.get("content-type");
   await store.put(key, bodyOf(req), size, { ...(sha256 ? { sha256 } : {}), ...(contentType ? { contentType } : {}) });
   return Response.json({ exists: false }, { status: 201 });
+}
+
+async function remove(key: string, store: Store, scope: R2Scope): Promise<Response> {
+  checkWritable(key, scope.writes);
+  if (isCreateOnly(key)) throw new RequestError(403, `${key}: artifacts and their metadata are never deleted`);
+  await store.delete(key);
+  return new Response(null, { status: 204 });
 }
 
 async function createUpload(key: string, req: Request, store: Store, scope: R2Scope): Promise<Response> {

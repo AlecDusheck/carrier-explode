@@ -20,7 +20,7 @@ const opt = <S extends v.GenericSchema>(s: S): v.ExactOptionalSchema<S, undefine
 
 export const platform: v.GenericSchema<Platform> = v.picklist(["ios", "android"]);
 
-const json: v.GenericSchema<Json> = v.lazy(() =>
+export const json: v.GenericSchema<Json> = v.lazy(() =>
   v.union([v.null(), v.boolean(), v.number(), v.string(), v.array(json), v.record(v.string(), json)]));
 
 const sourceRef: v.GenericSchema<SourceRef> = v.object({

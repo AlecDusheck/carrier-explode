@@ -113,6 +113,30 @@ export const sourceHref = (key: string, opts: { version?: string; tab?: string; 
 export const iosBundleHref = (name: string, family?: "Watch"): string =>
   sourceHref(sourceKey({ platform: "ios", kind: "carrier", name, ...(family ? { family } : {}) }));
 
+/** One side of a comparison: a source, at a version or at its head. */
+export interface SideRef {
+  readonly source: string;
+  readonly slug?: string | undefined;
+}
+
+/** `ios:carrier:ATT_US@ota-72.1`: a side as /compare's query names it. */
+export const sideParam = (s: SideRef): string => (s.slug ? `${s.source}@${s.slug}` : s.source);
+
+export function parseSide(param: string | null): SideRef | null {
+  if (!param) return null;
+  const at = param.lastIndexOf("@");
+  return at > 0 ? { source: param.slice(0, at), slug: param.slice(at + 1) } : { source: param };
+}
+
+/** /compare with two sides, either of which may be left for the reader to pick, narrowed to one file or not. */
+export function compareHref(a: SideRef | null, b: SideRef | null, file?: string | null): string {
+  const q = new URLSearchParams();
+  if (a) q.set("a", sideParam(a));
+  if (b) q.set("b", sideParam(b));
+  if (file) q.set("file", file);
+  return link("/compare") + (q.size ? "?" + q : "");
+}
+
 /** Only images and audio: the pages embed those, every other file is shown decoded. */
 export const rawHref = (key: string, version: string, path: string): string =>
   link(`/raw/${seg(key)}/${seg(version)}/${segs(path)}`);

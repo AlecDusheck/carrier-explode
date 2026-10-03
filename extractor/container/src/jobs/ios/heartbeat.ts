@@ -1,0 +1,21 @@
+/**
+ * Keeps a container awake through a long step that reports nothing itself
+ * (an external helper, a long download), by calling ctx.progress on a timer.
+ */
+
+import type { JobContext } from "../../job.ts";
+
+const EVERY_MS = 60_000;
+
+export async function withHeartbeat<T>(ctx: Pick<JobContext, "progress" | "log">, note: string, fn: () => Promise<T>): Promise<T> {
+  let beats = 0;
+  const timer = setInterval(() => {
+    beats++;
+    ctx.progress(beats, beats + 1, note).catch((e: unknown) => ctx.log(`progress failed: ${e instanceof Error ? e.message : String(e)}`));
+  }, EVERY_MS);
+  try {
+    return await fn();
+  } finally {
+    clearInterval(timer);
+  }
+}

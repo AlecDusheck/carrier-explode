@@ -14,8 +14,8 @@ import type { Json } from "../../src/lib/schema/types.ts";
 
 /* ------------------------------------------------------------------ atoms */
 
-const json: v.GenericSchema<Json> = v.lazy(() =>
-  v.union([v.null(), v.boolean(), v.number(), v.string(), v.array(json), v.record(v.string(), json)]),
+export const jsonSchema: v.GenericSchema<Json> = v.lazy(() =>
+  v.union([v.null(), v.boolean(), v.number(), v.string(), v.array(jsonSchema), v.record(v.string(), jsonSchema)]),
 );
 
 const sha256 = v.pipe(v.string(), v.regex(/^[0-9a-f]{64}$/, "expected a lower-case sha256"));
@@ -46,7 +46,18 @@ const iosBuild = v.object({
 /** One bundle as one IPSW carries it, stored as its own obj/ (deterministic re-zip). */
 const ipswBundle = v.object({ source: sourceKey, sha: sha256, version: v.string(), size: count, cid: v.exactOptional(v.string()) });
 
-const androidOta = v.object({ device: v.string(), build: v.string(), url, version: v.string(), patch: month });
+/**
+ * One Pixel OTA. `device` is the one whose OTA is read; `devices` every Pixel
+ * the build ships for (Release.devices), [device] when absent.
+ */
+const androidOta = v.object({
+  device: v.string(),
+  devices: v.exactOptional(v.array(v.string())),
+  build: v.string(),
+  url,
+  version: v.string(),
+  patch: month,
+});
 
 /* ------------------------------------------------------------- the table */
 
@@ -85,7 +96,7 @@ export const JOB_SCHEMAS = {
   "ios.modems": {
     params: v.object({ build: v.string(), ipsws: v.array(ipswRef) }),
     /** Release.modems entries (the v1 ImageModem shape). */
-    output: v.object({ modems: v.array(json) }),
+    output: v.object({ modems: v.array(jsonSchema) }),
   },
   "ios.release": {
     params: v.object({
@@ -123,7 +134,15 @@ export const JOB_SCHEMAS = {
     }),
   },
   "android.plan": {
-    params: v.object({ devices: v.exactOptional(v.array(v.string())), max: v.exactOptional(positive), since: v.exactOptional(month) }),
+    params: v.object({
+      devices: v.exactOptional(v.array(v.string())),
+      max: v.exactOptional(positive),
+      since: v.exactOptional(month),
+      /** One job per device instead of one per build. */
+      all: v.exactOptional(v.boolean()),
+      /** Plan builds already held, too. */
+      rebuild: v.exactOptional(v.boolean()),
+    }),
     output: v.object({ builds: v.array(androidOta) }),
   },
   "android.ota": {
@@ -201,7 +220,7 @@ export type AnyJobSpec = { [K in JobType]: JobSpec<K> }[JobType];
 export type JobResult = { readonly ok: true; readonly output: Json } | { readonly ok: false; readonly error: string };
 
 export const jobResultSchema = v.variant("ok", [
-  v.object({ ok: v.literal(true), output: json }),
+  v.object({ ok: v.literal(true), output: jsonSchema }),
   v.object({ ok: v.literal(false), error: v.string() }),
 ]) satisfies v.GenericSchema<JobResult>;
 
