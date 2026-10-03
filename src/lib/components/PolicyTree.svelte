@@ -24,6 +24,8 @@
 
 <style>
   .box {
+    /* In a table cell it would shrink to what the other columns leave; a phone gets most of the screen. */
+    min-width: min(36rem, 80vw);
     background: var(--field); padding: 6px; overflow-x: auto;
     border: 2px solid; border-color: var(--shadow) var(--light) var(--light) var(--shadow);
   }

@@ -1,9 +1,10 @@
 <script lang="ts">
-  import { goto } from "$app/navigation";
   import { getBaseband, getBasebandBuilds, getModems } from "#lib/api/tables.remote.ts";
   import { modemCapabilities } from "#lib/decode/index.ts";
   import { link } from "#lib/format.ts";
   import Pane from "#lib/components/Pane.svelte";
+  import Picker from "#lib/components/Picker.svelte";
+  import IosIcon from "#lib/components/IosIcon.svelte";
   import ModemNav from "#lib/components/baseband/ModemNav.svelte";
   import FbsSection from "#lib/components/baseband/FbsSection.svelte";
   import CarrierCombos from "#lib/components/baseband/CarrierCombos.svelte";
@@ -39,22 +40,17 @@
     {@const others = builds.filter((b) => b.families.includes(params.family) && b.build !== params.build)}
     {@const modem = mods.modems.find((x) => x.family === params.family)}
     <div class="toolbar">
-      <label class="lbl">
-        iOS version
-        <select
-          name="build"
-          value={params.build}
-          onchange={(e) => {
-            const b = builds.find((x) => x.build === e.currentTarget.value);
-            if (b) goto(link(`/builds/${b.build}` + (b.families.includes(params.family) ? `/${params.family}` : "")));
-          }}
-        >
-          {#if !builds.some((b) => b.build === params.build)}<option value={params.build}>{params.build}</option>{/if}
-          {#each builds as b (b.build)}
-            <option value={b.build} disabled={!b.families.length && b.build !== params.build}>iOS {b.version} ({b.build}){b.families.length ? "" : " - not extracted"}</option>
-          {/each}
-        </select>
-      </label>
+      <Picker
+        label="iOS version"
+        items={builds.filter((b) => b.families.length || b.build === params.build)}
+        selected={builds.find((b) => b.build === params.build)}
+        key={(b) => b.build}
+        href={(b) => link(`/builds/${b.build}` + (b.families.includes(params.family) ? `/${params.family}` : ""))}
+      >
+        {#snippet option(b)}
+          <span class="picker-opt"><IosIcon version={b.version} /><span class="text">iOS {b.version} ({b.build})</span></span>
+        {/snippet}
+      </Picker>
       <span class="grow"></span>
       {#if baseband}
         <Pane quiet>

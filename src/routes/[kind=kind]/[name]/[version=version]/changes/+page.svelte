@@ -1,12 +1,12 @@
 <script lang="ts">
-  import { goto } from "$app/navigation";
   import { page } from "$app/state";
   import { getBundle, getComparison, getPhoneChanges } from "#lib/api/bundles.remote.ts";
   import { routineReason } from "#lib/changes.ts";
   import PhoneChanges from "#lib/components/PhoneChanges.svelte";
-  import { bundleArgs, entryLabel, link, withParams } from "#lib/format.ts";
+  import { bundleArgs, link, withParams } from "#lib/format.ts";
   import Pane from "#lib/components/Pane.svelte";
   import BundleCompare from "#lib/components/BundleCompare.svelte";
+  import VersionPicker from "#lib/components/VersionPicker.svelte";
 
   let { params } = $props();
 
@@ -18,9 +18,6 @@
     b: { kind: params.kind, name: params.name, slug: params.version },
     ...(file ? { path: file } : {}),
   });
-
-  const set = (changes: Record<string, string | null>) =>
-    goto(withParams(page.url, changes), { reset: false });
 
   /** The timeline runs newest first. */
   function notNewer(timeline: Array<{ slug: string }>, x: string, y: string) {
@@ -40,18 +37,13 @@
     {@const bundle = await getBundle(bundleArgs(params))}
     {@const chosen = against ?? bundle.previous?.slug ?? ""}
     <div class="rowflex">
-      <label class="lbl">
-        Compare against
-        <select
-          name="against"
-          value={chosen}
-          onchange={(e) => set({ against: e.currentTarget.value === bundle.previous?.slug ? null : e.currentTarget.value })}
-        >
-          {#each bundle.timeline.filter((t) => t.slug !== bundle.entry.slug) as t (t.slug)}
-            <option value={t.slug}>{entryLabel(t)}{t.slug === bundle.previous?.slug ? " (previous)" : ""}</option>
-          {/each}
-        </select>
-      </label>
+      <VersionPicker
+        label="Compare against"
+        timeline={bundle.timeline.filter((t) => t.slug !== bundle.entry.slug)}
+        current={chosen}
+        head={bundle.head}
+        href={(slug) => withParams(page.url, { against: slug === bundle.previous?.slug ? null : slug })}
+      />
       <a href={compareHref(chosen || undefined)}>Compare with another bundle…</a>
     </div>
   </Pane>
