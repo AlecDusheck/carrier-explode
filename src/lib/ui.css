@@ -509,3 +509,4 @@ article.consumer ul.others { columns: 2 14em; padding-left: 18px; }
 .picker-list > [role="option"][aria-selected="true"] { background: var(--sel); color: var(--sel-text); }
 .picker-list > [role="option"][aria-selected="true"] .dimtext { color: #cfe0f5; }
 .phone-img { flex: none; width: 20px; height: 20px; object-fit: contain; vertical-align: middle; }
+.file-icon { flex: none; vertical-align: middle; }
