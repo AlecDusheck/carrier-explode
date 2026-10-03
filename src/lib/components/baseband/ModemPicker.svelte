@@ -1,7 +1,7 @@
 <script lang="ts">
   import { modemHref } from "#lib/format.ts";
   import { modemCapabilities, modemLabel } from "#lib/decode/index.ts";
-  import { compareProducts, phoneList } from "#lib/phones.ts";
+  import { newestNamed, phoneList } from "#lib/phones.ts";
   import Picker from "../Picker.svelte";
   import PhoneImage from "../PhoneImage.svelte";
   import type { ImageModems } from "./types";
@@ -21,7 +21,7 @@
 >
   {#snippet option(x)}
     <span class="picker-opt">
-      <PhoneImage name={x.devices.filter((d) => d.name).sort((a, b) => compareProducts(b.id, a.id))[0]?.name} />
+      <PhoneImage name={newestNamed(x.devices)} />
       <span class="text">{modemLabel(x.family)} <span class="dimtext">{phoneList(x.devices)}</span></span>
     </span>
   {/snippet}

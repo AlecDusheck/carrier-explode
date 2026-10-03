@@ -47,6 +47,9 @@ export function phoneList(phones: Phone[]): string {
 export const homePhone = (entry: { productType?: string }, image: { product?: string }) =>
   entry.productType?.includes(",") ? entry.productType : image.product;
 
+/** The newest named model among phones: the one a group of them is pictured by. */
+export const newestNamed = (phones: Phone[]) => phones.filter((p) => p.name).sort((a, b) => compareProducts(b.id, a.id))[0]?.name;
+
 /** A bundle file that is a modem override (.der.pri or plain .pri). */
 export const isPri = (f: Pick<BundleFile, "kind">) => f.kind === "pri-der" || f.kind === "pri-plain";
 
