@@ -13,8 +13,14 @@ const BACKOFF_MS = 2000;
 
 const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
 
+export interface StreamOptions {
+  /** First wait after a broken connection, doubled per consecutive failure (default 2 s). */
+  readonly backoffMs?: number;
+}
+
 /** Bytes `start .. start + length - 1` of `url`, in order, exactly `length` of them. */
-export async function* streamRange(url: string, start: number, length: number): AsyncGenerator<Uint8Array> {
+export async function* streamRange(url: string, start: number, length: number, opts: StreamOptions = {}): AsyncGenerator<Uint8Array> {
+  const backoff = opts.backoffMs ?? BACKOFF_MS;
   const end = start + length - 1;
   let at = start;
   let failures = 0;
@@ -40,6 +46,6 @@ export async function* streamRange(url: string, start: number, length: number): 
     }
     if (at > end) return;
     if (++failures >= TRIES) throw broke ?? new RangeResponseError(`${url}: body ended at ${at}, ${end - at + 1} bytes short`);
-    await sleep(BACKOFF_MS * 2 ** (failures - 1));
+    await sleep(backoff * 2 ** (failures - 1));
   }
 }

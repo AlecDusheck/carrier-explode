@@ -2,7 +2,7 @@
 
 import * as v from "valibot";
 
-import type { Json } from "../../../src/lib/schema/types.ts";
+import type { Json } from "../../../src/lib/schema/index.ts";
 import { PIPELINES } from "../worker/pipelines.ts";
 import { runJob, type RunContext } from "../worker/run-job.ts";
 import { Pipeline } from "./pipeline.ts";

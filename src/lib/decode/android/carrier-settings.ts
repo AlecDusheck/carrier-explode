@@ -232,28 +232,3 @@ export function splitMultiCarrierSettings(bytes: Uint8Array): SplitMultiCarrierS
   }
   return version === undefined ? { settings } : { version, settings };
 }
-
-/**
- * A CarrierSettings message with `version` (field 2) appended. Protobuf
- * merges a field that appears again, so this sets the version without
- * re-encoding: used to give an others.pb part, which carries no version of
- * its own, the version of the file it came from.
- */
-export function withCarrierSettingsVersion(setting: Uint8Array, version: string): Uint8Array {
-  const tail = [0x10, ...varint(BigInt.asUintN(64, BigInt(version)))];
-  const out = new Uint8Array(setting.length + tail.length);
-  out.set(setting);
-  out.set(tail, setting.length);
-  return out;
-}
-
-function varint(v: bigint): number[] {
-  const out: number[] = [];
-  let rest = v;
-  do {
-    const low = Number(rest & 0x7fn);
-    rest >>= 7n;
-    out.push(rest ? low | 0x80 : low);
-  } while (rest);
-  return out;
-}

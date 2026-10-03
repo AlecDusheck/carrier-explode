@@ -8,7 +8,7 @@
 
 import * as v from "valibot";
 
-import type { Json } from "../../../src/lib/schema/types.ts";
+import type { Json } from "../../../src/lib/schema/index.ts";
 import { fanOut, failures, succeeded } from "../fan-out.ts";
 import { MAX_INSTANCES } from "../worker/instances.ts";
 import { PIPELINES } from "../worker/pipelines.ts";

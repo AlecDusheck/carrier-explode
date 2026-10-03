@@ -19,10 +19,10 @@ import { keys } from "#lib/storage/keys.ts";
 import { sourceKey, type SourceRef, type TimelineEntry } from "#lib/schema/types.ts";
 import { countryName, splitName } from "#lib/names.ts";
 import { homePhone, isPri, knowsPhone, overridesFor, sharedPri, type GroupPhone, type PhoneRow } from "#lib/phones.ts";
-import type { CbsRow, Place, Version } from "#lib/types.ts";
+import type { CbsRow, Version } from "#lib/types.ts";
 import { bbfwSummary } from "./baseband";
 import { cached, fetchApple, perRequest } from "./cache";
-import { currentRelease, placeOf, releaseList, resolve, sourceSlugs, versionsOf, type Resolved } from "./catalog";
+import { currentRelease, releaseList, resolve, sourceSlugs, versionOf, versionsOf, type Resolved } from "./catalog";
 import { cbsRow } from "./cbs";
 import { modemView } from "./modems";
 import type { ImageModem } from "./records";
@@ -82,19 +82,13 @@ function plistOf(opened: OpenedBundle, path: string): Record<string, unknown> | 
 async function homeCountry(carrier: Record<string, unknown> | undefined): Promise<string | null> {
   const home = carrier?.HomeBundleIdentifier;
   if (typeof home !== "string") return null;
-  const key = sourceKey({ platform: "ios", kind: "country", name: home.replace(/^com\.apple\./, "") });
-  return key in (await sourceSlugs()) ? key : null;
-}
-
-async function ccOf(r: Resolved, place: Place | null): Promise<string | undefined> {
-  if (r.ref.kind === "country") return place?.id;
-  return r.doc.carrier.iso ?? splitName(r.ref.name).cc;
+  const name = home.replace(/^com\.apple\./, "");
+  return sourceKey({ platform: "ios", kind: "country", name }) in (await sourceSlugs()) ? name : null;
 }
 
 export interface IosBundle {
   readonly source: string;
   readonly ref: SourceRef;
-  readonly place: Place | null;
   readonly cc: string | undefined;
   readonly countryName: string | undefined;
   readonly entry: Version;
@@ -111,28 +105,28 @@ export interface IosBundle {
   readonly verified: boolean | null;
   /** carrier.plist, Info.plist and version.plist, decoded: what the Overview and Settings read. */
   readonly quick: Readonly<Record<string, unknown>>;
-  /** The home country bundle's source key, for a carrier bundle that names one. */
+  /** The home country bundle's name, for a carrier bundle that names one. */
   readonly home: string | null;
 }
 
 export async function getBundle(key: string, slug?: string): Promise<IosBundle> {
   const o = await open(key, slug ?? "");
   const { entry, opened, bytes } = o;
-  const [place, id, sha256, timeline] = await Promise.all([placeOf(key), contentId(opened), sha256Hex(bytes), versionsOf("ios", o.timeline)]);
+  const [id, sha256, timeline] = await Promise.all([contentId(opened), sha256Hex(bytes), versionsOf("ios", o.timeline)]);
   const sha1 = sha1Hex(bytes);
   const quick: Record<string, unknown> = {};
   for (const f of ["carrier.plist", "Info.plist", "version.plist"]) {
     const p = plistOf(opened, f);
     if (p) quick[f] = p;
   }
-  const cc = await ccOf(o, place);
+  const cc = o.doc.carrier.iso ?? splitName(o.ref.name).cc;
   const current = timeline.find((e) => e.slug === entry.slug);
   if (!current) error(500, `${key}: ${entry.slug} is not in its own timeline`);
   // Archived bytes are checked by content; Apple's by the SHA-1 it publishes. An OTA entry
   // with only a SHA-384 is not checked: #lib/binary has no SHA-384 yet.
   const verified = entry.cid ? entry.cid === id : entry.sha ? entry.sha === sha256 : entry.sha1 ? entry.sha1 === sha1 : null;
   return {
-    source: key, ref: o.ref, place, cc, countryName: countryName(cc),
+    source: key, ref: o.ref, cc, countryName: countryName(cc),
     entry: current,
     previous: timeline.find((e) => e.slug === o.previous?.slug) ?? null,
     timeline,
@@ -194,11 +188,8 @@ export interface NativeComparison {
 export async function getComparison(a: Side | null, b: Side, path?: string): Promise<NativeComparison> {
   const [rb, ra] = await Promise.all([resolve(b.source, b.slug), a ? resolve(a.source, a.slug) : null]);
   const left = ra ? { r: ra, entry: ra.entry } : rb.previous ? { r: rb, entry: rb.previous } : null;
-  const side = async (r: Resolved, entry: TimelineEntry): Promise<ComparedSide> => {
-    const [v] = await versionsOf("ios", [entry]);
-    if (!v) error(500, "no version");
-    return { source: r.key, ref: r.ref, entry: v };
-  };
+  const side = async (r: Resolved, entry: TimelineEntry): Promise<ComparedSide> =>
+    ({ source: r.key, ref: r.ref, entry: await versionOf("ios", entry) });
   const right = await side(rb, rb.entry);
   if (!left) return { a: null, b: right, diff: null };
   const leftSide = await side(left.r, left.entry);

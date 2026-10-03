@@ -1,15 +1,13 @@
 import { defineParams } from "@sveltejs/kit/params";
+import { isVersionSlug } from "./lib/schema/slug.ts";
+import { KINDS, type Kind } from "./lib/types.ts";
 
 /**
- * Every tab a native view can have, on either platform, plus the old names that
- * redirect (plist, assets, baseband, strings). Which of them a platform offers
- * is its view registry's business (#lib/components/views.ts); the matcher only
- * keeps a tab name from being read as a source or a version.
+ * A version's tabs, as the URL names them, on either platform:
+ * `/carriers/ATT_US/settings` means the current version's. Which of them a
+ * platform offers is its view registry's business (#lib/components/views.ts).
  */
-export const TABS = [
-  "settings", "modem", "files", "changes", "alerts", "apns", "raw",
-  "plist", "assets", "baseband", "strings",
-] as const;
+export const TABS = ["settings", "modem", "files", "changes", "alerts", "apns"] as const;
 export type Tab = (typeof TABS)[number];
 
 /**
@@ -36,15 +34,10 @@ export const FEATURE_SLUGS = [
 ] as const;
 export type FeatureSlug = (typeof FEATURE_SLUGS)[number];
 
-/** Spelled out rather than imported: like FEATURE_SLUGS, this file is loaded on its own. */
-const GROUPS = ["carriers", "countries"] as const;
-const PLATFORMS = ["ios", "android"] as const;
-
 export const params = defineParams({
-  group: (p): (typeof GROUPS)[number] | undefined => GROUPS.find((g) => g === p),
-  platform: (p): (typeof PLATFORMS)[number] | undefined => PLATFORMS.find((x) => x === p),
-  // Every timeline slug starts with where it came from (an iOS image, an OTA file, an Android image), so a tab name never is one.
-  version: (p): string | undefined => (/^(ota|ios|android)-./.test(p) ? p : undefined),
+  kind: (p): Kind | undefined => KINDS.find((k) => k === p),
+  // Every version slug starts with where it came from (an iOS image, an OTA file, an Android image), so a tab name never is one.
+  version: (p): string | undefined => (isVersionSlug(p) ? p : undefined),
   tab: (p): Tab | undefined => TABS.find((t) => t === p),
   feature: (p): FeatureSlug | undefined => FEATURE_SLUGS.find((f) => f === p),
 });

@@ -6,7 +6,7 @@
 
 import { WorkflowEntrypoint, type WorkflowEvent, type WorkflowStep } from "cloudflare:workers";
 
-import type { Json } from "../../../src/lib/schema/types.ts";
+import type { Json } from "../../../src/lib/schema/index.ts";
 import type { Env } from "../worker/env.ts";
 import type { PipelineName } from "../worker/pipelines.ts";
 import type { RunContext } from "../worker/run-job.ts";

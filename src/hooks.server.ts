@@ -14,11 +14,10 @@
  */
 
 import { env } from "cloudflare:workers";
-import { redirect, type RequestEvent } from "@sveltejs/kit";
+import type { RequestEvent } from "@sveltejs/kit";
 import type { Handle } from "@sveltejs/kit/hooks";
 import type { RouteId } from "$app/types";
 import { QUERIES, isQueryName, type QueryPolicy, type RateClass } from "#lib/api/policy.ts";
-import { legacyPath } from "#lib/server/legacy.ts";
 
 /**
  * Per-IP budgets, sized to the work a request can start rather than to the
@@ -34,32 +33,33 @@ const BUDGET: Record<RateClass, "RL_SCAN" | "RL_DIFF" | "RL_BUNDLE" | "RL_BASE">
   scan: "RL_SCAN",
   // Two opens and a full-bundle diff per miss; results are cached per pair.
   diff: "RL_DIFF",
-  // Everything that can pull and unzip an .ipcc or decode a CarrierSettings: /raw,
-  // the native view queries, and a page pinned to a version. The assets gallery
-  // fires one /raw per image, so this has to hold a page view plus its burst.
+  // Everything that can pull and unzip an .ipcc: /raw, the bundle queries, and
+  // a page pinned to a version. The assets gallery fires one /raw per image, so
+  // this has to hold a page view plus its burst.
   bundle: "RL_BUNDLE",
-  // Pages and the cached tables. Cheap, but a list with a guess is no-store and
-  // so runs the worker every time.
+  // Pages and the cached tables. Cheap, but /carriers is no-store and so runs
+  // the worker every time.
   base: "RL_BASE",
 };
 
-const RAW: RouteId = "/raw/[source]/[version=version]/[...path]";
+const RAW: RouteId = "/raw/[kind=kind]/[name]/[version=version]/[...path]";
 
-/** Pages that open an artifact whether or not they name a version: a member as-is, and a diff. */
+/** Pages that open a bundle whether or not they name a version: a member as-is, and a diff. */
 const BUNDLE_ROUTES: ReadonlySet<RouteId> = new Set<RouteId>([RAW, "/compare"]);
 
 /**
- * Pages rendered from modem package summaries or a release's modems, both of
- * which the extractor's ios.modems job can rewrite; it purges the "baseband" tag
- * when it does. An iOS bundle's Settings, Modem and Changes tabs list its phones
- * by modem.
+ * Pages rendered from modem package summaries or an image index's modems, both
+ * of which baseband.yml can rewrite; it purges the "baseband" tag when it does.
+ * A bundle's Overview, Settings, Modem and Changes tabs all list its phones by modem, and the
+ * Features pages offer the current release's phones.
  */
-const NATIVE = "/[group=group]/[id]/[platform=platform]/[source]/[version=version]";
 const BASEBAND_ROUTES: ReadonlySet<RouteId> = new Set<RouteId>([
-  "/builds", "/builds/[build]/[family]", "/builds/[build]/[family]/carriers",
+  "/builds", "/builds/[build]", "/builds/[build]/[family]", "/builds/[build]/[family]/carriers",
   "/builds/[build]/[family]/policy", "/builds/[build]/[family]/policy/[i]", "/builds/[build]/[family]/networks",
-  "/builds/[build]/[family]/configs", "/builds/[build]/[family]/changes", "/releases/[platform=platform]/[id]", "/sitemap.xml",
-  `${NATIVE}/[tab=tab]/[...path]`,
+  "/builds/[build]/[family]/configs", "/builds/[build]/[family]/changes", "/sitemap.xml",
+  "/[kind=kind]/[name]", "/[kind=kind]/[name]/[version=version]",
+  "/[kind=kind]/[name]/[version=version]/settings", "/[kind=kind]/[name]/[version=version]/modem",
+  "/[kind=kind]/[name]/[version=version]/changes", "/features", "/features/[feature=feature]",
 ]);
 
 const routeIn = (routes: ReadonlySet<RouteId>, id: RouteId | null) => id !== null && routes.has(id);
@@ -138,8 +138,7 @@ export function cachePolicy(
   if (status >= 400 && status !== 404) return nothing;
 
   const tags = [event.params.version ? "pinned" : "latest"];
-  // A carrier's or a country's pages, all of them: what a reindex of one carrier purges.
-  if (event.params.id && event.params.group) tags.push(`p-${event.params.group}-${event.params.id}`);
+  if (event.params.name) tags.push(`b-${event.params.name}`);
   if (routeIn(BASEBAND_ROUTES, event.route.id)) tags.push("baseband");
 
   if (status === 404) return { browser: REVALIDATE, edge: MISSING_EDGE, tags };
@@ -160,9 +159,6 @@ const shareable = (event: Pick<RequestEvent, "request" | "locals">, query: Query
   !!query?.shared && event.request.method === "GET" && status === 200 && !event.locals.perVisitor;
 
 export const handle: Handle = async ({ event, resolve }) => {
-  // v1 addresses (/carriers/ATT_US/..., /watch/..., /countries/Germany/...) live on under a carrier slug or a country code.
-  const moved = event.request.method === "GET" ? legacyPath(event.url.pathname) : null;
-  if (moved) redirect(308, moved + event.url.search);
   const query = remoteQuery(event);
   const limited = await overBudget(event, rateClass(event, query));
   if (limited) return limited;

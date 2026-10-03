@@ -22,11 +22,11 @@ const chunks = <T>(xs: readonly T[], n: number): T[][] =>
   Array.from({ length: Math.ceil(xs.length / n) }, (_, i) => xs.slice(i * n, (i + 1) * n));
 
 /** Profiles for `shas`; failures (a job, or single artifacts inside one) are listed, not thrown. */
-export async function normalizeShas(c: RunContext, shas: readonly string[], force = false): Promise<Normalized> {
+export async function normalizeShas(c: RunContext, shas: readonly string[]): Promise<Normalized> {
   const unique = [...new Set(shas)].sort();
   const parts = chunks(unique, NORMALIZE_CHUNK).map((chunk, i) => ({ chunk, i }));
   const results = await fanOut(parts, MAX_INSTANCES.light, async ({ chunk, i }) =>
-    (await runJob(c, "normalize", i, { shas: chunk, ...(force ? { force } : {}) })).output);
+    (await runJob(c, "normalize", i, { shas: chunk })).output);
   return totals(results);
 }
 

@@ -3,9 +3,9 @@
  * port of scripts/scan_index.ts to v2. Rows are each source's head Profile:
  * its raw leaves by file, and its concepts.
  *
- * Heads come from the index (index/carriers/<slug>.json timelines, newest
- * first): the newest entry with stored bytes that is not a beta, else the
- * newest with bytes. The index job is the only place timelines are computed.
+ * Heads come from the index (index/carriers/<slug>.json timelines), picked
+ * by the schema's headIndex: the entry a carrier page shows by default. A
+ * head whose bytes are not stored yet (an OTA file not archived) is skipped.
  *
  * Generations: everything goes under scan/<gen>/, scan/current.json flips
  * last, and the generation before the previous one is deleted (a warm site
@@ -17,7 +17,7 @@
 import * as v from "valibot";
 
 import { sha256Hex } from "../../../../src/lib/binary/index.ts";
-import { parseSourceKey, PROFILE_SCHEMA, type Json, type Profile } from "../../../../src/lib/schema/index.ts";
+import { headIndex, parseSourceKey, PROFILE_SCHEMA, type Json, type Profile } from "../../../../src/lib/schema/index.ts";
 import { keys } from "../../../../src/lib/storage/keys.ts";
 import {
   CONCEPTS_FILE, packShards, rareSettings, scanKeys, SCAN_FORMAT, splitRawKey,
@@ -26,20 +26,14 @@ import {
 import { fanOut, failures, succeeded } from "../../../src/fan-out.ts";
 import type { JobContext, JobOutput } from "../job.ts";
 import { allOrThrow, READ_CONCURRENCY } from "./shared/catalog.ts";
-import { profileSchema, readRecord, scanPointerSchema } from "./shared/records.ts";
+import { profileSchema, readRecord, scanPointerSchema, timelineEntrySchema } from "./shared/records.ts";
 
 /** A run that loses more than this share of its sources fails instead of publishing a thin index. */
 const MAX_FAILED_SHARE = 0.1;
 
 const carriersSchema = v.array(v.object({ slug: v.string() }));
 /** The part of a CarrierDoc a head needs. */
-const docSchema = v.object({
-  timelines: v.record(v.string(), v.array(v.object({
-    sha: v.exactOptional(v.string()),
-    version: v.string(),
-    beta: v.exactOptional(v.boolean()),
-  }))),
-});
+const docSchema = v.object({ timelines: v.record(v.string(), v.array(timelineEntrySchema)) });
 
 /** `20261003T051700`, UTC: sortable, and unique per run. */
 const generation = (now: Date): string => now.toISOString().replace(/[-:]/g, "").slice(0, 15);
@@ -52,21 +46,29 @@ async function loadHeads(ctx: JobContext<"scan">): Promise<ScanSource[]> {
     return doc;
   }));
   const heads = new Map<string, ScanSource>();
+  const unstored: string[] = [];
   for (const doc of docs) {
     for (const [source, timeline] of Object.entries(doc.timelines)) {
-      const stored = timeline.filter((e) => e.sha !== undefined);
-      const head = stored.find((e) => !e.beta) ?? stored[0];
-      if (head?.sha !== undefined && !heads.has(source)) heads.set(source, { source, sha: head.sha, version: head.version });
+      const head = timeline[headIndex(timeline)];
+      // Every copy of an entry has the same content, so any stored one will do.
+      const sha = head?.copies.find((c) => c.sha !== undefined)?.sha;
+      if (head === undefined || sha === undefined) unstored.push(source);
+      else if (!heads.has(source)) heads.set(source, { source, sha, version: head.version });
     }
   }
+  if (unstored.length) ctx.log(`${unstored.length} sources skipped, their heads not stored yet: ${unstored.slice(0, 5).join(", ")}${unstored.length > 5 ? ", ..." : ""}`);
   return [...heads.values()].sort((a, b) => (a.source < b.source ? -1 : a.source > b.source ? 1 : 0));
 }
+
+/** iOS signature hash lists and localisations are never worth comparing across sources (as in v1). */
+const scannable = (file: string): boolean => !file.startsWith("signatures/") && !file.includes(".lproj/");
 
 /** A Profile as scan rows: raw leaves grouped by file, concepts as their own file. */
 function entryOf(profile: Profile, source: string): ScanEntry {
   const files: Record<string, Record<string, Json>> = {};
   for (const [key, value] of Object.entries(profile.raw)) {
     const [file, path] = splitRawKey(key);
+    if (!scannable(file)) continue;
     const leaves = files[file] ?? {};
     files[file] = leaves;
     leaves[path] = value;

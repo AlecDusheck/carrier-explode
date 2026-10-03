@@ -14,6 +14,7 @@
  *   index/carriers/<slug>.json         CarrierDoc
  *   index/countries.json               CountrySummary[]
  *   index/sources.json                 sourceKey -> carrier slug
+ *   index/legacy.json                  v1 path -> v2 path (LegacyRoute[]), for the site's 301s
  *   scan/current.json, scan/<gen>/...  cross-source scan index
  *   jobs/<id>.json                     JobRecord (extractor)
  *
@@ -40,6 +41,7 @@ export const keys = {
   carrier: (slug: string) => `index/carriers/${slug}.json`,
   countries: () => "index/countries.json",
   sources: () => "index/sources.json",
+  legacy: () => "index/legacy.json",
   job: (id: string) => `jobs/${id}.json`,
 } as const;
 

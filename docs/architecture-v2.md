@@ -176,15 +176,19 @@ export const CONCEPTS: ConceptDef[];                                            
 
 ## Site
 
-**The site's design and layout do not change. Android is added inside them.**
+**The visual design and layout don't change. The URL model does, so it can be honest about platforms.**
 
-- **Storage:** the site reads only `carrier-explode-v2`. iOS OTA files that aren't archived yet still come from Apple, which is the existing fallback.
-- **URLs and layout:** both stay as they are: `/carriers/<name>/<version>/<tab>`, the two-pane explorer, and the bundle head (icon, name, version strip, tabs). A carrier's `<name>` is its primary iOS bundle name (Carrier.slug), so existing URLs keep working. A carrier that only exists on Android uses its canonical name, with an `android-` prefix only if it collides with an iOS name.
-- **Versions:** Android versions sit in the same version strip as `android-<build>[-<group>]` slugs, whose grammar is exported by schema. At most, they carry a muted platform label.
-- **Tabs:** they come from a per-platform registry. iOS tabs are unchanged. Android gets Overview, Settings, APNs, Files and Changes, built from the existing components or same-markup counterparts. Android uses the existing phone picker, generalised to Pixels.
-- **Overview:** it gains one section, "iOS and Android": feature states and a few headline concepts for the chosen iPhone vs the chosen Pixel, with a link to Compare.
-- **Compare:** both sides can pick Android versions. Cross-platform comparisons show concept rows in the existing diff style.
-- **Features:** the phone picker gains a Pixel group.
-- **Builds:** "iOS builds" becomes "Builds", with an Android section.
-- **Titlebar:** the subtitle becomes "iOS and Android carrier settings".
-- **Countries:** unchanged, plus Android-only carriers in each country's list.
+- **Path shape:** `/<kind>/<platform>/<name>/<version>/<tab>`, for example `/carriers/ios/Verizon_LTE/72.0/`, `/carriers/android/verizon_us/79000000034/settings`, `/carriers/ipados/Verizon_LTE/58.1/`, `/carriers/watchos/Vodafone_uk/…`, `/countries/ios/UnitedStates/…` and `/defaults/android/default/…`.
+- **Platforms:** `ios`, `ipados`, `watchos` and `android`. Apple's iPad and Watch bundles are separate files with their own version lines, so they're platforms, not slug suffixes or a `/watch` section. Paths come from `sourcePath()` and are never assembled by hand.
+- **Version segment:** it's the source's own version. Copies of one content (image and OTA) are one entry. Two different contents under one version get semver build metadata, `<version>+<hash8>`.
+- **Lists:** `/carriers` lists every platform, with a filter, and `/carriers/<platform>` lists one platform. The two-pane explorer, bundle head, version strip, tabs and styling all stay as they are.
+- **Cross-platform links:** pages are per source. The Carrier (an internal id) links a page to its counterparts on other platforms, through the bundle head and one "iOS and Android" Overview section.
+- **Redirects:** every v1 URL (`/carriers/<Name>/<ios-x|ota-x|ota-x-iPad>/…`, `/countries/<Name>/…`, `/watch/<Name>/…`, `/raw/…`) gets a 301 from a single hook, driven by `index/legacy.json`, which the index job writes.
+- **Android versions** use the existing components: Settings, APNs, Files and Changes. Android uses the existing phone picker, generalised to Pixels.
+- **Other pages:**
+  - Compare lets both sides pick any platform.
+  - Features adds a Pixel group to its phone picker.
+  - "iOS builds" becomes "Builds", with an Android section.
+  - The titlebar subtitle becomes "iOS and Android carrier settings".
+
+**No shims.** That means no compatibility code for data that doesn't exist yet, no optional-just-in-case fields, and no special-casing one platform inside another's code path. The only legitimate "legacy" in the system is the redirect table. The Apple OTA fetch for unarchived files is a feature in its own right.

@@ -9,7 +9,7 @@
 import * as v from "valibot";
 import type { ModemKind } from "#lib/decode/index.ts";
 import type {
-  Apn, ApnAuth, ApnType, Carrier, CarrierDoc, ConceptValue, FeatureState, IpProtocol, Json, NativeRef, Platform,
+  Apn, ApnAuth, ApnType, Carrier, CarrierDoc, ConceptValue, DeviceStates, FeatureState, IpProtocol, Json, NativeRef, Platform,
   Profile, ProfileVariant, Release, ReleaseSource, SimMatcher, SourceRef, TimelineEntry,
 } from "#lib/schema/types.ts";
 import type { CarrierSummary, CountrySummary, ReleaseSummary } from "#lib/storage/keys.ts";
@@ -97,13 +97,21 @@ const timelineEntry: v.GenericSchema<TimelineEntry> = v.object({
   sha384: opt(str),
   cid: opt(str),
   productType: opt(str),
+  devices: opt(strs),
   beta: opt(v.boolean()),
   changed: v.boolean(),
+});
+
+const deviceStates: v.GenericSchema<DeviceStates> = v.object({
+  devices: opt(strs),
+  slug: str,
+  states: v.record(v.string(), featureState),
 });
 
 export const carrierDoc: v.GenericSchema<CarrierDoc> = v.object({
   carrier,
   timelines: v.record(v.string(), v.array(timelineEntry)),
+  states: opt(v.record(v.string(), v.array(deviceStates))),
 });
 
 export const carrierSummaries: v.GenericSchema<CarrierSummary[]> = v.array(v.object({
@@ -122,11 +130,11 @@ export const releaseSummaries: v.GenericSchema<ReleaseSummary[]> = v.array(v.obj
 /** index/sources.json: sourceKey -> carrier slug. */
 export const sourceSlugs: v.GenericSchema<Record<string, string>> = v.record(v.string(), v.string());
 
-const releaseSource: v.GenericSchema<ReleaseSource> = v.object({ sha: str, version: str, size: v.number(), cid: opt(str) });
+const releaseSource: v.GenericSchema<ReleaseSource> = v.object({ sha: str, version: str, size: v.number(), cid: opt(str), devices: opt(strs) });
 
 export const release: v.GenericSchema<Release> = v.object({
   platform, id: str, version: str, patch: opt(str), released: opt(str), prerelease: opt(v.boolean()), devices: strs,
-  extractedAt: str, sources: v.record(v.string(), releaseSource), carrierList: opt(str), modems: opt(v.array(v.unknown())),
+  extractedAt: str, sources: v.record(v.string(), v.array(releaseSource)), carrierList: opt(str), modems: opt(v.array(v.unknown())),
 });
 
 /**

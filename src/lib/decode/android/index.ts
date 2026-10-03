@@ -7,7 +7,7 @@
 
 export type * from "./types.ts";
 export {
-  decodeCarrierSettings, decodeMultiCarrierSettings, splitMultiCarrierSettings, withCarrierSettingsVersion,
+  decodeCarrierSettings, decodeMultiCarrierSettings, splitMultiCarrierSettings,
   type SplitMultiCarrierSettings,
 } from "./carrier-settings.ts";
 export { decodeCarrierList } from "./carrier-list.ts";

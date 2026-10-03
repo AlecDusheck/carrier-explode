@@ -11,34 +11,53 @@
 
 export const PROFILE_SCHEMA = 1;
 
-export const PLATFORMS = ["ios", "android"] as const;
+/**
+ * The OS that ships the settings, which is also the first URL segment after
+ * the kind (`/carriers/ipados/Verizon_LTE/72.0/`). Apple's iPad and Watch
+ * bundles are separate files with their own version lines (the manifest's
+ * ByProductType "iPad" and CarrierBundles.Watch), so they are platforms, not
+ * variants of iOS. ios, ipados and watchos share the iOS decoder.
+ */
+export const PLATFORMS = ["ios", "ipados", "watchos", "android"] as const;
 export type Platform = (typeof PLATFORMS)[number];
+export const isPlatform = (p: string): p is Platform => (PLATFORMS as readonly string[]).includes(p);
+
+/** Which decoder family reads a platform's artifacts. */
+export type DecoderFamily = "apple" | "android";
+export const decoderFamily = (p: Platform): DecoderFamily => (p === "android" ? "android" : "apple");
 
 /**
  * What a source is on its platform:
- * - carrier: an iOS carrier bundle (also Watch, see `family`) or an Android canonical carrier
- * - country: an iOS country bundle (Android has none)
- * - default: settings that apply when nothing else does (Android default.pb / others.pb / no_sim.pb)
+ * - carrier: an Apple carrier bundle or an Android canonical carrier
+ * - country: an Apple country bundle (Android has none)
+ * - default: settings that apply when nothing else does (Android default.pb, no_sim.pb)
  */
-export type SourceKind = "carrier" | "country" | "default";
+export const SOURCE_KINDS = ["carrier", "country", "default"] as const;
+export type SourceKind = (typeof SOURCE_KINDS)[number];
+const isSourceKind = (k: string): k is SourceKind => (SOURCE_KINDS as readonly string[]).includes(k);
 
 /** One named thing a platform ships settings under. `name` is native: `TMobile_us`, `tmobile_us`. */
 export interface SourceRef {
-  platform: Platform;
-  kind: SourceKind;
-  name: string;
-  /** iOS only: "Watch" for Watch bundles; absent means the phone family. */
-  family?: "Watch";
+  readonly platform: Platform;
+  readonly kind: SourceKind;
+  readonly name: string;
 }
 
-/** `ios:carrier:TMobile_us`, `android:carrier:tmobile_us`, `ios:carrier:Vodafone_uk:Watch`. Stable; used in keys and URLs. */
-export const sourceKey = (s: SourceRef) => [s.platform, s.kind, s.name, ...(s.family ? [s.family] : [])].join(":");
-export function parseSourceKey(key: string): SourceRef | null {
-  const [platform, kind, name, family] = key.split(":");
-  if (!(PLATFORMS as readonly string[]).includes(platform) || !name) return null;
-  if (kind !== "carrier" && kind !== "country" && kind !== "default") return null;
-  return { platform: platform as Platform, kind, name, ...(family === "Watch" ? { family } : {}) };
+/** `ios:carrier:TMobile_us`, `watchos:carrier:Vodafone_uk`, `android:carrier:tmobile_us`. Stable: R2 keys and indexes use it. */
+export const sourceKey = (s: SourceRef): string => `${s.platform}:${s.kind}:${s.name}`;
+
+export function parseSourceKey(key: string): SourceRef | undefined {
+  const [platform, kind, name, ...rest] = key.split(":");
+  if (platform === undefined || kind === undefined || name === undefined || name === "" || rest.length > 0) return undefined;
+  if (!isPlatform(platform) || !isSourceKind(kind)) return undefined;
+  return { platform, kind, name };
 }
+
+/** The URL path segment for each kind: `/carriers/…`, `/countries/…`, `/defaults/…`. */
+export const KIND_SEGMENT = { carrier: "carriers", country: "countries", default: "defaults" } as const satisfies Record<SourceKind, string>;
+
+/** `/carriers/ios/Verizon_LTE`. Every page of a source lives under it: `/<version>/<tab>`. */
+export const sourcePath = (s: SourceRef): string => `/${KIND_SEGMENT[s.kind]}/${s.platform}/${encodeURIComponent(s.name)}`;
 
 /* ---------------------------------------------------------------- identity */
 
@@ -177,7 +196,11 @@ export interface ProfileVariant {
  * ship for it, linked by the SIMs they claim (./identity.ts) plus manual links.
  */
 export interface Carrier {
-  /** URL slug, e.g. `t-mobile-us`. Stable once published. */
+  /**
+   * Internal id for index/carriers/<id>.json, never shown in a URL: pages
+   * are per source (sourcePath), and a carrier is what links a source's page
+   * to its counterparts on other platforms. Stable across index rebuilds.
+   */
   slug: string;
   name: string;
   iso?: string;
@@ -232,37 +255,68 @@ export interface ReleaseSource {
   size: number;
   /** iOS: the bundle's file-set content id (src/lib/decode/bundle.ts contentId), equal across re-zips. */
   cid?: string;
-  /** Android: Pixel codenames carrying exactly this artifact. Absent on iOS. */
+  /** Devices carrying exactly this artifact (Pixel codenames; Apple product types for model-specific entries). Absent: every device. */
   devices?: string[];
 }
 
 /* ---------------------------------------------------------------- timeline */
 
-/** One version of a source, from an image or an OTA feed. Newest first in a timeline. */
+/**
+ * One version of a source: one distinct content, however many copies of it
+ * exist. Newest first in a timeline. The URL segment is the source's own
+ * version (`/carriers/ios/Verizon_LTE/72.0/`), see `slug`.
+ */
 export interface TimelineEntry {
-  /** URL segment, unique within the source: `ios-27.2`, `ota-58.1`, `android-cp3a.260905.009`. */
-  slug: string;
-  via: "image" | "ota";
-  version: string;
-  /** Releases (image) or OS keys (iOS OTA) carrying exactly this artifact. */
-  releases: string[];
-  /** R2 object, when we hold the bytes. */
-  sha?: string;
-  /** Upstream URL, for iOS OTA files not archived yet (the site fetches these from Apple). */
-  url?: string;
-  /** Upstream digests (iOS OTA). */
-  sha1?: string;
-  sha384?: string;
-  cid?: string;
-  productType?: string;
   /**
-   * Android: the devices this entry applies to. A source's Android timeline
-   * is per device line: `changed` compares against the previous entry for an
-   * overlapping device set, never against another generation's file.
+   * URL segment, unique within the source. The source's own version, as is
+   * (`72.0`, `79000000034`). Copies with the same content (equal cid, or equal
+   * sha) are one entry. Two different contents under one version are rare and
+   * real (an image's merged bundle vs the OTA file of the same build), so the
+   * newer-by-precedence keeps the bare version and each other gets
+   * `<version>+<first 8 hex of its sha or upstream sha1>`, semver's
+   * build-metadata form for "same version, different build".
+   */
+  slug: string;
+  version: string;
+  /** Every copy of this content, image and OTA alike. At least one. */
+  copies: TimelineCopy[];
+  /**
+   * The devices this content is for. Absent: every device of the platform.
+   * Android: the Pixels carrying this file. Apple: the handful of old
+   * model-specific manifest entries (iPhone7,1). `changed` compares against
+   * the previous entry for an overlapping device set, never across them.
    */
   devices?: string[];
-  beta?: boolean;
+  /** Only ever in beta images: newest, but not what a device on a release runs. */
+  beta: boolean;
   changed: boolean;
+}
+
+/** One place a version's bytes come from. */
+export type TimelineCopy =
+  | {
+      readonly via: "image";
+      /** Releases carrying it: iOS builds / Pixel builds. */
+      readonly releases: string[];
+      readonly sha: string;
+      readonly cid?: string;
+    }
+  | {
+      readonly via: "ota";
+      /** OS keys the manifest lists it under. */
+      readonly os: string[];
+      readonly url: string;
+      /** Set once archived to R2; until then the site fetches `url`. */
+      readonly sha?: string;
+      readonly cid?: string;
+      readonly sha1?: string;
+      readonly sha384?: string;
+    };
+
+/** v1 URL slugs (`ios-27.2`, `ota-58.1`, `ota-58.1-iPad`) -> where they live now, for the site's permanent redirects. */
+export interface LegacyRoute {
+  readonly from: string;
+  readonly to: string;
 }
 
 /** index/carriers/<slug>.json: everything a carrier page needs before opening any artifact. */
@@ -273,9 +327,8 @@ export interface CarrierDoc {
   /**
    * sourceKey -> feature states per device group at the head, so a page can say
    * "VoLTE: on for Pixel 8 and later, off on Pixel 6" without opening artifacts.
-   * Optional only so documents written before it still parse; the index job always writes it.
    */
-  states?: Record<string, DeviceStates[]>;
+  states: Record<string, DeviceStates[]>;
 }
 
 /** The `state` concepts of one device group of a source. */

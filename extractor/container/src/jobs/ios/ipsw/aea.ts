@@ -37,8 +37,8 @@ export interface AeaHeader {
   readonly profile: number;
   /** The raw profile word, which the main key's derivation mixes in. */
   readonly profileWord: number;
+  /** Opaque to decryption, which only authenticates it; Apple's are key/value metadata (aeaMetadata). */
   readonly authData: Uint8Array;
-  readonly metadata: AeaMetadata;
   /** Header plus auth data: where the prologue starts. */
   readonly length: number;
 }
@@ -47,13 +47,17 @@ const latin = new TextDecoder("latin1");
 const utf8 = new TextDecoder();
 const enc = new TextEncoder();
 
-/** Header and metadata, from the first bytes of the archive (12 + authLen of them). */
+/** The fixed header and auth data, from the first bytes of the archive (12 + authLen of them). */
 export function parseAeaHeader(b: Uint8Array): AeaHeader {
   if (b.length < 12 || latin.decode(b.subarray(0, 4)) !== MAGIC) throw new Error("not an AEA1 archive");
   const profileWord = u32le(b, 4);
   const authLen = u32le(b, 8);
   if (b.length < 12 + authLen) throw new Error(`AEA header wants ${12 + authLen} bytes, got ${b.length}`);
-  const authData = b.subarray(12, 12 + authLen);
+  return { profile: profileWord & 0xffffff, profileWord, authData: b.subarray(12, 12 + authLen), length: 12 + authLen };
+}
+
+/** Apple's auth data: u32le length (itself included), then `key NUL value`, repeated. */
+export function aeaMetadata(authData: Uint8Array): AeaMetadata {
   const metadata = new Map<string, Uint8Array>();
   for (let at = 0; at < authData.length; ) {
     const len = u32le(authData, at);
@@ -64,7 +68,7 @@ export function parseAeaHeader(b: Uint8Array): AeaHeader {
     metadata.set(utf8.decode(kv.subarray(0, nul)), kv.subarray(nul + 1));
     at += len;
   }
-  return { profile: profileWord & 0xffffff, profileWord, authData, metadata, length: 12 + authLen };
+  return metadata;
 }
 
 const FcsResponse = v.object({ "enc-request": v.string(), "wrapped-key": v.string() });
@@ -225,8 +229,12 @@ export async function decryptAea(source: AsyncIterable<Uint8Array>, key: Uint8Ar
   }
   if (written !== root.fileSize) throw new Error(`AEA: wrote ${written} bytes, header says ${root.fileSize}`);
 
+  // Apple pads its archives (34 MB on the iOS 27 OS image) and MACs the padding with the last
+  // cluster's next-HMAC. Writers that add none leave that slot unset, so, as in ipsw, only padding is checked.
   const padding = await q.rest();
-  const pk = headerKey(mainKey, info("AEA_PAK"));
-  verify(clusterMac, createHmac("sha256", pk.mac).update(padding).digest(), "padding");
+  if (padding.length) {
+    const pk = headerKey(mainKey, info("AEA_PAK"));
+    verify(clusterMac, createHmac("sha256", pk.mac).update(padding).digest(), "padding");
+  }
   return written;
 }

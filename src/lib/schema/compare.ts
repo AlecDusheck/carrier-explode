@@ -89,7 +89,8 @@ const APN_FIELDS: readonly ApnField[] = [
 /** Labels are Android's alone; across platforms they would always differ. */
 const CROSS_PLATFORM_FIELDS = APN_FIELDS.filter((f) => f !== "label");
 
-const fieldText = (v: Apn[ApnField]): string => (v === undefined ? "" : canonical(Array.isArray(v) ? [...v] : v));
+/** Types and bearers are sets: order carries no meaning. */
+const fieldText = (v: Apn[ApnField]): string => (v === undefined ? "" : canonical(Array.isArray(v) ? [...v].sort() : v));
 
 function apnDiffers(x: Apn, y: Apn, samePlatform: boolean): ApnField[] {
   const fields = samePlatform ? APN_FIELDS : CROSS_PLATFORM_FIELDS;

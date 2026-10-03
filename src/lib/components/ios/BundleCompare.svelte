@@ -2,23 +2,24 @@
   import { SvelteMap, SvelteSet } from "svelte/reactivity";
   import { summariseDiff, type BundleDiff, type DiffKind, type FileDiff } from "#lib/decode/index.ts";
   import { ROUTINE_LABEL, type RoutineReason } from "#lib/changes.ts";
-  import { DIFF_CHIP } from "#lib/format.ts";
+  import type { Kind, PublicEntry } from "#lib/types.ts";
+  import { DIFF_CHIP, fileHref } from "#lib/format.ts";
   import { toggleIn } from "#lib/ui-state.svelte.ts";
   import DiffRows from "../DiffRows.svelte";
 
-  interface Props {
+  interface Side { kind: Kind; name: string; entry: PublicEntry }
+
+  let { diff, a, b, left = "Before", right = "After", narrowHref, routine }: {
     diff: BundleDiff;
-    /** A file of one side, by its path. */
-    fileHref: (side: "a" | "b", path: string) => string;
+    a: Side;
+    b: Side;
     left?: string;
     right?: string;
     /** Link that narrows the comparison to one file. */
-    narrowHref?: ((path: string) => string) | undefined;
+    narrowHref?: (path: string) => string;
     /** Why a file's difference is routine; those are counted together rather than listed one by one. */
-    routine?: ((f: FileDiff) => RoutineReason | undefined) | undefined;
-  }
-
-  let { diff, fileHref, left = "Before", right = "After", narrowHref, routine }: Props = $props();
+    routine?: (f: FileDiff) => RoutineReason | undefined;
+  } = $props();
 
   const KINDS = ["changed", "added", "removed"] as const satisfies DiffKind[];
 
@@ -31,10 +32,7 @@
 
   // A filter that names a routine file shows it like any other.
   const routineOf = (f: FileDiff) => (q ? undefined : routine?.(f));
-  const folded = $derived(diff.files.flatMap((f) => {
-    const why = routineOf(f);
-    return why ? [{ f, why }] : [];
-  }));
+  const folded = $derived(diff.files.map((f) => ({ f, why: routineOf(f) })).filter((x) => x.why !== undefined));
   // The kind buttons count what they list: routine files are counted with their group.
   const byKind = $derived(summariseDiff(diff.files.filter((f) => routineOf(f) === undefined)));
   const visible = $derived(
@@ -55,8 +53,8 @@
   const anchor = (path: string) => "file-" + path.replace(/[^\w.-]/g, "_");
 </script>
 
-{#snippet sideLink(side: "a" | "b", path: string, label: string)}
-  <a class="chip" href={fileHref(side, path)}>{label}</a>
+{#snippet sideLink(s: Side, path: string, label: string)}
+  <a class="chip" href={fileHref(s.kind, s.name, s.entry.slug, path)}>{label}</a>
 {/snippet}
 
 {#if diff.files.length}
@@ -70,7 +68,7 @@
   </div>
 
   {#if folded.length}
-    {@const reasons = [...new Set(folded.map((x) => x.why))]}
+    {@const reasons = [...new Set(folded.map((x) => x.why!))]}
     <details class="more">
       <summary>Routine changes ({folded.length} files): {reasons.map((r) => ROUTINE_LABEL[r]).join(", ")}</summary>
       <table class="grid">
@@ -80,7 +78,7 @@
             <tr>
               <td class="mono wrap">{#if narrowHref}<a href={narrowHref(f.path)}>{f.path}</a>{:else}{f.path}{/if}</td>
               <td><span class="chip {DIFF_CHIP[f.kind]}">{f.kind}</span></td>
-              <td class="dimtext">{ROUTINE_LABEL[why]}</td>
+              <td class="dimtext">{ROUTINE_LABEL[why!]}</td>
             </tr>
           {/each}
         </tbody>
@@ -117,8 +115,8 @@
         <span class="mono">{f.path}</span>
         <span class="chip {DIFF_CHIP[f.kind]}">{f.kind}</span>
         {#if f.kind === "changed"}<span class="dimtext">{total(f.counts)} {total(f.counts) === 1 ? "row" : "rows"}</span>{/if}
-        {#if f.kind !== "added"}{@render sideLink("a", f.path, left)}{/if}
-        {#if f.kind !== "removed"}{@render sideLink("b", f.path, right)}{/if}
+        {#if f.kind !== "added"}{@render sideLink(a, f.path, left)}{/if}
+        {#if f.kind !== "removed"}{@render sideLink(b, f.path, right)}{/if}
         {#if narrowHref && diff.files.length > 1}<a class="chip" href={narrowHref(f.path)}>only this file</a>{/if}
       </legend>
       <!-- Rendered closed as well, so every row is in the page and can be linked to. -->

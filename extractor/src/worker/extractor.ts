@@ -78,5 +78,3 @@ export class LightExtractor extends Extractor {}
 // `static outboundByHost =` field would shadow it and register nothing.
 HeavyExtractor.outboundByHost = OUTBOUND;
 LightExtractor.outboundByHost = OUTBOUND;
-
-export type ExtractorClass = "HeavyExtractor" | "LightExtractor";

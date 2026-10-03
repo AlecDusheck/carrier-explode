@@ -21,7 +21,8 @@ const helper = (): string => process.env.APFS_EXTRACT ?? "apfs-extract";
 
 function run(cmd: string, args: readonly string[]): Promise<void> {
   return new Promise((resolve, reject) => {
-    const child = spawn(cmd, args, { stdio: ["ignore", "inherit", "pipe"] });
+    // stdout is go-apfs progress bars; stderr carries the errors worth reporting.
+    const child = spawn(cmd, args, { stdio: ["ignore", "ignore", "pipe"] });
     const err: Buffer[] = [];
     child.stderr.on("data", (b: Buffer) => err.push(b));
     child.on("error", reject);

@@ -1,0 +1,5 @@
+{
+  // The container, the dev harness and the tests: Node 22. The Worker is tsconfig.json.
+  "extends": "../packages/tsconfig/node.json",
+  "include": ["container/src", "container/build.mjs", "dev", "test", "vitest.config.ts"]
+}

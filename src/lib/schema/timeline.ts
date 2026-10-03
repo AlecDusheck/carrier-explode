@@ -10,10 +10,11 @@
  * Android is per device line. A build ships one CarrierSettings file per
  * device group (Release.sources holds one artifact per distinct file, with the
  * Pixels that carry it), and groups split and merge between builds. An entry
- * is one artifact over consecutive builds; it continues while the next older
- * build carries the same file for an overlapping set of Pixels, and its
- * `devices` is the union. Entries order by build, newest first, and within a
- * build by their newest Pixel.
+ * is one artifact for one exact set of Pixels over consecutive builds; when
+ * the set changes (Pixel 9 and 9 Pro Fold part ways, a new Pixel joins) a new
+ * entry starts, unchanged in content if the file is the same, so `devices`
+ * always says exactly who ran it. Entries order by build, newest first, and
+ * within a build by their newest Pixel.
  *
  * `changed` compares an entry with the next older one for the same product
  * type and an overlapping device set, never across generations: by file-set
@@ -58,6 +59,9 @@ export const isBeta = (r: Release): boolean => r.prerelease ?? isPrerelease(r.ve
 const isModelVariant = (productType: string | undefined): boolean =>
   productType !== undefined && productType !== "iPhone" && productType !== "Watch";
 
+const sameDevices = (a: readonly string[] | undefined, b: readonly string[] | undefined): boolean =>
+  a === undefined || b === undefined ? a === b : a.length === b.length && a.every((d) => b.includes(d));
+
 /** Device sets overlap; a set that is not stated (iOS) overlaps only another unstated one. */
 function overlaps(a: readonly string[] | undefined, b: readonly string[] | undefined): boolean {
   if (a === undefined || b === undefined) return a === b;
@@ -79,7 +83,7 @@ interface ImageRun {
   readonly newest: Release;
   readonly releases: Release[];
   readonly src: ReleaseSource;
-  devices: string[] | undefined;
+  readonly devices: readonly string[] | undefined;
 }
 
 function imageRuns(key: string, releases: readonly Release[]): ImageRun[] {
@@ -90,10 +94,9 @@ function imageRuns(key: string, releases: readonly Release[]): ImageRun[] {
     if (!srcs?.length) continue;
     const touched: ImageRun[] = [];
     for (const src of srcs) {
-      const run = open.find((x) => !touched.includes(x) && sameArtifact(x.src, src) && overlaps(x.devices, src.devices));
+      const run = open.find((x) => !touched.includes(x) && sameArtifact(x.src, src) && sameDevices(x.devices, src.devices));
       if (run) {
         run.releases.push(r);
-        if (run.devices && src.devices) run.devices = [...new Set([...run.devices, ...src.devices])];
         touched.push(run);
       } else {
         const fresh: ImageRun = { newest: r, releases: [r], src, devices: src.devices ? [...src.devices] : undefined };

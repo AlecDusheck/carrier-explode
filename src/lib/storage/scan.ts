@@ -123,10 +123,12 @@ export interface ScanEntry {
 
 /** Pack every entry into one `{ index, data }` pair per file. Entries are taken in the order given. */
 export function packShards(entries: readonly ScanEntry[]): Map<string, { index: ScanFileIndex; data: Uint8Array }> {
-  const byFile = new Map<string, { srcs: string[]; tops: Map<string, { at: number[]; rows: Record<string, Json>[] }> }>();
+  type Shard = { at: number[]; rows: Record<string, Json>[] };
+  type FileShards = { srcs: string[]; tops: Map<string, Shard> };
+  const byFile = new Map<string, FileShards>();
   for (const { source, files } of entries) {
     for (const [file, leaves] of Object.entries(files)) {
-      const f = byFile.get(file) ?? { srcs: [], tops: new Map() };
+      const f: FileShards = byFile.get(file) ?? { srcs: [], tops: new Map() };
       byFile.set(file, f);
       const at = f.srcs.push(source) - 1;
       const mine = new Map<string, Record<string, Json>>();
@@ -137,7 +139,7 @@ export function packShards(entries: readonly ScanEntry[]): Map<string, { index: 
         row[path] = value;
       }
       for (const [top, row] of mine) {
-        const shard = f.tops.get(top) ?? { at: [], rows: [] };
+        const shard: Shard = f.tops.get(top) ?? { at: [], rows: [] };
         f.tops.set(top, shard);
         shard.at.push(at);
         shard.rows.push(row);

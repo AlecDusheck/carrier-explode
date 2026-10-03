@@ -21,7 +21,7 @@ import type { RemoteZip } from "../../../../../../src/lib/firmware/index.ts";
 import { fetchRange, fetchWithRetry } from "../../../../../../src/lib/http/index.ts";
 import { streamRange } from "../range-stream.ts";
 import { osImagePath, type BuildManifest } from "../shared/build-manifest.ts";
-import { archiveKey, decryptAea, parseAeaHeader } from "./aea.ts";
+import { aeaMetadata, archiveKey, decryptAea, parseAeaHeader } from "./aea.ts";
 
 /** Room kept free beyond the image itself: extracted bundles, packaging, logs. */
 const MARGIN = 2 * 1024 ** 3;
@@ -63,7 +63,7 @@ async function aeaKey(url: string, start: number, size: number): Promise<Uint8Ar
   let head = await fetchRange(url, start, start + Math.min(HEADER_PROBE, size) - 1);
   const want = 12 + new DataView(head.buffer, head.byteOffset, head.byteLength).getUint32(8, true);
   if (want > head.length) head = await fetchRange(url, start, start + want - 1);
-  return archiveKey(parseAeaHeader(head).metadata, fetchPem);
+  return archiveKey(aeaMetadata(parseAeaHeader(head).authData), fetchPem);
 }
 
 export async function downloadOsImage(zip: RemoteZip, url: string, manifest: BuildManifest, dir: string, r: Reporter): Promise<OsImage> {

@@ -64,7 +64,16 @@ async function maybe(url: string, init: RequestInit, retry: RetryOptions): Promi
   }
 }
 
-export function createR2Client(base: string, retry: RetryOptions = {}): R2Client {
+export interface R2ClientOptions {
+  readonly retry?: RetryOptions;
+  /** Bodies above this go multipart (default MULTIPART_THRESHOLD); tests lower it. */
+  readonly multipartAbove?: number;
+  /** Part size for multipart (default PART_SIZE, R2's minimum is 5 MiB except the last). */
+  readonly partSize?: number;
+}
+
+export function createR2Client(base: string, opts: R2ClientOptions = {}): R2Client {
+  const { retry = {}, multipartAbove = MULTIPART_THRESHOLD, partSize = PART_SIZE } = opts;
   const url = (path: string): string => new URL(path, base).toString();
 
   async function upload(key: string, body: PutBody, opts: { readonly contentType?: string; readonly sha256?: string }): Promise<void> {
@@ -73,7 +82,7 @@ export function createR2Client(base: string, retry: RetryOptions = {}): R2Client
       ...(opts.contentType ? { "content-type": opts.contentType } : {}),
       ...(opts.sha256 ? { "x-sha256": opts.sha256 } : {}),
     };
-    if (src.size <= MULTIPART_THRESHOLD) {
+    if (src.size <= multipartAbove) {
       await fetchWithRetry(url(keyPath("o", key)), { method: "PUT", headers, body: await src.read(0, src.size) }, retry);
       return;
     }
@@ -83,8 +92,8 @@ export function createR2Client(base: string, retry: RetryOptions = {}): R2Client
     const id = encodeURIComponent(created.uploadId);
     try {
       const parts = [];
-      for (let n = 1, offset = 0; offset < src.size; n++, offset += PART_SIZE) {
-        const chunk = await src.read(offset, Math.min(PART_SIZE, src.size - offset));
+      for (let n = 1, offset = 0; offset < src.size; n++, offset += partSize) {
+        const chunk = await src.read(offset, Math.min(partSize, src.size - offset));
         const res = await fetchWithRetry(`${at}?uploadId=${id}&part=${n}`, { method: "PUT", body: chunk }, retry);
         parts.push(v.parse(partSchema, await res.json()));
       }

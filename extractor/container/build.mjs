@@ -20,6 +20,6 @@ await build({
   // extractor's own install: the repository root is not installed in the image.
   nodePaths: [here("../node_modules")],
   // CommonJS dependencies (seek-bzip) call require() for Node builtins; ESM output has none of its own.
-  banner: { js: 'import { createRequire } from "node:module"; const require = createRequire(import.meta.url);' },
+  banner: { js: 'import { createRequire as __createRequire } from "node:module"; const require = __createRequire(import.meta.url);' },
   logLevel: "info",
 });

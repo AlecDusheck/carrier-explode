@@ -15,9 +15,9 @@ import { base64ToBytes } from "#lib/binary/index.ts";
 import { keys } from "#lib/storage/keys.ts";
 import type { Json, SourceRef, TimelineEntry } from "#lib/schema/types.ts";
 import { configGroup, groupOrder } from "#lib/android-groups.ts";
-import type { Place, Version } from "#lib/types.ts";
+import type { Version } from "#lib/types.ts";
 import { perRequest } from "./cache";
-import { placeOf, resolve, versionsOf, type Resolved } from "./catalog";
+import { resolve, versionsOf, type Resolved } from "./catalog";
 import { readBytes } from "./store";
 
 interface Decoded extends Resolved {
@@ -53,7 +53,6 @@ const shownApn = ({ password, ...rest }: ApnItem): ShownApn => ({ ...rest, hasPa
 export interface AndroidVersion {
   readonly source: string;
   readonly ref: SourceRef;
-  readonly place: Place | null;
   readonly entry: Version;
   readonly previous: Version | null;
   readonly timeline: readonly Version[];
@@ -68,12 +67,12 @@ export interface AndroidVersion {
 
 export async function getAndroid(key: string, slug?: string): Promise<AndroidVersion> {
   const d = await decoded(key, slug ?? "");
-  const [place, timeline] = await Promise.all([placeOf(key), versionsOf("android", d.timeline)]);
+  const timeline = await versionsOf("android", d.timeline);
   const entry = timeline.find((e) => e.slug === d.entry.slug);
   if (!entry) error(500, `${key}: ${d.entry.slug} is not in its own timeline`);
   const unknown = "unknown" in d.settings && Array.isArray(d.settings.unknown) ? d.settings.unknown.length : 0;
   return {
-    source: key, ref: d.ref, place, entry,
+    source: key, ref: d.ref, entry,
     previous: timeline.find((e) => e.slug === d.previous?.slug) ?? null,
     timeline, head: d.head.slug,
     canonicalName: d.settings.canonicalName,

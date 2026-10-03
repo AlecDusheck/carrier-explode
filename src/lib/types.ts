@@ -4,16 +4,21 @@
  */
 
 import type { FileDiff } from "#lib/decode/index.ts";
-import type { SourceRef, TimelineEntry } from "#lib/schema/types.ts";
+import type { Platform, TimelineEntry } from "#lib/schema/types.ts";
 
-/** The two kinds of page a source lives under: its carrier, or (iOS country bundles) its country. */
-export const GROUPS = ["carriers", "countries"] as const;
-export type Group = (typeof GROUPS)[number];
+/**
+ * The three lists, and the first segment of every page URL: /carriers/<name>,
+ * /countries/<name>, /watch/<name>. `<name>` is an iOS bundle name, or for a
+ * carrier with no iOS bundle its Android name (index/carriers.json's slug).
+ */
+export const KINDS = ["carriers", "countries", "watch"] as const;
+export type Kind = (typeof KINDS)[number];
 
-/** A carrier (by slug) or a country (by ISO code). */
-export interface Place {
-  readonly group: Group;
-  readonly id: string;
+/** A page, and a version on it (a timeline slug of either platform). */
+export interface At {
+  readonly kind: Kind;
+  readonly name: string;
+  readonly version: string;
 }
 
 /**
@@ -22,7 +27,10 @@ export interface Place {
  * ids) or the OTA minimum-OS keys it is published under.
  */
 export interface Version extends TimelineEntry {
+  readonly platform: Platform;
   readonly os: readonly string[];
+  /** Android: the marketing names of `devices`, newest first. */
+  readonly phones?: readonly string[] | undefined;
 }
 
 /** One part of a modem package diff, under the section it belongs to. */
@@ -76,18 +84,8 @@ export interface CbsRow {
   hasCellBroadcast: boolean;
 }
 
-/** One source at one version, where its pages live: what every native view is given. */
-export interface NativeAt {
-  readonly place: Place;
-  readonly ref: SourceRef;
-  /** The source key. */
-  readonly source: string;
-  /** The timeline slug. */
-  readonly version: string;
-}
-
-/** What a native view's tab body receives: the version, and the file a tab that takes one is on ("" for none). */
+/** What a version's tab body receives: the page and version, and the file a tab that takes one is on ("" for none). */
 export interface TabProps {
-  readonly at: NativeAt;
+  readonly at: At;
   readonly path: string;
 }

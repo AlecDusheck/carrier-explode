@@ -1,7 +1,7 @@
 <script lang="ts">
   import { isPlistKind, type DecodedFile, type PlistKind } from "#lib/decode/index.ts";
   import { hexDump } from "#lib/format.ts";
-  import Tree, { type TreeCtx } from "../Tree.svelte";
+  import Tree from "../Tree.svelte";
   import PriView from "./PriView.svelte";
   import PrlView from "./PrlView.svelte";
   import CertView from "./CertView.svelte";
@@ -9,17 +9,13 @@
   import AudioView from "./AudioView.svelte";
   import SignatureView from "./SignatureView.svelte";
 
-  interface Props {
+  let { file, cc, raw, devices = true }: {
     file: DecodedFile;
-    /** Where the file is, for the tree's "compare across" menu. */
-    ctx: TreeCtx;
-    /** The member as-is, for images and audio. */
+    cc?: string;
     raw: string;
     /** Off where a phone picker already names the devices and their modem. */
     devices?: boolean;
-  }
-
-  let { file, ctx, raw, devices = true }: Props = $props();
+  } = $props();
 
   let showRaw = $state(false);
 
@@ -77,7 +73,7 @@
   <span class="checker frame"><img src={raw} alt={file.path} /></span>
 {:else if isTree(file)}
   {#if file.signature}<SignatureView sig={file.signature} />{/if}
-  {#if file.plist !== undefined}<Tree value={file.plist} {ctx} />{:else}{@render rawBody()}{/if}
+  {#if file.plist !== undefined}<Tree value={file.plist} ctx={{ file: file.path, cc }} />{:else}{@render rawBody()}{/if}
 {:else}
   {@render rawBody()}
 {/if}

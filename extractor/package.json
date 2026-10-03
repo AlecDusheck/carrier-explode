@@ -5,16 +5,22 @@
   "type": "module",
   "scripts": {
     "build:container": "node container/build.mjs",
-    "check": "tsc -p tsconfig.json --noEmit && tsc -p container/tsconfig.json --noEmit",
+    "check": "tsc -p tsconfig.json && tsc -p tsconfig.node.json",
     "test": "vitest run",
     "job": "tsx dev/job.ts",
-    "fake-r2": "tsx dev/server.ts",
     "seed": "tsx dev/seed.ts",
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",
     "types": "wrangler types"
   },
   "dependencies": {
+    "@carrier-explode/binary": "workspace:*",
+    "@carrier-explode/decode-android": "workspace:*",
+    "@carrier-explode/decode-ios": "workspace:*",
+    "@carrier-explode/firmware": "workspace:*",
+    "@carrier-explode/http": "workspace:*",
+    "@carrier-explode/schema": "workspace:*",
+    "@carrier-explode/storage": "workspace:*",
     "@cloudflare/containers": "^0.3.7",
     "fflate": "^0.8.2",
     "fzstd": "^0.1.1",
@@ -23,20 +29,13 @@
     "xz-decompress": "^0.2.3"
   },
   "devDependencies": {
+    "@carrier-explode/tsconfig": "workspace:*",
     "@cloudflare/workers-types": "^5.20261003.1",
     "@types/node": "^22.20.3",
     "esbuild": "^0.28.2",
-    "miniflare": "5.20261001.0-alpha",
     "tsx": "^4.23.15",
     "typescript": "^6.0.0",
     "vitest": "^5.0.3",
     "wrangler": "^4.147.0"
-  },
-  "packageManager": "pnpm@10.19.0",
-  "pnpm": {
-    "onlyBuiltDependencies": [
-      "esbuild",
-      "workerd"
-    ]
   }
 }

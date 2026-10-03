@@ -1,27 +1,31 @@
 <script lang="ts">
   import Self from "./TreeNode.svelte";
   import Confidence from "./Confidence.svelte";
-  import { isBigInt, isBlob, isDate, isJsonDict, isUid } from "#lib/decode/index.ts";
-  import { TREE_DOCS } from "#lib/tree-docs.ts";
-  import { SCAN_SCOPES, menuTrigger, copyText, scan, type MenuItem } from "#lib/ui-state.svelte.ts";
+  import { describeField, describeValue, isBigInt, isBlob, isDate, isJsonDict, isUid } from "#lib/decode/index.ts";
+  import { menuTrigger, copyText, scan, type MenuItem } from "#lib/ui-state.svelte.ts";
   import { hexDump, plainJson } from "#lib/format.ts";
   import { searchTerms } from "#lib/settings.ts";
   import type { KeyBadge, TreeCtx } from "./Tree.svelte";
 
-  interface Props {
+  let {
+    name,
+    value,
+    depth = 0,
+    path,
+    filter = "",
+    ctx,
+    onfilter,
+    badges,
+  }: {
     name: string;
     value: unknown;
     depth?: number;
     path: string;
     filter?: string;
     ctx: TreeCtx;
-    onfilter?: ((p: string) => void) | undefined;
-    badges?: KeyBadge[] | undefined;
-  }
-
-  let { name, value, depth = 0, path, filter = "", ctx, onfilter, badges }: Props = $props();
-
-  const docs = $derived(TREE_DOCS[ctx.platform]);
+    onfilter?: (p: string) => void;
+    badges?: KeyBadge[];
+  } = $props();
 
   let toggled = $state<boolean | null>(null);
   let showHex = $state(false);
@@ -33,10 +37,10 @@
   // Array elements take their meaning from the array's key: SupportedSIMs[3], MessageIDs[0].
   const element = $derived(/^\[\d+\]$/.test(name));
   const key = $derived(element ? (path.replace(/(\[\d+\])+$/, "").split(".").pop() ?? name) : name);
-  const doc = $derived(element ? undefined : docs?.field(name, path));
-  const valueDoc = $derived(container ? undefined : element ? docs?.field(key, path) : doc);
+  const doc = $derived(element ? undefined : describeField(name, path));
+  const valueDoc = $derived(container ? undefined : element ? describeField(key, path) : doc);
   const num = $derived(typeof value === "number" ? value : isBigInt(value) ? BigInt(value.__int) : undefined);
-  const labels = $derived(valueDoc ? docs?.value(key, num ?? value, path) : undefined);
+  const labels = $derived(valueDoc ? describeValue(key, num ?? value, path) : undefined);
   const mask = $derived(!!valueDoc && (valueDoc.format === "bitmask" || (!!valueDoc.bits && !valueDoc.format)));
   const unit = $derived(num !== undefined ? valueDoc?.unit : undefined);
 
@@ -64,22 +68,26 @@
   }
 
   function buildMenu(): { title: string; items: MenuItem[] } {
-    const scopes = SCAN_SCOPES[ctx.platform]
-      .filter((s) => s.scope !== "country" || ctx.cc)
-      .map((s): MenuItem => ({
-        label: s.label(ctx.cc ?? ""),
-        run: () => scan.start({ platform: ctx.platform, path, file: ctx.file, scope: s.scope === "country" ? `country:${ctx.cc}` : s.scope }),
-      }));
-    return {
-      title: path,
-      items: [
-        ...scopes,
-        { label: "", separator: true },
-        { label: "Copy key path", run: () => copyText(path) },
-        { label: "Copy value", run: () => copyText(valueText()) },
-        ...(onfilter ? [{ label: "Filter tree to this key", run: () => onfilter(name) }] : []),
-      ],
-    };
+    const items: MenuItem[] = [];
+    if (ctx.cc) {
+      items.push({
+        label: "Compare across " + ctx.cc.toUpperCase() + " carriers",
+        run: () => scan.start(path, ctx.file, `country:${ctx.cc}`),
+      });
+    }
+    items.push({
+      label: "Compare across all carriers",
+      run: () => scan.start(path, ctx.file, "all"),
+    });
+    items.push({
+      label: "Compare across countries",
+      run: () => scan.start(path, ctx.file, "countries"),
+    });
+    items.push({ label: "", separator: true });
+    items.push({ label: "Copy key path", run: () => copyText(path) });
+    items.push({ label: "Copy value", run: () => copyText(valueText()) });
+    if (onfilter) items.push({ label: "Filter tree to this key", run: () => onfilter(name) });
+    return { title: path, items };
   }
 </script>
 

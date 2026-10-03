@@ -10,7 +10,7 @@
 
 import * as v from "valibot";
 
-import type { Json } from "../../src/lib/schema/types.ts";
+import type { Json } from "../../src/lib/schema/index.ts";
 
 /* ------------------------------------------------------------------ atoms */
 

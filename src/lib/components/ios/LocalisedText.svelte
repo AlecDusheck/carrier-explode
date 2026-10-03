@@ -1,12 +1,11 @@
 <script lang="ts">
   import { goto } from "$app/navigation";
   import { page } from "$app/state";
-  import { getFile } from "#lib/api/ios.remote.ts";
+  import { getFile, type getBundle } from "#lib/api/bundles.remote.ts";
   import { rawHref, withParams } from "#lib/format.ts";
-  import type { IosBundle } from "#lib/server/ios.ts";
   import FileBody from "./FileBody.svelte";
 
-  let { bundle }: { bundle: IosBundle } = $props();
+  let { bundle }: { bundle: Awaited<ReturnType<typeof getBundle>> } = $props();
 
   const wantedLocale = $derived(page.url.searchParams.get("locale"));
   const wantedFile = $derived(page.url.searchParams.get("strings"));
@@ -34,9 +33,9 @@
     </label>
   </div>
   <FileBody
-    file={await getFile({ source: bundle.source, slug: bundle.entry.slug, path })}
-    ctx={{ platform: "ios", source: bundle.source, file: path, cc: bundle.cc }}
-    raw={rawHref(bundle.source, bundle.entry.slug, path)}
+    file={await getFile({ kind: bundle.kind, name: bundle.name, slug: bundle.entry.slug, path })}
+    cc={bundle.cc}
+    raw={rawHref(bundle.kind, bundle.name, bundle.entry.slug, path)}
   />
 {:else}
   <p class="dimtext note">No localised strings.</p>

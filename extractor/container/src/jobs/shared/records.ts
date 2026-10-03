@@ -10,7 +10,7 @@
 
 import * as v from "valibot";
 
-import { PLATFORMS, PROFILE_SCHEMA, type Profile, type Release } from "../../../../../src/lib/schema/index.ts";
+import { PLATFORMS, PROFILE_SCHEMA, type Profile, type Release, type TimelineEntry } from "../../../../../src/lib/schema/index.ts";
 import type { ArtifactKind, ObjMeta, OtaRef } from "../../../../../src/lib/storage/keys.ts";
 import type { ScanPointer } from "../../../../../src/lib/storage/scan.ts";
 import { jsonSchema } from "../../../../src/jobs.ts";
@@ -126,6 +126,20 @@ export const profileSchema = v.object({
     apns: opt(v.array(apnSchema)),
   })),
 }) satisfies v.GenericSchema<unknown, Profile>;
+
+const timelineCopySchema = v.variant("via", [
+  v.object({ via: v.literal("image"), releases: v.array(str), sha: str, cid: opt(str) }),
+  v.object({ via: v.literal("ota"), os: v.array(str), url: str, sha: opt(str), cid: opt(str), sha1: opt(str), sha384: opt(str) }),
+]);
+
+export const timelineEntrySchema = v.object({
+  slug: str,
+  version: str,
+  copies: v.array(timelineCopySchema),
+  devices: opt(v.array(str)),
+  beta: v.boolean(),
+  changed: v.boolean(),
+}) satisfies v.GenericSchema<unknown, TimelineEntry>;
 
 export const scanPointerSchema = v.object({
   format: v.literal(2),

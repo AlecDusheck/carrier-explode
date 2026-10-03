@@ -6,9 +6,11 @@
 import { error } from "@sveltejs/kit";
 import * as v from "valibot";
 import { keys } from "#lib/storage/keys.ts";
-import type { Platform, Release } from "#lib/schema/types.ts";
+import type { Platform, Release, ReleaseSource } from "#lib/schema/types.ts";
+import type { ReleaseSummary } from "#lib/storage/keys.ts";
+import type { Kind } from "#lib/types.ts";
 import { perRequest } from "./cache";
-import { releaseList, sourceSlugs } from "./catalog";
+import { pageFor, releaseList } from "./catalog";
 import { readJson } from "./store";
 import * as records from "./records";
 
@@ -41,38 +43,47 @@ export interface ReleaseView {
   readonly added: readonly SourceChange[];
   readonly removed: readonly SourceChange[];
   readonly changed: readonly SourceChange[];
-  /** Sources with a carrier page: the rest are not indexed yet. */
-  readonly linked: readonly string[];
+  /** Where each listed source's page is; a source missing here is not indexed yet. */
+  readonly pages: Readonly<Record<string, { readonly kind: Kind; readonly name: string }>>;
 }
 
 /**
- * Sources added, removed and changed against the platform's previous release.
- * iOS image bundles are re-zipped per extraction, so their content id says
- * whether a bundle changed; Android files are compared by their bytes.
+ * What identifies a source's content in a release, across its device groups:
+ * iOS image bundles are re-zipped per extraction, so their content id; Android
+ * files by their bytes.
  */
+const contentOf = (files: readonly ReleaseSource[]): string =>
+  files.map((f) => f.cid ?? f.sha).sort().join(",");
+
+/** The newest version a release carries for a source (Android device groups can differ). */
+const versionIn = (files: readonly ReleaseSource[] | undefined): string | undefined =>
+  files?.map((f) => f.version).sort().at(-1);
+
+/** Sources added, removed and changed against the platform's previous release. */
 export async function getRelease(platform: Platform, id: string): Promise<ReleaseView> {
   const mine = (await releaseList()).filter((r) => r.platform === platform);
   const at = mine.findIndex((r) => r.id === id);
   const before = at >= 0 ? mine[at + 1] : undefined;
-  const [release, previous, slugs] = await Promise.all([
-    mustRelease(platform, id),
-    before ? mustRelease(platform, before.id) : null,
-    sourceSlugs(),
-  ]);
+  const [release, previous] = await Promise.all([mustRelease(platform, id), before ? mustRelease(platform, before.id) : null]);
   const now = release.sources;
   const was = previous?.sources ?? {};
-  const same = (a: { sha: string; cid?: string }, b: { sha: string; cid?: string }): boolean =>
-    a.cid !== undefined && b.cid !== undefined ? a.cid === b.cid : a.sha === b.sha;
   const keysOf = (r: Record<string, unknown>): string[] => Object.keys(r).sort();
+  const listed = [...new Set([...keysOf(now), ...keysOf(was)])];
+  const pages = Object.fromEntries((await Promise.all(listed.map(async (k) => [k, await pageFor(k)] as const))).flatMap(([k, p]) => (p ? [[k, p]] : [])));
   return {
     release,
     previous: previous && { id: previous.id, version: previous.version },
-    added: previous ? keysOf(now).filter((k) => !(k in was)).map((k) => ({ source: k, to: now[k]?.version })) : [],
-    removed: keysOf(was).filter((k) => !(k in now)).map((k) => ({ source: k, from: was[k]?.version })),
+    added: previous ? keysOf(now).filter((k) => !(k in was)).map((k) => ({ source: k, to: versionIn(now[k]) })) : [],
+    removed: keysOf(was).filter((k) => !(k in now)).map((k) => ({ source: k, from: versionIn(was[k]) })),
     changed: keysOf(now).flatMap((k) => {
       const a = was[k], b = now[k];
-      return a && b && !same(a, b) ? [{ source: k, from: a.version, to: b.version }] : [];
+      return a && b && contentOf(a) !== contentOf(b) ? [{ source: k, from: versionIn(a), to: versionIn(b) }] : [];
     }),
-    linked: keysOf(now).filter((k) => k in slugs),
+    pages,
   };
+}
+
+/** Every Android build, newest first: the Builds page's second table. */
+export async function androidBuilds(): Promise<ReleaseSummary[]> {
+  return (await releaseList()).filter((r) => r.platform === "android");
 }

@@ -46,12 +46,10 @@ export interface Runtime {
   readonly server: Server;
   /** The job still running, if any: started and not yet reported. */
   running(): AnyJobSpec | undefined;
-  /** Settles when the current job has reported /done (or failed to). */
-  idle(): Promise<void>;
 }
 
 export function startRuntime(registry: Registry, deps: Deps & { readonly control: ControlClient }, port: number): Runtime {
-  let current: { readonly spec: AnyJobSpec; readonly finished: Promise<void> } | undefined;
+  let current: AnyJobSpec | undefined;
   let reported = false;
 
   const run = (spec: AnyJobSpec): Promise<void> =>
@@ -66,7 +64,7 @@ export function startRuntime(registry: Registry, deps: Deps & { readonly control
       });
 
   async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> {
-    if (req.method === "GET" && req.url === "/health") return reply(res, 200, { ok: true, job: current?.spec.id ?? null });
+    if (req.method === "GET" && req.url === "/health") return reply(res, 200, { ok: true, job: current?.id ?? null });
     if (req.method !== "POST" || req.url !== "/run") return reply(res, 404, { error: `${req.method} ${req.url}: no such route` });
     let spec: AnyJobSpec;
     try {
@@ -74,10 +72,11 @@ export function startRuntime(registry: Registry, deps: Deps & { readonly control
     } catch (e) {
       return reply(res, e instanceof BodyError ? e.status : 400, { error: e instanceof Error ? e.message : String(e) });
     }
-    if (current && current.spec.id !== spec.id) return reply(res, 409, { error: `busy with ${current.spec.id}` });
+    if (current && current.id !== spec.id) return reply(res, 409, { error: `busy with ${current.id}` });
     if (!current) {
       deps.log(`[${spec.id}] start ${spec.type}`);
-      current = { spec, finished: run(spec) };
+      current = spec;
+      void run(spec);
     }
     return reply(res, 202, { id: spec.id });
   }
@@ -88,7 +87,6 @@ export function startRuntime(registry: Registry, deps: Deps & { readonly control
   server.listen(port);
   return {
     server,
-    running: () => (current && !reported ? current.spec : undefined),
-    idle: () => current?.finished ?? Promise.resolve(),
+    running: () => (reported ? undefined : current),
   };
 }

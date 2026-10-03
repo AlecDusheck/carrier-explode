@@ -2,9 +2,8 @@ import { resolve } from "$app/paths";
 import type { ReadonlyURL } from "$app/state";
 import type { Path } from "$app/types";
 import { bandList, isBigInt, isRecord, isUid, type ComboComponent, type DiffKind } from "#lib/decode/index.ts";
-import { sourceKey, type Platform, type SourceRef } from "#lib/schema/types.ts";
-import type { Place, Version } from "#lib/types.ts";
-import { segmentOf } from "#lib/places.ts";
+import type { Platform } from "#lib/schema/types.ts";
+import type { At, Kind, Version } from "#lib/types.ts";
 
 export function humanBytes(n: number): string {
   if (n < 1024) return n + " B";
@@ -52,7 +51,7 @@ function iosRange(first: string, last: string): string {
   return a && b && a[1] === b[1] ? `${a[1]} ${a[2] ?? 1}–${b[2]}` : `${first} – ${last}`;
 }
 
-type Labelled = Pick<Version, "via" | "os" | "version" | "productType" | "slug">;
+type Labelled = Pick<Version, "via" | "os" | "version" | "productType" | "slug" | "phones">;
 
 /** iOS: which images carry it or which OS it is published for, the bundle's build, and the model a per-model copy is for. */
 function iosLabel(e: Labelled): string {
@@ -64,14 +63,18 @@ function iosLabel(e: Labelled): string {
   return `iOS ${ios} image · build ${e.version}${model}`;
 }
 
-/** Android: the release, its build id, and the file's own version. */
+/** Android: the release, the file's own version, and the Pixels it is for. */
 const androidLabel = (e: Labelled): string =>
-  `Android ${e.os.join(", ")} · ${e.slug.replace(/^android-/, "").toUpperCase()} · version ${e.version}`;
+  `Android ${e.os.at(-1) ?? ""} image · version ${e.version}` + (e.phones?.length ? ` · ${shortPhones(e.phones)}` : "");
+
+/** "Pixel 9, 9 Pro, 9 Pro XL": the shared "Pixel " said once. */
+const shortPhones = (names: readonly string[]): string =>
+  names.map((n, i) => (i && n.startsWith("Pixel ") ? n.slice(6) : n)).join(", ");
 
 const LABELS = { ios: iosLabel, android: androidLabel } as const satisfies Record<Platform, (e: Labelled) => string>;
 
-/** Where a version came from: the one label used by the version picker, Overview and Compare. */
-export const entryLabel = (e: Labelled, platform: Platform): string => LABELS[platform](e);
+/** Where a version came from: the one label used by the timeline, Summary and Compare. */
+export const entryLabel = (e: Labelled & { readonly platform: Platform }): string => LABELS[e.platform](e);
 
 /** Chip class for each kind of difference. */
 export const DIFF_CHIP: Record<DiffKind, string> = { added: "good", removed: "bad", changed: "warn", same: "" };
@@ -90,56 +93,22 @@ export const link = (path: string) => resolve(path.slice(1) as Path);
 export const modemHref = (build: string, family: string, tab?: string): string =>
   link(`/builds/${seg(build)}/${seg(family)}` + (tab ? `/${tab}` : ""));
 
-/** A carrier's or a country's overview. */
-export const placeHref = (p: Place, query = ""): string => link(`/${p.group}/${seg(p.id)}`) + query;
+export const bundleHref = (kind: Kind, name: string, slug?: string, tab?: string): string =>
+  link(`/${kind}/${seg(name)}` + (slug ? `/${seg(slug)}` + (tab ? `/${tab}` : "") : ""));
 
-/** A native view: a source at a version, on one tab, at one file. Without a version, the source's head. */
-export function nativeHref(p: Place, ref: SourceRef, version?: string, tab?: string, path?: string): string {
-  const base = `/${p.group}/${seg(p.id)}/${ref.platform}/${seg(segmentOf(p.group, ref))}`;
-  if (!version) return link(base);
-  return link(`${base}/${seg(version)}` + (tab ? `/${tab}` : "") + (tab && path ? `/${segs(path)}` : ""));
-}
-
-/**
- * Any source by its key, wherever its pages live: /source resolves the key to
- * its carrier or country and redirects. For links that only have a key (scan
- * results, release lists, the SIM table, the wiki) without loading where each lives.
- */
-export const sourceHref = (key: string, opts: { version?: string; tab?: string; path?: string; release?: string } = {}): string =>
-  link(`/source/${seg(key)}` + (opts.version ? `/${seg(opts.version)}` : "") + (opts.tab ? `/${opts.tab}` : "") + (opts.tab && opts.path ? `/${segs(opts.path)}` : ""))
-  + (opts.release ? `?release=${seg(opts.release)}` : "");
-
-/** An iOS carrier bundle by name, for the tables that only know Apple's names (the manifest's SIM rules, modem carrier maps). */
-export const iosBundleHref = (name: string, family?: "Watch"): string =>
-  sourceHref(sourceKey({ platform: "ios", kind: "carrier", name, ...(family ? { family } : {}) }));
-
-/** One side of a comparison: a source, at a version or at its head. */
-export interface SideRef {
-  readonly source: string;
-  readonly slug?: string | undefined;
-}
-
-/** `ios:carrier:ATT_US@ota-72.1`: a side as /compare's query names it. */
-export const sideParam = (s: SideRef): string => (s.slug ? `${s.source}@${s.slug}` : s.source);
-
-export function parseSide(param: string | null): SideRef | null {
-  if (!param) return null;
-  const at = param.lastIndexOf("@");
-  return at > 0 ? { source: param.slice(0, at), slug: param.slice(at + 1) } : { source: param };
-}
-
-/** /compare with two sides, either of which may be left for the reader to pick, narrowed to one file or not. */
-export function compareHref(a: SideRef | null, b: SideRef | null, file?: string | null): string {
-  const q = new URLSearchParams();
-  if (a) q.set("a", sideParam(a));
-  if (b) q.set("b", sideParam(b));
-  if (file) q.set("file", file);
-  return link("/compare") + (q.size ? "?" + q : "");
-}
+export const fileHref = (kind: Kind, name: string, slug: string, path: string): string =>
+  `${bundleHref(kind, name, slug, "files")}/${segs(path)}`;
 
 /** Only images and audio: the pages embed those, every other file is shown decoded. */
-export const rawHref = (key: string, version: string, path: string): string =>
-  link(`/raw/${seg(key)}/${seg(version)}/${segs(path)}`);
+export const rawHref = (kind: Kind, name: string, slug: string, path: string): string =>
+  link(`/raw/${kind}/${seg(name)}/${seg(slug)}/${segs(path)}`);
+
+/** Query args must be built the same way everywhere so layout and page share one cached query. */
+export const bundleArgs = (p: { kind: Kind; name: string; version?: string | undefined }): { kind: Kind; name: string; slug?: string } =>
+  p.version ? { kind: p.kind, name: p.name, slug: p.version } : { kind: p.kind, name: p.name };
+
+/** A tab body's query args: its page at its version. */
+export const atArgs = (at: At): { kind: Kind; name: string; slug: string } => ({ kind: at.kind, name: at.name, slug: at.version });
 
 export function errorMessage(e: unknown): string {
   const x = isRecord(e) ? e : {};

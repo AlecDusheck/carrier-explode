@@ -89,6 +89,7 @@ function mvnoVariants(s: Settings, main: Mapped, kind: SourceRef["kind"]): Profi
   return Object.entries(overrides).flatMap(([name, entry]) => {
     if (!isJsonDict(entry) || !isJsonDict(entry.OverrideConfiguration)) return [];
     const conf = entry.OverrideConfiguration;
+    // Always found (the entry came out of the merged tree); the fallback only satisfies the type.
     const file = origin(s, `MVNOOverrides.${name}.OverrideConfiguration`)?.file ?? "carrier.plist";
     const other = mapSettings(withLayer(s, { file, prefix: `MVNOOverrides.${name}.OverrideConfiguration.`, dict: conf }), kind);
     const label = typeof conf.CarrierName === "string" && conf.CarrierName ? conf.CarrierName : name;
@@ -104,7 +105,9 @@ function bundleSims(s: Settings): SimMatcher[] {
     ? Object.values(overrides).flatMap((e) => (isJsonDict(e) ? supportedSims(e.SupportedSIMs) : []))
     : [];
   const byKey = new Map<string, SimMatcher>();
-  for (const m of [...supportedSims(s.merged.SupportedSIMs), ...mvno]) if (!byKey.has(matcherKey(m))) byKey.set(matcherKey(m), m);
+  for (const m of [...supportedSims(s.merged.SupportedSIMs), ...mvno]) {
+    if (!byKey.has(matcherKey(m))) byKey.set(matcherKey(m), m);
+  }
   return [...byKey.values()];
 }
 

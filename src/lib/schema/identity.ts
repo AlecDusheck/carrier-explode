@@ -21,7 +21,7 @@
  */
 
 import { LINKS, type Links } from "./links.ts";
-import { matcherKey, type Carrier, type Platform, type SimMatcher, type SourceRef } from "./types.ts";
+import { matcherKey, type Carrier, type SimMatcher, type SourceRef } from "./types.ts";
 
 export interface LinkMember {
   /** sourceKey. */
@@ -42,8 +42,6 @@ export interface LinkedGroup {
   readonly links: readonly LinkReason[];
 }
 
-const other = (p: Platform): Platform => (p === "ios" ? "android" : "ios");
-
 const pairKey = (a: string, b: string): string => (a < b ? `${a}\n${b}` : `${b}\n${a}`);
 
 /** Union-find over source keys. */
@@ -57,7 +55,10 @@ class Groups {
   }
   union(a: string, b: string): void {
     const [ra, rb] = [this.find(a), this.find(b)];
-    if (ra !== rb) this.#parent.set(rb < ra ? ra : rb, rb < ra ? rb : ra);
+    if (ra === rb) return;
+    // The smaller key becomes the root, so grouping does not depend on edge order.
+    const [child, root] = ra < rb ? [rb, ra] : [ra, rb];
+    this.#parent.set(child, root);
   }
 }
 
@@ -76,9 +77,13 @@ function sharedKeys(members: readonly LinkMember[]): Map<string, Map<string, str
     row.set(to.key, [...(row.get(to.key) ?? []), k]);
   };
   for (const [k, list] of owners) {
-    for (const a of list) for (const b of list) if (a.source.platform === "ios" && b.source.platform === "android") {
-      note(a, b, k);
-      note(b, a, k);
+    const ios = list.filter((m) => m.source.platform === "ios");
+    const android = list.filter((m) => m.source.platform === "android");
+    for (const a of ios) {
+      for (const b of android) {
+        note(a, b, k);
+        note(b, a, k);
+      }
     }
   }
   return shared;
@@ -93,7 +98,6 @@ function best(row: ReadonlyMap<string, readonly string[]> | undefined): Set<stri
 
 function simEdges(members: readonly LinkMember[], splits: ReadonlySet<string>): Array<{ a: string; b: string; shared: string[] }> {
   const shared = sharedKeys(members);
-  const byKey = new Map(members.map((m) => [m.key, m]));
   const edges = new Map<string, { a: string; b: string; shared: string[] }>();
   const add = (a: string, b: string): void => {
     const keys = shared.get(a)?.get(b) ?? [];
@@ -107,8 +111,7 @@ function simEdges(members: readonly LinkMember[], splits: ReadonlySet<string>): 
     const own = new Set(m.sims.map(matcherKey)).size;
     for (const t of mine) {
       const n = shared.get(m.key)?.get(t)?.length ?? 0;
-      const target = byKey.get(t);
-      if (target && target.source.platform === other(m.source.platform) && n * 2 >= own) add(m.key, t);
+      if (n * 2 >= own) add(m.key, t);
     }
   }
   return [...edges.values()];

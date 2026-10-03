@@ -1,27 +1,22 @@
 /** Argument schemas the remote queries share. Every argument arrives from the client, so each is checked here. */
 
 import * as v from "valibot";
-import { parseSourceKey, PLATFORMS } from "#lib/schema/types.ts";
+import { VERSION_SLUG } from "#lib/schema/index.ts";
+import { PLATFORMS } from "#lib/schema/types.ts";
+import { KINDS } from "#lib/types.ts";
 
-/** A source key: `ios:carrier:ATT_US`, `android:carrier:tmobile_us`. */
-export const source = v.pipe(v.string(), v.check((s) => parseSourceKey(s) !== null, "not a source key"));
+export const kind = v.picklist(KINDS);
 
-/** A timeline slug: ios-27.0, ota-72.1, android-cp3a.260905.009. */
-export const slug = v.pipe(v.string(), v.regex(/^(ota|ios|android)-[\w.,-]+$/));
+/** A timeline slug of either platform: ios-27.0, ota-72.1, android-cp3a.260905.009-tokay. */
+export const slug = v.pipe(v.string(), v.regex(VERSION_SLUG));
 
-/** A source at a version, or at its head. */
-export const at = { source, slug: v.exactOptional(slug) };
+/** A page, at a version or at its head. */
+export const bundle = { kind, name: v.pipe(v.string(), v.maxLength(200)), slug: v.exactOptional(slug) };
 
-/** A source at a named version. */
-export const pinned = { source, slug };
+/** A page at a named version. */
+export const pinned = { kind, name: v.pipe(v.string(), v.maxLength(200)), slug };
 
 export const platform = v.picklist(PLATFORMS);
-
-/** A carrier slug: t-mobile-us. */
-export const carrier = v.pipe(v.string(), v.regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/));
-
-/** An ISO 3166 alpha-2 country code, lower case. */
-export const iso = v.pipe(v.string(), v.regex(/^[a-z]{2}$/));
 
 /** A release id: an iOS build (24A437) or an Android build id (CP3A.260905.009). */
 export const release = v.pipe(v.string(), v.regex(/^[\w.]{3,40}$/));
@@ -42,3 +37,6 @@ export const index = v.pipe(v.number(), v.integer());
 
 /** A path inside a bundle, or a key path inside a file. */
 export const path = v.pipe(v.string(), v.maxLength(1024));
+
+/** A phone a page can be read for: an iPhone product type (iPhone18,1) or a Pixel codename (tokay). */
+export const phone = v.pipe(v.string(), v.regex(/^(?:[A-Za-z]+\d+,\d+|[a-z][a-z0-9_]{1,30})$/));

@@ -1,14 +1,12 @@
 <script lang="ts">
-  import type { PhoneChange, PhoneFileChange } from "#lib/server/ios.ts";
+  import type { PhoneChange, PhoneFileChange } from "#lib/server/data.ts";
   import { modemLabel } from "#lib/decode/index.ts";
   import { phoneList } from "#lib/phones.ts";
   import DiffRows from "../DiffRows.svelte";
 
-  let { changes }: { changes: readonly PhoneChange[] } = $props();
+  let { changes }: { changes: PhoneChange[] } = $props();
 
-  /** A group's first phone names it: getPhoneChanges never makes an empty group. */
-  const lead = (g: PhoneChange): string => g.phones[0]?.id ?? "";
-  const anchor = (g: PhoneChange, which: string): string => `phone-${lead(g).replace(/[^\w]/g, "_")}-${which}`;
+  const anchor = (g: PhoneChange, which: string) => `phone-${g.phones[0].id.replace(/[^\w]/g, "_")}-${which}`;
   const total = (c: PhoneFileChange) => c.counts.added + c.counts.removed + c.counts.changed;
   const families = (g: PhoneChange) =>
     [...new Set(g.phones.map((p) => p.family).filter((f): f is string => !!f))].map(modemLabel).join(", ");
@@ -37,7 +35,7 @@
   <table class="grid">
     <thead><tr><th>Phones</th><th>Settings</th><th>Modem file</th></tr></thead>
     <tbody>
-      {#each changes as g (lead(g))}
+      {#each changes as g (g.phones[0].id)}
         <tr>
           <td>{phoneList(g.phones)}{#if families(g)}<div class="dimtext">{families(g)}</div>{/if}</td>
           <td>{@render cell(g, g.plist, "plist")}</td>
@@ -48,7 +46,7 @@
   </table>
 </fieldset>
 
-{#each changed as g (lead(g))}
+{#each changed as g (g.phones[0].id)}
   {#each [["plist", g.plist], ["modem", g.modem]] as const as [which, c] (which)}
     {#if c?.kind === "changed"}
       <fieldset class="hgroup" id={anchor(g, which)}>

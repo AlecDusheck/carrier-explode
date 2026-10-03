@@ -8,7 +8,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import type { Json } from "../../../../src/lib/schema/types.ts";
+import type { Json } from "../../../../src/lib/schema/index.ts";
 import { parseOutput, type AnyJobSpec, type JobOutput, type JobResult, type JobSpec, type JobType } from "../../../src/jobs.ts";
 import type { RunnerTable } from "../job.ts";
 import { createContext, type Deps } from "./context.ts";

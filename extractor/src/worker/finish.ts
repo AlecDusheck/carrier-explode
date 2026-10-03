@@ -8,7 +8,7 @@ import type { Launch } from "./launch.ts";
 import { workflowOf } from "./workflows.ts";
 
 /** The payload of a done event: only whether to read an output or an error from jobs/<id>.json. */
-export interface DoneEvent {
+interface DoneEvent {
   readonly ok: boolean;
 }
 
