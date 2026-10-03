@@ -21,7 +21,7 @@ const file = (path: string, kind: BundleFile["kind"] = "pri-der"): BundleFile =>
 describe("modem names", () => {
   it("uses marketing names only where known", () => {
     expect(modemLabel("Mav25")).toBe("Qualcomm X80 · Mav25");
-    expect(modemLabel("Mav24")).toBe("Qualcomm X75 · Mav24");
+    expect(modemLabel("Mav24")).toBe("Qualcomm X71M · Mav24");
     expect(modemLabel("Mav21")).toBe("Qualcomm · Mav21");
     expect(modemLabel("C1")).toBe("Apple C1");
     expect(modemLabel("c4020")).toBe("Apple · c4020");
