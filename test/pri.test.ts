@@ -358,8 +358,10 @@ describe("decodeValue", () => {
     expect(v.xml).toBe('<?xml version="1.0"?><x/>');
   });
 
-  it("does not treat an XML fragment without the declaration as xml", () => {
-    expect(decodeValue(S("<plist><dict/></plist>")).kind).toBe("string");
+  it("treats a whole element as xml, declaration or not, and leaves other text alone", () => {
+    expect(decodeValue(S("<plist><dict/></plist>")).kind).toBe("xml");
+    expect(decodeValue(S("<a> is less than b")).kind).toBe("string");
+    expect(decodeValue(S("x <tag/>")).kind).toBe("string");
   });
 
   it("returns opaque binary as kind bytes with a length summary", () => {

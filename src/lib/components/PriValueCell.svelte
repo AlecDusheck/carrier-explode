@@ -26,4 +26,6 @@
 
 <style>
   .label { font-family: var(--ui); color: var(--meaning); }
+  /* Strings can be whole XML documents or long tokens; they wrap inside the cell. */
+  .mono { overflow-wrap: anywhere; }
 </style>

@@ -130,7 +130,7 @@ describe("der pri", () => {
     let sawXml = false;
     for (const f of b.info.files.filter((x) => x.kind === "pri-der")) {
       for (const e of decodedPri(decodeFile(b, f.path))!.efs) {
-        if (e.value.kind === "xml") { sawXml = true; expect(e.value.xml!.startsWith("<?xml")).toBe(true); }
+        if (e.value.kind === "xml") { sawXml = true; expect(e.value.xml!.trimStart().startsWith("<")).toBe(true); }
         if (e.value.kind === "int") expect(typeof e.value.int).toBe("number");
       }
     }

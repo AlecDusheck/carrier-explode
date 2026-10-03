@@ -386,6 +386,34 @@ export const CCM_ITEMS: Record<number, string> = {
   62015: "UIM Service Feature Group", 62018: "OMA Feature Group", 62035: "Feature Group (unnamed, tag 9f83e453)",
 };
 
+/**
+ * Who sets each CCM flag. No source names a flag, so this is only what the bundles show:
+ * corpus: 365 Qualcomm overrides in 94 current bundles (October 2026); every other flag is never set.
+ */
+export const CCM_FLAG_NOTES: Record<number, Record<number, string>> = {
+  62009: { 4: "Set only by Appalachian Wireless and C Spire, both former CDMA carriers" },
+  62011: {
+    6: "Set only by former CDMA regional carriers in the US (US Cellular, C Spire, Appalachian, Cellcom, Carolina West, AppWire)",
+    17: "Set only by Optus and Telstra",
+  },
+  62012: {
+    0: "Set only by SoftBank, Y!mobile and Iusacell, on older iPhones",
+    1: "Set only by former CDMA regional carriers in the US, on older iPhones",
+    6: "Set only by KDDI's LTE-only bundles, always with flag 15",
+    12: "Set only on AT&T's network (AT&T, its brands and Dish), always with flag 3 of the unnamed group",
+    14: "Set for iPhone 12 and 13; a file sets this or flag 20, rarely both",
+    15: "Set only by KDDI's LTE-only bundles, always with flag 6",
+    20: "Set for every iPhone from iPhone 14, and on older iPhones only by carriers that have shut down 3G; likely the newer form of flag 14",
+  },
+  62013: { 2: "Set only by C Spire" },
+  62014: {
+    3: "Set only on Verizon's network: Verizon, its MVNOs and the LTE in Rural America partners on its core",
+    5: "Set only by former CDMA carriers not on Verizon's core (US Cellular, C Spire, Carolina West)",
+  },
+  62015: { 6: "Set only on Verizon's network" },
+  62035: { 2: "Set only by T-Mobile US", 3: "Set only on AT&T's network, always with Call Manager flag 12" },
+};
+
 function legacy(item: number): NvInfo | undefined {
   const d = NV_DETAIL[item];
   const base = NV_NAMES[item];

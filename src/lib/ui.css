@@ -123,8 +123,9 @@ input[type="text"], input[type="search"], select {
   border: 2px solid; border-color: var(--shadow) var(--light) var(--light) var(--shadow);
   min-height: 26px; max-width: 100%;
 }
-select { padding: 2px; }
+select { padding: 2px; max-width: 100%; text-overflow: ellipsis; }
 label.lbl { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }
+label.lbl select { min-width: 0; flex: 1; }
 
 /* -------------------------------------------------------------- split pane */
 
@@ -243,6 +244,9 @@ th.sticky-col { z-index: 3; }
   font: inherit; background: none; border: 0; padding: 0; line-height: inherit;
 }
 .tree .key { color: var(--key); font-weight: bold; }
+/* Long camel-case keys break inside the pane instead of running past it. */
+.tree .row > span { min-width: 0; }
+.tree .key { overflow-wrap: anywhere; text-align: left; }
 .tree .val { color: #14442a; word-break: break-word; }
 .tree .val.str { color: #7a2f2f; }
 .tree .val.num { color: #1f3f8a; }
@@ -310,10 +314,16 @@ pre.code {
 pre.code.hex { white-space: pre; word-break: normal; }
 a { color: #123a6d; }
 .rowflex { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.rowflex > * { min-width: 0; max-width: 100%; }
 .grow { flex: 1; min-width: 0; }
 p.lead { max-width: 74ch; }
-/* Wide tables scroll inside their own box, never the page. */
-.hscroll { overflow-x: auto; max-width: 100%; -webkit-overflow-scrolling: touch; }
+/* Wide tables scroll inside their own box, never the page. A scroll box also captures
+   sticky headers, so it only becomes one on narrow screens, where the table can't fit;
+   on wide screens the header sticks to the pane like every other table's. */
+.hscroll { max-width: 100%; }
+@media (max-width: 760px) {
+  .hscroll { overflow-x: auto; -webkit-overflow-scrolling: touch; --sticky-top: 0; }
+}
 
 /* A name that explains itself: tap or click for its note; long-press stays the context menu. */
 button.doc {

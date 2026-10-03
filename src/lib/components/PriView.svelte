@@ -115,7 +115,7 @@
 {#if pri.featureGroups.length}
   <fieldset class="hgroup">
     <legend>Carrier Configuration Management feature groups</legend>
-    <p class="dimtext note">25 one-byte flags per group; none are named.</p>
+    <p class="dimtext note">25 one-byte flags per group. No source names them; under each set flag is which carriers set it, across current bundles.</p>
     <table class="grid">
       <thead><tr><th>Group</th><th>Flags</th></tr></thead>
       <tbody>
@@ -132,12 +132,12 @@
                     class="flag"
                     class:set={x.set}
                     class:odd={x.value > 1}
-                    title="flag {x.index}{x.name ? ': ' + x.name : ''} = {x.value}"
+                    title="flag {x.index}{x.name ? ': ' + x.name : ''} = {x.value}{x.note ? '. ' + x.note : ''}"
                   >{x.index}</span>
                 {/each}
               </div>
-              {#each g.flags.filter((x) => x.set && x.name) as x (x.index)}
-                <div>{x.index}: {x.name}<Confidence c={x.confidence} /></div>
+              {#each g.flags.filter((x) => x.set && (x.name || x.note)) as x (x.index)}
+                <div class="flagnote"><b>{x.index}</b>: {x.name ?? x.note}{#if x.name}<Confidence c={x.confidence} />{/if}</div>
               {/each}
             </td>
           </tr>
@@ -195,10 +195,13 @@
 {/if}
 
 <style>
-  .setting { width: 58%; }
+  /* A share of the width only where there is width to share; on a phone it would widen the table past the screen. */
+  @media (min-width: 761px) { .setting { width: 58%; } }
   .items { margin: 0; word-break: break-word; font-size: 11px; }
   td.small { font-size: 10px; }
   .path { font-size: 10.5px; word-break: break-all; }
+  /* Setting names are long snake_case words; let them break so one can't set the column's width. */
+  td :global(b) { overflow-wrap: anywhere; }
   .flags { display: flex; flex-wrap: wrap; gap: 2px; margin-bottom: 3px; }
   .flag {
     font: 10px/16px var(--mono); width: 20px; text-align: center; color: var(--text-dim);
@@ -206,4 +209,5 @@
   }
   .flag.set { background: var(--good-bg); border-color: var(--good-border); color: var(--text); font-weight: bold; }
   .flag.odd { background: var(--warn-bg); border-color: var(--warn-border); }
+  .flagnote { font-size: 11px; color: var(--text-dim); }
 </style>

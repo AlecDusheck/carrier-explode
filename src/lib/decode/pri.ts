@@ -10,7 +10,7 @@
 import { inflateSync, unzlibSync } from "fflate";
 import { asciiAt, bytesToHex, leBigInt, maybeText, u16le } from "./bytes";
 import { readTlv, type Tlv } from "./der";
-import { CCM_ITEMS, annotateNv, describeNv, } from "./nv";
+import { CCM_FLAG_NOTES, CCM_ITEMS, annotateNv, describeNv, } from "./nv";
 import type { Confidence, ConfidenceOrUnknown } from "./confidence";
 import { intelTree, type IntelTree } from "./intel";
 
@@ -151,7 +151,8 @@ export function decodeValue(b: Uint8Array, preferText = false): PriValue {
 
   const printable = looksPrintable(b);
   const asText = printable?.text;
-  if (asText && /^\s*<\?xml/.test(asText)) {
+  // A whole document, with or without the prolog (data_3gpp_dynamic_config.xml has none).
+  if (asText && /^\s*<(\?xml|[A-Za-z_][\w.-]*[\s/>])[\s\S]*>\s*$/.test(asText)) {
     return { kind: "xml", text: asText, xml: asText, hex, len: b.length };
   }
 
@@ -203,6 +204,8 @@ export interface PriCcmFlag {
   set: boolean;
   /** Per-flag meaning; no public or on-device source names any of them. */
   name?: string;
+  /** Which carriers set it, from the bundles. */
+  note?: string;
   confidence: ConfidenceOrUnknown;
 }
 
@@ -307,7 +310,10 @@ function decodeSchema(value: Uint8Array): PriDecoded["schema"] {
 }
 
 function ccmGroup(tag: string, info: PriTagInfo, nv: number, value: Uint8Array): PriFeatureGroup {
-  const flags: PriCcmFlag[] = Array.from(value, (b, index) => ({ index, value: b, set: b !== 0, confidence: "unknown" as const }));
+  const notes = CCM_FLAG_NOTES[nv] ?? {};
+  const flags: PriCcmFlag[] = Array.from(value, (b, index) => ({
+    index, value: b, set: b !== 0, confidence: "unknown" as const, ...(notes[index] && { note: notes[index] }),
+  }));
   return {
     tag,
     name: info.name,
