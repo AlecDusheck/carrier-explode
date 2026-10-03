@@ -39,7 +39,7 @@
       <span class="mono">.der.gri</span> files. Regional band tables are in Default.bundle's
       <a class="mono" href={fileHref("carriers", "Default", imageSlug(version), "global_setting_G.der.gri")}>global_setting_G.der.gri</a>.
     </p>
-  {:else}
+  {:else if !caps?.plaintextDefaults}
     <p class="prose">No plaintext config in the package: carrier settings come from the bundles' <span class="mono">.der.pri</span> files.</p>
   {/if}
 </fieldset>

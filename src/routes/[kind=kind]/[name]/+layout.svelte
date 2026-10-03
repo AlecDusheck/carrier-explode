@@ -6,6 +6,7 @@
   import { isPri } from "#lib/phones.ts";
   import Pane from "#lib/components/Pane.svelte";
   import BundleIcon from "#lib/components/BundleIcon.svelte";
+  import TabLinks from "#lib/components/TabLinks.svelte";
   import VersionPicker from "#lib/components/VersionPicker.svelte";
 
   type Bundle = Awaited<ReturnType<typeof getBundle>>;
@@ -47,9 +48,10 @@
     ["files", `Files (${files.length})`],
     ...(bundle.previous ? [["changes", "Changes"]] : []),
   ]}
-  {#each items as [seg, label] (seg)}
-    <a href={bundleHref(bundle.kind, bundle.name, bundle.entry.slug, seg)} aria-current={(tab ?? "") === seg ? "page" : undefined}>{label}</a>
-  {/each}
+  <TabLinks
+    items={items.map(([seg, label]) => [bundleHref(bundle.kind, bundle.name, bundle.entry.slug, seg), label])}
+    current={bundleHref(bundle.kind, bundle.name, bundle.entry.slug, tab ?? "")}
+  />
 {/snippet}
 
 <!-- Name, version strip and tab row keep their height while the bundle loads, so the pane below never jumps. -->
