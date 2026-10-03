@@ -1,32 +1,37 @@
-/**
- * Building ConceptValues. Readers on both platforms go through these so that
- * every value carries the native settings it was read from and a fidelity, and
- * so that "equal meaning compares equal" is enforced in one place: unordered
- * lists sorted and de-duplicated, empty strings treated as unset.
- */
+/** Building and comparing concept readings; both platforms' readers go through these. */
 
-import type { ConceptValue, FeatureState, Json, NativeRef } from "./types.ts";
+import { canonical } from "./json.ts";
+import type { ConceptValue, FeatureState, Fidelity, Json, NativeRef } from "./types.ts";
 
-export type Fidelity = NonNullable<ConceptValue["fidelity"]>;
-
-/** A value read from native settings. A missing fidelity means "exact". */
-export function conceptValue(value: Json, because: readonly NativeRef[], fidelity: Fidelity = "exact"): ConceptValue {
-  return { value, because: [...because], ...(fidelity === "exact" ? {} : { fidelity }) };
+export type StateReading = Extract<ConceptValue, { kind: "state" }>;
+export type Unset = Extract<ConceptValue, { kind: "unset" }>;
+export interface ValueReading<T extends Json> {
+  readonly kind: "value";
+  readonly value: T;
+  readonly because: readonly NativeRef[];
+  readonly fidelity: Fidelity;
 }
 
-export function stateValue(state: FeatureState, because: readonly NativeRef[], fidelity: Fidelity = "exact"): ConceptValue {
-  return { value: state, state, because: [...because], ...(fidelity === "exact" ? {} : { fidelity }) };
+export const unset: Unset = { kind: "unset" };
+
+export const stateReading = (state: FeatureState, because: readonly NativeRef[], fidelity: Fidelity = "exact"): StateReading =>
+  ({ kind: "state", state, because, fidelity });
+
+export const valueReading = <T extends Json>(value: T, because: readonly NativeRef[], fidelity: Fidelity = "exact"): ValueReading<T> =>
+  ({ kind: "value", value, because, fidelity });
+
+/** Equal readings give equal keys; where a reading came from does not count. */
+export function readingKey(r: ConceptValue): string {
+  if (r.kind === "unset") return "unset";
+  return r.kind === "state" ? `state:${r.state}` : `value:${canonical(r.value)}`;
 }
 
-/** Expressible on the platform, but this source does not set it. */
-export const unset = (because: readonly NativeRef[] = []): ConceptValue => ({ value: null, because: [...because] });
-
-/** Sorted, de-duplicated strings: for sets whose native order carries no meaning. */
+/** Sorted and de-duplicated, for sets whose native order means nothing. */
 export const stringSet = <T extends string>(xs: Iterable<T>): T[] => [...new Set(xs)].sort();
 
 export const numberSet = (xs: Iterable<number>): number[] => [...new Set(xs)].sort((a, b) => a - b);
 
-/** A non-empty trimmed string, else undefined: an empty native string means "not set" on both platforms. */
+/** A non-empty trimmed string: both platforms write "" for unset. */
 export function text(v: unknown): string | undefined {
   if (typeof v !== "string") return undefined;
   const t = v.trim();
@@ -42,19 +47,12 @@ export function num(v: unknown): number | undefined {
 
 export const bool = (v: unknown): boolean | undefined => (typeof v === "boolean" ? v : undefined);
 
-/** `sip:conf@x` and `conf@x` name the same server; the scheme is dropped so the platforms compare equal. */
+/** `sip:conf@x` and `conf@x` name one server. */
 export const sipUri = (v: string): string => v.replace(/^sips?:/i, "");
 
-/** The status bar labels both platforms can draw for advanced 5G, spelled the way the phone shows them. */
-export const ICON_LABELS: Readonly<Record<string, string>> = {
-  // iOS DataIndicatorOverride* (fields.ts DATA_INDICATOR)
-  NRPlus: "5G+",
-  NRUWB: "5G UW",
-  NRUC: "5G UC",
-  LTEPlus: "LTE+",
-  LTEA: "LTE-A",
-  // Android 5g_icon_configuration_string icon names (AOSP NetworkTypeController)
-  "5G_Plus": "5G+",
+/** Status bar labels as the phone draws them: iOS DataIndicatorOverride* values and Android 5G icon names. */
+const ICON_LABELS: Readonly<Record<string, string>> = {
+  NRPlus: "5G+", NRUWB: "5G UW", NRUC: "5G UC", LTEPlus: "LTE+", LTEA: "LTE-A", "5G_Plus": "5G+",
 };
 
 export const iconLabel = (native: string): string => ICON_LABELS[native] ?? native;

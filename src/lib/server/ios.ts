@@ -23,7 +23,7 @@ import { homePhone, isPri, knowsPhone, overridesFor, sharedPri, type GroupPhone,
 import type { CbsRow, Version } from "#lib/types.ts";
 import { bbfwSummary } from "./baseband";
 import { cached, fetchApple, perRequest } from "./cache";
-import { archivedSha, currentRelease, releaseList, resolveVer, sourceSlugs, versionOf, type Resolved, type Ver } from "./catalog";
+import { archivedSha, currentRelease, releaseList, resolve, isIndexed, versionOf, type Resolved, type Ver } from "./catalog";
 import { cbsRow } from "./cbs";
 import { modemView } from "./modems";
 import type { ImageModem } from "./records";
@@ -33,32 +33,31 @@ import { readBytes } from "./store";
 /** Content never changes under a sha or an Apple URL, so what is derived from one is kept for a month. */
 const KEEP = 30 * 86400;
 
-/** The Apple URL of an OTA copy, for content the bucket does not hold yet. */
-const upstream = (e: TimelineEntry): string | undefined => e.copies.flatMap((c) => (c.via === "ota" ? [c.url] : []))[0];
+/** An OTA copy not archived yet: the bytes come from Apple. */
+const pending = (e: TimelineEntry): string | undefined =>
+  e.copies.flatMap((c) => (c.via === "ota" && c.archive.state !== "archived" ? [c.url] : []))[0];
 
-/** What a version's derived views are cached by: its object, else its Apple URL. Content never changes under either. */
-const identity = (e: TimelineEntry): string => archivedSha(e) ?? upstream(e) ?? e.slug;
+/** What a version's derived views are cached by. Content never changes under a sha or an Apple URL. */
+const identity = (e: TimelineEntry): string => archivedSha(e) ?? pending(e) ?? e.slug;
 
-/** A version's bytes: from the bucket, or from Apple for an OTA file not archived yet. */
 async function bytesOf(e: TimelineEntry): Promise<Uint8Array<ArrayBuffer>> {
   const sha = archivedSha(e);
-  const held = sha === undefined ? null : await readBytes(keys.obj(sha));
-  if (held) return held;
-  const url = upstream(e);
-  if (url) return fetchApple(url);
-  error(404, `Version ${e.slug} is neither in the bucket nor published by Apple.`);
+  if (sha !== undefined) {
+    const held = await readBytes(keys.obj(sha));
+    if (!held) error(500, `obj/${sha} is indexed but missing from the bucket.`);
+    return held;
+  }
+  const url = pending(e);
+  if (url === undefined) error(404, `Version ${e.slug} has no copy to read.`);
+  return fetchApple(url);
 }
 
-/**
- * Whether the bytes are what the index says: archived content by its sha or
- * content id, Apple's by the SHA-1 it publishes. An OTA copy with only a
- * SHA-384 is not checked: #lib/binary has no SHA-384 yet.
- */
+/** Bytes from the bucket match by content id or sha; Apple's by the digest it publishes (SHA-1 only: #lib/binary has no SHA-384). */
 function verify(e: TimelineEntry, got: { cid: string; sha256: string; sha1: string }): boolean | null {
   const checks = e.copies.flatMap((c): boolean[] => {
-    if (c.cid !== undefined) return [c.cid === got.cid];
-    if (c.sha !== undefined) return [c.sha === got.sha256];
-    return c.via === "ota" && c.sha1 !== undefined ? [c.sha1 === got.sha1] : [];
+    if (c.via === "image") return [c.cid !== undefined ? c.cid === got.cid : c.sha === got.sha256];
+    if (c.archive.state === "archived") return [c.archive.cid === got.cid];
+    return c.digest?.algorithm === "sha1" ? [c.digest.hex === got.sha1] : [];
   });
   return checks.length ? checks.some(Boolean) : null;
 }
@@ -70,7 +69,7 @@ interface Opened extends Resolved {
 
 /** A version's bytes and zip index. Several queries of one page read the same bundle, so it is opened once per request. */
 const openOnce = perRequest(async (source: string, line: string, slug: string): Promise<Opened> => {
-  const r = await resolveVer({ source, line: line || undefined, slug: slug || undefined });
+  const r = await resolve({ source, line: line || undefined, slug: slug || undefined });
   if (decoderFamily(r.ref.platform) !== "apple") error(400, `${source} is not an Apple bundle.`);
   const bytes = await bytesOf(r.entry);
   return { ...r, opened: openIpcc(bytes), bytes };
@@ -104,7 +103,7 @@ async function homeCountry(platform: Platform, carrier: Record<string, unknown> 
   if (typeof home !== "string") return null;
   const name = home.replace(/^com\.apple\./, "");
   const key = sourceKey({ platform, kind: "country", name });
-  return key in (await sourceSlugs()) ? key : null;
+  return (await isIndexed(key)) ? key : null;
 }
 
 export interface IosBundle {
@@ -196,7 +195,7 @@ export interface NativeComparison {
  * Changes tab. Without `a`, `b` is compared to the version before it.
  */
 export async function getComparison(a: Ver | null, b: Ver, path?: string): Promise<NativeComparison> {
-  const [rb, ra] = await Promise.all([resolveVer(b), a ? resolveVer(a) : null]);
+  const [rb, ra] = await Promise.all([resolve(b), a ? resolve(a) : null]);
   const left = ra ? { r: ra, entry: ra.entry } : rb.previous ? { r: rb, entry: rb.previous } : null;
   const side = async (r: Resolved, entry: TimelineEntry): Promise<ComparedSide> =>
     ({ source: r.key, ref: r.ref, entry: await versionOf(r.ref.platform, entry) });
@@ -333,8 +332,8 @@ function fileChange(A: OpenedBundle | null, before: string | undefined, B: Opene
  * group's file as one file removed and another added; this compares per phone.
  */
 export async function getPhoneChanges(v: Ver, against?: string): Promise<PhoneChange[] | null> {
-  const { entry: b, previous } = await resolveVer(v);
-  const a = against ? (await resolveVer({ ...v, slug: against })).entry : previous;
+  const { entry: b, previous } = await resolve(v);
+  const a = against ? (await resolve({ ...v, slug: against })).entry : previous;
   const vb = await phoneCopies(v);
   if (!a || !vb) return null;
   return cached(`phonechanges:v4:${identity(b)}|${identity(a)}|${vb.phones.map((p) => p.id).join(",")}`, KEEP, async () => {

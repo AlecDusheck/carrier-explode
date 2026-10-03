@@ -1,18 +1,13 @@
-/**
- * How iOS answers each concept (../concepts.ts), read from the merged settings
- * a phone runs with. Feature states come from features.ts, the site's own
- * decisions, so a carrier page and the features pages never disagree.
- *
- * A reader returns undefined when iOS has no way to say it; `unset` when it
- * could but this bundle does not. Absent keys are never filled with a guessed
- * iOS default: CommCenter's defaults are not public.
- */
+/** How Apple bundles answer each concept, from the merged settings a phone runs with. Absent keys are never filled with a guessed default. */
 
 import { FEATURES } from "#lib/features.ts";
 import { isJsonDict } from "#lib/decode/index.ts";
-import type { ConceptId } from "../concepts.ts";
-import type { Apn, ApnType, ConceptValue, Json, NativeRef } from "../types.ts";
-import { bool, conceptValue, iconLabel, num, numberSet, sipUri, stateValue, stringSet, text, unset, type Fidelity } from "../values.ts";
+import type { ConceptId, Readers } from "../concepts.ts";
+import type { Apn, ApnType, ConceptValue, Fidelity, Json, NativeRef } from "../types.ts";
+import {
+  bool, iconLabel, num, numberSet, sipUri, stateReading, stringSet, text, unset, valueReading,
+  type StateReading, type Unset, type ValueReading,
+} from "../values.ts";
 import { read, type Read, type Settings } from "./settings.ts";
 
 export interface IosView {
@@ -20,16 +15,14 @@ export interface IosView {
   readonly apns: readonly Apn[];
 }
 
-export type IosReader = (v: IosView) => ConceptValue | undefined;
-
-/* ----------------------------------------------------------------- helpers */
+type Valued<T extends Json> = (v: IosView) => ValueReading<T> | Unset;
 
 /** A value at one path, converted; unset when absent or not convertible. */
-function at(path: string, convert: (raw: unknown) => Json | undefined, fidelity: Fidelity = "exact"): IosReader {
+function at<T extends Json>(path: string, convert: (raw: unknown) => T | undefined, fidelity: Fidelity = "exact"): Valued<T> {
   return ({ settings }) => {
     const r = read(settings, path);
     const v = r === undefined ? undefined : convert(r.value);
-    return r === undefined || v === undefined ? unset() : conceptValue(v, [r.ref], fidelity);
+    return r === undefined || v === undefined ? unset : valueReading(v, [r.ref], fidelity);
   };
 }
 
@@ -39,18 +32,18 @@ const asNum = (raw: unknown): number | undefined => num(raw);
 const seconds = (raw: unknown): number | undefined => { const n = num(raw); return n === undefined ? undefined : n * 1000; };
 
 /** The first APN carrying a type, by name. APN names are case-insensitive (3GPP TS 23.003 9.1). */
-function apnName(type: ApnType): IosReader {
+function apnName(type: ApnType): Valued<string> {
   return ({ apns }) => {
     const a = apns.find((x) => x.types.includes(type));
-    return a ? conceptValue(a.apn.toLowerCase(), [{ path: a.path, value: a.apn }]) : unset();
+    return a ? valueReading(a.apn.toLowerCase(), [{ path: a.path, value: a.apn }]) : unset;
   };
 }
 
-function apnField(type: ApnType, field: "protocol" | "roamingProtocol"): IosReader {
+function apnField(type: ApnType, field: "protocol" | "roamingProtocol"): Valued<string> {
   return ({ apns }) => {
     const a = apns.find((x) => x.types.includes(type));
     const v = a?.[field];
-    return a && v ? conceptValue(v, [{ path: `${a.path}.${field === "protocol" ? "AllowedProtocolMask" : "AllowedProtocolMaskInRoaming"}`, value: v }]) : unset();
+    return a && v ? valueReading(v, [{ path: `${a.path}.${field === "protocol" ? "AllowedProtocolMask" : "AllowedProtocolMaskInRoaming"}`, value: v }]) : unset;
   };
 }
 
@@ -61,83 +54,74 @@ function each(r: Read | undefined): unknown[] {
   return isJsonDict(r.value) ? Object.values(r.value) : [];
 }
 
-/* ------------------------------------------------------------------ features */
+type Stated = (v: IosView) => StateReading;
 
-function featureReaders(): Partial<Record<ConceptId, IosReader>> {
-  const out: Partial<Record<ConceptId, IosReader>> = {};
-  for (const f of FEATURES) {
-    out[f.slug] = ({ settings }) => {
-      const { state, because } = f.decide({ ...settings.merged });
-      // "no" names nothing that decided it; the keys the feature looks at, where set, are still worth showing.
-      const paths = because.length ? because : f.keys;
-      const refs = paths.flatMap((p): NativeRef[] => { const r = read(settings, p); return r ? [r.ref] : []; });
-      return stateValue(state, refs);
-    };
-  }
-  return out;
+/** features.ts decides; a "no" names no key, so the keys it looked at are shown instead. */
+const FEATURE_READERS: ReadonlyMap<string, Stated> = new Map(FEATURES.map((f): [string, Stated] => [f.slug, ({ settings }) => {
+  const { state, because } = f.decide({ ...settings.merged });
+  const refs = (because.length ? because : f.keys).flatMap((p): NativeRef[] => { const r = read(settings, p); return r ? [r.ref] : []; });
+  return stateReading(state, refs);
+}]));
+
+function feature(id: ConceptId): Stated {
+  const reader = FEATURE_READERS.get(id);
+  if (!reader) throw new Error(`features.ts has no feature ${id}`);
+  return reader;
 }
-
-const READERS_FEATURES = featureReaders();
-
-/* ------------------------------------------------------------------- tables */
 
 const CODEC_NAMES: Readonly<Record<string, string>> = { AMR: "AMR", "AMR-WB": "AMR-WB", EVS: "EVS" };
 
-const codecs: IosReader = ({ settings }) => {
+const codecs: Valued<string[]> = ({ settings }) => {
   const r = read(settings, "IMSConfig.Media.AudioCodecs");
-  if (!r) return unset();
+  if (!r) return unset;
   const names = each(r).flatMap((c) => {
     const n = isJsonDict(c) ? text(c.EncodingName) : undefined;
     return n === undefined ? [] : [CODEC_NAMES[n.toUpperCase()] ?? n.toUpperCase()];
   });
-  return conceptValue(stringSet(names), [r.ref]);
+  return valueReading(stringSet(names), [r.ref]);
 };
 
-/** iOS has one "5G" decision and one for SA; NSA is what plain 5G runs on until SA is on. */
-const nrModes: IosReader = (v) => {
-  const nsa = READERS_FEATURES["5g"]?.(v);
-  const sa = READERS_FEATURES["5g-standalone"]?.(v);
-  if (!nsa || !sa) return undefined;
+/** Plain 5G runs as NSA until SA is on. */
+const nrModes: Valued<string[]> = (v) => {
+  const nsa = feature("5g")(v), sa = feature("5g-standalone")(v);
   const modes = [...(nsa.state !== "no" ? ["NSA"] : []), ...(sa.state !== "no" ? ["SA"] : [])];
-  return conceptValue(modes, [...nsa.because, ...sa.because], "derived");
+  return valueReading(modes, [...nsa.because, ...sa.because], "derived");
 };
 
 const PRECONDITION: Readonly<Record<string, boolean>> = { supported: true, mandatory: true, required: true, none: false, disabled: false, notsupported: false };
 
 const WFC_PREF: Readonly<Record<string, string>> = { cellular: "cellular-preferred", wifi: "wifi-preferred" };
 
-const wfcMode = (path: string): IosReader =>
+const wfcMode = (path: string): Valued<string> =>
   at(path, (raw) => { const t = text(raw)?.toLowerCase(); return t === undefined ? undefined : WFC_PREF[t]; });
 
-const dhGroups: IosReader = ({ settings }) => {
+const dhGroups: Valued<number[]> = ({ settings }) => {
   const r = read(settings, "TechSettings.IKE.Proposals");
-  if (!r) return unset();
+  if (!r) return unset;
   const groups = each(r).flatMap((p) => { const n = isJsonDict(p) ? num(p.DHGroup) : undefined; return n === undefined ? [] : [n]; });
-  return conceptValue(numberSet(groups), [r.ref]);
+  return valueReading(numberSet(groups), [r.ref]);
 };
 
 /** IMSConfig.SMS.SupportedDomains: radio -> true where texts go over IMS. */
 const SMS_DOMAINS: Readonly<Record<string, string>> = { GSM: "gsm", UMTS: "umts", LTE: "lte", NR: "nr", EHRPD: "ehrpd" };
 
-const smsDomains: IosReader = ({ settings }) => {
+const smsDomains: Valued<string[]> = ({ settings }) => {
   const r = read(settings, "IMSConfig.SMS.SupportedDomains");
-  if (!r || !isJsonDict(r.value)) return unset();
+  if (!r || !isJsonDict(r.value)) return unset;
   const on = Object.entries(r.value).flatMap(([k, x]) => (x === true ? [SMS_DOMAINS[k] ?? k.toLowerCase()] : []));
-  return conceptValue(stringSet(on), [r.ref]);
+  return valueReading(stringSet(on), [r.ref]);
 };
 
-const smsOverIms: IosReader = ({ settings }) => {
+const smsOverIms: Valued<boolean> = ({ settings }) => {
   const r = read(settings, "IMSConfig.SMS.SupportedDomains");
-  if (!r || !isJsonDict(r.value)) return unset();
-  return conceptValue(Object.values(r.value).some((x) => x === true), [r.ref], "derived");
+  if (!r || !isJsonDict(r.value)) return unset;
+  return valueReading(Object.values(r.value).some((x) => x === true), [r.ref], "derived");
 };
 
-const mmsImage: IosReader = at("MMS.MaxImageDimension", asNum);
-
-const mmsProxy: IosReader = ({ settings }) => {
+const mmsProxy: Valued<string> = ({ settings }) => {
   const r = read(settings, "MMS.Proxy");
   const t = text(r?.value);
-  return r && t ? conceptValue(t.toLowerCase(), [r.ref]) : unset();
+  return r && t ? valueReading(t.toLowerCase(), [r.ref]) : unset;
 };
 
 /** EmergencyCalling.EmergencyNumbers[] and the per-MCC lists of EmergencyNumbers.<mcc>[]. */
@@ -193,8 +177,6 @@ const homeNetworks: IosReader = at("SupportedPLMNs", (raw) =>
   Array.isArray(raw) ? stringSet(raw.flatMap((x: unknown) => (typeof x === "string" ? [x] : []))) : undefined, "approx");
 
 const ussd: IosReader = at("IMSConfig.Signaling.ussdEnabled", asBool, "approx");
-
-/* ------------------------------------------------------------------ registry */
 
 
 export const IOS_READERS: Readonly<Partial<Record<ConceptId, IosReader>>> = {

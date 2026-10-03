@@ -17,7 +17,7 @@ import { compareProfiles, type ConceptRow, type ProfileComparison } from "#lib/s
 import { decoderFamily, sourceKey, type DeviceStates, type FeatureState, type Platform, type Profile, type SourceRef, type TimelineEntry } from "#lib/schema/types.ts";
 import type { Version } from "#lib/types.ts";
 import { perRequest } from "./cache";
-import { archivedSha, locate, resolve, resolveVer, versionOf, type Ver } from "./catalog";
+import { archivedSha, locate, resolve, versionOf, type Ver } from "./catalog";
 import { DEVICES } from "./devices";
 import { readJson } from "./store";
 import * as records from "./records";
@@ -73,7 +73,7 @@ function spreadOf(groups: readonly DeviceStates[], platform: Platform): Record<s
     const by = new Map<FeatureState | "not set", string[]>();
     for (const g of groups) {
       const state = g.states[f] ?? "not set";
-      by.set(state, [...(by.get(state) ?? []), ...(g.devices?.map(DEVICES[platform].name) ?? [EVERY[platform]])]);
+      by.set(state, [...(by.get(state) ?? []), ...(g.devices === "rest" ? [EVERY[platform]] : g.devices.map(DEVICES[platform].name))]);
     }
     if (by.size > 1) out[f] = [...by].map(([state, phones]) => ({ state, phones }));
   }
@@ -87,14 +87,14 @@ function spreadOf(groups: readonly DeviceStates[], platform: Platform): Record<s
  */
 async function sideOf(ref: SourceRef, groups: readonly DeviceStates[], wanted: string | undefined): Promise<{ side: PairSide; profile: Profile } | null> {
   const naming = DEVICES[ref.platform];
-  const ids = [...new Set(groups.flatMap((g) => g.devices ?? []))].sort(naming.order);
+  const ids = [...new Set(groups.flatMap((g) => (g.devices === "rest" ? [] : g.devices)))].sort(naming.order);
   const id = wanted !== undefined && ids.includes(wanted) ? wanted : ids[0];
-  const group = groups.find((g) => id !== undefined && g.devices?.includes(id)) ?? groups.find((g) => g.devices === undefined);
+  const group = groups.find((g) => id !== undefined && g.devices !== "rest" && g.devices.includes(id)) ?? groups.find((g) => g.devices === "rest");
   if (!group) return null;
-  const { entry } = await resolve(sourceKey(ref), group.line, group.slug);
+  const { entry } = await resolve({ source: sourceKey(ref), line: group.line, slug: group.slug });
   const profile = await profileAt(entry);
   if (!profile) return null;
-  const variant = id === undefined ? undefined : profile.variants.find((v) => v.when.devices?.includes(id));
+  const variant = id === undefined ? undefined : profile.variants.find((v) => v.when.by === "device" && v.when.devices.includes(id));
   const read = variant ? { ...profile, concepts: { ...profile.concepts, ...variant.concepts }, apns: variant.apns ?? profile.apns } : profile;
   return {
     side: {
@@ -142,7 +142,7 @@ export interface CrossComparison {
 
 /** Two versions of any two sources, concept by concept: /compare across platforms. */
 export async function getCrossComparison(a: Ver, b: Ver): Promise<CrossComparison> {
-  const [ra, rb] = await Promise.all([resolveVer(a), resolveVer(b)]);
+  const [ra, rb] = await Promise.all([resolve(a), resolve(b)]);
   const [pa, pb] = await Promise.all([profileAt(ra.entry), profileAt(rb.entry)]);
   if (!pa || !pb) error(404, `${!pa ? a.source : b.source} has no normalised settings at that version yet.`);
   const [ea, eb] = await Promise.all([versionOf(ra.ref.platform, ra.entry), versionOf(rb.ref.platform, rb.entry)]);

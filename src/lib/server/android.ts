@@ -17,7 +17,7 @@ import type { Json, SourceRef } from "#lib/schema/types.ts";
 import { configGroup, groupOrder } from "#lib/android-groups.ts";
 import type { Version } from "#lib/types.ts";
 import { perRequest } from "./cache";
-import { archivedSha, resolveVer, versionOf, type Resolved, type Ver } from "./catalog";
+import { archivedSha, resolve, versionOf, type Resolved, type Ver } from "./catalog";
 import { readBytes } from "./store";
 
 interface Decoded extends Resolved {
@@ -26,7 +26,7 @@ interface Decoded extends Resolved {
 
 /** A version decoded, once per request. */
 const decodedOnce = perRequest(async (source: string, line: string, slug: string): Promise<Decoded> => {
-  const r = await resolveVer({ source, line: line || undefined, slug: slug || undefined });
+  const r = await resolve({ source, line: line || undefined, slug: slug || undefined });
   if (r.ref.platform !== "android") error(400, `${source} is not an Android source.`);
   const sha = archivedSha(r.entry);
   const bytes = sha === undefined ? null : await readBytes(keys.obj(sha));

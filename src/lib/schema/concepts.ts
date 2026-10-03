@@ -1,15 +1,11 @@
 /**
- * The concept registry: the things a carrier configures that both platforms can
- * be asked about, in platform-neutral terms. This file holds definitions only;
- * how each platform answers lives with its mapper (./ios/readers.ts,
- * ./android/readers.ts), keyed by the ids here, so this module imports neither
- * decoder.
- *
- * Values are normalised so that equal meaning compares equal: durations in the
- * unit named here whatever the native key used, unordered lists sorted, codec
- * and icon names spelled one way. A concept only one platform expresses is
- * still listed: the gap is information.
+ * The concept registry: platform-neutral definitions only. Each platform's
+ * answers live with its mapper (./ios/readers.ts, ./android/readers.ts), typed
+ * by the concept's value spec. Mapping rationale: docs/concepts.md.
  */
+
+import type { Json } from "./types.ts";
+import type { StateReading, Unset, ValueReading } from "./values.ts";
 
 export const CONCEPT_GROUPS = [
   "features",
@@ -50,14 +46,13 @@ export const GROUP_NAMES = {
 
 export type ConceptUnit = "bytes" | "ms" | "s" | "dBm" | "count" | "px" | "chars" | "port";
 
-/** What a value looks like. `state` values are FeatureState strings; unordered lists are sorted by readers. */
+/** Unordered lists are sorted by readers, so equal sets compare equal. */
 export type ConceptValueSpec =
   | { readonly type: "state" }
   | { readonly type: "boolean" }
   | { readonly type: "number"; readonly unit: ConceptUnit }
   | { readonly type: "string" }
-  | { readonly type: "list"; readonly of: "string" | "number"; readonly ordered: boolean }
-  | { readonly type: "json" };
+  | { readonly type: "list"; readonly of: "string" | "number"; readonly ordered: boolean };
 
 export type ConceptDef = {
   readonly id: string;
@@ -76,7 +71,7 @@ const state = { type: "state" } as const;
 const strings = { type: "list", of: "string", ordered: false } as const;
 const numbers = { type: "list", of: "number", ordered: false } as const;
 
-/** Registry order is display order within a group. Feature ids equal features.ts slugs. */
+/** Registry order is display order. Feature ids equal features.ts slugs. */
 export const CONCEPTS = [
   // ---------------------------------------------------------------- features
   { id: "5g", group: "features", name: "5G", description: "The phone can use the carrier's 5G network instead of LTE.", ...state },
@@ -209,11 +204,29 @@ export const CONCEPTS = [
 
 export type ConceptId = (typeof CONCEPTS)[number]["id"];
 
+type SpecOf<Id extends ConceptId> = Extract<(typeof CONCEPTS)[number], { readonly id: Id }>;
+
+type ValueOf<S> =
+  S extends { readonly type: "boolean" } ? boolean
+  : S extends { readonly type: "number" } ? number
+  : S extends { readonly type: "string" } ? string
+  : S extends { readonly type: "list"; readonly of: "string" } ? readonly string[]
+  : S extends { readonly type: "list"; readonly of: "number" } ? readonly number[]
+  : never;
+
+/** What a reader of a concept may return: a state for `state` concepts, a value of the spec's type otherwise. */
+export type Reading<Id extends ConceptId> =
+  | Unset
+  | (SpecOf<Id> extends { readonly type: "state" } ? StateReading : ValueReading<ValueOf<SpecOf<Id>> & Json>);
+
+/** A platform's readers, typed per concept; a concept a platform cannot express has no reader. */
+export type Readers<View> = { readonly [Id in ConceptId]?: (view: View) => Reading<Id> };
+
 const BY_ID: ReadonlyMap<string, ConceptDef> = new Map(CONCEPTS.map((c) => [c.id, c]));
 
 export const conceptById = (id: string): ConceptDef | undefined => BY_ID.get(id);
 
-/** Registry position, for stable ordering of rows. Unknown ids sort last. */
+/** Registry position, for stable row order. Unknown ids sort last. */
 export function conceptOrder(id: string): number {
   const i = CONCEPTS.findIndex((c) => c.id === id);
   return i < 0 ? CONCEPTS.length : i;

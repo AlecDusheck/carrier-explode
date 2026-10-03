@@ -8,7 +8,7 @@
 import { error } from "@sveltejs/kit";
 import type { SourceRef } from "#lib/schema/types.ts";
 import type { Version } from "#lib/types.ts";
-import { canonicalPath, counterparts, linesOf, resolveVer, versionsOf, type Ver } from "./catalog";
+import { canonicalPath, counterparts, linesOf, resolve, versionsOf, type Ver } from "./catalog";
 import { named } from "./devices";
 
 export interface BundleHead {
@@ -28,7 +28,7 @@ export interface BundleHead {
 }
 
 export async function getHead(v: Ver): Promise<BundleHead> {
-  const r = await resolveVer(v);
+  const r = await resolve(v);
   const timeline = await versionsOf(r.ref.platform, r.entries);
   const find = (s: string | undefined): Version | undefined => timeline.find((e) => e.slug === s);
   const entry = find(r.entry.slug);

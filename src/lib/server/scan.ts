@@ -9,7 +9,7 @@ import { parseSourceKey, type Platform } from "#lib/schema/types.ts";
 import { SCAN_FORMAT, scanKeys, topKey, type RareSetting, type ScanFileIndex, type ScanPointer, type ScanShard, type ScanSources } from "#lib/storage/scan.ts";
 import type { ScanScope } from "#lib/ui-state.svelte.ts";
 import { cached, perRequest } from "./cache";
-import { carrierList, countryList, resolveVer, type Ver } from "./catalog";
+import { archivedSha, carrierList, countryList, resolve, type Ver } from "./catalog";
 import { keyScan, summarise, type ScanResult, type ScanTarget, type SettingSummary, type TargetRow } from "./keyscan";
 import { readBytes, readJson } from "./store";
 import { json } from "./records";
@@ -59,7 +59,7 @@ async function scopeSources(platform: Platform, scope: ScanScope): Promise<ScanT
     .filter((c) => cc === null || c.iso === cc)
     .flatMap((c) => c.members.flatMap((source) => {
       const ref = parseSourceKey(source);
-      return ref?.platform === platform && ref.kind === "carrier" && !ref.family ? [{ source, name: ref.name, cc: c.iso }] : [];
+      return ref?.platform === platform && ref.kind === "carrier" ? [{ source, name: ref.name, cc: c.iso }] : [];
     }));
 }
 
@@ -106,12 +106,12 @@ export type Rare =
 /** A version's settings that at most a few other sources of its platform and kind share. Only the indexed (head) version has them. */
 export async function getRare(v: Ver): Promise<Rare> {
   const key = v.source;
-  const [{ entry }, p] = await Promise.all([resolveVer(v), pointer()]);
+  const [{ entry }, p] = await Promise.all([resolve(v), pointer()]);
   if (!p) return { indexed: false, why: "pending" };
   const got = await cached(`rare:v2:${p.gen}:${key}`, 86400, async () => {
     const [all, indexed] = await Promise.all([readJson(scanKeys.rare(p.gen), rareSchema), indexedSources(p.gen)]);
     return { built: all !== null, sha: indexed.get(key)?.sha ?? null, rows: all?.[key] ?? [] };
   });
   if (!got.built) return { indexed: false, why: "pending" };
-  return got.sha !== null && entry.copies.some((c) => c.sha === got.sha) ? { indexed: true, rows: got.rows } : { indexed: false, why: "old" };
+  return got.sha !== null && archivedSha(entry) === got.sha ? { indexed: true, rows: got.rows } : { indexed: false, why: "old" };
 }
