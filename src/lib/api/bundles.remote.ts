@@ -4,7 +4,6 @@ import * as data from "#lib/server/data.ts";
 import { build, bundle, pinned } from "./schemas";
 
 export const getIndex = query(() => data.getIndex());
-export const getStats = query(() => data.getStats());
 export const getManifestFacts = query(() => data.getManifestFacts());
 export const guessCarrier = query(() => data.guessCarrier());
 export const guessCountry = query(() => data.guessCountry());

@@ -18,7 +18,7 @@
   const args = $derived(bundleArgs(params));
   const sp = $derived(page.url.searchParams);
   const show = $derived(sp.get("show") === "phone" ? "phone" : "all");
-  const VIEWS = [["all", "All"], ["phone", "This phone's overrides"]] as const;
+  const VIEWS = [["all", "All"], ["phone", "Phone specific"]] as const;
 
   const tree = new TreeState();
   // A link from the Overview names the key to show.

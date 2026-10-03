@@ -70,6 +70,7 @@ body {
 }
 .titlebar .spacer { flex: 1; }
 .titlebar .sub { font-weight: normal; color: #cddcee; font-size: 11px; }
+.titlebar .github { color: #fff; font-weight: normal; font-size: 11px; }
 .titlebar .btn { min-height: 22px; padding: 1px 10px; }
 
 .menubar {
@@ -94,6 +95,7 @@ body {
 .body { flex: 1; min-height: 0; display: flex; background: var(--face); }
 .view { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; }
 
+
 .statusbar {
   flex: none; display: flex; gap: 4px; padding: 2px 4px; font-size: 11px;
   color: var(--text-dim); border-top: 1px solid var(--light); align-items: center;
@@ -103,7 +105,6 @@ body {
   padding: 1px 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 .statusbar .cell.grow { flex: 1; min-width: 0; }
-.statusbar a.cell { color: inherit; }
 
 /* ---------------------------------------------------------------- controls */
 
@@ -443,7 +444,6 @@ button.drawer-btn { display: none; }
   input[type="text"], input[type="search"] { font-size: 16px; min-height: 32px; }
   .list li > a { padding: 8px; }
   button.doc { padding: 6px 0; margin: -6px 0; }
-  .statusbar { flex-wrap: wrap; }
   .ctxmenu button { padding: 8px 10px; }
   .dialog-back { padding: 0; }
   .dialog { max-height: 100%; height: 100%; }

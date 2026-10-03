@@ -218,22 +218,6 @@ export const getIndex = perRequest(async () => {
   });
 });
 
-/** Just the numbers the chrome shows. Awaiting getIndex() anywhere puts the
- *  whole list in the page for hydration; this is a few bytes instead. */
-export async function getStats() {
-  const idx = await getIndex();
-  const newest = release(idx.builds);
-  const beta = idx.builds[0] && isPrerelease(idx.builds[0].version) ? idx.builds[0] : undefined;
-  return {
-    carriers: idx.carriers.length,
-    countries: idx.countries.length,
-    watch: idx.watch.length,
-    build: newest?.build,
-    version: newest?.version,
-    beta: beta && { build: beta.build, version: beta.version },
-  };
-}
-
 /* ---------------------------------------------------------------- timeline */
 
 /**
