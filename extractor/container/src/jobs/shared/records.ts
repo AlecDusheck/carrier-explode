@@ -61,7 +61,7 @@ export const releaseSchema = v.object({
   prerelease: opt(v.boolean()),
   devices: v.array(str),
   extractedAt: str,
-  sources: v.record(str, v.object({ sha: str, version: str, size: v.number(), cid: opt(str) })),
+  sources: v.record(str, v.array(v.object({ sha: str, version: str, size: v.number(), cid: opt(str), devices: opt(v.array(str)) }))),
   carrierList: opt(str),
   modems: opt(v.array(v.unknown())),
 }) satisfies v.GenericSchema<unknown, Release>;

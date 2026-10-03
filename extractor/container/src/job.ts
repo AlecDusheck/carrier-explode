@@ -57,6 +57,6 @@ export type JobRunner<T extends JobType> = (ctx: JobContext<T>) => Promise<JobOu
 /**
  * Runners by type, as the registry (./jobs/index.ts) imports them:
  *   ./jobs/ios/index.ts   export const iosRunners: RunnerTable<"ios.plan" | "ios.ipsw" | "ios.modems" | "ios.release">
- *   ./jobs/android.ts     export const androidRunners: RunnerTable<"android.plan" | "android.ota">
+ *   ./jobs/android.ts     export const androidRunners: RunnerTable<"android.plan" | "android.ota" | "android.release">
  */
 export type RunnerTable<T extends JobType> = { readonly [K in T]: JobRunner<K> };

@@ -49,7 +49,9 @@ export interface Use {
 export function usesBySha(catalog: Catalog): Map<string, Use> {
   const found: Array<{ sha: string; key: string; carrierList?: string }> = [];
   for (const r of catalog.releases) {
-    for (const [key, s] of Object.entries(r.sources)) found.push({ sha: s.sha, key, ...(r.carrierList ? { carrierList: r.carrierList } : {}) });
+    for (const [key, artifacts] of Object.entries(r.sources)) {
+      for (const a of artifacts) found.push({ sha: a.sha, key, ...(r.carrierList ? { carrierList: r.carrierList } : {}) });
+    }
   }
   for (const ref of catalog.refs) if (ref.sha) found.push({ sha: ref.sha, key: ref.source });
   found.sort((a, b) => (a.key < b.key ? -1 : a.key > b.key ? 1 : 0));

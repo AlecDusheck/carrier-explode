@@ -22,7 +22,7 @@ const sourcesSchema = v.record(v.string(), v.string());
 export async function buildIndex(ctx: JobContext<"index">): Promise<JobOutput<"index">> {
   const catalog = await loadCatalog(ctx.r2);
   const shas = [...new Set([
-    ...catalog.releases.flatMap((r) => Object.values(r.sources).map((s) => s.sha)),
+    ...catalog.releases.flatMap((r) => Object.values(r.sources).flatMap((artifacts) => artifacts.map((a) => a.sha))),
     ...catalog.refs.flatMap((r) => (r.sha ? [r.sha] : [])),
   ])];
   ctx.log(`${catalog.releases.length} releases, ${catalog.refs.length} refs, ${shas.length} artifacts`);

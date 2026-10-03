@@ -46,24 +46,14 @@ const iosBuild = v.object({
 /** One bundle as one IPSW carries it, stored as its own obj/ (deterministic re-zip). */
 const ipswBundle = v.object({ source: sourceKey, sha: sha256, version: v.string(), size: count, cid: v.exactOptional(v.string()) });
 
-/**
- * One Pixel OTA. `device` is the one whose OTA is read; `devices` every Pixel
- * the build ships for (Release.devices), [device] when absent.
- */
-const androidOta = v.object({
-  device: v.string(),
-  devices: v.exactOptional(v.array(v.string())),
-  build: v.string(),
-  url,
-  version: v.string(),
-  patch: month,
-});
+/** One Pixel OTA: carrier settings differ per device within a build, so each device's OTA is read. */
+const androidOta = v.object({ build: v.string(), device: v.string(), url, version: v.string(), patch: month });
 
 /* ------------------------------------------------------------- the table */
 
 export const JOB_TYPES = [
   "ios.plan", "ios.ipsw", "ios.modems", "ios.release", "ios.ota-archive",
-  "android.plan", "android.ota",
+  "android.plan", "android.ota", "android.release",
   "normalize", "index", "scan",
 ] as const;
 export type JobType = (typeof JOB_TYPES)[number];
@@ -135,19 +125,38 @@ export const JOB_SCHEMAS = {
   },
   "android.plan": {
     params: v.object({
-      devices: v.exactOptional(v.array(v.string())),
-      max: v.exactOptional(positive),
-      since: v.exactOptional(month),
-      /** One job per device instead of one per build. */
-      all: v.exactOptional(v.boolean()),
       /** Plan builds already held, too. */
       rebuild: v.exactOptional(v.boolean()),
     }),
-    output: v.object({ builds: v.array(androidOta) }),
+    output: v.object({
+      builds: v.array(v.object({
+        build: v.string(),
+        version: v.string(),
+        patch: month,
+        devices: v.array(v.object({ device: v.string(), url })),
+      })),
+    }),
   },
   "android.ota": {
     params: androidOta,
-    output: v.object({ build: v.string(), shas: v.array(sha256) }),
+    /** A device without CarrierSettings (a tablet) succeeds with no files. */
+    output: v.object({
+      build: v.string(),
+      device: v.string(),
+      carrierList: v.nullable(sha256),
+      files: v.array(v.object({ source: sourceKey, sha: sha256, version: v.string(), size: count })),
+    }),
+  },
+  "android.release": {
+    params: v.object({
+      build: v.string(),
+      version: v.string(),
+      patch: month,
+      released: v.exactOptional(v.string()),
+      /** Job ids of the build's android.ota runs, read from jobs/<id>.json like ios.release's parts. */
+      parts: v.array(jobIdSchema),
+    }),
+    output: v.object({ build: v.string(), sources: count }),
   },
   normalize: {
     params: v.union([
@@ -198,7 +207,8 @@ export const JOBS = {
   "ios.release": { size: "light", timeout: "30 minutes", writes: [...INGEST, "releases/ios/"] },
   "ios.ota-archive": { size: "light", timeout: "1 hours", writes: [...INGEST, "feeds/ios-ota/"] },
   "android.plan": { size: "light", timeout: "15 minutes", writes: [] },
-  "android.ota": { size: "light", timeout: "1 hours", writes: [...INGEST, "releases/android/"] },
+  "android.ota": { size: "light", timeout: "1 hours", writes: INGEST },
+  "android.release": { size: "light", timeout: "30 minutes", writes: ["releases/android/"] },
   normalize: { size: "light", timeout: "1 hours", writes: ["norm/"] },
   index: { size: "light", timeout: "30 minutes", writes: ["index/"] },
   scan: { size: "light", timeout: "1 hours", writes: ["scan/"] },
