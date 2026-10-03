@@ -1,17 +1,17 @@
 <script lang="ts">
   import { page } from "$app/state";
-  import { getFeaturePhones, getFeatureTable, getVisitorCountry } from "#lib/api/bundles.remote.ts";
+  import { getFeaturePhones, getFeatureTable, getVisitorCountry, guessCarrierName } from "#lib/api/bundles.remote.ts";
   import { FEATURES, featureBySlug } from "#lib/features.ts";
   import { link } from "#lib/format.ts";
-  import { carrierName, countryName } from "#lib/names.ts";
+  import { carrierName } from "#lib/names.ts";
   import Pane from "#lib/components/Pane.svelte";
+  import CarrierList from "#lib/components/features/CarrierList.svelte";
   import FeatureStatus from "#lib/components/features/FeatureStatus.svelte";
   import FeaturePhonePicker from "#lib/components/features/FeaturePhonePicker.svelte";
 
   let { params } = $props();
 
   const feature = $derived(featureBySlug(params.feature)!);
-  let filter = $state("");
   let offeredOnly = $state(true);
 
   const FAQ = $derived([
@@ -41,8 +41,14 @@
     },
   ]).replace(/</g, "\\u003c"));
 
-  const fold = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, "");
   const offers = (state: string) => state === "on" || state === "available";
+
+  /** A carrier's own features page, keeping the phone picked. */
+  function carrierHref(name: string) {
+    const q = new URLSearchParams(page.url.search);
+    q.set("carrier", name);
+    return `${link("/features")}?${q}`;
+  }
 </script>
 
 <svelte:head>
@@ -62,52 +68,42 @@
         {@const phone = phones.find((p) => p.id === page.url.searchParams.get("phone")) ?? phones[0]}
         <p>Whether you get it depends on your carrier and your iPhone model.</p>
         <FeaturePhonePicker {phones} {phone} />
+        {@const picked = page.url.searchParams.get("carrier")}
+        {@const carrier = picked ?? (await guessCarrierName())}
         {#if phone}
           {@const t = await getFeatureTable({ slug: feature.slug, phone: phone.id })}
           {#if !t.indexed}
             <p class="dimtext note">Not computed yet: the next index run reads every carrier.</p>
           {:else}
+            {@const mine = carrier ? t.rows.find((r) => r.name === carrier) : undefined}
+            {#if mine}
+              <p class="answer">
+                {carrierName(mine.name).brand} on the {phone.name}: <FeatureStatus state={mine.state} />
+              </p>
+              <p class="dimtext">
+                {#if !picked}Guessed from the network you are on. Not yours? Find it below.{/if}
+                <a href={carrierHref(mine.name)}>Every feature on {carrierName(mine.name).brand}</a>
+              </p>
+            {/if}
+
             {@const offered = t.rows.filter((r) => offers(r.state)).length}
             {@const notOffered = t.rows.filter((r) => r.state === "no").length}
             {@const unknown = t.rows.length - offered - notOffered}
-            <p class="answer"><b>{offered} carrier{offered === 1 ? "" : "s"}</b> offer {feature.name} on {phone.name}.</p>
-            <p class="dimtext">
-              {notOffered} don't.{#if unknown} For {unknown} more there are no settings for the {phone.name} to read yet.{/if}
+            <h2>Carriers</h2>
+            <p>
+              <b>{offered} carrier{offered === 1 ? "" : "s"}</b> offer {feature.name} on the {phone.name}, and {notOffered} don't.
+              {#if unknown}<span class="dimtext">For {unknown} more there are no settings for the {phone.name} to read yet.</span>{/if}
             </p>
-
-            {@const home = await getVisitorCountry()}
-            {@const f = fold(filter)}
-            {@const rows = t.rows
-              .filter((r) => !offeredOnly || offers(r.state))
-              .map((r) => ({ ...r, brand: carrierName(r.name).brand, country: countryName(r.cc) }))
-              .filter((r) => !f || fold(r.brand).includes(f) || fold(r.name).includes(f) || fold(r.country ?? "").includes(f))
-              .sort((a, b) =>
-                Number(b.cc === home) - Number(a.cc === home) ||
-                Number(!a.country) - Number(!b.country) ||
-                (a.country ?? "").localeCompare(b.country ?? "") ||
-                a.brand.localeCompare(b.brand))}
-            {@const shared = new Set(rows.filter((r, i) => rows.findIndex((o) => o.brand === r.brand && o.cc === r.cc) !== i).map((r) => r.brand))}
-            <div class="filters">
-              <input class="grow" type="search" name="carrier" placeholder="Find your carrier or country" aria-label="find your carrier or country" bind:value={filter} />
-              <label class="lbl"><input type="checkbox" bind:checked={offeredOnly} /> Only carriers that offer it</label>
-            </div>
-            <table class="grid">
-              <thead><tr><th>Carrier</th><th>{feature.name}</th></tr></thead>
-              <tbody>
-                {#each rows as r, i (r.name)}
-                  {#if i === 0 || rows[i - 1].country !== r.country}
-                    <tr class="group"><td colspan="2">{r.country ?? "Other"}</td></tr>
-                  {/if}
-                  <tr>
-                    <td><a href={link(`/carriers/${encodeURIComponent(r.name)}/settings`)}>{r.brand}</a>
-                      {#if shared.has(r.brand)}<span class="dimtext">{r.display}</span>{/if}</td>
-                    <td><FeatureStatus state={r.state} /></td>
-                  </tr>
-                {:else}
-                  <tr><td colspan="2" class="dimtext">No carrier matches.</td></tr>
-                {/each}
-              </tbody>
-            </table>
+            <CarrierList
+              rows={offeredOnly ? t.rows.filter((r) => offers(r.state)) : t.rows}
+              home={await getVisitorCountry()}
+              href={carrierHref}
+              column={feature.name}
+            >
+              {#snippet filters()}
+                <label class="lbl"><input type="checkbox" bind:checked={offeredOnly} /> Only carriers that offer it</label>
+              {/snippet}
+            </CarrierList>
           {/if}
         {/if}
       </Pane>

@@ -850,7 +850,7 @@ export async function getRare(kind: Kind, name: string, slug?: string) {
 const featureIndex = perRequest(async () => {
   const pointer = await r2json<ScanPointer>(POINTER_KEY);
   if (!pointer) return null;
-  return cached(`features:v1:${pointer.gen}`, 86400, () => r2json<FeatureIndex>(featuresKey(pointer.gen)));
+  return cached(`features:v2:${pointer.gen}`, 86400, () => r2json<FeatureIndex>(featuresKey(pointer.gen)));
 });
 
 /** The phones a feature page can be asked about: the current release's iPhones that have a name, newest first. */
@@ -870,7 +870,7 @@ export async function getFeatureTable(slug: string, phone: string) {
   if (!index) return { indexed: false as const };
   const rows = list.carriers
     .filter((c) => Object.hasOwn(index.bundles, c.name))
-    .map((c) => ({ name: c.name, display: c.display, cc: c.cc, ...phoneFeature(index, c.name, slug, phone) }));
+    .map((c) => ({ name: c.name, display: c.display, cc: c.cc, state: phoneFeature(index, c.name, slug, phone) }));
   return { indexed: true as const, rows };
 }
 
@@ -881,7 +881,7 @@ export async function getFeatureSummary(phone: string) {
   const names = Object.keys(index.bundles);
   return FEATURES.map((f) => {
     const counts = { on: 0, available: 0, no: 0, unknown: 0 };
-    for (const n of names) counts[phoneFeature(index, n, f.slug, phone).state]++;
+    for (const n of names) counts[phoneFeature(index, n, f.slug, phone)]++;
     return { slug: f.slug, counts, of: names.length };
   });
 }
@@ -890,7 +890,7 @@ export async function getFeatureSummary(phone: string) {
 export async function getCarrierFeatures(name: string, phone: string) {
   const index = await featureIndex();
   if (!index || !Object.hasOwn(index.bundles, name)) return null;
-  return FEATURES.map((f) => ({ slug: f.slug, ...phoneFeature(index, name, f.slug, phone) }));
+  return FEATURES.map((f) => ({ slug: f.slug, state: phoneFeature(index, name, f.slug, phone) }));
 }
 
 /** A phone's override plist next to its modem file (same stem), decoded; null when the copy has none. */

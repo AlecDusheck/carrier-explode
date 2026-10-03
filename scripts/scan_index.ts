@@ -149,22 +149,18 @@ async function build() {
   }));
   flats.sort((a, b) => a.src.localeCompare(b.src));
 
-  // Features per phone: each carrier's current copy, then its newest OTA for the phones the current one lacks.
+  // Features per phone: each carrier's current copy, with its newest OTA for the phones the current one lacks.
   const features: FeatureIndex = { features: featureSlugs(), bundles: {} };
-  const carriers = heads.filter((h) => h.kind === "carriers");
-  const fq = [...carriers];
+  const fq = heads.filter((h) => h.kind === "carriers");
   await Promise.all(Array.from({ length: 12 }, async () => {
     for (let h = fq.shift(); h; h = fq.shift()) {
-      const copies = [];
-      for (const c of [h, ...(h.ota ? [h.ota] : [])]) {
-        try {
-          const fc = featureCopy(openIpcc(await load(c.src)), c.build, c.source, c.phone);
-          if (fc) copies.push(fc);
-        } catch (e) {
-          console.error(`features: skip ${c.src}: ${e instanceof Error ? e.message : e}`);
-        }
+      try {
+        const ota = h.ota && openIpcc(await load(h.ota.src));
+        const fc = featureCopy(openIpcc(await load(h.src)), h.build, h.phone, ota);
+        if (fc) features.bundles[h.name] = fc;
+      } catch (e) {
+        console.error(`features: skip ${h.name}: ${e instanceof Error ? e.message : e}`);
       }
-      if (copies.length) features.bundles[h.name] = copies;
     }
   }));
 
