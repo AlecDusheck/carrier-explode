@@ -1,11 +1,13 @@
 <script lang="ts">
   import { getRelease } from "#lib/api/bundles.remote.ts";
-  import { getModems } from "#lib/api/tables.remote.ts";
+  import { getBasebandBuilds, getModems } from "#lib/api/tables.remote.ts";
   import { modemLabel } from "#lib/decode/index.ts";
   import { bundleHref, link } from "#lib/format.ts";
   import { imageSlug } from "#lib/names.ts";
   import { phoneList } from "#lib/phones.ts";
   import Pane from "#lib/components/Pane.svelte";
+  import BuildPicker from "#lib/components/BuildPicker.svelte";
+  import IosIcon from "#lib/components/IosIcon.svelte";
 
   let { params } = $props();
 
@@ -16,14 +18,13 @@
 <div class="view">
   <div class="scroll pad">
     <Pane>
-      {@const [r, mods] = await Promise.all([getRelease(params.build), getModems(params.build)])}
+      {@const [r, mods, builds] = await Promise.all([getRelease(params.build), getModems(params.build), getBasebandBuilds()])}
       {@const slug = imageSlug(r.image.version)}
       <div class="filters">
-        <b>iOS {r.image.version}</b>
-        <span class="mono">{r.image.build}</span>
+        <BuildPicker {builds} current={params.build} href={(b) => link("/builds/" + b.build)} />
         {#if r.previous}
           <span class="dimtext">since</span>
-          <a href={link("/builds/" + r.previous.build)}>iOS {r.previous.version} ({r.previous.build})</a>
+          <a class="picker-opt" href={link("/builds/" + r.previous.build)}><IosIcon version={r.previous.version} />iOS {r.previous.version} ({r.previous.build})</a>
         {:else}
           <span class="dimtext">oldest image held</span>
         {/if}
