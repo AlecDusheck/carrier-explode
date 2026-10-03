@@ -160,11 +160,11 @@ function imageChanges(images: ImageIndex[], kind: "carriers" | "countries") {
 /** The day the newest of these files was published. */
 const newestPublished = (refs: BundleRef[] = []) => newestDate(refs.map((r) => publishedOn(r.url)));
 
-/** Every bundle name. Built from the manifest and every image, so it is kept per manifest window and image set. */
+/** Every bundle name. Built from the manifest and every image, so it is kept per manifest window and image set. v7: country codes for country bundles and for names like O2_Germany. */
 export const getIndex = perRequest(async () => {
   const all = await builds();
   const version = await manifestVersion();
-  return cached(`index:v6:${version}:${buildsKey(all)}`, KEEP, async () => {
+  return cached(`index:v7:${version}:${buildsKey(all)}`, KEEP, async () => {
     const [m, images] = await Promise.all([manifest(), imageIndexes()]);
     const newest = images.find((i) => i.build === release(all)?.build);
 
