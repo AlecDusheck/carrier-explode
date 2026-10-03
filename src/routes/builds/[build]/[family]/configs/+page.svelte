@@ -1,7 +1,7 @@
 <script lang="ts">
   import { getBaseband } from "#lib/api/tables.remote.ts";
   import Pane from "#lib/components/Pane.svelte";
-  import PackageConfigs from "#lib/components/baseband/PackageConfigs.svelte";
+  import PackageConfigs from "#lib/components/ios/baseband/PackageConfigs.svelte";
 
   let { params } = $props();
 </script>

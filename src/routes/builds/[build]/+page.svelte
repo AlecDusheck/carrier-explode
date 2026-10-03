@@ -6,8 +6,8 @@
   import { imageSlug } from "#lib/names.ts";
   import { phoneList } from "#lib/phones.ts";
   import Pane from "#lib/components/Pane.svelte";
-  import BuildPicker from "#lib/components/BuildPicker.svelte";
-  import IosIcon from "#lib/components/IosIcon.svelte";
+  import BuildPicker from "#lib/components/ios/BuildPicker.svelte";
+  import IosIcon from "#lib/components/ios/IosIcon.svelte";
   import BundleChip from "#lib/components/BundleChip.svelte";
   import BundleIcon from "#lib/components/BundleIcon.svelte";
 

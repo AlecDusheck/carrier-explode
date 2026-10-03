@@ -1,28 +1,24 @@
+/** Tables across sources: the SIM tables, releases, and the iOS modem packages. */
+
 import * as v from "valibot";
 import { query } from "$app/server";
-import * as data from "#lib/server/data.ts";
-import { build, bundle, device, family, index, packageId } from "./schemas";
+import type { MccMncTable } from "#lib/decode/index.ts";
+import * as apple from "#lib/server/apple.ts";
+import * as baseband from "#lib/server/baseband.ts";
+import * as releases from "#lib/server/releases.ts";
+import { build, family, index, packageId, platform, release } from "./schemas";
 
-export const getCbs = query(() => data.getCbs());
-export const getPlmn = query(() => data.getPlmn());
+export const getPlmn = query((): Promise<MccMncTable> => apple.plmnTable());
+export const getManifestCounts = query((): Promise<Record<string, number>> => apple.manifestCounts());
 
-const scan = v.object({ path: v.string(), file: v.string(), scope: v.string() });
+export const getRelease = query(v.object({ platform, id: release }), (a): Promise<releases.ReleaseView> => releases.getRelease(a.platform, a.id));
 
-export const scanKey = query(scan, (a) => data.scanKey(a.path, a.file, a.scope));
-export const getSettingSummary = query(scan, (a) => data.settingSummary(a.path, a.file, a.scope));
-
-export const getBasebandBuilds = query(() => data.basebandBuilds());
-export const getModems = query(build, (b) => data.getModems(b));
-export const getModemPackageHeader = query(packageId, (id) => data.getModemPackageHeader(id));
-export const getBaseband = query(v.object({ build, family }), (a) => data.getBaseband(a.build, a.family));
-export const getBasebandFile = query(v.object({ id: packageId, i: index }), (a) => data.getBasebandFile(a.id, a.i));
-export const getBasebandCombos = query(v.object({ id: packageId, sha1: v.string(), tag: v.string() }), (a) =>
-  data.getBasebandCombos(a.id, a.sha1, a.tag));
-export const getBasebandDiff = query(v.object({ a: build, b: build, family }), (q) => data.getBasebandDiff(q.a, q.b, q.family));
-export const getBundleOverrides = query(v.object(bundle), (a) => data.getBundleOverrides(a.kind, a.name, a.slug));
-export const getBasebandDefaults = query(v.object({ ...bundle, device: v.optional(device) }), (a) =>
-  data.getBasebandDefaults(a.kind, a.name, a.slug, a.device));
-export const getBasebandOverride = query(
-  v.object({ ...bundle, id: packageId, pri: v.string(), efs: v.string(), i: index }),
-  (a) => data.getBasebandOverride(a.kind, a.name, a.slug, a.id, a.pri, a.efs, a.i),
-);
+export const getBasebandBuilds = query((): Promise<baseband.BuildFamilies[]> => baseband.basebandBuilds());
+export const getModems = query(build, (b): Promise<baseband.BuildModems> => baseband.getModems(b));
+export const getModemPackageHeader = query(packageId, (id): Promise<baseband.PackageHeader> => baseband.getModemPackageHeader(id));
+export const getBaseband = query(v.object({ build, family }), (a): Promise<baseband.BasebandPage> => baseband.getBaseband(a.build, a.family));
+export const getBasebandFile = query(v.object({ id: packageId, i: index }), (a): Promise<baseband.PackageFile> => baseband.getBasebandFile(a.id, a.i));
+export const getBasebandCombos = query(v.object({ id: packageId, sha1: v.string(), tag: v.string() }), (a): Promise<string[]> =>
+  baseband.getBasebandCombos(a.id, a.sha1, a.tag));
+export const getBasebandDiff = query(v.object({ a: build, b: build, family }), (q): Promise<baseband.BasebandDiff> =>
+  baseband.getBasebandDiff(q.a, q.b, q.family));

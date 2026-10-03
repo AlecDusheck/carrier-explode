@@ -3,8 +3,8 @@
   import { getBasebandBuilds, getBasebandDiff } from "#lib/api/tables.remote.ts";
   import { withParams } from "#lib/format.ts";
   import Pane from "#lib/components/Pane.svelte";
-  import BuildPicker from "#lib/components/BuildPicker.svelte";
-  import BasebandDiff from "#lib/components/BasebandDiff.svelte";
+  import BuildPicker from "#lib/components/ios/BuildPicker.svelte";
+  import BasebandDiff from "#lib/components/ios/BasebandDiff.svelte";
 
   let { params } = $props();
 </script>

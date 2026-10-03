@@ -4,9 +4,9 @@
   import { modemCapabilities } from "#lib/decode/index.ts";
   import { link, modemHref } from "#lib/format.ts";
   import Pane from "#lib/components/Pane.svelte";
-  import BuildPicker from "#lib/components/BuildPicker.svelte";
+  import BuildPicker from "#lib/components/ios/BuildPicker.svelte";
   import TabLinks from "#lib/components/TabLinks.svelte";
-  import ModemPicker from "#lib/components/baseband/ModemPicker.svelte";
+  import ModemPicker from "#lib/components/ios/baseband/ModemPicker.svelte";
 
   let { params, children } = $props();
 

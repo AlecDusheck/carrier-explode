@@ -2,7 +2,7 @@
   import { getBaseband } from "#lib/api/tables.remote.ts";
   import { modemHref } from "#lib/format.ts";
   import Pane from "#lib/components/Pane.svelte";
-  import Variants from "#lib/components/Variants.svelte";
+  import Variants from "#lib/components/ios/Variants.svelte";
 
   let { params } = $props();
 </script>

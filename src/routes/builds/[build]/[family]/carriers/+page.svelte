@@ -1,7 +1,7 @@
 <script lang="ts">
   import { getBaseband } from "#lib/api/tables.remote.ts";
   import Pane from "#lib/components/Pane.svelte";
-  import CarrierCombos from "#lib/components/baseband/CarrierCombos.svelte";
+  import CarrierCombos from "#lib/components/ios/baseband/CarrierCombos.svelte";
 
   let { params } = $props();
 </script>

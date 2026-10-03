@@ -1,6 +1,6 @@
 <script lang="ts">
   import Pane from "#lib/components/Pane.svelte";
-  import SimLookup from "#lib/components/SimLookup.svelte";
+  import SimLookup from "#lib/components/ios/SimLookup.svelte";
 </script>
 
 <div class="view">

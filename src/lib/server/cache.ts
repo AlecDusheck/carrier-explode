@@ -10,14 +10,17 @@
 import { error } from "@sveltejs/kit";
 import { getRequestEvent } from "$app/server";
 import { waitUntil } from "cloudflare:workers";
-import { bytesToHex } from "#lib/decode/index.ts";
+import { HttpError, fetchWithRetry, withSchemeFallback } from "#lib/http/index.ts";
 
 /**
  * JSON built by `fn`, kept in the colo cache for `ttlSeconds` when `keep`
  * allows. By default a null/undefined result is never stored: it usually
- * means "not reachable yet".
+ * means "not reachable yet". A hit is read back unvalidated: only this
+ * function writes the cache, from a value of the same `T` under the same key.
  */
-export async function cached<T>(key: string, ttlSeconds: number, fn: () => Promise<T>, keep: (v: T) => boolean = (v) => v != null): Promise<T> {
+export async function cached<T>(
+  key: string, ttlSeconds: number, fn: () => Promise<T>, keep: (v: T) => boolean = (v) => v !== null && v !== undefined,
+): Promise<T> {
   const cache = await caches.open("derived");
   const req = new Request(`https://cache.carrier-explode/${encodeURIComponent(key)}`);
   const hit = await cache.match(req);
@@ -27,7 +30,8 @@ export async function cached<T>(key: string, ttlSeconds: number, fn: () => Promi
     const res = new Response(JSON.stringify(value), {
       headers: { "content-type": "application/json", "cache-control": `public, s-maxage=${ttlSeconds}` },
     });
-    waitUntil(cache.put(req, res).catch(() => {}));
+    // A failed write costs the next request a rebuild and nothing else, so it is not worth failing this one.
+    waitUntil(cache.put(req, res).catch(() => undefined));
   }
   return value;
 }
@@ -54,28 +58,26 @@ export function perRequest<A extends string[], T>(fn: (...args: A) => Promise<T>
 // updates.cdn-apple.com, appldnld.apple.com, and the 2008-era appldnld.apple.com.edgesuite.net
 const APPLE = /(^|\.)(cdn-)?apple\.com(\.edgesuite\.net)?$/;
 
-/** Fetch from Apple. Old manifest entries are HTTP-only and some hosts have dropped HTTP, so try both. */
+/**
+ * An iOS OTA file the extractor has not archived yet, straight from Apple. The
+ * host allow-list is the site's: the URL comes from an index entry, but nothing
+ * else may make the worker fetch for it. Old entries are http-only and some
+ * hosts have dropped http, so both schemes are tried.
+ */
 export async function fetchApple(url: string): Promise<Uint8Array<ArrayBuffer>> {
   const u = new URL(url);
   if (!APPLE.test(u.hostname)) error(400, `host not allowed: ${u.hostname}`);
-  const alt = new URL(u);
-  alt.protocol = u.protocol === "https:" ? "http:" : "https:";
-  let last = "";
-  for (const target of [u, alt]) {
-    try {
-      const res = await fetch(target, {
-        cf: { cacheTtl: 30 * 86400, cacheEverything: true },
-        headers: { "user-agent": "carrier-explode/1.0" },
-      });
-      if (res.ok) return new Uint8Array(await res.arrayBuffer());
-      last = `HTTP ${res.status}`;
-    } catch (e) {
-      last = e instanceof Error ? e.message : String(e);
-    }
+  try {
+    return new Uint8Array(await withSchemeFallback(u, (target) =>
+      fetchWithRetry(target, { cf: { cacheTtl: 30 * 86400, cacheEverything: true } }).then((r) => r.arrayBuffer())));
+  } catch (e) {
+    error(502, `Apple did not serve ${u.hostname}${u.pathname}: ${failure(e)}`);
   }
-  error(502, `Apple returned ${last} for ${u.hostname}`);
 }
 
-export async function digestHex(algorithm: "SHA-1" | "SHA-384", bytes: Uint8Array<ArrayBuffer>): Promise<string> {
-  return bytesToHex(new Uint8Array(await crypto.subtle.digest(algorithm, bytes)));
+/** What went wrong, in a line: an HTTP status, or the network error, for each scheme tried. */
+function failure(e: unknown): string {
+  if (e instanceof AggregateError) return e.errors.map(failure).join("; ");
+  if (e instanceof HttpError) return `HTTP ${e.status}`;
+  return e instanceof Error ? e.message : String(e);
 }

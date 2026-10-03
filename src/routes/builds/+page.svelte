@@ -3,7 +3,7 @@
   import { modemLabel } from "#lib/decode/index.ts";
   import { link } from "#lib/format.ts";
   import Pane from "#lib/components/Pane.svelte";
-  import IosIcon from "#lib/components/IosIcon.svelte";
+  import IosIcon from "#lib/components/ios/IosIcon.svelte";
 </script>
 
 <div class="view">

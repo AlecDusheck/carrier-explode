@@ -33,8 +33,11 @@ const utf8 = new TextDecoder();
 
 /** Sequential reader over one message's bytes. Owns a cursor, so it is a class. */
 export class WireReader {
+  private readonly buf: Uint8Array;
   private pos = 0;
-  constructor(private readonly buf: Uint8Array) {}
+  constructor(buf: Uint8Array) {
+    this.buf = buf;
+  }
 
   get done(): boolean {
     return this.pos >= this.buf.length;

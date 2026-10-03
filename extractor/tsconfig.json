@@ -1,0 +1,5 @@
+{
+  // The Worker: runs in workerd. The container and the dev tools run in Node: container/tsconfig.json.
+  "extends": "../packages/tsconfig/worker.json",
+  "include": ["src"]
+}

@@ -5,7 +5,7 @@
   import { KINDS } from "#lib/types.ts";
   import { withParams } from "#lib/format.ts";
   import Pane from "#lib/components/Pane.svelte";
-  import BundleCompare from "#lib/components/BundleCompare.svelte";
+  import BundleCompare from "#lib/components/ios/BundleCompare.svelte";
   import VersionPicker from "#lib/components/VersionPicker.svelte";
   import { routineReason } from "#lib/changes.ts";
 

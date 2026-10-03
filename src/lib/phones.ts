@@ -1,40 +1,30 @@
-/** Phones by the modem package that serves them, and the bundle files each one reads. */
+/** Phones by the modem package that serves them, and the iOS bundle files each one reads. */
 
-import type { BundleFile } from "./decode";
+import { byNewest, compareProducts, type BundleFile } from "#lib/decode/index.ts";
 
-export interface Phone { id: string; name?: string }
-export interface PhoneModem { family: string; devices: Phone[] }
-
-/** "iPhone18,1" -> [18, 1]; newer models sort higher. */
-const model = (id: string) => (/(\d+),(\d+)$/.exec(id) ?? [0, 0, 0]).slice(1).map(Number);
-
-export function compareProducts(a: string, b: string): number {
-  const [x, y] = [model(a), model(b)];
-  return x[0] - y[0] || x[1] - y[1];
+export interface Phone {
+  readonly id: string;
+  readonly name?: string | undefined;
+}
+export interface PhoneModem {
+  readonly family: string;
+  readonly devices: readonly Phone[];
 }
 
-const newest = (m: PhoneModem) => m.devices.map((d) => d.id).sort(compareProducts).at(-1) ?? "";
-
-/** Families serving the newest phone first. */
-export const byNewest = <M extends PhoneModem>(modems: M[]) =>
-  [...modems].sort((a, b) => compareProducts(newest(b), newest(a)));
-
 /** Where a build's baseband pages open: the newest family serving a phone that has a name. Unreleased models ship early in images. */
-export const defaultModem = <M extends PhoneModem>(modems: M[]) => {
+export function defaultModem<M extends PhoneModem>(modems: readonly M[]): M | undefined {
   const sorted = byNewest(modems);
   return sorted.find((m) => m.devices.some((d) => d.name)) ?? sorted[0];
-};
+}
 
 /** Named phones in name order, then unnamed ones by product type. */
-export function sortPhones(phones: Phone[]): Phone[] {
-  const named = phones
-    .filter((p): p is Phone & { name: string } => !!p.name)
-    .sort((a, b) => a.name.localeCompare(b.name, "en", { numeric: true }));
+export function sortPhones<P extends Phone>(phones: readonly P[]): P[] {
+  const named = phones.filter((p) => p.name).sort((a, b) => (a.name ?? "").localeCompare(b.name ?? "", "en", { numeric: true }));
   return [...named, ...phones.filter((p) => !p.name).sort((a, b) => compareProducts(a.id, b.id))];
 }
 
 /** "iPhone 17, 17 Pro, 17 Pro Max": each name once, the shared "iPhone " said once. */
-export function phoneList(phones: Phone[]): string {
+export function phoneList(phones: readonly Phone[]): string {
   const names = [...new Set(sortPhones(phones).map((p) => p.name ?? p.id))];
   return names.map((n, i) => (i && n.startsWith("iPhone ") ? n.slice(7) : n)).join(", ");
 }
@@ -42,61 +32,66 @@ export function phoneList(phones: Phone[]): string {
 /**
  * The phone a bundle version means when none is named: a per-model OTA file's
  * (its product type is a model, "iPhone17,1", not a family like "iPad"), else
- * the one the image was cut for.
+ * the newest phone of the release it is read against.
  */
-export const homePhone = (entry: { productType?: string }, image: { product?: string }) =>
-  entry.productType?.includes(",") ? entry.productType : image.product;
+export function homePhone(entry: { readonly productType?: string | undefined }, devices: readonly string[]): string | undefined {
+  return entry.productType?.includes(",") ? entry.productType : [...devices].sort(compareProducts).at(-1);
+}
 
 /** The newest named model among phones: the one a group of them is pictured by. */
-export const newestNamed = (phones: Phone[]) => phones.filter((p) => p.name).sort((a, b) => compareProducts(b.id, a.id))[0]?.name;
+export const newestNamed = (phones: readonly Phone[]): string | undefined =>
+  phones.filter((p) => p.name).sort((a, b) => compareProducts(b.id, a.id))[0]?.name;
+
+type FileRef = Pick<BundleFile, "kind" | "devices">;
 
 /** A bundle file that is a modem override (.der.pri or plain .pri). */
-export const isPri = (f: Pick<BundleFile, "kind">) => f.kind === "pri-der" || f.kind === "pri-plain";
+export const isPri = (f: Pick<BundleFile, "kind">): boolean => f.kind === "pri-der" || f.kind === "pri-plain";
 
 /** The bundle's modem override files for one phone, by the device codenames in their `overrides_<stem>` names. */
-export const overridesFor = <F extends Pick<BundleFile, "kind" | "devices">>(files: F[], productType: string) =>
+export const overridesFor = <F extends FileRef>(files: readonly F[], productType: string): F[] =>
   files.filter((f) => isPri(f) && f.devices?.some((d) => d.ids === productType));
 
 /** Whether a copy was made once `productType` existed: an override file names it or a newer model. */
-export const knowsPhone = <F extends Pick<BundleFile, "kind" | "devices">>(files: F[], productType: string) =>
-  files.some((f) => isPri(f) && f.devices?.some((d) => d.ids && compareProducts(d.ids, productType) >= 0));
+export const knowsPhone = (files: readonly FileRef[], productType: string): boolean =>
+  files.some((f) => isPri(f) && f.devices?.some((d) => d.ids !== undefined && compareProducts(d.ids, productType) >= 0));
 
 /** An override file's codes that name no phone the table knows: a board newer than the table. */
-const unknownBoards = (f: Pick<BundleFile, "devices">) => (f.devices ?? []).filter((d) => d.name === undefined).map((d) => d.code);
+const unknownBoards = (f: Pick<BundleFile, "devices">): string[] =>
+  (f.devices ?? []).filter((d) => d.name === undefined).map((d) => d.code);
+
+const namesNoPhone = (f: FileRef): boolean => isPri(f) && !f.devices?.some((d) => d.ids);
 
 /** Modem files named for no phone: global_setting_*.der.gri, an MVNO set. Not a board the table has yet to learn. */
-export const sharedPri = <F extends Pick<BundleFile, "kind" | "devices">>(files: F[]) =>
-  files.filter((f) => isPri(f) && !f.devices?.some((d) => d.ids) && !unknownBoards(f).length);
+export const sharedPri = <F extends FileRef>(files: readonly F[]): F[] =>
+  files.filter((f) => namesNoPhone(f) && !unknownBoards(f).length);
 
 /** Modem files named only for boards the table does not know yet, each shown as its board code. */
-export const unrecognisedPri = <F extends Pick<BundleFile, "kind" | "devices">>(files: F[]) =>
-  files.filter((f) => isPri(f) && !f.devices?.some((d) => d.ids) && unknownBoards(f).length);
+export const unrecognisedPri = <F extends FileRef>(files: readonly F[]): F[] =>
+  files.filter((f) => namesNoPhone(f) && unknownBoards(f).length > 0);
+
+export type GroupPhone = Phone & { readonly family?: string | undefined };
 
 /** One phone group's modem override file in a bundle version. */
 export interface PhoneRow {
-  slug: string;
-  path: string;
-  phones: Array<Phone & { family?: string }>;
-  source?: "ota" | "image";
-  ios?: string[];
-  build?: string;
+  /** The version the file is read from. */
+  readonly slug: string;
+  readonly path: string;
+  readonly phones: readonly GroupPhone[];
 }
 
-/** Files named for phones first, then the ones named for none (global_setting_*, MVNO sets). */
+/** Files named for phones first, newest phone first whichever modem it uses, then the ones named for none (global_setting_*, MVNO sets). */
 export function phoneRows(
-  here: { slug: string; source?: "ota" | "image"; ios?: string[]; build?: string },
-  files: Array<Pick<BundleFile, "kind" | "devices" | "path">>,
-  ov: { files: Array<{ slug: string; path: string; phones: Array<Phone & { family?: string }> }> } | null,
+  slug: string,
+  files: ReadonlyArray<Pick<BundleFile, "kind" | "devices" | "path">>,
+  ov: { readonly files: readonly PhoneRow[] } | null,
 ): PhoneRow[] {
-  // Newest phone first, whichever modem it uses.
-  const newestIn = (f: { phones: Phone[] }) => f.phones.map((p) => p.id).sort(compareProducts).at(-1) ?? "";
+  const newestIn = (f: PhoneRow): string => f.phones.map((p) => p.id).sort(compareProducts).at(-1) ?? "";
   return [
     ...[...(ov?.files ?? [])].sort((x, y) => compareProducts(newestIn(y), newestIn(x))),
     ...unrecognisedPri(files).map((f) => ({
-      ...here, path: f.path,
-      phones: unknownBoards(f).map((code) => ({ id: code, name: `Unrecognised phone (${code})` })),
+      slug, path: f.path, phones: unknownBoards(f).map((code) => ({ id: code, name: `Unrecognised phone (${code})` })),
     })),
-    ...sharedPri(files).map((f) => ({ ...here, path: f.path, phones: [] })),
+    ...sharedPri(files).map((f) => ({ slug, path: f.path, phones: [] })),
   ];
 }
 
@@ -105,7 +100,7 @@ export function phoneRows(
  * file is not read by any phone in this version, so the page can say so instead of quietly
  * showing another phone.
  */
-export function pickPhoneRow(rows: PhoneRow[], sel: { file: string | null }) {
-  const named = sel.file ? rows.find((r) => r.path === sel.file) : undefined;
-  return { row: named ?? rows[0], missing: !!sel.file && !named ? sel.file : undefined };
+export function pickPhoneRow(rows: readonly PhoneRow[], file: string | null): { row: PhoneRow | undefined; missing: string | undefined } {
+  const named = file ? rows.find((r) => r.path === file) : undefined;
+  return { row: named ?? rows[0], missing: file && !named ? file : undefined };
 }

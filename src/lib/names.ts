@@ -1,48 +1,23 @@
 /**
- * Names and versions, shared by the server and the page head: how a bundle
- * name reads to a person, and how iOS versions order once betas are among them.
- * No imports, so anything can use it.
+ * Names, shared by the server and the page head: how a bundle name, a version
+ * slug or a build reads to a person. Ordering lives with the iOS decoder
+ * (#lib/decode/versions.ts). No imports, so anything can use it.
  */
 
 /* ---------------------------------------------------------------- versions */
 
-// "27.2 beta 3", "26.0 RC 2": the suffix AppleDB and Apple's release notes use.
-const PRERELEASE = /^(.*?)\s+(beta|rc)\s*(\d*)$/i;
-
-/** Numeric segments; anything that is not a number sorts below every real release. */
-export function versionKey(v: string): number[] {
-  return v.split(".").map((p) => parseInt(p, 10)).map((p) => (Number.isNaN(p) ? -1 : p));
-}
-
-/** A prerelease ranks below its release: 27.2 beta 3 < 27.2 RC < 27.2 < 27.2.1. */
-function split(v: string): [number[], number] {
-  const m = PRERELEASE.exec(v);
-  const num = versionKey(m ? m[1] : v);
-  const rank = !m ? 1e6 : m[2].toLowerCase() === "rc" ? 1e3 + Number(m[3] || 0) : Number(m[3] || 0);
-  return [num, rank];
-}
-
-export function compareVersions(a: string, b: string): number {
-  const [A, ra] = split(a), [B, rb] = split(b);
-  for (let i = 0; i < Math.max(A.length, B.length); i++) {
-    const d = (A[i] ?? 0) - (B[i] ?? 0);
-    if (d) return d;
-  }
-  return ra - rb;
-}
-
-export const isPrerelease = (version: string) => PRERELEASE.test(version);
-
-/** URL segment for an iOS image: ios-27.0, ios-27.2-beta-3. */
-export const imageSlug = (version: string) => "ios-" + version.trim().replace(/\s+/g, "-");
-
-/** "ios-27.2-beta-3" -> "iOS 27.2 beta 3", "ota-58.1-iPad" -> "build 58.1 (iPad)". */
+/**
+ * A timeline slug as words: "ios-27.2-beta-3" -> "iOS 27.2 beta 3", "ota-58.1-iPad" -> "build 58.1 (iPad)",
+ * "android-cp3a.260905.009" -> "Android CP3A.260905.009".
+ */
 export function versionLabel(slug: string): string {
-  let m = /^ios-(\d+(?:\.\d+)*)((?:-(?:beta|rc)(?:-\d+)?)?)(?:-(\w+))?$/i.exec(slug);
-  if (m) return `iOS ${m[1]}${m[2].replace(/-/g, " ")}${m[3] ? ` (${m[3]})` : ""}`;
+  const ios = /^ios-(\d+(?:\.\d+)*)((?:-(?:beta|rc)(?:-\d+)?)?)(?:-(\w+))?$/i.exec(slug);
+  if (ios) return `iOS ${ios[1]}${(ios[2] ?? "").replace(/-/g, " ")}${ios[3] ? ` (${ios[3]})` : ""}`;
   if (slug === "ota-legacy") return "legacy build";
-  m = /^ota-([\d.]+)(?:-([A-Za-z]\w*))?/.exec(slug);
-  if (m) return `build ${m[1]}${m[2] ? ` (${m[2]})` : ""}`;
+  const ota = /^ota-([\d.]+)(?:-([A-Za-z]\w*))?/.exec(slug);
+  if (ota) return `build ${ota[1]}${ota[2] ? ` (${ota[2]})` : ""}`;
+  const android = /^android-(.+)$/.exec(slug);
+  if (android) return `Android ${(android[1] ?? "").toUpperCase()}`;
   return slug;
 }
 

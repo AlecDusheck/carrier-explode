@@ -1,7 +1,7 @@
 <script lang="ts">
   import type { PublicEntry } from "#lib/types.ts";
   import { entryLabel } from "#lib/format.ts";
-  import IosIcon from "./IosIcon.svelte";
+  import IosIcon from "./ios/IosIcon.svelte";
   import Picker from "./Picker.svelte";
 
   let { label, timeline, current, head, href }: {

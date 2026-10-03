@@ -4,10 +4,14 @@ import { byteAt } from "./bounds.ts";
 
 /** MSB-first bit reader over a byte array. Keeps a cursor, so it is a class. */
 export class BitReader {
+  readonly buf: Uint8Array;
+  readonly endBit: number;
   /** Current position in bits. */
   pos: number;
-  constructor(readonly buf: Uint8Array, startBit = 0, readonly endBit = buf.length * 8) {
+  constructor(buf: Uint8Array, startBit = 0, endBit = buf.length * 8) {
+    this.buf = buf;
     this.pos = startBit;
+    this.endBit = endBit;
   }
 
   get left(): number {

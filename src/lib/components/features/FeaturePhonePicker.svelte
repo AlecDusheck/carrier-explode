@@ -1,7 +1,7 @@
 <script lang="ts">
   import { page } from "$app/state";
   import { withParams } from "#lib/format.ts";
-  import PhoneImage from "#lib/components/PhoneImage.svelte";
+  import PhoneImage from "#lib/components/ios/PhoneImage.svelte";
   import Picker from "#lib/components/Picker.svelte";
 
   type Phone = { id: string; name: string };

@@ -29,3 +29,5 @@ export * from "./ims";
 export * from "./policyman";
 export * from "./mdb";
 export * from "./ssgccs";
+export * from "./versions";
+export * from "./manifest";

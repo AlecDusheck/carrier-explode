@@ -3,8 +3,14 @@
 /** A read outside the buffer: the input is truncated or an offset in it is wrong. */
 export class BoundsError extends RangeError {
   override name = "BoundsError";
-  constructor(readonly offset: number, readonly length: number, readonly size: number) {
+  readonly offset: number;
+  readonly length: number;
+  readonly size: number;
+  constructor(offset: number, length: number, size: number) {
     super(`read of ${length} byte(s) at ${offset} is outside a ${size}-byte buffer`);
+    this.offset = offset;
+    this.length = length;
+    this.size = size;
   }
 }
 

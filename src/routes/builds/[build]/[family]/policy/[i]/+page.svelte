@@ -2,7 +2,7 @@
   import { getBaseband, getBasebandFile } from "#lib/api/tables.remote.ts";
   import { humanBytes } from "#lib/format.ts";
   import Pane from "#lib/components/Pane.svelte";
-  import PolicyTree from "#lib/components/PolicyTree.svelte";
+  import PolicyTree from "#lib/components/ios/PolicyTree.svelte";
 
   let { params } = $props();
 

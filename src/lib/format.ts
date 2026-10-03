@@ -2,7 +2,9 @@ import { resolve } from "$app/paths";
 import type { ReadonlyURL } from "$app/state";
 import type { Path } from "$app/types";
 import { bandList, isBigInt, isRecord, isUid, type ComboComponent, type DiffKind } from "#lib/decode/index.ts";
-import type { CbsRow, Kind, PublicEntry } from "#lib/types.ts";
+import { sourceKey, type Platform, type SourceRef } from "#lib/schema/types.ts";
+import type { Place, Version } from "#lib/types.ts";
+import { segmentOf } from "#lib/places.ts";
 
 export function humanBytes(n: number): string {
   if (n < 1024) return n + " B";
@@ -50,25 +52,26 @@ function iosRange(first: string, last: string): string {
   return a && b && a[1] === b[1] ? `${a[1]} ${a[2] ?? 1}–${b[2]}` : `${first} – ${last}`;
 }
 
-/** Where a version came from: the one label used by the timeline, Summary and Compare. */
-export function entryLabel(e: Pick<PublicEntry, "source" | "ios" | "build" | "productType">): string {
+type Labelled = Pick<Version, "via" | "os" | "version" | "productType" | "slug">;
+
+/** iOS: which images carry it or which OS it is published for, the bundle's build, and the model a per-model copy is for. */
+function iosLabel(e: Labelled): string {
   // Every Watch bundle is for Watch; only the iPad and single-model variants need saying.
   const model = e.productType && e.productType !== "Watch" ? " · " + e.productType : "";
-  if (e.source === "image") {
-    const ios = e.ios.length > 1 ? iosRange(e.ios[0], e.ios.at(-1)!) : e.ios[0];
-    return `iOS ${ios} image · build ${e.build}${model}`;
-  }
-  return `OTA · ${e.ios.length ? `iOS ${e.ios[0]}+` : "legacy"} · build ${e.build}${model}`;
+  const [first, last] = [e.os[0], e.os.at(-1)];
+  if (e.via === "ota") return `OTA · ${first !== undefined ? `iOS ${first}+` : "legacy"} · build ${e.version}${model}`;
+  const ios = first !== undefined && last !== undefined && e.os.length > 1 ? iosRange(first, last) : (first ?? "");
+  return `iOS ${ios} image · build ${e.version}${model}`;
 }
 
-/** A cell-broadcast row's bundle in entryLabel's words: the current image's copy, or an OTA one. */
-export function cbsEntryLabel(r: Pick<CbsRow, "source" | "version" | "minOS">, image: { version: string } | null): string {
-  return entryLabel(
-    r.source === "image" && image
-      ? { source: "image", ios: [image.version], build: r.version }
-      : { source: "ota", ios: r.minOS ? [r.minOS] : [], build: r.version },
-  );
-}
+/** Android: the release, its build id, and the file's own version. */
+const androidLabel = (e: Labelled): string =>
+  `Android ${e.os.join(", ")} · ${e.slug.replace(/^android-/, "").toUpperCase()} · version ${e.version}`;
+
+const LABELS = { ios: iosLabel, android: androidLabel } as const satisfies Record<Platform, (e: Labelled) => string>;
+
+/** Where a version came from: the one label used by the version picker, Overview and Compare. */
+export const entryLabel = (e: Labelled, platform: Platform): string => LABELS[platform](e);
 
 /** Chip class for each kind of difference. */
 export const DIFF_CHIP: Record<DiffKind, string> = { added: "good", removed: "bad", changed: "warn", same: "" };
@@ -84,23 +87,35 @@ const segs = (path: string) => path.split("/").map(seg).join("/");
 export const link = (path: string) => resolve(path.slice(1) as Path);
 
 /** A modem package page of an iOS build, or one of its tabs. */
-export const modemHref = (build: string, family: string, tab?: string) =>
+export const modemHref = (build: string, family: string, tab?: string): string =>
   link(`/builds/${seg(build)}/${seg(family)}` + (tab ? `/${tab}` : ""));
 
-export const bundleHref = (kind: Kind, name: string, slug?: string, tab?: string) =>
-  link(`/${kind}/${seg(name)}` + (slug ? `/${seg(slug)}` + (tab ? `/${tab}` : "") : ""));
+/** A carrier's or a country's overview. */
+export const placeHref = (p: Place, query = ""): string => link(`/${p.group}/${seg(p.id)}`) + query;
 
-export const fileHref = (kind: Kind, name: string, slug: string, path: string) =>
-  `${bundleHref(kind, name, slug, "files")}/${segs(path)}`;
+/** A native view: a source at a version, on one tab, at one file. Without a version, the source's head. */
+export function nativeHref(p: Place, ref: SourceRef, version?: string, tab?: string, path?: string): string {
+  const base = `/${p.group}/${seg(p.id)}/${ref.platform}/${seg(segmentOf(p.group, ref))}`;
+  if (!version) return link(base);
+  return link(`${base}/${seg(version)}` + (tab ? `/${tab}` : "") + (tab && path ? `/${segs(path)}` : ""));
+}
+
+/**
+ * Any source by its key, wherever its pages live: /source resolves the key to
+ * its carrier or country and redirects. For links that only have a key (scan
+ * results, release lists, the SIM table, the wiki) without loading where each lives.
+ */
+export const sourceHref = (key: string, opts: { version?: string; tab?: string; path?: string; release?: string } = {}): string =>
+  link(`/source/${seg(key)}` + (opts.version ? `/${seg(opts.version)}` : "") + (opts.tab ? `/${opts.tab}` : "") + (opts.tab && opts.path ? `/${segs(opts.path)}` : ""))
+  + (opts.release ? `?release=${seg(opts.release)}` : "");
+
+/** An iOS carrier bundle by name, for the tables that only know Apple's names (the manifest's SIM rules, modem carrier maps). */
+export const iosBundleHref = (name: string, family?: "Watch"): string =>
+  sourceHref(sourceKey({ platform: "ios", kind: "carrier", name, ...(family ? { family } : {}) }));
 
 /** Only images and audio: the pages embed those, every other file is shown decoded. */
-export const rawHref = (kind: Kind, name: string, slug: string, path: string) =>
-  link(`/raw/${kind}/${seg(name)}/${seg(slug)}/${segs(path)}`);
-
-
-/** Query args must be built the same way everywhere so layout and page share one cached query. */
-export const bundleArgs = (p: { kind: Kind; name: string; version?: string }) =>
-  p.version ? { kind: p.kind, name: p.name, slug: p.version } : { kind: p.kind, name: p.name };
+export const rawHref = (key: string, version: string, path: string): string =>
+  link(`/raw/${seg(key)}/${seg(version)}/${segs(path)}`);
 
 export function errorMessage(e: unknown): string {
   const x = isRecord(e) ? e : {};

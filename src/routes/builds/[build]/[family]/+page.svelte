@@ -2,9 +2,9 @@
   import { getBaseband, getModems } from "#lib/api/tables.remote.ts";
   import { modemCapabilities } from "#lib/decode/index.ts";
   import Pane from "#lib/components/Pane.svelte";
-  import ModemFirmware from "#lib/components/baseband/ModemFirmware.svelte";
-  import FbsSection from "#lib/components/baseband/FbsSection.svelte";
-  import PowerTable from "#lib/components/baseband/PowerTable.svelte";
+  import ModemFirmware from "#lib/components/ios/baseband/ModemFirmware.svelte";
+  import FbsSection from "#lib/components/ios/baseband/FbsSection.svelte";
+  import PowerTable from "#lib/components/ios/baseband/PowerTable.svelte";
 
   let { params } = $props();
 

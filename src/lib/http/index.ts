@@ -9,8 +9,12 @@
 /** A response that settles the request: 404, any other 4xx but 429, or the last failed attempt. */
 export class HttpError extends Error {
   override name = "HttpError";
-  constructor(readonly url: string, readonly status: number, message = `HTTP ${status} for ${url}`) {
-    super(message);
+  readonly url: string;
+  readonly status: number;
+  constructor(url: string, status: number) {
+    super(`HTTP ${status} for ${url}`);
+    this.url = url;
+    this.status = status;
   }
 }
 

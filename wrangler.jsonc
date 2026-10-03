@@ -11,8 +11,10 @@
     }
   ],
   "assets": { "binding": "ASSETS", "directory": ".svelte-kit/cloudflare" },
-  // Bundles pulled out of an IPSW by scripts/extract_system_bundles.py
-  "r2_buckets": [{ "binding": "SYSTEM", "bucket_name": "carrier-explode", "remote": true }],
+  // The v2 store (src/lib/storage/keys.ts), written only by the extractor worker.
+  // `pnpm dev` reads local R2 (.wrangler/state), which the extractor's seed
+  // script fills; add "remote": true here to browse the real bucket instead.
+  "r2_buckets": [{ "binding": "BUCKET", "bucket_name": "carrier-explode-v2" }],
   // Cloudflare checks this worker's own cache before running it, and honours the
   // Cache-Control that src/hooks.server.ts puts on every response. Zone cache
   // settings — Cache Everything, cache rules, page rules — never apply to what a
