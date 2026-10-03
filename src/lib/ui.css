@@ -370,17 +370,11 @@ p.note { margin: 0 0 6px; }
 
 .bundle-head { display: flex; gap: 8px; padding: 4px 6px; flex: none; border-bottom: 1px solid var(--shadow); align-items: flex-start; }
 .bundle-head .ident { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; min-width: 0; padding-top: 3px; }
-.bundle-head .versions-slot { margin-left: auto; width: min(420px, 55%); flex: none; height: 78px; }
-.versions .scroll { height: 78px; flex: none; }
-.versions .toggle { display: none; }
-.timeline { list-style: none; margin: 0; padding: 0; font-size: 11.5px; }
-.timeline a { display: flex; gap: 8px; padding: 2px 6px; text-decoration: none; color: inherit; white-space: nowrap; }
-.timeline a:hover { background: #eef2f7; }
-.timeline a[aria-current="true"] { background: var(--sel); color: var(--sel-text); }
-.timeline .flag { margin-left: auto; font-size: 10.5px; color: var(--text-dim); }
-.timeline .flag + .flag { margin-left: 6px; }
-.timeline .flag.now { color: var(--good-text); font-weight: bold; }
-.timeline a[aria-current="true"] .flag { color: inherit; }
+.bundle-head .versions-slot { margin-left: auto; max-width: 60%; flex: none; min-height: 28px; }
+.picker-tag { margin-left: auto; padding-left: 8px; font-size: 10.5px; color: var(--text-dim); white-space: nowrap; }
+.picker-tag + .picker-tag { margin-left: 0; padding-left: 6px; }
+.picker-tag.now { color: var(--good-text); font-weight: bold; }
+[aria-selected="true"] .picker-tag { color: inherit; }
 
 /* ------------------------------------------------------------ context menu */
 
@@ -454,15 +448,8 @@ button.drawer-btn { display: none; }
   .dialog-back { padding: 0; }
   .dialog { max-height: 100%; height: 100%; }
   .bundle-head { flex-direction: column; align-items: stretch; }
-  .bundle-head .versions-slot { width: 100%; margin: 0; height: 32px; }
-  .versions { position: relative; }
-  .versions .toggle { display: flex; width: 100%; overflow: hidden; white-space: nowrap; }
-  .versions:not(.open) .scroll { display: none; }
-  .versions .scroll {
-    position: absolute; z-index: 20; left: 0; right: 0; top: 100%; height: auto; max-height: 50vh;
-    box-shadow: 3px 3px 0 rgba(0, 0, 0, 0.3);
-  }
-  .timeline a { padding: 7px 8px; }
+  .bundle-head .versions-slot { max-width: 100%; margin: 0; }
+  .picker-list > [role="option"] { padding: 8px; }
   .drawer-bar { display: flex; }
 }
 
@@ -498,3 +485,27 @@ article.consumer ul.others { columns: 2 14em; padding-left: 18px; }
 .chip.bundle .logo { width: 14px; height: 14px; border-radius: 3px; }
 .chip.bundle .logo.initials { font-size: 7px; }
 .chip.bundle .flag { font-size: 12px; }
+.ios-icon { flex: none; vertical-align: middle; }
+
+/* ------------------------------------------------------------------ pickers */
+
+.picker { display: inline-flex; align-items: center; gap: 6px; min-width: 0; max-width: 100%; }
+.picker-btn { display: inline-flex; align-items: center; gap: 6px; min-width: 0; max-width: 100%; text-align: left; }
+.picker-btn .caret { margin-left: auto; padding-left: 4px; font-size: 10px; }
+.picker-opt { display: inline-flex; align-items: center; gap: 6px; min-width: 0; }
+.picker-opt .text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.picker-list {
+  margin: 0; padding: 2px; max-height: min(60vh, 420px); overflow: auto;
+  min-width: anchor-size(width); max-width: min(92vw, 520px);
+  background: var(--light); border: 2px solid; border-color: var(--light) var(--dark) var(--dark) var(--light);
+  box-shadow: 3px 3px 0 rgba(0, 0, 0, 0.3);
+  position-area: bottom span-right; position-try-fallbacks: flip-block, flip-inline;
+}
+.picker-list > [role="option"] {
+  display: flex; width: 100%; padding: 4px 8px; border: 0; background: none; font: inherit;
+  color: inherit; text-decoration: none; text-align: left; cursor: pointer;
+}
+.picker-list > [role="option"]:hover { background: #eef2f7; }
+.picker-list > [role="option"][aria-selected="true"] { background: var(--sel); color: var(--sel-text); }
+.picker-list > [role="option"][aria-selected="true"] .dimtext { color: #cfe0f5; }
+.phone-img { flex: none; width: 20px; height: 20px; object-fit: contain; vertical-align: middle; }

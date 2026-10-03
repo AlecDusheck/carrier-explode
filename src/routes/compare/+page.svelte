@@ -3,9 +3,10 @@
   import { page } from "$app/state";
   import { getBundle, getComparison, getIndex } from "#lib/api/bundles.remote.ts";
   import type { Kind } from "#lib/types.ts";
-  import { entryLabel, withParams } from "#lib/format.ts";
+  import { withParams } from "#lib/format.ts";
   import Pane from "#lib/components/Pane.svelte";
   import BundleCompare from "#lib/components/BundleCompare.svelte";
+  import VersionPicker from "#lib/components/VersionPicker.svelte";
   import { routineReason } from "#lib/changes.ts";
 
   const sp = $derived(page.url.searchParams);
@@ -42,15 +43,12 @@
       {#if chosen}
         <Pane>
           {@const bundle = await getBundle(chosen)}
-          <select
-            name="{key}v"
-            class="grow"
-            aria-label="{title} version"
-            value={bundle.entry.slug}
-            onchange={(e) => set({ [key + "v"]: e.currentTarget.value })}
-          >
-            {#each bundle.timeline as t (t.slug)}<option value={t.slug}>{entryLabel(t)}</option>{/each}
-          </select>
+          <VersionPicker
+            timeline={bundle.timeline}
+            current={bundle.entry.slug}
+            head={bundle.head}
+            href={(slug) => withParams(page.url, { [key + "v"]: slug })}
+          />
         </Pane>
       {:else if sp.get(key)}
         <span class="dimtext">No such bundle</span>

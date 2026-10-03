@@ -5,7 +5,7 @@
   import { bundleArgs, bundleHref } from "#lib/format.ts";
   import Pane from "#lib/components/Pane.svelte";
   import BundleIcon from "#lib/components/BundleIcon.svelte";
-  import VersionTimeline from "#lib/components/VersionTimeline.svelte";
+  import VersionPicker from "#lib/components/VersionPicker.svelte";
 
   type Bundle = Awaited<ReturnType<typeof getBundle>>;
 
@@ -26,7 +26,7 @@
 {/snippet}
 
 {#snippet versions(bundle: Bundle)}
-  <VersionTimeline
+  <VersionPicker
     timeline={bundle.timeline}
     current={bundle.entry.slug}
     head={bundle.head}

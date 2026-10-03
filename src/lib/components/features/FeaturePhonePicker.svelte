@@ -1,16 +1,17 @@
 <script lang="ts">
-  import { goto } from "$app/navigation";
   import { page } from "$app/state";
   import { withParams } from "#lib/format.ts";
+  import PhoneImage from "#lib/components/PhoneImage.svelte";
+  import Picker from "#lib/components/Picker.svelte";
 
-  let { phones, phone }: { phones: Array<{ id: string; name: string }>; phone?: { id: string; name: string } } = $props();
+  type Phone = { id: string; name: string };
+  let { phones, phone }: { phones: Phone[]; phone?: Phone } = $props();
 </script>
 
 <div class="filters">
-  <label class="lbl grow">
-    Your iPhone
-    <select name="phone" value={phone?.id} onchange={(e) => goto(withParams(page.url, { phone: e.currentTarget.value }), { replace: true, reset: false })}>
-      {#each phones as p (p.id)}<option value={p.id}>{p.name}</option>{/each}
-    </select>
-  </label>
+  <Picker label="Your iPhone" items={phones} selected={phone} key={(p) => p.id} href={(p) => withParams(page.url, { phone: p.id })}>
+    {#snippet option(p)}
+      <span class="picker-opt"><PhoneImage name={p.name} /><span class="text">{p.name}</span></span>
+    {/snippet}
+  </Picker>
 </div>
