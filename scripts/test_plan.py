@@ -113,10 +113,12 @@ class Rebuild(unittest.TestCase):
                 {"version": "27.0", "build": "24A437", "product": "iPhone17,1", "released": "2026-09-15"},
                 {"version": "26.0", "build": "gone", "product": "iPhone17,1"}]
         urls = {"24C5": [("iPhone18,1", "x"), ("iPhone17,1", "y")], "24A437": [("iPhone17,1", "a"), ("iPhone18,1", "b")]}
-        got = plan_rebuild(held, lambda b: urls.get(b, []))
+        got = plan_rebuild(held, lambda b: urls.get(b, []), lambda b: {"24C5": "2026-11-02"}.get(b, ""))
         self.assertEqual([(g["version"], g["label"], g["device"]) for g in got], [("27.2 beta 2", "27.2 beta 2", "iPhone18,1"), ("27.0", "27.0", "iPhone17,1")])
         self.assertEqual(got[1]["ipsws"], [{"device": "iPhone17,1", "url": "a"}, {"device": "iPhone18,1", "url": "b"}])
         self.assertEqual(got[1]["released"], "2026-09-15")
+        # An image held from before release days were recorded gets one.
+        self.assertEqual(got[0]["released"], "2026-11-02")
 
 
 class Ipsws(unittest.TestCase):
