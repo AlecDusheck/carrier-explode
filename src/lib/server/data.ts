@@ -20,7 +20,7 @@ import {
   type BasebandSummary, type BundleFile, type DiffCounts, type DiffRow, type ModemKind, type ModemSummary, type OpenedBundle,
   type PriReplacement,
 } from "#lib/decode/index.ts";
-import { compareVersions, fold, imageSlug, isPrerelease } from "#lib/names.ts";
+import { compareVersions, countryCode, fold, imageSlug, isPrerelease } from "#lib/names.ts";
 import { byNewest, compareProducts, homePhone, knowsPhone, overridesFor, sharedPri } from "#lib/phones.ts";
 import { FEATURES, featureBySlug } from "#lib/features.ts";
 import { featuresKey, phoneFeature, type FeatureIndex } from "./featureindex";
@@ -184,13 +184,13 @@ export const getIndex = perRequest(async () => {
     const countries = new Map<string, ListEntry>();
     for (const c of m.index.countries) {
       if (c.family !== "iPhone") continue;
-      const e = countries.get(c.id) ?? { name: c.id, display: c.id, ota: 0 };
+      const e = countries.get(c.id) ?? { name: c.id, display: c.id, cc: countryCode(c.id), ota: 0 };
       e.ota++;
       countries.set(c.id, e);
     }
     for (const img of images) {
       for (const name of Object.keys(img.countries)) {
-        if (!countries.has(name)) countries.set(name, { name, display: name, ota: 0 });
+        if (!countries.has(name)) countries.set(name, { name, display: name, cc: countryCode(name), ota: 0 });
       }
     }
 

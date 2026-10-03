@@ -85,6 +85,15 @@ const ISO_NAMES: Record<string, string> = {
   va:"Vatican City",vc:"St Vincent",ve:"Venezuela",vg:"British Virgin Is.",vi:"US Virgin Is.",vn:"Vietnam",vu:"Vanuatu",ws:"Samoa",ye:"Yemen",za:"South Africa",zm:"Zambia",zw:"Zimbabwe",
 };
 
+/** A country bundle's ISO code from its name: Apple's names are the English name run together (UnitedStates). */
+export const countryCode = (bundle: string): string | undefined => ISO_BY_NAME.get(fold(bundle));
+
+/** A country's flag emoji from its ISO code: the two letters as regional indicator symbols. */
+export function flag(cc?: string): string | undefined {
+  if (!cc || !Object.hasOwn(ISO_NAMES, cc)) return undefined;
+  return String.fromCodePoint(...[...cc.toUpperCase()].map((c) => 0x1f1e6 + c.charCodeAt(0) - 65));
+}
+
 export function countryName(cc?: string): string | undefined {
   // Own properties only: "constructor" is not a country.
   return cc && Object.hasOwn(ISO_NAMES, cc) ? ISO_NAMES[cc] : undefined;
