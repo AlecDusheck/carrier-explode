@@ -14,13 +14,17 @@
   import type { Kind } from "#lib/types.ts";
   import { bundleHref, link } from "#lib/format.ts";
   import { menuTrigger, copyText } from "#lib/ui-state.svelte.ts";
+  import { flag } from "#lib/names.ts";
   import Pane from "#lib/components/Pane.svelte";
+  import CarrierLogo from "#lib/components/CarrierLogo.svelte";
 
   let { params, children } = $props();
 
   type Row = { name: string; display: string; cc?: string };
   // Letters and digits only, so "AT&T" finds ATT_US and "Red Pocket" finds ATT_RedPocket_US.
   const fold = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, "");
+  // A country's flag already says where it is.
+  const code = (c: Row) => (params.kind === "countries" ? "" : (c.cc?.toUpperCase() ?? ""));
   const matches = (c: Row, q: string) => {
     const f = fold(q);
     return c.cc === q || (!!f && (fold(c.name).includes(f) || fold(c.display).includes(f)));
@@ -122,9 +126,14 @@
                 {@attach menuTrigger(rowMenu(c.name))}
                 {@attach c.name === selected && reveal}
               >
+                {#if params.kind === "countries"}
+                  <span class="flag" aria-hidden="true">{flag(c.cc)}</span>
+                {:else}
+                  <CarrierLogo name={c.name} />
+                {/if}
                 <span class="name">{c.display}</span>
-                {#if c.cc || (dated && c.updated)}
-                  <span class="dim">{c.cc?.toUpperCase() ?? ""}{#if dated && c.updated}&nbsp; {c.updated}{/if}</span>
+                {#if code(c) || (dated && c.updated)}
+                  <span class="dim">{code(c)}{#if dated && c.updated}&nbsp; {c.updated}{/if}</span>
                 {/if}
               </a>
             </li>

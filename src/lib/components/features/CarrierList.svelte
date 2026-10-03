@@ -1,7 +1,8 @@
 <script lang="ts">
   import type { Snippet } from "svelte";
   import type { FeatureState } from "#lib/features.ts";
-  import { carrierName, countryName } from "#lib/names.ts";
+  import { carrierName, countryName, flag } from "#lib/names.ts";
+  import CarrierLogo from "#lib/components/CarrierLogo.svelte";
   import FeatureStatus from "./FeatureStatus.svelte";
 
   type Row = { name: string; cc?: string; state?: FeatureState | "unknown" };
@@ -55,10 +56,11 @@
   <tbody>
     {#each shown as r, i (r.name)}
       {#if i === 0 || shown[i - 1].country !== r.country}
-        <tr class="group"><td colspan={column ? 2 : 1}>{r.country ?? "Other"}</td></tr>
+        <tr class="group"><td colspan={column ? 2 : 1}><span class="flag" aria-hidden="true">{flag(r.cc)}</span> {r.country ?? "Other"}</td></tr>
       {/if}
       <tr>
         <td>
+          <CarrierLogo name={r.name} />
           <a href={href(r.name)}>{r.brand}</a>
           {#if twins.has(r.brand)}<span class="dimtext">{r.name.replace(/_/g, " ")}</span>{/if}
         </td>

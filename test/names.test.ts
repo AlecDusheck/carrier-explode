@@ -52,3 +52,22 @@ describe("carrierName", () => {
     expect(countryDisplay("TheBahamas")).toBe("The Bahamas");
   });
 });
+
+describe("carrier logos and flags", () => {
+  it("picks the longest, then rightmost, rule a bundle name holds", async () => {
+    const { carrierLogo } = await import("../src/lib/carrierlogos.ts");
+    expect(carrierLogo("ATT_US")).toBe("att");
+    expect(carrierLogo("ATT_RedPocket_US")).toBe("red-pocket");
+    expect(carrierLogo("TMobile_MetroPCS_US")).toBe("metro-by-t-mobile");
+    expect(carrierLogo("Cellcom_il")).not.toBe(carrierLogo("CellcomWI_LTE_US"));
+    expect(carrierLogo("Nonexistent_Carrier")).toBeUndefined();
+  });
+
+  it("turns an ISO code into its flag and a country bundle name into its code", async () => {
+    const { flag, countryCode } = await import("../src/lib/names.ts");
+    expect(flag("us")).toBe("🇺🇸");
+    expect(flag("zz")).toBeUndefined();
+    expect(countryCode("UnitedStates")).toBe("us");
+    expect(countryCode("UnitedKingdom")).toBe("gb");
+  });
+});

@@ -3,7 +3,9 @@
   import { page } from "$app/state";
   import { getBundle } from "#lib/api/bundles.remote.ts";
   import { bundleArgs, bundleHref } from "#lib/format.ts";
+  import { countryCode, flag } from "#lib/names.ts";
   import Pane from "#lib/components/Pane.svelte";
+  import CarrierLogo from "#lib/components/CarrierLogo.svelte";
   import VersionTimeline from "#lib/components/VersionTimeline.svelte";
 
   type Bundle = Awaited<ReturnType<typeof getBundle>>;
@@ -58,7 +60,10 @@
 
 <!-- Name, version strip and tab row keep their height while the bundle loads, so the pane below never jumps. -->
 <div class="bundle-head">
-  <div class="ident"><b>{params.name}</b>{@render withBundle(ident)}</div>
+  <div class="ident">
+    {#if params.kind === "countries"}<span class="flag" aria-hidden="true">{flag(countryCode(params.name))}</span>{:else}<CarrierLogo name={params.name} />{/if}
+    <b>{params.name}</b>{@render withBundle(ident)}
+  </div>
   <!-- Emergency alerts come from the current copy whatever the version, so that tab has no strip. -->
   {#if tab !== "alerts"}<div class="versions-slot">{@render withBundle(versions)}</div>{/if}
 </div>

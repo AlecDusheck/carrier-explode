@@ -155,7 +155,7 @@ label.lbl select { min-width: 0; }
 .list li { border-bottom: 1px solid #f0eee9; }
 .list li > a {
   color: inherit; text-decoration: none;
-  padding: 3px 8px; display: flex; gap: 6px; align-items: baseline;
+  padding: 3px 8px; display: flex; gap: 6px; align-items: center;
 }
 .list li > a:hover { background: #eef2f7; }
 .list li > a[aria-current="page"] { background: var(--sel); color: var(--sel-text); }
@@ -482,3 +482,15 @@ article.consumer tr.group td { background: var(--face); font-weight: bold; }
 article.consumer ul.features { list-style: none; padding: 0; margin: 0; }
 article.consumer ul.features li { display: flex; flex-direction: column; gap: 1px; padding: 6px 0; border-bottom: 1px solid var(--shadow); }
 article.consumer ul.others { columns: 2 14em; padding-left: 18px; }
+
+/* ------------------------------------------------------------ carrier logos */
+
+.logo {
+  display: inline-block; flex: none; width: 20px; height: 20px; border-radius: 5px;
+  vertical-align: middle; box-shadow: 0 0 0 1px var(--shadow);
+}
+.logo.initials {
+  display: inline-grid; place-items: center; font-size: 9px; font-weight: bold; line-height: 1;
+  color: #fff; background: hsl(var(--hue) 45% 42%);
+}
+.flag { font-size: 15px; line-height: 1; }
