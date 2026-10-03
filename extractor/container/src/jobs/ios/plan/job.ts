@@ -8,7 +8,7 @@ import * as v from "valibot";
 
 import { keys } from "../../../../../../src/lib/storage/keys.ts";
 import type { JobContext, JobOutput, JobRunner, R2Client } from "../../../job.ts";
-import { appledbFirmware, appledbKeys, deviceFirmwares, iphoneCatalog, mapLimit, newestIphone, type AppleDbEntry, type IphoneCatalog } from "../catalog.ts";
+import { appledbFirmware, appledbKeys, deviceFirmwares, iphoneCatalog, mapLimit, newestIphone, type AppleDbEntry } from "../catalog.ts";
 import { betaCandidates, plan, planBetas, planRebuild, toBuild, type Held, type PlannedBuild } from "./plan.ts";
 
 /**
@@ -38,30 +38,20 @@ export async function heldReleases(r2: R2Client): Promise<Held[]> {
 /** The output shape: valibot's inferred types are mutable, PlannedBuild's are not. */
 const toOutput = (b: PlannedBuild): JobOutput<"ios.plan">["builds"][number] => ({ ...b, ipsws: [...b.ipsws] });
 
-/** Release days by build, from every firmware ipsw.me lists. */
-function releaseDays(cat: IphoneCatalog): Map<string, string> {
-  const out = new Map<string, string>();
-  for (const fws of cat.byDevice.values()) for (const f of fws) if (f.released && !out.has(f.build)) out.set(f.build, f.released);
-  return out;
-}
-
 async function rebuild(ctx: JobContext<"ios.plan">, held: readonly Held[]): Promise<PlannedBuild[]> {
   const cat = await iphoneCatalog();
-  const days = releaseDays(cat);
-  // Betas are not on ipsw.me: their IPSWs and dates come from AppleDB, fetched up front.
-  const need = held.filter((h) => !cat.byBuild.has(h.build) || (!h.released && !days.has(h.build))).map((h) => h.build);
-  const fromDb = new Map<string, AppleDbEntry>();
-  await mapLimit(need, 4, async (build) => {
+  // Betas are not on ipsw.me: their IPSWs come from AppleDB. One it no longer has is reported, not rebuilt.
+  const betas = new Map<string, AppleDbEntry>();
+  await mapLimit(held.filter((h) => !cat.byBuild.has(h.build)), 4, async (h) => {
     try {
-      fromDb.set(build, await appledbFirmware(build));
+      betas.set(h.build, await appledbFirmware(h.build));
     } catch (e) {
-      ctx.log(`AppleDB has no usable record for ${build}: ${e instanceof Error ? e.message : String(e)}`);
+      ctx.log(`${h.build}: no AppleDB record (${e instanceof Error ? e.message : String(e)})`);
     }
   });
   const { builds, missing } = planRebuild(
     held,
-    (b) => cat.byBuild.get(b) ?? [...(fromDb.get(b)?.ipsws ?? [])].map(([device, url]) => ({ device, url })),
-    (b) => days.get(b) ?? fromDb.get(b)?.released,
+    (b) => cat.byBuild.get(b) ?? [...(betas.get(b)?.ipsws ?? [])].map(([device, url]) => ({ device, url })),
     PREFERRED_DEVICE,
   );
   for (const b of missing) ctx.log(`${b}: no iPhone IPSW found, not rebuilt`);
@@ -83,7 +73,12 @@ export const runPlan: JobRunner<"ios.plan"> = async (ctx): Promise<JobOutput<"io
   const builds: PlannedBuild[] = [];
   if (chosen.length) {
     const cat = await iphoneCatalog();
-    for (const c of chosen) builds.push(toBuild(c, cat.byBuild.get(c.build) ?? []));
+    for (const c of chosen) {
+      // Chosen from a device's firmware list, so the catalogue built from those lists has it.
+      const pairs = cat.byBuild.get(c.build);
+      if (!pairs) throw new Error(`${c.build}: in ${c.device}'s firmware list but not in the catalogue`);
+      builds.push(toBuild(c, pairs));
+    }
   }
 
   // Not when one version was asked for; `since` is only a floor for releases, and betas are above it anyway.

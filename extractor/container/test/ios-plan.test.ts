@@ -123,7 +123,7 @@ describe("versions", () => {
 });
 
 describe("rebuild", () => {
-  it("takes every held image newest first, keeping its name, leading with the preferred device", () => {
+  it("takes every held image newest first, keeping its name and day, leading with the preferred device", () => {
     const h: Held[] = [
       { version: "27.2 beta 2", build: "24C5", devices: ["iPhone18,1"] },
       { version: "27.0", build: "24A437", devices: ["iPhone17,1"], released: "2026-09-15" },
@@ -133,15 +133,13 @@ describe("rebuild", () => {
       "24C5": [{ device: "iPhone18,1", url: "x" }, { device: "iPhone17,1", url: "y" }],
       "24A437": [{ device: "iPhone17,1", url: "a" }, { device: "iPhone18,1", url: "b" }],
     };
-    const { builds, missing } = planRebuild(h, (b) => urls[b] ?? [], (b) => (b === "24C5" ? "2026-11-02" : undefined), "iPhone17,1");
+    const { builds, missing } = planRebuild(h, (b) => urls[b] ?? [], "iPhone17,1");
     expect(builds.map((g) => [g.version, g.label, g.ipsws[0]?.device])).toEqual([
       ["27.2 beta 2", "27.2 beta 2", "iPhone17,1"],
       ["27.0", "27.0", "iPhone17,1"],
     ]);
     expect(builds[1]?.ipsws).toEqual([{ device: "iPhone17,1", url: "a" }, { device: "iPhone18,1", url: "b" }]);
     expect(builds[1]?.released).toBe("2026-09-15");
-    // An image held from before release days were recorded gets one.
-    expect(builds[0]?.released).toBe("2026-11-02");
     expect(builds[0]?.prerelease).toBe(true);
     expect(missing).toEqual(["gone"]);
   });

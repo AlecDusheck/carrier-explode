@@ -188,14 +188,13 @@ export function toBuild(c: Chosen, pairs: readonly IpswRef[]): PlannedBuild {
  * Every image held, again, newest first, so what phones run now is redone
  * first: for when what an extraction keeps has changed. Each keeps its
  * recorded version as its label (a beta's name is the planner's, not the
- * image's), leads with `device`'s IPSW when it has one, else the newest
- * phone's, and gets its release day if it was extracted before those were
- * recorded. A build no catalogue lists any more is reported in `missing`.
+ * image's) and release day, and leads with `device`'s IPSW when it has one,
+ * else the newest phone's. A build no catalogue lists any more is reported in
+ * `missing`.
  */
 export function planRebuild(
   held: readonly Held[],
   ipswsOf: (build: string) => readonly IpswRef[],
-  releasedOf: (build: string) => string | undefined,
   device: string,
 ): { builds: PlannedBuild[]; missing: string[] } {
   const builds: PlannedBuild[] = [];
@@ -208,12 +207,11 @@ export function planRebuild(
       missing.push(h.build);
       continue;
     }
-    const released = h.released ?? releasedOf(h.build);
     builds.push({
       build: h.build,
       version: h.version,
       label: h.version,
-      ...(released ? { released } : {}),
+      ...(h.released ? { released: h.released } : {}),
       ...(isPrerelease(h.version) ? { prerelease: true } : {}),
       ipsws: distinctIpsws(pairs, lead),
     });
