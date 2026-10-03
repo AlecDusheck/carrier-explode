@@ -8,6 +8,8 @@
   import Pane from "#lib/components/Pane.svelte";
   import BuildPicker from "#lib/components/BuildPicker.svelte";
   import IosIcon from "#lib/components/IosIcon.svelte";
+  import BundleChip from "#lib/components/BundleChip.svelte";
+  import BundleIcon from "#lib/components/BundleIcon.svelte";
 
   let { params } = $props();
 
@@ -60,24 +62,23 @@
               <legend>{title}: {d.changed.length} changed, {d.added.length} added, {d.removed.length} removed</legend>
               {#if d.added.length}
                 <p class="names"><b>Added</b>
-                  {#each d.added as name (name)}<a class="chip good" href={bundleHref(kind, name, slug)}>{name}</a>{/each}
+                  {#each d.added as name (name)}<BundleChip {kind} {name} {slug} tone="good" />{/each}
                 </p>
               {/if}
               {#if d.removed.length}
                 <p class="names"><b>Removed</b>
-                  {#each d.removed as name (name)}<a class="chip bad" href={bundleHref(kind, name)}>{name}</a>{/each}
+                  {#each d.removed as name (name)}<BundleChip {kind} {name} tone="bad" />{/each}
                 </p>
               {/if}
               {#if d.changed.length}
                 <table class="grid">
-                  <thead><tr><th>Bundle</th><th class="num">From</th><th class="num">To</th><th></th></tr></thead>
+                  <thead><tr><th>Bundle</th><th class="num">Version</th></tr></thead>
                   <tbody>
                     {#each d.changed as c (c.name)}
                       <tr>
-                        <td class="k"><a href={bundleHref(kind, c.name, slug)}>{c.name}</a></td>
-                        <td class="num mono">{c.from}</td>
-                        <td class="num mono">{c.to}</td>
-                        <td><a href={bundleHref(kind, c.name, slug, "changes")}>Changes</a></td>
+                        <td class="k name"><a class="picker-opt" href={bundleHref(kind, c.name, slug)}><BundleIcon {kind} name={c.name} />{c.name}</a></td>
+                        <!-- The version links to what changed; a content change can keep the version. -->
+                        <td class="num mono"><a href={bundleHref(kind, c.name, slug, "changes")}>{c.from === c.to ? c.to : `${c.from} → ${c.to}`}</a></td>
                       </tr>
                     {/each}
                   </tbody>
@@ -93,5 +94,7 @@
 
 <style>
   .names { margin: 0 0 6px; }
+  /* Long bundle names wrap rather than push the table past a phone's width. */
+  td.name { white-space: normal; overflow-wrap: anywhere; }
   .names b { margin-right: 6px; }
 </style>

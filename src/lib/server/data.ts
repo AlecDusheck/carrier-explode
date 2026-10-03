@@ -87,7 +87,7 @@ const releasePlists = perRequest(async (): Promise<CountryPlists> => {
 });
 
 /** Distinguishes one list of images from another in a cache key. */
-const buildsKey = (all: ImageBuild[]) => fingerprint(all.map((b) => `${b.build}@${b.extractedAt}`));
+const buildsKey = (all: ImageBuild[]) => fingerprint(all.map((b) => `${b.build}@${b.extractedAt}@${b.released ?? ""}`));
 
 /* ---------------------------------------------------------------- manifest */
 
