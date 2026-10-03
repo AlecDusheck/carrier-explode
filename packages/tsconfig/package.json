@@ -1,0 +1,12 @@
+{
+  "name": "@carrier-explode/tsconfig",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "files": ["base.json", "worker.json", "node.json"],
+  "exports": {
+    "./base.json": "./base.json",
+    "./worker.json": "./worker.json",
+    "./node.json": "./node.json"
+  }
+}
