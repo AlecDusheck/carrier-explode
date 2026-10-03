@@ -3,6 +3,7 @@
   import { bundleArgs, fileHref, humanBytes, rawHref } from "#lib/format.ts";
   import Pane from "#lib/components/Pane.svelte";
   import FileBody from "#lib/components/FileBody.svelte";
+  import FileIcon from "#lib/components/FileIcon.svelte";
 
   let { params } = $props();
 </script>
@@ -23,7 +24,7 @@
         <tbody>
           {#each bundle.info.files as f (f.path)}
             <tr>
-              <td class="mono wrap"><a href={fileHref(params.kind, params.name, params.version, f.path)}>{f.path}</a></td>
+              <td class="mono wrap"><a class="picker-opt" href={fileHref(params.kind, params.name, params.version, f.path)}><FileIcon kind={f.kind} path={f.path} />{f.path}</a></td>
               <td class="num">{humanBytes(f.size)}</td>
               <td class="dimtext">{f.devices?.map((d) => d.name ?? d.code).join(", ") ?? ""}</td>
             </tr>

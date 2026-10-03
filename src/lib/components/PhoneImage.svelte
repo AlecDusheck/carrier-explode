@@ -1,41 +1,22 @@
 <script lang="ts">
-  import { phoneShape } from "#lib/phoneshapes.ts";
+  import { asset } from "$app/paths";
 
-  /** A phone drawn from the back, from its measured shape; a plain outline for a model without one. */
+  /** Models with a drawing in static/phones (measured on Apple's images); others get a plain outline. */
+  const PHONES = [
+    "iphone-18-pro", "iphone-18-pro-max", "iphone-17-pro", "iphone-17-pro-max", "iphone-17", "iphone-17e", "iphone-air",
+    "iphone-16-pro", "iphone-16-pro-max", "iphone-16-plus", "iphone-16", "iphone-16e", "iphone-15-pro", "iphone-15-pro-max",
+    "iphone-15-plus", "iphone-15", "iphone-14-pro", "iphone-14-pro-max", "iphone-14-plus", "iphone-14",
+    "iphone-se-3rd-generation", "iphone-se-2nd-generation", "iphone-13-pro", "iphone-13-pro-max", "iphone-13", "iphone-13-mini",
+    "iphone-12-pro", "iphone-12-pro-max", "iphone-12", "iphone-12-mini", "iphone-11-pro", "iphone-11-pro-max", "iphone-11",
+    "iphone-xs", "iphone-xs-max", "iphone-x", "iphone-xr", "iphone-8-plus", "iphone-8", "iphone-7-plus", "iphone-7",
+    "iphone-6s", "iphone-6", "iphone-6s-plus", "iphone-6-plus", "iphone-5s", "iphone-se-1st-generation", "iphone-5",
+    "iphone-5c", "iphone-4s", "iphone-4", "iphone-3gs",
+  ] as const;
+
   let { name }: { name?: string } = $props();
 
-  const id = $props.id();
-  const shape = $derived(phoneShape(name));
-  // The body fills the 24-unit tile's height, centred; every part is placed as a fraction of it.
-  const H = 22;
-  const W = $derived(shape ? H / shape.aspect : 0);
-  const ox = $derived((24 - W) / 2);
-  const X = (f: number) => ox + f * W;
-  const Y = (f: number) => 1 + f * H;
+  // "iPhone 18 Pro Max (US)" looks like the model it is a variant of.
+  const slug = $derived(PHONES.find((p) => p === name?.replace(/ \((US|China)\)$/, "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/-$/, "")));
 </script>
 
-{#if shape}
-  <svg class="phone-img" viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">
-    <defs>
-      <clipPath id="b{id}"><rect x={ox} y="1" width={W} height={H} rx={shape.radius * W} /></clipPath>
-    </defs>
-    <rect x={ox} y="1" width={W} height={H} rx={shape.radius * W} fill={shape.color} stroke="#8e8e93" stroke-width="0.6" />
-    <g clip-path="url(#b{id})">
-      {#if shape.module}
-        {@const m = shape.module}
-        <rect x={X(m.x)} y={Y(m.y)} width={m.w * W} height={m.h * H} rx={m.radius * W} fill={m.color} stroke="#8e8e93" stroke-width="0.3" />
-      {/if}
-      {#each shape.lenses as [x, y, d], i (i)}
-        <circle cx={X(x)} cy={Y(y)} r={(d * W) / 2} fill="#2c2c2e" stroke="#636366" stroke-width="0.25" />
-      {/each}
-      {#each shape.extras ?? [] as [kind, x, y, d], i (i)}
-        <circle cx={X(x)} cy={Y(y)} r={(d * W) / 2} fill={kind === "flash" ? "#fff4cc" : "#1c1c1e"} />
-      {/each}
-    </g>
-  </svg>
-{:else}
-  <svg class="phone-img" viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">
-    <rect x="6.5" y="2" width="11" height="20" rx="2.5" fill="none" stroke="currentColor" stroke-width="1.5" opacity="0.55" />
-    <rect x="10" y="3.6" width="4" height="1.2" rx="0.6" fill="currentColor" opacity="0.55" />
-  </svg>
-{/if}
+<img class="phone-img" src={asset(slug ? `phones/${slug}.svg` : "phones/iphone.svg")} alt="" width="20" height="20" />
