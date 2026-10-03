@@ -1,9 +1,7 @@
 <script lang="ts">
   import { getRare, type getBundle } from "#lib/api/bundles.remote.ts";
-  import { getBundleOverrides, getPlmn } from "#lib/api/tables.remote.ts";
-  import { modemLabel } from "#lib/decode/index.ts";
-  import { bundleArgs, bundleHref, humanBytes, link } from "#lib/format.ts";
-  import { phoneList, phoneRows } from "#lib/phones.ts";
+  import { getPlmn } from "#lib/api/tables.remote.ts";
+  import { bundleArgs, bundleHref, humanBytes } from "#lib/format.ts";
   import { asDict, selectionRules } from "#lib/settings.ts";
   import BundleChip from "./BundleChip.svelte";
 
@@ -15,7 +13,6 @@
   const version = $derived(asDict(bundle.quick["version.plist"]));
   const fromImage = $derived(bundle.entry.source === "image");
   const tab = (seg: string, q = "") => bundleHref(bundle.kind, bundle.name, bundle.entry.slug, seg) + q;
-  const fileQuery = (path: string) => "?" + new URLSearchParams({ file: path });
 </script>
 
 <fieldset class="hgroup">
@@ -128,33 +125,4 @@
       </table>
     {/if}
   </fieldset>
-{/if}
-
-{#if bundle.kind !== "countries"}
-  {@const ov = await getBundleOverrides(args)}
-  {@const rows = phoneRows(bundle.entry, bundle.info.files, ov).filter((r) => r.phones.length)}
-  {#if rows.length || ov?.defaults.length}
-    <fieldset class="hgroup">
-      <legend>Phones</legend>
-      <table class="grid">
-        <thead><tr><th>Phones</th><th>Modem</th><th>Overrides</th></tr></thead>
-        <tbody>
-          {#each rows as r (r.slug + r.path)}
-            <tr>
-              <td>{phoneList(r.phones)}</td>
-              <td>
-                {#each [...new Set(r.phones.map((p) => p.family).filter((f): f is string => !!f))] as f, i (f)}{#if i}, {/if}<a href={link(`/builds/${ov?.build}/${f}`)}>{modemLabel(f)}</a>{/each}
-              </td>
-              <td>
-                <a href={tab("settings", fileQuery(r.path))}>Settings</a> · <a href={tab("modem", fileQuery(r.path))}>Modem</a>
-              </td>
-            </tr>
-          {/each}
-          {#if ov?.defaults.length}
-            <tr><td>{phoneList(ov.defaults)}</td><td></td><td class="dimtext">None: carrier.plist and the modem's defaults</td></tr>
-          {/if}
-        </tbody>
-      </table>
-    </fieldset>
-  {/if}
 {/if}
