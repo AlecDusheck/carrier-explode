@@ -20,7 +20,7 @@ import {
   type BasebandSummary, type BundleFile, type DiffCounts, type DiffRow, type ModemKind, type ModemSummary, type OpenedBundle,
   type PriReplacement,
 } from "#lib/decode/index.ts";
-import { compareVersions, countryCode, fold, imageSlug, isPrerelease } from "#lib/names.ts";
+import { compareVersions, fold, imageSlug, isPrerelease } from "#lib/names.ts";
 import { byNewest, compareProducts, homePhone, knowsPhone, overridesFor, sharedPri } from "#lib/phones.ts";
 import { FEATURES, featureBySlug } from "#lib/features.ts";
 import { featuresKey, phoneFeature, type FeatureIndex } from "./featureindex";
@@ -70,6 +70,12 @@ const countryPlists = perRequest((build: string) => r2json<CountryPlists>(`syste
  * links between carriers and countries read. The whole file is 200 KB and a
  * bundle page needs it every time, so the cut is kept per extraction.
  */
+/** A country bundle's own ISO code: the first its carrier.plist lists. */
+const isoOf = (plists: CountryPlists, country: string) => {
+  const iso = plists[country]?.ISOAlpha2CountryCode;
+  return Array.isArray(iso) && typeof iso[0] === "string" ? iso[0].toLowerCase() : undefined;
+};
+
 const releasePlists = perRequest(async (): Promise<CountryPlists> => {
   const newest = release(await builds());
   if (!newest) return {};
@@ -160,12 +166,12 @@ function imageChanges(images: ImageIndex[], kind: "carriers" | "countries") {
 /** The day the newest of these files was published. */
 const newestPublished = (refs: BundleRef[] = []) => newestDate(refs.map((r) => publishedOn(r.url)));
 
-/** Every bundle name. Built from the manifest and every image, so it is kept per manifest window and image set. v7: country codes for country bundles and for names like O2_Germany. */
+/** Every bundle name. Built from the manifest and every image, so it is kept per manifest window and image set. v8: country codes for country bundles and for names like O2_Germany. */
 export const getIndex = perRequest(async () => {
   const all = await builds();
   const version = await manifestVersion();
-  return cached(`index:v7:${version}:${buildsKey(all)}`, KEEP, async () => {
-    const [m, images] = await Promise.all([manifest(), imageIndexes()]);
+  return cached(`index:v8:${version}:${buildsKey(all)}`, KEEP, async () => {
+    const [m, images, plists] = await Promise.all([manifest(), imageIndexes(), releasePlists()]);
     const newest = images.find((i) => i.build === release(all)?.build);
 
     const changed = imageChanges(images, "carriers");
@@ -184,13 +190,13 @@ export const getIndex = perRequest(async () => {
     const countries = new Map<string, ListEntry>();
     for (const c of m.index.countries) {
       if (c.family !== "iPhone") continue;
-      const e = countries.get(c.id) ?? { name: c.id, display: c.id, cc: countryCode(c.id), ota: 0 };
+      const e = countries.get(c.id) ?? { name: c.id, display: c.id, cc: isoOf(plists, c.id), ota: 0 };
       e.ota++;
       countries.set(c.id, e);
     }
     for (const img of images) {
       for (const name of Object.keys(img.countries)) {
-        if (!countries.has(name)) countries.set(name, { name, display: name, cc: countryCode(name), ota: 0 });
+        if (!countries.has(name)) countries.set(name, { name, display: name, cc: isoOf(plists, name), ota: 0 });
       }
     }
 
@@ -317,7 +323,7 @@ export async function getBundle(kind: Kind, name: string, slug?: string) {
       try { quick[f] = decodedPlist(decodeFile(opened, f)); } catch { /* shown as undecodable in Files */ }
     }
   }
-  const cc = kind === "countries" ? undefined : splitName(name).cc;
+  const cc = kind === "countries" ? isoOf(plists, name) : splitName(name).cc;
   const carrierPlist = quick["carrier.plist"];
   const related = kind === "countries"
     ? { country: null, carriers: carriersOf(name, plists, carriers) }

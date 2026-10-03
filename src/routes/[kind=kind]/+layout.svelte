@@ -127,7 +127,7 @@
                 {@attach c.name === selected && reveal}
               >
                 {#if params.kind === "countries"}
-                  <span class="flag" aria-hidden="true">{flag(c.cc)}</span>
+                  {#if flag(c.cc)}<span class="flag" aria-hidden="true">{flag(c.cc)}</span>{/if}
                 {:else}
                   <CarrierLogo name={c.name} />
                 {/if}

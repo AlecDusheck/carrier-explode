@@ -56,7 +56,7 @@
   <tbody>
     {#each shown as r, i (r.name)}
       {#if i === 0 || shown[i - 1].country !== r.country}
-        <tr class="group"><td colspan={column ? 2 : 1}><span class="flag" aria-hidden="true">{flag(r.cc)}</span> {r.country ?? "Other"}</td></tr>
+        <tr class="group"><td colspan={column ? 2 : 1}>{#if flag(r.cc)}<span class="flag" aria-hidden="true">{flag(r.cc)}</span>{/if} {r.country ?? "Other"}</td></tr>
       {/if}
       <tr>
         <td>

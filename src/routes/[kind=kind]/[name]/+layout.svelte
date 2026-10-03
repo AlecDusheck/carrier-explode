@@ -3,7 +3,7 @@
   import { page } from "$app/state";
   import { getBundle } from "#lib/api/bundles.remote.ts";
   import { bundleArgs, bundleHref } from "#lib/format.ts";
-  import { countryCode, flag } from "#lib/names.ts";
+  import { flag } from "#lib/names.ts";
   import Pane from "#lib/components/Pane.svelte";
   import CarrierLogo from "#lib/components/CarrierLogo.svelte";
   import VersionTimeline from "#lib/components/VersionTimeline.svelte";
@@ -23,7 +23,9 @@
 {/snippet}
 
 {#snippet ident(bundle: Bundle)}
-  {#if bundle.related.country}
+  {#if bundle.kind === "countries"}
+    {#if flag(bundle.cc)}<span class="flag" aria-hidden="true">{flag(bundle.cc)}</span>{/if}
+  {:else if bundle.related.country}
     <a href={bundleHref("countries", bundle.related.country)}>{bundle.related.country} country bundle</a>
   {:else if bundle.countryName}
     <span class="dimtext">{bundle.countryName}</span>
@@ -61,7 +63,7 @@
 <!-- Name, version strip and tab row keep their height while the bundle loads, so the pane below never jumps. -->
 <div class="bundle-head">
   <div class="ident">
-    {#if params.kind === "countries"}<span class="flag" aria-hidden="true">{flag(countryCode(params.name))}</span>{:else}<CarrierLogo name={params.name} />{/if}
+    {#if params.kind !== "countries"}<CarrierLogo name={params.name} />{/if}
     <b>{params.name}</b>{@render withBundle(ident)}
   </div>
   <!-- Emergency alerts come from the current copy whatever the version, so that tab has no strip. -->
