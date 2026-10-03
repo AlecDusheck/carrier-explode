@@ -14,9 +14,8 @@
   import type { Kind } from "#lib/types.ts";
   import { bundleHref, link } from "#lib/format.ts";
   import { menuTrigger, copyText } from "#lib/ui-state.svelte.ts";
-  import { flag } from "#lib/names.ts";
   import Pane from "#lib/components/Pane.svelte";
-  import CarrierLogo from "#lib/components/CarrierLogo.svelte";
+  import BundleIcon from "#lib/components/BundleIcon.svelte";
 
   let { params, children } = $props();
 
@@ -126,11 +125,7 @@
                 {@attach menuTrigger(rowMenu(c.name))}
                 {@attach c.name === selected && reveal}
               >
-                {#if params.kind === "countries"}
-                  {#if flag(c.cc)}<span class="flag" aria-hidden="true">{flag(c.cc)}</span>{/if}
-                {:else}
-                  <CarrierLogo name={c.name} />
-                {/if}
+                <BundleIcon kind={params.kind} name={c.name} cc={c.cc} />
                 <span class="name">{c.display}</span>
                 {#if code(c) || (dated && c.updated)}
                   <span class="dim">{code(c)}{#if dated && c.updated}&nbsp; {c.updated}{/if}</span>

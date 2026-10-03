@@ -5,6 +5,7 @@
   import { bundleArgs, bundleHref, humanBytes, link } from "#lib/format.ts";
   import { phoneList, phoneRows } from "#lib/phones.ts";
   import { asDict, selectionRules } from "#lib/settings.ts";
+  import BundleChip from "./BundleChip.svelte";
 
   let { bundle }: { bundle: Awaited<ReturnType<typeof getBundle>> } = $props();
 
@@ -85,11 +86,18 @@
   </fieldset>
 {/if}
 
+{#if bundle.related.country}
+  <fieldset class="hgroup">
+    <legend>Country</legend>
+    <BundleChip kind="countries" name={bundle.related.country} cc={bundle.cc} />
+  </fieldset>
+{/if}
+
 {#if bundle.related.carriers.length}
   <fieldset class="hgroup" id="carriers">
     <legend>Carriers ({bundle.related.carriers.length})</legend>
     {#each bundle.related.carriers as name (name)}
-      <a class="chip" href={bundleHref("carriers", name)}>{name}</a>
+      <BundleChip kind="carriers" {name} />
     {/each}
   </fieldset>
 {/if}
@@ -113,7 +121,7 @@
             <tr>
               <td class="mono wrap"><a href={tab("settings", "?filter=" + encodeURIComponent(r.path.split(/[.[]/, 1)[0]))}>{r.path}</a></td>
               <td class="mono wrap">{r.value ?? "set"}</td>
-              <td>{#each r.with as w (w)}<a class="chip" href={bundleHref(bundle.kind, w)}>{w}</a>{:else}<span class="dimtext">none</span>{/each}</td>
+              <td>{#each r.with as w (w)}<BundleChip kind={bundle.kind} name={w} />{:else}<span class="dimtext">none</span>{/each}</td>
             </tr>
           {/each}
         </tbody>

@@ -494,3 +494,7 @@ article.consumer ul.others { columns: 2 14em; padding-left: 18px; }
   color: #fff; background: hsl(var(--hue) 45% 42%);
 }
 .flag { font-size: 15px; line-height: 1; }
+.chip.bundle { display: inline-flex; align-items: center; gap: 4px; }
+.chip.bundle .logo { width: 14px; height: 14px; border-radius: 3px; }
+.chip.bundle .logo.initials { font-size: 7px; }
+.chip.bundle .flag { font-size: 12px; }
