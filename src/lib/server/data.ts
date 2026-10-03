@@ -15,7 +15,7 @@ import { getRequestEvent } from "$app/server";
 import { env } from "cloudflare:workers";
 import {
   MODEM_SUMMARY_SCHEMA, basebandComparable, carriedBy, comparable, compareBundles, contentId, decodeFile, decodedPlist, decodedPri,
-  diffKeyed, diffValues, isRecord, mergeComboSets, openIpcc, parseBandCombos, priReplacements, priText,
+  diffKeyed, diffValues, isRecord, mergeComboSets, modemVendor, openIpcc, parseBandCombos, priReplacements, priText,
   summariseDiff,
   type BasebandSummary, type BundleFile, type DiffCounts, type DiffRow, type ModemKind, type ModemSummary, type OpenedBundle,
   type PriReplacement,
@@ -816,25 +816,35 @@ const featureIndex = perRequest(async () => {
   return cached(`features:v2:${pointer.gen}`, 86400, () => r2json<FeatureIndex>(featuresKey(pointer.gen)));
 });
 
-/** The phones a feature page can be asked about: the current release's iPhones that have a name, newest first. */
-export async function featurePhones() {
+/**
+ * The phones a feature page can be asked about: the current release's iPhones that have a name, newest
+ * first. `lte` marks an LTE-only one: no Intel modem Apple used has 5G.
+ */
+export const featurePhones = perRequest(async () => {
   const b = release(await builds());
   if (!b) return [];
   const { modems } = await getModems(b.build);
-  const phones = new Map<string, string>();
-  for (const m of modems) for (const d of m.devices) if (d.name) phones.set(d.id, d.name);
-  return [...phones].map(([id, name]) => ({ id, name })).sort((x, y) => compareProducts(y.id, x.id));
-}
+  const phones = new Map<string, { id: string; name: string; lte: boolean }>();
+  for (const m of modems) {
+    for (const d of m.devices) if (d.name) phones.set(d.id, { id: d.id, name: d.name, lte: modemVendor(m.family) === "intel" });
+  }
+  return [...phones.values()].sort((x, y) => compareProducts(y.id, x.id));
+});
+
+/** Whether a feature cannot work on a phone at all, whatever the carrier sets. */
+const unusable = async (slug: string, phone: string) =>
+  !!featureBySlug(slug)?.needs5G && !!(await featurePhones()).find((p) => p.id === phone)?.lte;
 
 /** One feature for every carrier bundle, on one phone. */
 export async function getFeatureTable(slug: string, phone: string) {
   if (!featureBySlug(slug)) error(404, `no feature ${slug}`);
   const [index, list] = await Promise.all([featureIndex(), getIndex()]);
   if (!index) return { indexed: false as const };
+  if (await unusable(slug, phone)) return { indexed: true as const, unusable: true, rows: [] };
   const rows = list.carriers
     .filter((c) => Object.hasOwn(index.bundles, c.name))
     .map((c) => ({ name: c.name, display: c.display, cc: c.cc, state: phoneFeature(index, c.name, slug, phone) }));
-  return { indexed: true as const, rows };
+  return { indexed: true as const, unusable: false, rows };
 }
 
 /** How many carrier bundles offer each feature on one phone. */
@@ -842,11 +852,12 @@ export async function getFeatureSummary(phone: string) {
   const index = await featureIndex();
   if (!index) return null;
   const names = Object.keys(index.bundles);
-  return FEATURES.map((f) => {
+  return Promise.all(FEATURES.map(async (f) => {
     const counts = { on: 0, available: 0, no: 0, unknown: 0 };
-    for (const n of names) counts[phoneFeature(index, n, f.slug, phone)]++;
-    return { slug: f.slug, counts, of: names.length };
-  });
+    const no = await unusable(f.slug, phone);
+    if (!no) for (const n of names) counts[phoneFeature(index, n, f.slug, phone)]++;
+    return { slug: f.slug, counts, of: names.length, unusable: no };
+  }));
 }
 
 /** A phone's override plist next to its modem file (same stem), decoded; null when the copy has none. */

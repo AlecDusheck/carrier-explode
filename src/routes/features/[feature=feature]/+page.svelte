@@ -65,6 +65,8 @@
           {@const t = await getFeatureTable({ slug: feature.slug, phone: phone.id })}
           {#if !t.indexed}
             <p class="dimtext note">Not computed yet: the next index run reads every carrier.</p>
+          {:else if t.unusable}
+            <p class="answer">The {phone.name} has no 5G modem, so {feature.name} is not available on it with any carrier.</p>
           {:else}
             {@const mine = carrier ? t.rows.find((r) => r.name === carrier) : undefined}
             {#if mine}
