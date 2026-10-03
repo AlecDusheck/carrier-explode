@@ -1,7 +1,4 @@
-/**
- * Keeps a container awake through a long step that reports nothing itself
- * (an external helper, a long download), by calling ctx.progress on a timer.
- */
+/** Keeps a container awake through a step that reports nothing itself, by calling ctx.progress on a timer. */
 
 import type { JobContext } from "../../job.ts";
 

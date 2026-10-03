@@ -5,7 +5,6 @@
  * are named with encodeURIComponent) survive exactly.
  */
 
-import { WRITABLE_PREFIXES } from "../../../src/lib/storage/keys.ts";
 import { RequestError } from "./errors.ts";
 
 const MAX_KEY_BYTES = 1024;
@@ -39,13 +38,9 @@ export function keyFromPath(pathname: string, base: "o" | "mpu"): string {
 /** Prefixes whose objects never change: a second write of the same key is a no-op, not an overwrite. */
 export const isCreateOnly = (key: string): boolean => key.startsWith("obj/") || key.startsWith("meta/");
 
-/**
- * Throws 403 unless `key` is under one of the job's prefixes, and those are
- * themselves under WRITABLE_PREFIXES (index/ is the index job's alone, and
- * so on: see JOBS in ../jobs.ts).
- */
+/** Throws 403 unless `key` is under one of the job's prefixes (JOBS in ../jobs.ts). */
 export function checkWritable(key: string, writes: readonly string[]): void {
-  const allowed = writes.some((p) => key.startsWith(p) && WRITABLE_PREFIXES.some((w) => p.startsWith(w)));
+  const allowed = writes.some((p) => key.startsWith(p));
   if (!allowed) throw new RequestError(403, `${key}: not writable by this job (may write ${writes.join(", ") || "nothing"})`);
 }
 

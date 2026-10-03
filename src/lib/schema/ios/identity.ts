@@ -1,11 +1,5 @@
-/**
- * Which SIMs an iOS bundle is for, and which countries it serves. Two sources
- * say so: the bundle's own SupportedSIMs (carrier.plist, and each
- * MVNOOverrides entry), and Apple's manifest, which maps MCC+MNC (+ GID/ICCID)
- * to bundle names before the phone opens any bundle. The manifest is the
- * stronger claim (it is what routes a SIM), so linking (../identity.ts) takes
- * both.
- */
+/** Which SIMs and countries an Apple bundle serves: its SupportedSIMs, Apple's manifest routes, and its name. */
+
 
 import type { MccMncTable } from "#lib/decode/index.ts";
 import { carrierName, countryDisplay, splitName } from "#lib/names.ts";
@@ -14,10 +8,7 @@ import { simMatcher } from "../sims.ts";
 import { sourceKey, type SimMatcher, type SourceRef } from "../types.ts";
 import { stringSet } from "../values.ts";
 
-/**
- * `310260`, `310260_GID1-54`, `310260_ID-89012600`, `20404_GID2-1A_ID-891480`:
- * the MCC+MNC, then any number of `_<FIELD>-<value>` qualifiers, all of which must match.
- */
+/** `310260`, `310260_GID1-54`, `20404_GID2-1A_ID-891480`: MCC+MNC, then qualifiers that must all match. */
 export function parseSupportedSim(entry: string): SimMatcher | undefined {
   const [mccmnc = "", ...quals] = entry.trim().split("_");
   const fields: { gid1?: string; gid2?: string; iccidPrefix?: string } = {};
@@ -38,11 +29,7 @@ export const supportedSims = (v: unknown): SimMatcher[] =>
     return m ? [m] : [];
   });
 
-/**
- * Manifest routes per iOS carrier source key. Bare ICCID prefixes
- * (MobileDeviceCarriers) are left out: a SimMatcher needs an MCC+MNC, and the
- * same bundles are reachable through their PLMN entries anyway.
- */
+/** The manifest's PLMN routes per iPhone carrier source (bare ICCID prefixes have no MCC+MNC to match on). */
 export function manifestSims(table: Pick<MccMncTable, "entries">): Record<string, SimMatcher[]> {
   const out: Record<string, SimMatcher[]> = {};
   const add = (bundle: string, m: SimMatcher | undefined): void => {
@@ -62,11 +49,7 @@ export function iosDisplay(source: SourceRef): string {
   return source.kind === "country" ? countryDisplay(source.name) : carrierName(source.name).brand;
 }
 
-/**
- * ISO codes, best evidence first: ISOAlpha2CountryCode (country bundles), the
- * name's suffix, HomeBundleIdentifier, SupportedCountryIds MCCs, then the
- * MCCs of the SIMs it claims.
- */
+/** Best evidence first: ISOAlpha2CountryCode, the name's suffix, HomeBundleIdentifier, SupportedCountryIds, the SIMs' MCCs. */
 export function iosIso(source: SourceRef, plist: Readonly<Record<string, unknown>>, sims: readonly SimMatcher[]): string[] {
   const listed = (Array.isArray(plist.ISOAlpha2CountryCode) ? plist.ISOAlpha2CountryCode : [plist.ISOAlpha2CountryCode])
     .flatMap((x: unknown) => (typeof x === "string" && /^[a-z]{2}$/i.test(x) ? [x.toLowerCase()] : []));

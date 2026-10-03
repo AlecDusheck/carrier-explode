@@ -1,13 +1,9 @@
 import { defineParams } from "@sveltejs/kit/params";
-import { isVersionSlug } from "./lib/schema/slug.ts";
+import { isVersionSlug } from "./lib/schema/timeline.ts";
 import { PLATFORMS, type Platform } from "./lib/schema/types.ts";
 import { KINDS, type Kind } from "./lib/types.ts";
 
-/**
- * A version's tabs, as the URL names them, on either platform:
- * `/carriers/ATT_US/settings` means the current version's. Which of them a
- * platform offers is its view registry's business (#lib/components/views.ts).
- */
+/** A version's tabs on any platform; which a platform offers is its view registry's (#lib/components/views.ts). */
 export const TABS = ["settings", "modem", "files", "changes", "alerts", "apns"] as const;
 export type Tab = (typeof TABS)[number];
 
@@ -38,8 +34,9 @@ export type FeatureSlug = (typeof FEATURE_SLUGS)[number];
 export const params = defineParams({
   kind: (p): Kind | undefined => KINDS.find((k) => k === p),
   platform: (p): Platform | undefined => PLATFORMS.find((x) => x === p),
-  // A version is the source's own version number (72.0, 79000000034), so a tab name never is one.
   version: (p): string | undefined => (isVersionSlug(p) ? p : undefined),
+  // A line (a Pixel, a model) is whatever sits before a version and is neither a version nor a tab.
+  line: (p): string | undefined => (!isVersionSlug(p) && !TABS.some((t) => t === p) ? p : undefined),
   tab: (p): Tab | undefined => TABS.find((t) => t === p),
   feature: (p): FeatureSlug | undefined => FEATURE_SLUGS.find((f) => f === p),
 });

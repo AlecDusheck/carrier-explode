@@ -1,8 +1,4 @@
-/**
- * Byte helpers shared by both decoders, the firmware readers, storage and the
- * extractor: bounds-checked fixed-width reads, varints, hex/base64, digests.
- * No dependencies; runs in browsers, Workers and Node.
- */
+/** Byte helpers for the decoders, firmware readers, storage and extractor. No dependencies. */
 
 export { BoundsError, byteAt, need, slice } from "./bounds.ts";
 export {

@@ -1,8 +1,4 @@
-/**
- * Fixed-width integers at an offset, both byte orders, bounds-checked. 32-bit
- * readers return unsigned numbers; 64-bit readers return bigint, with a
- * `safe` variant for sizes and offsets that must fit a double.
- */
+/** Bounds-checked fixed-width integers. 64-bit reads are bigint; the `safe` variants are for sizes and offsets. */
 
 import { byteAt, need } from "./bounds.ts";
 

@@ -1,11 +1,6 @@
 /**
- * payload.bin, the A/B OTA image update_engine applies (system/update_engine
- * update_metadata.proto). A full OTA writes every partition with independent
- * operations, each producing whole blocks from its own compressed blob, so
- * any block can be had by fetching one blob.
- *
- *   "CrAU" | u64be version (2) | u64be manifest size | u32be metadata signature size
- *   | DeltaArchiveManifest | metadata signature | blobs (op.data_offset is relative to here)
+ * payload.bin (update_engine update_metadata.proto). In a full OTA every operation writes whole
+ * blocks from its own blob, so any block costs one blob fetch.
  */
 
 import { asciiAt, safeU64be, u32be } from "../binary/index.ts";
@@ -44,7 +39,6 @@ export interface PartitionUpdate {
   /** new_partition_info.size. */
   readonly size: number;
   readonly operations: readonly InstallOp[];
-  readonly version?: string;
 }
 
 export interface Payload {
@@ -53,18 +47,12 @@ export interface Payload {
   /** Absolute offset of the blob area in `source`. */
   readonly dataOffset: number;
   readonly partitions: readonly PartitionUpdate[];
-  /** 0 for a full payload; incremental payloads carry their delta format version. */
-  readonly minorVersion: number;
-  /** YYYY-MM-DD, when the manifest says. */
-  readonly securityPatchLevel?: string;
-  /** Build time, seconds since the epoch. */
-  readonly maxTimestamp?: number;
   readonly decompressors: Decompressors;
   partition(name: string): PartitionUpdate | undefined;
 }
 
 export interface PayloadOptions {
-  readonly decompressors?: Decompressors;
+  readonly decompressors: Decompressors;
 }
 
 function opType(n: number): OpType {
@@ -77,8 +65,10 @@ function extent(f: readonly Field[]): Extent {
 
 function operation(f: readonly Field[]): InstallOp {
   const hash = bytes(f, 8);
+  const type = uint(f, 1);
+  if (type === undefined) throw new PayloadFormatError("operation without a type");
   return {
-    type: opType(uint(f, 1) ?? -1),
+    type: opType(type),
     dataOffset: uint(f, 2) ?? 0,
     dataLength: uint(f, 3) ?? 0,
     dstExtents: messages(f, 6).map(extent),
@@ -92,17 +82,11 @@ function partitionUpdate(f: readonly Field[]): PartitionUpdate {
   const info = messages(f, 7)[0];
   const size = info && uint(info, 1);
   if (size === undefined) throw new PayloadFormatError(`partition ${name} has no new_partition_info.size`);
-  const version = string(f, 17);
-  return {
-    name,
-    size,
-    operations: messages(f, 8).map(operation),
-    ...(version === undefined ? {} : { version }),
-  };
+  return { name, size, operations: messages(f, 8).map(operation) };
 }
 
 /** Header and manifest of a payload.bin held in `src`. Version 2 is the only one A/B devices have shipped since Android 8. */
-export async function openPayloadSource(src: RangeSource, opts: PayloadOptions = {}): Promise<Payload> {
+export async function openPayloadSource(src: RangeSource, opts: PayloadOptions): Promise<Payload> {
   const head = await src.read(0, 24);
   if (!asciiAt(head, 0, "CrAU")) throw new PayloadFormatError(`${src.label}: not a payload (no CrAU magic)`);
   const version = safeU64be(head, 4);
@@ -111,26 +95,22 @@ export async function openPayloadSource(src: RangeSource, opts: PayloadOptions =
   const signatureSize = u32be(head, 20);
   const headerSize = 24;
   const manifest = parseMessage(await src.read(headerSize, manifestSize));
+  // 4096 is block_size's declared proto default.
   const blockSize = uint(manifest, 3) ?? 4096;
   const partitions = messages(manifest, 13).map(partitionUpdate);
   const byName = new Map(partitions.map((p) => [p.name, p]));
-  const spl = string(manifest, 18);
-  const maxTimestamp = uint(manifest, 14);
   return {
     source: src,
     blockSize,
     dataOffset: headerSize + manifestSize + signatureSize,
     partitions,
-    minorVersion: uint(manifest, 12) ?? 0,
-    ...(spl === undefined || spl === "" ? {} : { securityPatchLevel: spl }),
-    ...(maxTimestamp === undefined ? {} : { maxTimestamp }),
-    decompressors: opts.decompressors ?? {},
+    decompressors: opts.decompressors,
     partition: (name) => byName.get(name),
   };
 }
 
 /** payload.bin inside an OTA zip, where it is stored uncompressed and read in place. */
-export async function openPayload(zip: RemoteZip, opts: PayloadOptions = {}): Promise<Payload> {
+export async function openPayload(zip: RemoteZip, opts: PayloadOptions): Promise<Payload> {
   const entry = zip.entry("payload.bin");
   if (!entry) throw new PayloadFormatError(`${zip.source.label}: no payload.bin (not an A/B OTA)`);
   return openPayloadSource(await zip.storedSource(entry), opts);

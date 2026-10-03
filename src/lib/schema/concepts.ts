@@ -1,8 +1,4 @@
-/**
- * The concept registry: platform-neutral definitions only. Each platform's
- * answers live with its mapper (./ios/readers.ts, ./android/readers.ts), typed
- * by the concept's value spec. Mapping rationale: docs/concepts.md.
- */
+/** Platform-neutral concept definitions; each platform's readers are typed by them. Mapping: docs/concepts.md. */
 
 import type { Json } from "./types.ts";
 import type { StateReading, Unset, ValueReading } from "./values.ts";

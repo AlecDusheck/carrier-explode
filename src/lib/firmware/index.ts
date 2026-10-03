@@ -1,8 +1,6 @@
 /**
- * Firmware readers: a remote zip over HTTP Range requests, an A/B OTA's
- * payload.bin, random access into one partition, and read-only ext4 / EROFS
- * on top. Decoder-agnostic and fetch-based, so it runs in Node 22, Workers
- * and browsers; decompressors other than deflate are injected (./codecs.ts).
+ * Remote zip, A/B OTA payload, partition access, and read-only ext4 / EROFS.
+ * fetch-based for Node and Workers; decompressors beyond deflate are injected.
  */
 
 import { Erofs, isErofs } from "./erofs.ts";
@@ -12,7 +10,7 @@ import type { BlockReader } from "./partition.ts";
 
 export { bytesSource, HttpSource, SourceRangeError, subSource, type FetchStats, type RangeSource } from "./source.ts";
 export { openRemoteZip, openZip, ZipFormatError, type RemoteZip, type ZipEntry } from "./zip.ts";
-export { MissingCodecError, type Decompress, type Decompressors } from "./codecs.ts";
+export type { Decompress, Decompressors } from "./codecs.ts";
 export {
   openPayload, openPayloadSource, PayloadFormatError,
   type Extent, type InstallOp, type OpType, type PartitionUpdate, type Payload, type PayloadOptions,

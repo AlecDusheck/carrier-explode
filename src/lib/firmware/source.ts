@@ -1,8 +1,4 @@
-/**
- * Random-access byte sources. Every reader in this package sits on a
- * RangeSource, so the same code reads a remote OTA over HTTP Range requests
- * or a buffer in a test.
- */
+/** Random-access byte sources: a remote file over Range requests, or a buffer. */
 
 import { contentLength, fetchRange, type RetryOptions } from "../http/index.ts";
 

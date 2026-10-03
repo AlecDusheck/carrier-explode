@@ -1,16 +1,6 @@
 /**
- * android.plan: which Pixel builds to extract. Carrier settings differ per
- * device generation within one build (CP3A.260905.009: 11 distinct sets
- * across 20 phones), so every build fans out to every device it ships for.
- *
- * Policy, from the OTA page alone:
- * - current devices: those whose newest general build is within
- *   CURRENT_MONTHS of the newest build on the page (drops retired Pixels);
- * - per current device, its NEWEST_BUILDS newest general builds;
- * - general builds only: carrier/region variants (`CP2A.260805.005.A1,
- *   Rogers`) are skipped (see the report's open issues);
- * - builds already in releases/android/ are skipped unless `rebuild`, or
- *   unless the page now lists a device the held release lacks.
+ * android.plan: the newest builds of current Pixels, one OTA per device, minus releases already held
+ * with every device. Carrier and region variant builds are skipped.
  */
 
 import * as v from "valibot";
@@ -38,10 +28,7 @@ function currentDevices(devices: readonly OtaDevice[]): OtaDevice[] {
   });
 }
 
-/**
- * Builds by id. A build is picked by any device's newest few, then lists
- * every current device that has it: Release.devices must be complete.
- */
+/** A build picked by any device's newest few lists every current device that has it. */
 export function planBuilds(devices: readonly OtaDevice[], held: ReadonlyMap<string, ReadonlySet<string>>, rebuild: boolean): PlannedBuild[] {
   const current = currentDevices(devices);
   const general = (d: OtaDevice): OtaBuild[] => d.builds.filter((b) => b.variant === undefined);
@@ -76,7 +63,7 @@ const heldRelease = v.object({ id: v.string(), devices: v.array(v.string()) });
 /** Held releases: build id -> the devices it was extracted from. */
 async function heldBuilds(ctx: JobContext<"android.plan">): Promise<Map<string, Set<string>>> {
   const held = new Map<string, Set<string>>();
-  for (const key of await ctx.r2.list(keys.releasesPrefix("android"))) {
+  for (const key of await ctx.r2.list(keys.releases("android"))) {
     if (!key.endsWith(".json")) continue;
     const release = v.parse(heldRelease, await ctx.r2.getJson(key));
     held.set(release.id, new Set(release.devices));

@@ -1,31 +1,17 @@
-/**
- * Carrier ids (Carrier.slug): the key of index/carriers/<id>.json, never shown
- * in a URL (pages are per source, at sourcePath). Readable and stable: the
- * name of the carrier's primary member (./identity.ts primary: an Apple
- * bundle with the most SIM rules, else the largest Android canonical), or
- * `<platform>-<name>` when another carrier already holds that name. A carrier
- * keeps the id its members had in the previous index while that id is still
- * one of its own names, so documents do not move when a member gains matchers.
- */
+/** Carrier ids: the primary member's name (`ATT_US`), or `<platform>-<name>` when taken; kept across builds while still one of the carrier's names. */
 
 import type { Platform } from "./types.ts";
 
-export interface SlugMember {
+export interface IdMember {
   readonly key: string;
   readonly platform: Platform;
   readonly name: string;
 }
 
-/** Ids a carrier may hold: each member's name, and its platform-qualified form. */
-const ownIds = (members: readonly SlugMember[]): Set<string> =>
-  new Set(members.flatMap((m) => [m.name, `${m.platform}-${m.name}`]));
+const ownIds = (members: readonly IdMember[]): Set<string> => new Set(members.flatMap((m) => [m.name, `${m.platform}-${m.name}`]));
 
-/**
- * One id per carrier, in input order. `carriers` lists each carrier's members,
- * primary first. Larger carriers choose first, so when a carrier splits, its
- * larger part keeps the old id.
- */
-export function assignSlugs(carriers: ReadonlyArray<readonly SlugMember[]>, previous: Readonly<Record<string, string>> = {}): string[] {
+/** One id per carrier (members primary first), in input order; larger carriers choose first, so a split's larger part keeps the old id. */
+export function assignIds(carriers: ReadonlyArray<readonly IdMember[]>, previous: Readonly<Record<string, string>> = {}): string[] {
   const taken = new Set<string>();
   const out = carriers.map(() => "");
   const order = carriers.map((ms, i) => ({ ms, i })).sort((a, b) => b.ms.length - a.ms.length || a.i - b.i);
@@ -36,12 +22,11 @@ export function assignSlugs(carriers: ReadonlyArray<readonly SlugMember[]>, prev
       const id = previous[m.key];
       if (id !== undefined && own.has(id)) votes.set(id, (votes.get(id) ?? 0) + 1);
     }
-    const kept = [...votes].sort((x, y) => y[1] - x[1] || x[0].localeCompare(y[0])).map(([id]) => id).find((id) => !taken.has(id));
+    const kept = [...votes].sort((x, y) => y[1] - x[1] || x[0].localeCompare(y[0])).map(([id]) => id);
     const head = ms[0];
-    const candidates = [kept, head?.name, head ? `${head.platform}-${head.name}` : undefined].flatMap((c) => (c === undefined ? [] : [c]));
-    let id = candidates.find((c) => !taken.has(c)) ?? head?.name ?? "carrier";
-    // Two carriers whose primaries share a name on one platform cannot happen (names are unique per platform); the counter only guards it.
-    for (let n = 2; taken.has(id); n++) id = `${head?.platform ?? "carrier"}-${head?.name ?? ""}-${n}`;
+    const fresh = head ? [head.name, `${head.platform}-${head.name}`] : [];
+    const id = [...kept, ...fresh].find((c) => !taken.has(c));
+    if (id === undefined) throw new Error(`carrier ids: no free id for ${ms.map((m) => m.key).join(", ")}`);
     taken.add(id);
     out[i] = id;
   }

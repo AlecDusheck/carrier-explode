@@ -1,45 +1,35 @@
-/**
- * The three lists on the left: carriers, countries and Watch bundles, one row
- * per page, from the index. A carrier row is an iOS bundle as it always was;
- * a carrier with no iOS bundle is one row under its Android name.
- */
+/** The lists on the left: one row per source, every platform, from the index. */
 
+import { error } from "@sveltejs/kit";
 import { splitName } from "#lib/names.ts";
-import { parseSourceKey, type SourceRef } from "#lib/schema/types.ts";
-import type { Kind } from "#lib/types.ts";
+import { parseSourceKey, sourcePath, type Platform, type SourceKind } from "#lib/schema/types.ts";
 import { perRequest } from "./cache";
 import { carrierList, countryList } from "./catalog";
 
 export interface ListEntry {
+  readonly path: string;
+  readonly platform: Platform;
   readonly name: string;
   readonly display: string;
-  readonly cc?: string | undefined;
-  /** YYYY-MM-DD: when anything of its carrier last changed, on either platform. */
-  readonly updated?: string | undefined;
+  readonly cc: string | undefined;
+  /** YYYY-MM-DD: the newest change of its carrier, any platform. */
+  readonly updated: string | undefined;
 }
 
-export type Lists = Readonly<Record<Kind, readonly ListEntry[]>>;
+export type Lists = Readonly<Record<SourceKind, readonly ListEntry[]>>;
 
-const refs = (members: readonly string[]): SourceRef[] => members.flatMap((k) => parseSourceKey(k) ?? []);
-const byName = (a: ListEntry, b: ListEntry): number => a.name.localeCompare(b.name);
+const byName = (a: ListEntry, b: ListEntry): number => a.name.localeCompare(b.name) || a.platform.localeCompare(b.platform);
 
 export const getLists = perRequest(async (): Promise<Lists> => {
   const [carriers, countries] = await Promise.all([carrierList(), countryList()]);
-  const phone: ListEntry[] = [], watch: ListEntry[] = [];
-  for (const c of carriers) {
-    const ios = refs(c.members).filter((r) => r.platform === "ios" && r.kind === "carrier");
-    const row = (name: string, display: string): ListEntry => ({ name, display, cc: c.iso ?? splitName(name).cc, updated: c.updated });
-    const bundles = ios.filter((r) => !r.family);
-    if (bundles.length) phone.push(...bundles.map((r) => row(r.name, splitName(r.name).display)));
-    else if (c.platforms.includes("android")) phone.push(row(c.slug, c.name));
-    watch.push(...ios.filter((r) => r.family === "Watch").map((r) => row(r.name, splitName(r.name).display)));
-  }
-  const country = countries.flatMap((c) => refs(c.countryBundles).filter((r) => !r.family).map((r): ListEntry => ({ name: r.name, display: r.name, cc: c.iso })));
-  return { carriers: phone.sort(byName), countries: country.sort(byName), watch: watch.sort(byName) };
+  const out: Record<SourceKind, ListEntry[]> = { carrier: [], country: [], default: [] };
+  const add = (key: string, cc: string | undefined, updated: string | undefined): void => {
+    const ref = parseSourceKey(key);
+    if (!ref) error(500, `The index lists ${key}, which is not a source key.`);
+    out[ref.kind].push({ path: sourcePath(ref), platform: ref.platform, name: ref.name, display: splitName(ref.name).display, cc, updated });
+  };
+  // Country bundles are listed by country, with its code.
+  for (const c of carriers) for (const k of c.members) if (parseSourceKey(k)?.kind !== "country") add(k, c.iso, c.updated);
+  for (const c of countries) for (const k of c.countryBundles) add(k, c.iso, undefined);
+  return { carrier: out.carrier.sort(byName), country: out.country.sort(byName), default: out.default.sort(byName) };
 });
-
-/** The carrier rows of one country, for a country bundle's Overview. */
-export async function carriersIn(cc: string | undefined): Promise<string[]> {
-  if (!cc) return [];
-  return (await getLists()).carriers.filter((c) => c.cc === cc).map((c) => c.name);
-}

@@ -1,20 +1,9 @@
-/**
- * Reading CarrierConfig keys. A Pixel CarrierSettings file only lists what the
- * carrier changes; every other key keeps the AOSP default from
- * CarrierConfigManager. For the few keys whose default decides a feature
- * state ("VoLTE is off unless the carrier turns it on") the default is applied
- * and named as `default:<key>`, so a concept never claims the file said
- * something it did not. All other keys read as unset when absent.
- */
+/** CarrierConfig keys. A file lists only what the carrier changes; readers that need the AOSP default name it `default:<key>`. */
 
-import type { CarrierConfigValue } from "#lib/decode/android/types.ts";
-import { toJson } from "../json.ts";
+import type { CarrierConfigValue } from "#lib/decode/android/index.ts";
 import type { Json, NativeRef } from "../types.ts";
 
-/**
- * AOSP CarrierConfigManager defaults (Android 16 sDefaults), only for keys a
- * reader falls back on. Each is a documented default, not an observed one.
- */
+/** CarrierConfigManager defaults (AOSP sDefaults), for the keys a reader falls back on. */
 export const AOSP_DEFAULTS = {
   carrier_volte_available_bool: false,
   carrier_wfc_ims_available_bool: false,
@@ -77,7 +66,6 @@ export function config(configs: Configs, key: string): ConfigRead | undefined {
 export function configOrDefault(configs: Configs, key: DefaultedKey): ConfigRead {
   const own = config(configs, key);
   if (own) return own;
-  // A copy: the table is shared and profiles are handed to callers.
-  const value = toJson(AOSP_DEFAULTS[key]) ?? null;
+  const value: Json = AOSP_DEFAULTS[key];
   return { value, ref: { path: `default:${key}`, value } };
 }

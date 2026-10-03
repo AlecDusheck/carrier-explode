@@ -123,7 +123,7 @@ export async function versionsOf(platform: Platform, entries: readonly TimelineE
   return entries.map((e) => ({
     ...e,
     platform,
-    images: e.copies.flatMap((c) => (c.via === "image" ? c.releases.map((id) => names.get(`${platform}:${id}`) ?? id) : [])),
+    images: e.copies.flatMap((c) => (c.via === "image" ? [...c.releases].reverse().map((id) => names.get(`${platform}:${id}`) ?? id) : [])),
     ota: e.copies.flatMap((c) => (c.via === "ota" ? c.os : [])),
   }));
 }

@@ -1,9 +1,4 @@
-/**
- * A large byte range of a remote file as a stream of chunks, resumed from
- * where it broke when a connection drops. fetchRange (src/lib/http) buffers a
- * whole range, which is right for zip directories and manifests but not for a
- * 9 GB filesystem image or a 200 MB modem package.
- */
+/** A large byte range as a stream, resumed where it broke. fetchRange buffers, which a 9 GB image cannot afford. */
 
 import { fetchWithRetry, RangeResponseError } from "../../../../../src/lib/http/index.ts";
 

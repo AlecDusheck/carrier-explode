@@ -2,21 +2,23 @@
   import type { Snippet } from "svelte";
 
   /**
-   * The one dropdown for choosing an iOS version or an iPhone: a button showing
+   * The one dropdown for choosing a version, a phone or a source: a button showing
    * the choice, opening a list where each item carries its picture. Items are
    * links when `href` is given (a choice is a page), else `onpick` is called.
    * The list is a native popover, so it closes on an outside tap or Escape.
    */
-  let { label, items, selected, key, option, href, onpick }: {
-    label?: string;
-    items: T[];
-    selected?: T;
+  interface Props {
+    label?: string | undefined;
+    items: readonly T[];
+    selected?: T | undefined;
     key: (item: T) => string;
     /** One item's picture and text, in the button and in the list alike. */
     option: Snippet<[T]>;
-    href?: (item: T) => string;
-    onpick?: (item: T) => void;
-  } = $props();
+    href?: ((item: T) => string) | undefined;
+    onpick?: ((item: T) => void) | undefined;
+  }
+
+  let { label, items, selected, key, option, href, onpick }: Props = $props();
 
   const id = $props.id();
 

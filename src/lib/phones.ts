@@ -1,6 +1,6 @@
 /** Phones by the modem package that serves them, and the iOS bundle files each one reads. */
 
-import { byNewest, compareProducts, type BundleFile } from "#lib/decode/index.ts";
+import { byNewest, compareProducts, modemLabel, type BundleFile } from "#lib/decode/index.ts";
 
 export interface Phone {
   readonly id: string;
@@ -99,4 +99,28 @@ export function phoneRows(
 export function pickPhoneRow(rows: readonly PhoneRow[], file: string | null): { row: PhoneRow | undefined; missing: string | undefined } {
   const named = file ? rows.find((r) => r.path === file) : undefined;
   return { row: named ?? rows[0], missing: file && !named ? file : undefined };
+}
+
+/** One phone picker choice: the phones it covers, pictured by the newest. */
+export interface PhoneChoice {
+  readonly key: string;
+  readonly label: string;
+  readonly id: string | undefined;
+  readonly name: string | undefined;
+  readonly href: string;
+}
+
+/** An Apple version's override-file rows as phone picker choices; picking one sets `?file=`. */
+export function fileChoices(rows: readonly PhoneRow[], href: (path: string) => string): PhoneChoice[] {
+  return rows.map((r) => {
+    const modems = [...new Set(r.phones.flatMap((p) => (p.family ? [modemLabel(p.family)] : [])))].join(", ");
+    const newest = [...r.phones].sort((a, b) => compareProducts(b.id, a.id))[0];
+    return {
+      key: r.path,
+      label: r.phones.length ? `${phoneList(r.phones)}${modems ? ` · ${modems}` : ""}` : `${r.path} (not named for a phone)`,
+      id: newest?.id,
+      name: newestNamed(r.phones),
+      href: href(r.path),
+    };
+  });
 }

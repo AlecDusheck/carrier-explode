@@ -16,14 +16,14 @@ import { join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 
-import { BUCKET_V2 } from "../../src/lib/storage/keys.ts";
+import { BUCKET } from "../../src/lib/storage/keys.ts";
 
 const { values } = parseArgs({
   options: {
     r2: { type: "string", default: ".r2" },
     site: { type: "string", default: ".." },
     "persist-to": { type: "string" },
-    bucket: { type: "string", default: BUCKET_V2 },
+    bucket: { type: "string", default: BUCKET },
   },
 });
 

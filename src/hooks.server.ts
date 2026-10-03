@@ -15,6 +15,12 @@
 
 import { env } from "cloudflare:workers";
 import type { RequestEvent } from "@sveltejs/kit";
+import { keys } from "#lib/storage/keys.ts";
+import type { LegacyRoute } from "#lib/schema/types.ts";
+import { cached } from "#lib/server/cache.ts";
+import { answer, isLegacy } from "#lib/server/legacy.ts";
+import * as records from "#lib/server/records.ts";
+import { etagOf, readJson } from "#lib/server/store.ts";
 import type { Handle } from "@sveltejs/kit/hooks";
 import type { RouteId } from "$app/types";
 import { QUERIES, isQueryName, type QueryPolicy, type RateClass } from "#lib/api/policy.ts";
@@ -33,33 +39,32 @@ const BUDGET: Record<RateClass, "RL_SCAN" | "RL_DIFF" | "RL_BUNDLE" | "RL_BASE">
   scan: "RL_SCAN",
   // Two opens and a full-bundle diff per miss; results are cached per pair.
   diff: "RL_DIFF",
-  // Everything that can pull and unzip an .ipcc: /raw, the bundle queries, and
-  // a page pinned to a version. The assets gallery fires one /raw per image, so
-  // this has to hold a page view plus its burst.
+  // Everything that can pull and unzip an .ipcc or decode a CarrierSettings: /raw,
+  // the version queries, and a page pinned to a version. The assets gallery fires
+  // one /raw per image, so this has to hold a page view plus its burst.
   bundle: "RL_BUNDLE",
-  // Pages and the cached tables. Cheap, but /carriers is no-store and so runs
-  // the worker every time.
+  // Pages and the cached tables. Cheap, but a list with a guess is no-store and
+  // so runs the worker every time.
   base: "RL_BASE",
 };
 
-const RAW: RouteId = "/raw/[kind=kind]/[name]/[version=version]/[...path]";
+const SOURCE = "/[kind=kind]/[platform=platform]/[name]";
+const VERSION = `${SOURCE}/[[line=line]]/[version=version]`;
+const RAW: RouteId = `/raw${VERSION}/[...path]`;
 
-/** Pages that open a bundle whether or not they name a version: a member as-is, and a diff. */
+/** Pages that open an artifact whether or not they name a version: a member as-is, and a diff. */
 const BUNDLE_ROUTES: ReadonlySet<RouteId> = new Set<RouteId>([RAW, "/compare"]);
 
 /**
- * Pages rendered from modem package summaries or an image index's modems, both
- * of which baseband.yml can rewrite; it purges the "baseband" tag when it does.
- * A bundle's Overview, Settings, Modem and Changes tabs all list its phones by modem, and the
- * Features pages offer the current release's phones.
+ * Pages rendered from modem package summaries or a release's modems, which the
+ * ios.modems job can rewrite (it purges the "baseband" tag), and pages listing
+ * phones by modem: an Apple version's Settings, Modem and Changes tabs, and the Features pages.
  */
 const BASEBAND_ROUTES: ReadonlySet<RouteId> = new Set<RouteId>([
   "/builds", "/builds/[build]", "/builds/[build]/[family]", "/builds/[build]/[family]/carriers",
   "/builds/[build]/[family]/policy", "/builds/[build]/[family]/policy/[i]", "/builds/[build]/[family]/networks",
   "/builds/[build]/[family]/configs", "/builds/[build]/[family]/changes", "/sitemap.xml",
-  "/[kind=kind]/[name]", "/[kind=kind]/[name]/[version=version]",
-  "/[kind=kind]/[name]/[version=version]/settings", "/[kind=kind]/[name]/[version=version]/modem",
-  "/[kind=kind]/[name]/[version=version]/changes", "/features", "/features/[feature=feature]",
+  SOURCE, VERSION, `${VERSION}/[tab=tab]/[...path]`, "/features", "/features/[feature=feature]",
 ]);
 
 const routeIn = (routes: ReadonlySet<RouteId>, id: RouteId | null) => id !== null && routes.has(id);
@@ -138,7 +143,7 @@ export function cachePolicy(
   if (status >= 400 && status !== 404) return nothing;
 
   const tags = [event.params.version ? "pinned" : "latest"];
-  if (event.params.name) tags.push(`b-${event.params.name}`);
+  if (event.params.name && event.params.platform) tags.push(`s-${event.params.platform}-${event.params.name}`);
   if (routeIn(BASEBAND_ROUTES, event.route.id)) tags.push("baseband");
 
   if (status === 404) return { browser: REVALIDATE, edge: MISSING_EDGE, tags };
@@ -158,7 +163,28 @@ const SHARED: Policy = { browser: REVALIDATE, edge: LATEST_EDGE, tags: ["latest"
 const shareable = (event: Pick<RequestEvent, "request" | "locals">, query: QueryPolicy | null, status: number) =>
   !!query?.shared && event.request.method === "GET" && status === 200 && !event.locals.perVisitor;
 
+/** The index's redirect table, kept as long as its etag. */
+async function legacyRoutes(): Promise<readonly LegacyRoute[]> {
+  const tag = await etagOf(keys.legacy());
+  return tag === null ? [] : cached(`legacy:${tag}`, 30 * 86400, async () => (await readJson(keys.legacy(), records.legacyRoutes)) ?? []);
+}
+
+/** v1 URLs answer before routing, so no route knows their shapes. Split out so it can be tested with a table. */
+export async function legacyStep(url: URL, routes: () => Promise<readonly LegacyRoute[]>): Promise<Response | null> {
+  if (!isLegacy(url.pathname)) return null;
+  const a = answer(await routes(), url.pathname, url.search);
+  if (!a) return null;
+  if (a.status === 301) return new Response(null, { status: 301, headers: { location: a.location, "cache-control": REVALIDATE } });
+  const html = (t: string): string => t.replace(/[&<>"]/g, (c) => `&#${c.charCodeAt(0)};`);
+  const body = `<!doctype html><meta charset="utf-8"><title>Not found</title><p>${html(a.message)} <a href="${html(a.page)}">Its versions are here.</a></p>`;
+  return new Response(body, { status: 404, headers: { "content-type": "text/html; charset=utf-8", "cache-control": REVALIDATE } });
+}
+
 export const handle: Handle = async ({ event, resolve }) => {
+  if (event.request.method === "GET") {
+    const moved = await legacyStep(event.url, legacyRoutes);
+    if (moved) return moved;
+  }
   const query = remoteQuery(event);
   const limited = await overBudget(event, rateClass(event, query));
   if (limited) return limited;

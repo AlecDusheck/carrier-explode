@@ -76,7 +76,7 @@ export interface BuildFamilies {
 
 /** Every iOS release, newest first, and the modem families it holds. Kept as long as the release list is the same. */
 export const basebandBuilds = perRequest(async (): Promise<BuildFamilies[]> => {
-  const tag = await etagOf(keys.releases());
+  const tag = await etagOf(keys.releaseIndex());
   return cached(`basebandbuilds:v1:${tag ?? "none"}`, KEEP, async () => {
     const ios = (await releaseList()).filter((r) => r.platform === "ios");
     return Promise.all(ios.map(async (r) => ({

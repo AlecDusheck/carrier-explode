@@ -1,5 +1,16 @@
 <script lang="ts" module>
-  export interface TreeCtx { file: string; cc?: string }
+  import type { Platform } from "#lib/schema/types.ts";
+
+  /** Where a tree's values come from: what its keys are documented by and what "compare across" scans. */
+  export interface TreeCtx {
+    readonly platform: Platform;
+    /** The source key. */
+    readonly source: string;
+    /** The file (iOS member path, or Android `config`) the tree's paths are inside. */
+    readonly file: string;
+    /** The source's country, for "compare across its carriers". */
+    readonly cc?: string | undefined;
+  }
   /** A tag beside a top-level key: where its value came from, or how rare it is. */
   export interface KeyBadge { text: string; tone?: "phone" | "rare" | "country"; title?: string }
 </script>
@@ -10,13 +21,15 @@
   import TreeNode from "./TreeNode.svelte";
   import TreeToolbar from "./TreeToolbar.svelte";
 
-  let { value, ctx, state, badges }: {
+  interface Props {
     value: unknown;
     ctx: TreeCtx;
     /** Shared with a toolbar elsewhere on the page; without it the tree has its own. */
-    state?: TreeState;
-    badges?: Record<string, KeyBadge[]>;
-  } = $props();
+    state?: TreeState | undefined;
+    badges?: Record<string, KeyBadge[]> | undefined;
+  }
+
+  let { value, ctx, state, badges }: Props = $props();
 
   const own = new TreeState();
   const st = $derived(state ?? own);

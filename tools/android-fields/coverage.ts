@@ -1,10 +1,6 @@
 /**
- * How many config keys in real CarrierSettings files have docs in fields.ts.
- *
+ * Share of config keys in real CarrierSettings files that fields.ts documents.
  *   node tools/android-fields/coverage.ts <dir of *.pb> [--missing]
- *
- * Counts distinct keys (top level, and keys inside bundles separately) and
- * key uses across files. carrier_list.pb is skipped; others.pb is expanded.
  */
 
 import { readdirSync, readFileSync } from "node:fs";

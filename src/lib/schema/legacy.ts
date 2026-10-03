@@ -1,24 +1,7 @@
-/**
- * v1 URL prefixes -> v2 paths, for the site's permanent redirects
- * (index/legacy.json).
- *
- * v1 had one page per bundle name and kind (`/carriers/<Name>`,
- * `/watch/<Name>`, `/countries/<Name>`), its versions in one strip:
- *   ios-<version>[-<image build>]   an iOS image's copy
- *   ota-<build>[-<n>]               an OTA file; -2, -3 for more files of one build
- *   ota-<build>-<productType>[-<n>] iPad (now ipados), a model (now that model's line),
- *                                   iPhone (the manifest's CarrierBundles.iPhone family)
- *   ota-legacy                      the 2009-2010 MobileDeviceCarrierBundles file
- * Each is derived here from the v2 copy it named, not by replaying v1's
- * ordering: an image copy answers to `ios-<version>-<build>` for every release
- * carrying it and the bare `ios-<version>` from the newest entry with that iOS
- * version; OTA files sharing a v1 slug are numbered in v1's order (OS key,
- * then build, newest first).
- */
+/** v1 path prefixes -> v2 paths, each v1 slug derived from the v2 copy it named (docs/concepts.md#timelines-and-v1-urls). */
 
 import { compareVersions } from "#lib/decode/index.ts";
 import type { OtaRef } from "#lib/storage/keys.ts";
-import { modelOf } from "./timeline.ts";
 import {
   parseSourceKey, sourceKey, sourcePath, versionPath,
   type LegacyRoute, type Platform, type Release, type SourceKind, type SourceRef, type Timeline, type TimelineEntry,
@@ -58,12 +41,10 @@ function imageRoutes(base: string, lines: readonly Line[], releases: ReadonlyMap
   return out;
 }
 
-/** v1's per-model suffix for a ref of `source`. */
+/** v1's product-type suffix: the model, `iPad`, or `iPhone` for CarrierBundles.iPhone entries (OS keys `iPhone <n>`). */
 function v1Suffix(ref: OtaRef, source: SourceRef): string | undefined {
-  const model = modelOf(ref.productType);
-  if (model !== undefined) return model;
+  if (ref.model !== undefined) return ref.model;
   if (source.platform === "ipados") return "iPad";
-  // CarrierBundles.iPhone entries are listed under OS keys `iPhone <n>`.
   return ref.os.startsWith("iPhone ") ? "iPhone" : undefined;
 }
 
@@ -96,10 +77,7 @@ function otaRoutes(base: string, lines: readonly Line[], refs: readonly OtaRef[]
       }));
 }
 
-/**
- * Every v1 prefix: each name's page, and each version it listed. `timelines`
- * holds every v2 source's timeline by sourceKey.
- */
+/** Every v1 page and version it listed; `timelines` is every v2 source's, by sourceKey. */
 export function legacyRoutes(releases: readonly Release[], refs: readonly OtaRef[], timelines: ReadonlyMap<string, Timeline>): LegacyRoute[] {
   const byId = new Map(releases.map((r) => [r.id, r]));
   const sources = [...timelines.keys()].flatMap((k) => parseSourceKey(k) ?? []);

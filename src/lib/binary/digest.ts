@@ -1,8 +1,4 @@
-/**
- * Digests. sha256 goes through WebCrypto (Node 22 and Workers both have
- * crypto.subtle); SHA-1 is synchronous so decoders can dedup content without
- * awaiting. Streaming a large file's hash is Node-only and lives in the extractor.
- */
+/** sha256 via WebCrypto (Node and Workers); SHA-1 synchronous so decoders can dedup without awaiting. */
 
 import { bytesToHex } from "./text.ts";
 

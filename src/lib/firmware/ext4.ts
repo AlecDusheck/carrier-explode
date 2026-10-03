@@ -1,10 +1,6 @@
 /**
- * Read-only ext4, enough to walk a path and read files from an Android
- * partition image: superblock, group descriptors (32- and 64-bit), inodes,
- * extent trees and inline data. Directories are read
- * linearly: in an htree directory the index blocks look like one empty
- * dirent spanning the block, so a linear walk skips them and still sees every
- * leaf entry.
+ * Read-only ext4: extents and inline data. Directories are read linearly: htree index
+ * blocks look like one empty dirent spanning the block, so a linear walk skips them.
  */
 
 import { asciiAt, u16le, u32le, u8 } from "../binary/index.ts";

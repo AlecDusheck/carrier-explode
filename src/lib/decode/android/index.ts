@@ -1,9 +1,4 @@
-/**
- * Android carrier settings decoder: Google's CarrierSettings / CarrierList
- * protobufs as plain JSON (./types.ts), plus CarrierConfigManager docs for
- * their config keys. Self-contained: imports only the binary helpers; no
- * SvelteKit, Workers or Node APIs, so it runs in browsers too.
- */
+/** Google CarrierSettings / CarrierList protobufs as JSON, plus CarrierConfigManager docs for their keys. */
 
 export type * from "./types.ts";
 export {

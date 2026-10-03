@@ -1,8 +1,4 @@
-/**
- * Javadoc to the plain text a settings table can show: the description's
- * first paragraphs, with inline tags and HTML flattened, and the block tags
- * reduced to the two flags the docs table keeps (@deprecated, @hide).
- */
+/** Javadoc to plain text: the first paragraphs, plus the @deprecated and @hide flags. */
 
 export interface Javadoc {
   readonly text: string;

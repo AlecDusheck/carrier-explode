@@ -1,11 +1,4 @@
-/**
- * Bundles as extracted to disk, read back into memory one at a time.
- *
- * A bundle directory also holds symlinks, which are lookup aliases, not
- * bundles: `310240_GID1-6434 -> TMobile_us.bundle` in Carrier Bundles,
- * `202 -> Greece.bundle` in CountryBundles. Only real `.bundle` directories are
- * read, and only regular files in them, as v1 stored them.
- */
+/** Extracted bundles, read back one at a time. Symlinks there (`202 -> Greece.bundle`) are lookup aliases, not bundles. */
 
 import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";

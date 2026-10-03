@@ -1,11 +1,5 @@
-/**
- * APNs from a phone's merged iOS settings. iOS keeps them in three shapes:
- *   apns[i]                        one APN, types in `type-mask`
- *   apns[i].configuration[j]       a group sharing the outer `technology-mask`
- *   AttachAPN.<3GPP|WiFiCalling3GPP>  the initial-attach APN (one dict or a list)
- * and the MMS centre in MMS.MMSC / MMS.Proxy rather than on the APN. Each comes
- * out as one Apn with its native path, in the layer (file) that set it.
- */
+/** APNs from merged Apple settings: `apns[i]`, `apns[i].configuration[j]` and `AttachAPN`, with the MMS centre from `MMS`. */
+
 
 import { isJsonDict } from "#lib/decode/index.ts";
 import type { Apn, ApnAuth, ApnType, IpProtocol } from "../types.ts";
@@ -90,7 +84,7 @@ function apnFrom(d: Readonly<Record<string, unknown>>, path: string, extra: { ty
     ...(roaming !== undefined ? { roamingProtocol: roaming } : {}),
     ...(au !== undefined ? { auth: au } : {}),
     ...(user !== undefined ? { user } : {}),
-    ...(typeof d.password === "string" ? { hasPassword: d.password !== "" } : {}),
+    hasPassword: typeof d.password === "string" && d.password !== "",
     ...(t.includes("mms") ? mms : {}),
     ...(rats !== undefined ? { bearers: rats } : {}),
     path,

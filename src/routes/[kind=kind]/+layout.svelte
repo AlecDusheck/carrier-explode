@@ -7,46 +7,46 @@
 <script lang="ts">
   import { untrack } from "svelte";
   import { MediaQuery } from "svelte/reactivity";
-  import { goto } from "$app/navigation";
   import { page, navigating } from "$app/state";
   import type { Attachment } from "svelte/attachments";
   import { getIndex, guessCarrier, guessCountry } from "#lib/api/bundles.remote.ts";
-  import type { Kind } from "#lib/types.ts";
-  import { bundleHref, link } from "#lib/format.ts";
+  import { link } from "#lib/format.ts";
   import { menuTrigger, copyText } from "#lib/ui-state.svelte.ts";
   import { carrierName, fold } from "#lib/names.ts";
+  import { PLATFORM_NAMES } from "#lib/platforms.ts";
+  import { PLATFORMS } from "#lib/schema/types.ts";
+  import type { ListEntry } from "#lib/server/lists.ts";
+  import { SOURCE_KIND, type Kind } from "#lib/types.ts";
   import Pane from "#lib/components/Pane.svelte";
-  import BundleIcon from "#lib/components/BundleIcon.svelte";
+  import SourceIcon from "#lib/components/SourceIcon.svelte";
 
   let { params, children } = $props();
 
-  type Row = { name: string; display: string; cc?: string };
-
-  // A country's flag already says where it is.
-  const code = (c: Row) => (params.kind === "countries" ? "" : (c.cc?.toUpperCase() ?? ""));
-  const matches = (c: Row, q: string) => {
+  const matches = (c: ListEntry, q: string): boolean => {
     const f = fold(q);
     // The brand too: "China Mobile" finds CMCC_cn.
     return c.cc === q || (!!f && [c.name, c.display, carrierName(c.name).brand].some((n) => fold(n).includes(f)));
   };
 
-  // Carriers come from the network the request arrived on, countries from where
-  // it arrived from. Watch bundles have neither.
+  /** Carriers are guessed from the network the request came in on, countries from where it came from; defaults are not guessed. */
+  const GUESSES = {
+    carriers: () => guessCarrier(),
+    countries: () => guessCountry(),
+    defaults: async () => null,
+  } as const satisfies Record<Kind, () => Promise<string | null>>;
+
   async function guessFor(kind: Kind): Promise<string> {
-    if (kind === "watch" || guessShown[kind]) return "";
-    const guess = kind === "countries" ? await guessCountry() : await guessCarrier();
+    if (guessShown[kind]) return "";
+    const guess = await GUESSES[kind]();
     if (!guess) return "";
-    const list = (await getIndex())[kind];
-    // The box keeps the bundle's own spelling ("UnitedStates"); the filter lowercases.
+    const list = (await getIndex())[SOURCE_KIND[kind]];
     return list.some((c) => matches(c, guess.toLowerCase())) ? guess : "";
   }
 
   // Only a list that is the page gets a guess; beside an open bundle it is navigation.
-  // Depends on the kind alone, so moving between bundles keeps whatever was typed.
   const guess = $derived(untrack(() => params.name) ? "" : await guessFor(params.kind));
   // The box starts from the guess and resets with it when the list changes; typing overrides it.
   let query = $derived(guess);
-  // Says why the box is not empty, and gets out of the way on the first edit.
   const fromIp = $derived(!!guess && query === guess);
   /** Once a guess has been on screen, that list is not guessed again. */
   const spend: Attachment = () => {
@@ -54,51 +54,36 @@
   };
 
   let drawerOpen = $state(false);
-  // With nothing selected the list is the page. With a bundle open it is
-  // navigation — and on a phone it sits in a closed drawer — so 782 links are
-  // neither rendered nor serialised into the page until something wants them:
-  // a wide screen, or the drawer opened once.
+  // With nothing selected the list is the page. With a bundle open it is navigation (in a closed
+  // drawer on a phone), so its links are not rendered until something wants them.
   const wide = new MediaQuery("min-width: 761px", false);
   let drawerUsed = $state(false);
   const showList = $derived(!params.name || wide.current || drawerUsed);
 
-
-  // Carrier and Watch lists can put the most recently changed bundles first; countries stay A-Z.
+  // Carrier lists can put the most recently changed first; countries stay A-Z.
   let byUpdated = $state(true);
   const sortable = $derived(params.kind !== "countries");
-  const newestFirst = (a: { name: string; updated?: string }, b: { name: string; updated?: string }) =>
-    (b.updated ?? "").localeCompare(a.updated ?? "") || a.name.localeCompare(b.name);
-  const label = $derived(params.kind[0].toUpperCase() + params.kind.slice(1));
+  const newestFirst = (a: ListEntry, b: ListEntry): number => (b.updated ?? "").localeCompare(a.updated ?? "") || a.name.localeCompare(b.name);
+  const label = $derived(params.kind[0]?.toUpperCase() + params.kind.slice(1));
 
   // The row lights up on click, before the bundle behind it has loaded.
-  const selected = $derived(navigating.to ? navigating.to.params?.name : page.params.name);
+  const here = $derived(navigating.to?.url.pathname ?? page.url.pathname);
+  const isOpen = (c: ListEntry): boolean => here === link(c.path) || here.startsWith(link(c.path) + "/");
 
   const reveal: Attachment<HTMLElement> = (node) => node.scrollIntoView({ block: "nearest" });
 
-  function rowMenu(name: string) {
-    return () => ({
-      title: name,
-      items: [
-        { label: "Copy name", run: () => copyText(name) },
-        {
-          label: page.params.name ? `Compare with ${page.params.name}` : "Compare",
-          run: () => goto(link("/compare") + "?" + new URLSearchParams(page.params.name ? { a: page.params.name, b: name } : { a: name })),
-        },
-      ],
-    });
-  }
+  const rowMenu = (c: ListEntry) => () => ({ title: c.name, items: [{ label: "Copy name", run: () => copyText(c.name) }] });
 </script>
 
 <!-- With nothing selected, a phone shows the list as the page instead of hiding it in the drawer. -->
 <div class="split" class:browsing={!params.name}>
   <div class="pane-left" class:open={drawerOpen}>
-    {#if params.kind !== "countries"}
-      <!-- Watch bundles are carrier bundles for another device: one list, two families. -->
-      <div class="family">
-        <a class="btn" href={link("/carriers")} aria-current={params.kind === "carriers" ? "page" : undefined}>iPhone</a>
-        <a class="btn" href={link("/watch")} aria-current={params.kind === "watch" ? "page" : undefined}>Apple Watch</a>
-      </div>
-    {/if}
+    <div class="family">
+      <a class="btn" href={link(`/${params.kind}`)} aria-current={!params.platform ? "page" : undefined}>All</a>
+      {#each PLATFORMS as p (p)}
+        <a class="btn" href={link(`/${params.kind}/${p}`)} aria-current={params.platform === p ? "page" : undefined}>{PLATFORM_NAMES[p]}</a>
+      {/each}
+    </div>
     {#if !params.name && params.kind === "carriers"}
       <a class="btn landing-link" href={link("/sim")}>Find the bundle for a SIM</a>
     {/if}
@@ -109,28 +94,26 @@
     </div>
     {#if showList}
     <Pane>
-      {@const all = (await getIndex())[params.kind]}
+      {@const all = (await getIndex())[SOURCE_KIND[params.kind]].filter((c) => !params.platform || c.platform === params.platform)}
       {@const q = query.trim().toLowerCase()}
       {@const matched = q ? all.filter((c) => matches(c, q)) : all}
       {@const dated = sortable && byUpdated}
       {@const shown = dated ? [...matched].sort(newestFirst) : matched}
       <div class="scroll list-box">
         <ul class="list" aria-label={params.kind}>
-          {#each shown as c (c.name)}
+          {#each shown as c (c.path)}
             <li>
               <a
-                href={bundleHref(params.kind, c.name)}
+                href={link(c.path)}
                 title={c.name}
-                aria-current={c.name === selected ? "page" : undefined}
+                aria-current={isOpen(c) ? "page" : undefined}
                 onclick={() => (drawerOpen = false)}
-                {@attach menuTrigger(rowMenu(c.name))}
-                {@attach c.name === selected && reveal}
+                {@attach menuTrigger(rowMenu(c))}
+                {@attach isOpen(c) && reveal}
               >
-                <BundleIcon kind={params.kind} name={c.name} cc={c.cc} />
+                <SourceIcon name={c.display} bundle={c.name} country={params.kind === "countries" ? c.cc : undefined} />
                 <span class="name">{c.display}</span>
-                {#if code(c) || (dated && c.updated)}
-                  <span class="dim">{code(c)}{#if dated && c.updated}&nbsp; {c.updated}{/if}</span>
-                {/if}
+                <span class="dim">{params.platform ? "" : PLATFORM_NAMES[c.platform]}{#if params.kind !== "countries" && c.cc}&nbsp; {c.cc.toUpperCase()}{/if}{#if dated && c.updated}&nbsp; {c.updated}{/if}</span>
               </a>
             </li>
           {:else}
@@ -141,7 +124,7 @@
       <div class="statusbar list-status">
         <span class="cell grow">{q ? `${shown.length} of ${all.length}` : all.length}</span>
         {#if sortable}
-          <button class="cell sort" title="Sort by when the bundle last changed, or by name" onclick={() => (byUpdated = !byUpdated)}>
+          <button class="cell sort" title="Sort by when the carrier last changed, or by name" onclick={() => (byUpdated = !byUpdated)}>
             {byUpdated ? "Newest" : "A–Z"}
           </button>
         {/if}
@@ -162,7 +145,7 @@
 
 <style>
   .find { padding: 6px; display: flex; gap: 6px; }
-  .family { display: flex; gap: 4px; padding: 6px 6px 0; }
+  .family { display: flex; gap: 4px; padding: 6px 6px 0; flex-wrap: wrap; }
   .family .btn { flex: 1; text-align: center; }
   /* Wide screens have the same link beside the list. */
   .landing-link { display: none; margin: 6px 6px 0; text-align: center; }

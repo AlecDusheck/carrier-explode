@@ -1,78 +1,67 @@
 /**
- * The Features pages: one consumer feature (features.ts, a `state` concept of
- * the schema) for every carrier, on one iPhone or one Pixel. The answers are
- * the index's: each carrier document carries its sources' feature states per
- * device group (CarrierDoc.states), so nothing is decoded here. A table is
- * every document's states at once, kept as long as the carrier list is the same.
+ * The Features pages: one consumer feature (a `state` concept) for every
+ * carrier, on one iPhone or one Pixel, from the feature states each carrier
+ * document carries per device group. A table reads every document, so it is
+ * kept as long as the carrier list is the same.
  */
 
 import { error } from "@sveltejs/kit";
-import { compareProducts, modemVendor, splitName } from "#lib/decode/index.ts";
-import { byPixelRank, pixelName } from "#lib/schema/index.ts";
-import { parseSourceKey, type DeviceStates, type FeatureState, type Platform } from "#lib/schema/types.ts";
+import { modemVendor } from "#lib/decode/index.ts";
 import { keys } from "#lib/storage/keys.ts";
+import { parseSourceKey, sourceKey, sourcePath, type DeviceStates, type FeatureState, type Platform } from "#lib/schema/types.ts";
 import { FEATURES, featureBySlug } from "#lib/features.ts";
 import { getModems } from "./baseband";
 import { cached, perRequest } from "./cache";
-import { carrierList, currentRelease, pageOf } from "./catalog";
+import { carrierList, currentRelease, locate } from "./catalog";
+import { named } from "./devices";
 import { etagOf } from "./store";
 
+/** The platforms the feature pages ask about, one device line each. */
+const ASKED = ["ios", "android"] as const satisfies readonly Platform[];
+type Asked = (typeof ASKED)[number];
+
 export interface FeaturePhone {
-  /** iPhone product type or Pixel codename. */
   readonly id: string;
   readonly name: string;
-  readonly platform: Platform;
+  readonly platform: Asked;
   /** No 5G modem: Apple's Intel-modem iPhones. */
   readonly lte: boolean;
 }
 
-/** The phones a feature page can be asked about: the current releases' iPhones that have a name, then their Pixels; newest first. */
+/** The current releases' named iPhones, then their Pixels, newest first. */
 export const featurePhones = perRequest(async (): Promise<FeaturePhone[]> => {
   const [ios, android] = await Promise.all([currentRelease("ios"), currentRelease("android")]);
-  const iphones = new Map<string, FeaturePhone>();
-  if (ios) {
-    for (const m of (await getModems(ios.id)).modems) {
-      for (const d of m.devices) if (d.name) iphones.set(d.id, { id: d.id, name: d.name, platform: "ios", lte: modemVendor(m.family) === "intel" });
-    }
-  }
-  const pixels = [...(android?.devices ?? [])].sort(byPixelRank).map((id): FeaturePhone => ({ id, name: pixelName(id), platform: "android", lte: false }));
-  return [...[...iphones.values()].sort((x, y) => compareProducts(y.id, x.id)), ...pixels];
+  const lte = new Map<string, boolean>();
+  if (ios) for (const m of (await getModems(ios.id)).modems) for (const d of m.devices) if (d.name) lte.set(d.id, modemVendor(m.family) === "intel");
+  return [
+    ...named("ios", [...lte.keys()]).map((p): FeaturePhone => ({ ...p, platform: "ios", lte: lte.get(p.id) ?? false })),
+    ...named("android", android?.devices ?? []).map((p): FeaturePhone => ({ ...p, platform: "android", lte: false })),
+  ];
 });
 
-/** One list row's feature states on each platform it has. */
-interface PageStates {
+interface SourceStates {
+  readonly path: string;
   readonly name: string;
-  readonly display: string;
   readonly cc: string | undefined;
-  readonly states: Readonly<Partial<Record<Platform, readonly DeviceStates[]>>>;
+  readonly platform: Platform;
+  readonly states: readonly DeviceStates[];
 }
 
-/** Every carrier page's states: each iOS bundle row with its carrier's Android states, and Android-only carriers. */
-const allStates = perRequest(async (): Promise<PageStates[]> => {
-  const tag = await etagOf(keys.carriers());
-  return cached(`featurestates:v1:${tag ?? "none"}`, 86400, async () => {
-    const rows = (await carrierList()).flatMap((c) => {
-      const ios = c.members.flatMap((k) => {
-        const ref = parseSourceKey(k);
-        return ref?.platform === "ios" && ref.kind === "carrier" && !ref.family ? [ref.name] : [];
-      });
-      return (ios.length ? ios : [c.slug]).map((name) => ({ name, display: ios.length ? splitName(name).display : c.name, cc: c.iso }));
-    });
-    return Promise.all(rows.map(async (r): Promise<PageStates> => {
-      const page = await pageOf("carriers", r.name);
-      const of = (p: Platform): readonly DeviceStates[] | undefined => {
-        const line = page.lines[p];
-        return line ? page.doc.states?.[line] : undefined;
-      };
-      const ios = of("ios"), android = of("android");
-      return { ...r, states: { ...(ios ? { ios } : {}), ...(android ? { android } : {}) } };
+/** Every carrier source's feature states. */
+const allStates = perRequest(async (): Promise<SourceStates[]> => {
+  const tag = await etagOf(keys.carrierIndex());
+  return cached(`featurestates:v2:${tag ?? "none"}`, 86400, async () => {
+    const sources = (await carrierList()).flatMap((c) => c.members.flatMap((k) => {
+      const ref = parseSourceKey(k);
+      return ref?.kind === "carrier" ? [{ ref, cc: c.iso }] : [];
     }));
+    return Promise.all(sources.map(async ({ ref, cc }): Promise<SourceStates> =>
+      ({ path: sourcePath(ref), name: ref.name, cc, platform: ref.platform, states: (await locate(sourceKey(ref))).states })));
   });
 });
 
-/** The group a phone reads: the one naming it, else (iOS) the bundle's own carrier.plist group. */
 function stateFor(groups: readonly DeviceStates[], phone: string, feature: string): FeatureState | "unknown" {
-  const group = groups.find((g) => g.devices?.includes(phone)) ?? groups.find((g) => g.devices === undefined);
+  const group = groups.find((g) => g.devices !== "rest" && g.devices.includes(phone)) ?? groups.find((g) => g.devices === "rest");
   return group?.states[feature] ?? "unknown";
 }
 
@@ -85,23 +74,21 @@ async function mustPhone(id: string): Promise<FeaturePhone> {
 const unusable = (slug: string, phone: FeaturePhone): boolean => !!featureBySlug(slug)?.needs5G && phone.lte;
 
 export interface FeatureRow {
+  readonly path: string;
   readonly name: string;
-  readonly display: string;
   readonly cc: string | undefined;
   readonly state: FeatureState | "unknown";
 }
 
-export type FeatureTable = { readonly unusable: true; readonly rows: readonly [] } | { readonly unusable: false; readonly rows: readonly FeatureRow[] };
+export type FeatureTable = { readonly unusable: true } | { readonly unusable: false; readonly rows: readonly FeatureRow[] };
 
-/** One feature for every carrier with settings for the phone's platform. */
 export async function getFeatureTable(slug: string, phoneId: string): Promise<FeatureTable> {
   if (!featureBySlug(slug)) error(404, `no feature ${slug}`);
   const phone = await mustPhone(phoneId);
-  if (unusable(slug, phone)) return { unusable: true, rows: [] };
-  const rows = (await allStates()).flatMap((p): FeatureRow[] => {
-    const groups = p.states[phone.platform];
-    return groups ? [{ name: p.name, display: p.display, cc: p.cc, state: stateFor(groups, phone.id, slug) }] : [];
-  });
+  if (unusable(slug, phone)) return { unusable: true };
+  const rows = (await allStates())
+    .filter((s) => s.platform === phone.platform)
+    .map((s): FeatureRow => ({ path: s.path, name: s.name, cc: s.cc, state: stateFor(s.states, phone.id, slug) }));
   return { unusable: false, rows };
 }
 
@@ -115,11 +102,11 @@ export interface FeatureCount {
 /** How many carriers offer each feature on one phone. */
 export async function getFeatureSummary(phoneId: string): Promise<FeatureCount[]> {
   const [phone, all] = await Promise.all([mustPhone(phoneId), allStates()]);
-  const pages = all.filter((p) => p.states[phone.platform]);
+  const sources = all.filter((s) => s.platform === phone.platform);
   return FEATURES.map((f) => {
     const counts = { on: 0, available: 0, no: 0, unknown: 0 };
     const no = unusable(f.slug, phone);
-    if (!no) for (const p of pages) counts[stateFor(p.states[phone.platform] ?? [], phone.id, f.slug)]++;
-    return { slug: f.slug, counts, of: pages.length, unusable: no };
+    if (!no) for (const s of sources) counts[stateFor(s.states, phone.id, f.slug)]++;
+    return { slug: f.slug, counts, of: sources.length, unusable: no };
   });
 }

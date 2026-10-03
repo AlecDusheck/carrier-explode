@@ -1,9 +1,6 @@
 /**
- * fetch with the retry policy every ingest path shares (a port of
- * scripts/net.py `get`), verified Range reads, and the http<->https fallback
- * old Apple manifest URLs need. Generic: no format knowledge, no host
- * allow-lists (callers keep those). Uses only fetch, so it runs in Node 22,
- * Workers and browsers.
+ * fetch with shared retry policy, verified Range reads, and http/https fallback.
+ * No format knowledge and no host allow-lists: callers keep those.
  */
 
 /** A response that settles the request: 404, any other 4xx but 429, or the last failed attempt. */
@@ -46,11 +43,7 @@ function delay(attempt: number, base: number, res?: Response): number {
   return Number.isFinite(after) && after * 1000 > jittered ? after * 1000 : jittered;
 }
 
-/**
- * fetch that retries 5xx, 429 and network errors with backoff. Resolves only
- * with an ok response; anything else ends as an HttpError (404 at once), or
- * the last network error.
- */
+/** Retries 5xx, 429 and network errors with jittered backoff; resolves only with an ok response. */
 export async function fetchWithRetry(url: string | URL, init: RequestInit = {}, opts: RetryOptions = {}): Promise<Response> {
   const { tries = 5, backoff = 1000, fetch: doFetch = fetch } = opts;
   const headers = new Headers(init.headers);
@@ -81,12 +74,7 @@ function parseContentRange(header: string | null): { start: number; end: number 
   return { start: Number(m[1]), end: Number(m[2]) };
 }
 
-/**
- * Bytes `start..end` inclusive (HTTP's convention). Throws RangeResponseError
- * unless the server answered 206 with exactly that Content-Range and length:
- * a server that ignores Range sends the whole file with a 200, which must not
- * be mistaken for the slice.
- */
+/** Bytes `start..end` inclusive. A server that ignores Range answers 200 with the whole file, so the 206, Content-Range and length are all checked. */
 export async function fetchRange(url: string | URL, start: number, end: number, opts: RetryOptions & { readonly init?: RequestInit } = {}): Promise<Uint8Array> {
   if (!(Number.isSafeInteger(start) && Number.isSafeInteger(end) && start >= 0 && end >= start)) {
     throw new RangeError(`bad range ${start}-${end}`);
@@ -132,12 +120,7 @@ function otherScheme(url: URL): URL {
   return alt;
 }
 
-/**
- * Runs `attempt` on the URL as given, then on its other scheme: old Apple
- * manifest entries are http-only and some hosts have since dropped http. A
- * 404 on the first scheme still tries the second (the hosts differ in what
- * they serve). The error, if both fail, carries both causes.
- */
+/** Tries the URL, then its other scheme: old Apple URLs are http-only and some hosts have dropped http. */
 export async function withSchemeFallback<T>(url: string | URL, attempt: (url: URL) => Promise<T>): Promise<T> {
   const first = new URL(url);
   if (first.protocol !== "http:" && first.protocol !== "https:") throw new TypeError(`not an http(s) URL: ${first}`);

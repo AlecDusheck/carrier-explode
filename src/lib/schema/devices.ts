@@ -1,14 +1,4 @@
-/**
- * Pixel codenames in release order. An Android build ships CarrierSettings per
- * device generation (Release.sources), so a timeline needs to know which
- * device a page means when none is named: the newest flagship in the release,
- * the phone most readers compare an iPhone against.
- *
- * Rank = generation * 10 + tier (Pro XL 4, Pro 3, base 2, Fold 1, a-series and
- * tablet 0). A codename missing here ranks below every known one: a new
- * flagship sinks until it is added, which shows as the previous flagship
- * staying the default.
- */
+/** Pixel codenames by rank (generation × 10 + tier: Pro XL 4, Pro 3, base 2, Fold 1, a-series and tablet 0); unknown codenames rank last. */
 
 const PIXELS = {
   sailfish: { name: "Pixel", rank: 12 }, marlin: { name: "Pixel XL", rank: 14 },

@@ -1,34 +1,26 @@
 <script lang="ts">
-  import { page } from "$app/state";
-  import { modemLabel } from "#lib/decode/index.ts";
-  import { withParams } from "#lib/format.ts";
-  import { newestNamed, phoneList, type PhoneRow } from "#lib/phones.ts";
-  import PhoneImage from "./ios/PhoneImage.svelte";
+  import type { PhoneChoice } from "#lib/phones.ts";
+  import type { Platform } from "#lib/schema/types.ts";
+  import { PHONE_IMAGES } from "./icons";
   import Picker from "./Picker.svelte";
 
-  let { rows, selected }: { rows: PhoneRow[]; selected?: PhoneRow } = $props();
+  interface Props {
+    platform: Platform;
+    choices: readonly PhoneChoice[];
+    selected?: string | undefined;
+  }
 
-  const key = (r: PhoneRow) => r.path;
-  const label = (r: PhoneRow) => {
-    if (!r.phones.length) return `${r.path} (not named for a phone)`;
-    const modems = [...new Set(r.phones.map((p) => p.family).filter((f): f is string => !!f))].map(modemLabel).join(", ");
-    return `${phoneList(r.phones)}${modems ? ` · ${modems}` : ""}`;
-  };
+  let { platform, choices, selected }: Props = $props();
+
+  const Image = $derived(PHONE_IMAGES[platform]);
 </script>
 
-{#snippet option(r: PhoneRow)}
-  <span class="picker-opt"><PhoneImage name={newestNamed(r.phones)} /><span class="text">{label(r)}</span></span>
+{#snippet option(c: PhoneChoice)}
+  <span class="picker-opt"><Image id={c.id} name={c.name} /><span class="text">{c.label}</span></span>
 {/snippet}
 
-{#if rows.length}
+{#if choices.length}
   <div class="filters">
-    <Picker
-      label="Phone"
-      items={rows}
-      {selected}
-      {key}
-      {option}
-      href={(r) => withParams(page.url, { file: r.path, pri: null, efs: null, base: null })}
-    />
+    <Picker label="Phone" items={choices} selected={choices.find((c) => c.key === selected)} key={(c) => c.key} {option} href={(c) => c.href} />
   </div>
 {/if}

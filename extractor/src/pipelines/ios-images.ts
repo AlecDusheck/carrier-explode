@@ -36,8 +36,7 @@ export class IosImagesPipeline extends Pipeline {
       })),
     ]);
 
-    // fanOut keeps input order, so extracted[i] is ipsws[i]'s result.
-    const failedBuilds = new Set(ipsws.filter((_, i) => !extracted[i]?.ok).map((x) => x.build.build));
+    const failedBuilds = new Set(extracted.flatMap((r) => (r.ok ? [] : [r.item.build.build])));
     const complete = builds.filter((b) => !failedBuilds.has(b.build));
     const released = await fanOut(complete, MAX_INSTANCES.light, async (b) => {
       const parts = extracted.flatMap((r) => (r.ok && r.value.build === b.build ? [r.value.id] : []));

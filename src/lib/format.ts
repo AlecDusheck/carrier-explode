@@ -2,8 +2,8 @@ import { resolve } from "$app/paths";
 import type { ReadonlyURL } from "$app/state";
 import type { Path } from "$app/types";
 import { bandList, isBigInt, isRecord, isUid, type ComboComponent, type DiffKind } from "#lib/decode/index.ts";
-import type { Platform } from "#lib/schema/types.ts";
-import type { At, Kind, Version } from "#lib/types.ts";
+import { sourceKey, versionPath, type ConceptValue, type Platform, type SourceRef } from "#lib/schema/types.ts";
+import type { At, Version } from "#lib/types.ts";
 
 export function humanBytes(n: number): string {
   if (n < 1024) return n + " B";
@@ -51,64 +51,85 @@ function iosRange(first: string, last: string): string {
   return a && b && a[1] === b[1] ? `${a[1]} ${a[2] ?? 1}–${b[2]}` : `${first} – ${last}`;
 }
 
-type Labelled = Pick<Version, "via" | "os" | "version" | "productType" | "slug" | "phones">;
+type Labelled = Pick<Version, "images" | "ota" | "version">;
 
-/** iOS: which images carry it or which OS it is published for, the bundle's build, and the model a per-model copy is for. */
-function iosLabel(e: Labelled): string {
-  // Every Watch bundle is for Watch; only the iPad and single-model variants need saying.
-  const model = e.productType && e.productType !== "Watch" ? " · " + e.productType : "";
-  const [first, last] = [e.os[0], e.os.at(-1)];
-  if (e.via === "ota") return `OTA · ${first !== undefined ? `iOS ${first}+` : "legacy"} · build ${e.version}${model}`;
-  const ios = first !== undefined && last !== undefined && e.os.length > 1 ? iosRange(first, last) : (first ?? "");
-  return `iOS ${ios} image · build ${e.version}${model}`;
-}
+/** Apple: the images carrying it and the OS its OTA copy is published for, then the bundle's own version. */
+const appleLabel = (os: string) => (e: Labelled): string => {
+  const [first, last] = [e.images[0], e.images.at(-1)];
+  const image = first === undefined || last === undefined ? [] : [`${os} ${first === last ? first : iosRange(first, last)} image`];
+  const ota = e.ota.length ? [`OTA${e.ota[0] ? ` ${os} ${e.ota[0]}+` : ""}`] : [];
+  return `${[...image, ...ota].join(" + ")} · build ${e.version}`;
+};
 
-/** Android: the release, the file's own version, and the Pixels it is for. */
-const androidLabel = (e: Labelled): string =>
-  `Android ${e.os.at(-1) ?? ""} image · version ${e.version}` + (e.phones?.length ? ` · ${shortPhones(e.phones)}` : "");
+/** Android: the newest release carrying it, and the file's own version. */
+const androidLabel = (e: Labelled): string => `Android ${e.images.at(-1) ?? ""} · version ${e.version}`;
 
-/** "Pixel 9, 9 Pro, 9 Pro XL": the shared "Pixel " said once. */
-const shortPhones = (names: readonly string[]): string =>
-  names.map((n, i) => (i && n.startsWith("Pixel ") ? n.slice(6) : n)).join(", ");
+const LABELS = {
+  ios: appleLabel("iOS"),
+  ipados: appleLabel("iPadOS"),
+  watchos: appleLabel("watchOS"),
+  android: androidLabel,
+} as const satisfies Record<Platform, (e: Labelled) => string>;
 
-const LABELS = { ios: iosLabel, android: androidLabel } as const satisfies Record<Platform, (e: Labelled) => string>;
-
-/** Where a version came from: the one label used by the timeline, Summary and Compare. */
+/** Where a version came from: the one label used by the version strip, the Overview and Compare. */
 export const entryLabel = (e: Labelled & { readonly platform: Platform }): string => LABELS[e.platform](e);
+
+/** A concept's reading as text; absent means the platform cannot express it. */
+export function conceptText(v: ConceptValue | undefined): string {
+  if (!v) return "not expressible";
+  if (v.kind === "unset") return "not set";
+  return v.kind === "state" ? v.state : shortValue(v.value, 120);
+}
 
 /** Chip class for each kind of difference. */
 export const DIFF_CHIP: Record<DiffKind, string> = { added: "good", removed: "bad", changed: "warn", same: "" };
 
 /** "n77A", "b66A↑A": one band-combo component, with its uplink class unless `uplink` is off. */
-export const comboPart = (c: ComboComponent, uplink = true) =>
+export const comboPart = (c: ComboComponent, uplink = true): string =>
   bandList([c.band], c.rat) + c.dl + (uplink && c.ul ? "↑" + c.ul : "");
 
 const seg = encodeURIComponent;
-const segs = (path: string) => path.split("/").map(seg).join("/");
+const segs = (path: string): string => path.split("/").map(seg).join("/");
 
-/** Every internal link goes through here so a configured base path is honoured. */
-export const link = (path: string) => resolve(path.slice(1) as Path);
+/** Every internal link goes through here so a configured base path is honoured. Paths come from this module or the schema's path builders. */
+export const link = (path: string): string => resolve(path.slice(1) as Path);
 
 /** A modem package page of an iOS build, or one of its tabs. */
 export const modemHref = (build: string, family: string, tab?: string): string =>
   link(`/builds/${seg(build)}/${seg(family)}` + (tab ? `/${tab}` : ""));
 
-export const bundleHref = (kind: Kind, name: string, slug?: string, tab?: string): string =>
-  link(`/${kind}/${seg(name)}` + (slug ? `/${seg(slug)}` + (tab ? `/${tab}` : "") : ""));
+/** A version's page, on a tab, at a file. */
+export function versionHref(at: At, tab?: string, path?: string): string {
+  const base = versionPath(at.ref, at.version, at.line);
+  return link(base + (tab ? `/${tab}` : "") + (tab && path ? `/${segs(path)}` : ""));
+}
 
-export const fileHref = (kind: Kind, name: string, slug: string, path: string): string =>
-  `${bundleHref(kind, name, slug, "files")}/${segs(path)}`;
+/** One side of /compare: a source, at a version on a line, or at its head. */
+export interface CompareSide {
+  readonly source: SourceRef;
+  readonly slug?: string | undefined;
+  readonly line?: string | undefined;
+}
+
+/** /compare's query for two sides (`a=ios:carrier:ATT_US&av=72.0`, `b=android:carrier:att_us&bl=tokay&bv=79000000034`), narrowed to a file or not. */
+export function compareHref(a: CompareSide | null, b: CompareSide | null, file?: string | null): string {
+  const q = new URLSearchParams();
+  for (const [p, s] of [["a", a], ["b", b]] as const) {
+    if (!s) continue;
+    q.set(p, sourceKey(s.source));
+    if (s.line) q.set(`${p}l`, s.line);
+    if (s.slug) q.set(`${p}v`, s.slug);
+  }
+  if (file) q.set("file", file);
+  return link("/compare") + (q.size ? "?" + q : "");
+}
+
+/** The query args naming a version. */
+export const verArgs = (at: At): { source: string; line?: string; slug: string } =>
+  at.line === undefined ? { source: at.source, slug: at.version } : { source: at.source, line: at.line, slug: at.version };
 
 /** Only images and audio: the pages embed those, every other file is shown decoded. */
-export const rawHref = (kind: Kind, name: string, slug: string, path: string): string =>
-  link(`/raw/${kind}/${seg(name)}/${seg(slug)}/${segs(path)}`);
-
-/** Query args must be built the same way everywhere so layout and page share one cached query. */
-export const bundleArgs = (p: { kind: Kind; name: string; version?: string | undefined }): { kind: Kind; name: string; slug?: string } =>
-  p.version ? { kind: p.kind, name: p.name, slug: p.version } : { kind: p.kind, name: p.name };
-
-/** A tab body's query args: its page at its version. */
-export const atArgs = (at: At): { kind: Kind; name: string; slug: string } => ({ kind: at.kind, name: at.name, slug: at.version });
+export const rawHref = (at: At, path: string): string => link(`/raw${versionPath(at.ref, at.version, at.line)}/${segs(path)}`);
 
 export function errorMessage(e: unknown): string {
   const x = isRecord(e) ? e : {};

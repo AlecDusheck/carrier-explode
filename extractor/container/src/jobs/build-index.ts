@@ -1,57 +1,54 @@
 /**
- * index: rebuild index/* from what is stored. All the logic (timelines,
- * carriers, countries, slugs) is buildIndexes' (src/lib/schema); this job only
- * loads its inputs and writes its outputs. index/sources.json is written last:
- * it is the previous run's slug memory, so it must not move ahead of the docs.
- *
- * buildIndexes reads profiles synchronously, so every Profile a release or
- * ref points at is loaded first.
+ * index: index/* from what is stored, by buildIndexes alone. The source index
+ * goes last: it is the next run's id memory, so it must not get ahead of the docs.
  */
 
 import * as v from "valibot";
 
-import { buildIndexes, type Profile } from "../../../../src/lib/schema/index.ts";
+import { manifestTables, parseManifest } from "../../../../src/lib/decode/index.ts";
+import { buildIndexes, manifestSims, type Profile } from "../../../../src/lib/schema/index.ts";
 import { keys } from "../../../../src/lib/storage/keys.ts";
 import { fanOut } from "../../../src/fan-out.ts";
 import type { JobContext, JobOutput } from "../job.ts";
-import { allOrThrow, loadCatalog, READ_CONCURRENCY } from "./shared/catalog.ts";
+import { fetchManifest } from "./shared/apple.ts";
+import { allOrThrow, loadCatalog, READ_CONCURRENCY, shippedShas } from "./shared/catalog.ts";
 import { profileSchema, readRecord } from "./shared/records.ts";
 
-const sourcesSchema = v.record(v.string(), v.string());
+const sourceIndexSchema = v.record(v.string(), v.string());
 
-export async function buildIndex(ctx: JobContext<"index">): Promise<JobOutput<"index">> {
-  const catalog = await loadCatalog(ctx.r2);
-  const shas = [...new Set([
-    ...catalog.releases.flatMap((r) => Object.values(r.sources).flatMap((artifacts) => artifacts.map((a) => a.sha))),
-    ...catalog.refs.flatMap((r) => (r.sha ? [r.sha] : [])),
-  ])];
-  ctx.log(`${catalog.releases.length} releases, ${catalog.refs.length} refs, ${shas.length} artifacts`);
-
-  let loaded = 0;
+/** buildIndexes reads profiles synchronously, so all are loaded up front. */
+async function loadProfiles(ctx: JobContext<"index">, shas: readonly string[]): Promise<Map<string, Profile>> {
   const profiles = new Map<string, Profile>();
-  const reads = await fanOut(shas, READ_CONCURRENCY, async (sha) => {
+  let loaded = 0;
+  allOrThrow("profiles", await fanOut(shas, READ_CONCURRENCY, async (sha) => {
     const profile = await readRecord(ctx.r2, keys.norm(sha), profileSchema);
     if (profile) profiles.set(sha, profile);
     await ctx.progress(++loaded, shas.length, "profiles");
-  });
-  allOrThrow("profiles", reads);
-  ctx.log(`${profiles.size} of ${shas.length} artifacts have a profile`);
+  }));
+  return profiles;
+}
 
-  const previous = await readRecord(ctx.r2, keys.sources(), sourcesSchema);
+export async function buildIndex(ctx: JobContext<"index">): Promise<JobOutput<"index">> {
+  const catalog = await loadCatalog(ctx.r2);
+  const shas = shippedShas(catalog);
+  const profiles = await loadProfiles(ctx, shas);
+  ctx.log(`${catalog.releases.length} releases, ${catalog.refs.length} refs, ${profiles.size} of ${shas.length} artifacts profiled`);
+
+  const previous = await readRecord(ctx.r2, keys.sourceIndex(), sourceIndexSchema);
   const out = buildIndexes({
     releases: catalog.releases,
     otaRefs: catalog.refs,
     profiles: (sha) => profiles.get(sha),
+    manifestSims: manifestSims(manifestTables(parseManifest(await fetchManifest())).plmn),
     ...(previous ? { previous: { sources: previous } } : {}),
   });
 
-  allOrThrow("carrier docs", await fanOut(out.docs, READ_CONCURRENCY, (doc) => ctx.r2.putJson(keys.carrier(doc.carrier.slug), doc)));
-  await ctx.r2.putJson(keys.releases(), out.releases);
-  await ctx.r2.putJson(keys.countries(), out.countries);
+  allOrThrow("carrier docs", await fanOut(out.docs, READ_CONCURRENCY, (doc) => ctx.r2.putJson(keys.carrier(doc.carrier.id), doc)));
+  await ctx.r2.putJson(keys.releaseIndex(), out.releases);
+  await ctx.r2.putJson(keys.countryIndex(), out.countries);
   await ctx.r2.putJson(keys.legacy(), out.legacy);
-  await ctx.r2.putJson(keys.carriers(), out.carriers);
-  await ctx.r2.putJson(keys.sources(), out.sources);
-
+  await ctx.r2.putJson(keys.carrierIndex(), out.carriers);
+  await ctx.r2.putJson(keys.sourceIndex(), out.sources);
   return {
     releases: out.releases.length,
     carriers: out.carriers.length,

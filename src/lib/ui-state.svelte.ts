@@ -42,13 +42,17 @@ interface ScopeChoice {
   readonly label: (cc: string) => string;
 }
 
+const APPLE_SCOPES: readonly ScopeChoice[] = [
+  { scope: "country", label: (cc) => `Compare across ${cc.toUpperCase()} carriers` },
+  { scope: "carriers", label: () => "Compare across all carriers" },
+  { scope: "countries", label: () => "Compare across countries" },
+];
+
 /** What "compare across" offers on each platform: Android has no country bundles. */
 export const SCAN_SCOPES = {
-  ios: [
-    { scope: "country", label: (cc) => `Compare across ${cc.toUpperCase()} carriers` },
-    { scope: "carriers", label: () => "Compare across all carriers" },
-    { scope: "countries", label: () => "Compare across countries" },
-  ],
+  ios: APPLE_SCOPES,
+  ipados: APPLE_SCOPES,
+  watchos: APPLE_SCOPES,
   android: [
     { scope: "country", label: (cc) => `Compare across ${cc.toUpperCase()} carriers` },
     { scope: "carriers", label: () => "Compare across all carriers" },

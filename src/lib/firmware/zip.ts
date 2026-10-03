@@ -1,11 +1,4 @@
-/**
- * A zip read in place: the central directory from the file's tail, then any
- * member by offset. Only the directory and the members asked for are fetched,
- * which is what makes a 3 GB OTA or IPSW cheap to look into.
- *
- *   EOCD (PK\5\6) -> [zip64 locator (PK\6\7) -> zip64 EOCD (PK\6\6)] -> central directory (PK\1\2 ...)
- *   member data = local header (PK\3\4, 30 bytes + name + extra; its extra may differ from the CD's) + data
- */
+/** A zip read in place: the central directory from the tail (zip64 too), then members by offset. */
 
 import { latin1, safeU64le, u16le, u32le } from "../binary/index.ts";
 import type { RetryOptions } from "../http/index.ts";
@@ -79,21 +72,12 @@ async function directory(src: RangeSource): Promise<Directory> {
   return { count: safeU64le(record, 32), size: safeU64le(record, 40), offset: safeU64le(record, 48) };
 }
 
-/** Central-directory sizes and offsets saturated at 0xFFFFFFFF are in the zip64 extra field (id 1), in this order. */
-function zip64Values(extra: Uint8Array, want: { size: boolean; compressed: boolean; offset: boolean }): { size?: number; compressed?: number; offset?: number } {
+/** The u64 values of the zip64 extra field (id 1): the saturated CD fields, in size, compressed, offset order. */
+function zip64Extra(extra: Uint8Array): number[] {
   for (let p = 0; p + 4 <= extra.length; p += 4 + u16le(extra, p + 2)) {
     if (u16le(extra, p) !== 1) continue;
-    let q = p + 4;
-    const next = (): number => {
-      const v = safeU64le(extra, q);
-      q += 8;
-      return v;
-    };
-    return {
-      ...(want.size ? { size: next() } : {}),
-      ...(want.compressed ? { compressed: next() } : {}),
-      ...(want.offset ? { offset: next() } : {}),
-    };
+    const count = Math.floor(u16le(extra, p + 2) / 8);
+    return Array.from({ length: count }, (_, i) => safeU64le(extra, p + 4 + i * 8));
   }
   throw new ZipFormatError("entry needs zip64 values but has no zip64 extra field");
 }
@@ -112,16 +96,17 @@ function parseEntries(cd: Uint8Array, count: number): ZipEntry[] {
     const rawName = cd.subarray(p + 46, p + 46 + nameLen);
     // Bit 11: UTF-8 names; otherwise CP437, which matches Latin-1 for the ASCII names firmware uses.
     const name = flags & 0x800 ? utf8.decode(rawName) : latin1(rawName);
-    let compressedSize = u32le(cd, p + 20);
-    let size = u32le(cd, p + 24);
-    let localHeaderOffset = u32le(cd, p + 42);
-    const want = { size: size === U32_MAX, compressed: compressedSize === U32_MAX, offset: localHeaderOffset === U32_MAX };
-    if (want.size || want.compressed || want.offset) {
-      const z = zip64Values(cd.subarray(p + 46 + nameLen, p + 46 + nameLen + extraLen), want);
-      size = z.size ?? size;
-      compressedSize = z.compressed ?? compressedSize;
-      localHeaderOffset = z.offset ?? localHeaderOffset;
-    }
+    let wide: number[] | undefined;
+    const widen = (v: number): number => {
+      if (v !== U32_MAX) return v;
+      wide ??= zip64Extra(cd.subarray(p + 46 + nameLen, p + 46 + nameLen + extraLen));
+      const value = wide.shift();
+      if (value === undefined) throw new ZipFormatError(`${name}: zip64 extra field is too short`);
+      return value;
+    };
+    const size = widen(u32le(cd, p + 24));
+    const compressedSize = widen(u32le(cd, p + 20));
+    const localHeaderOffset = widen(u32le(cd, p + 42));
     entries.push({ name, method: u16le(cd, p + 10), compressedSize, size, crc32: u32le(cd, p + 16), localHeaderOffset });
     p += 46 + nameLen + extraLen + commentLen;
   }

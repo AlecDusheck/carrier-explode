@@ -1,13 +1,4 @@
-/**
- * Image bundles as .ipcc files. Apple ships carrier bundles over the air as
- * .ipcc (a zip of `Payload/<Name>.bundle/...`); bundles cut out of an OS image
- * are packaged the same way, so one reader serves both. The packaging is
- * deterministic: entries in byte order of path, a fixed timestamp, deflate
- * level 9. The same files therefore give the same bytes, hence the same
- * sha256 and R2 key, on every run and every machine.
- *
- * Pure (fflate and the plist decoder), for the iOS decoder package.
- */
+/** Image bundles packaged as OTA-shaped .ipcc zips, deterministically: the same files always give the same bytes. */
 
 import { unzipSync, zipSync, type ZipOptions } from "fflate";
 
@@ -41,10 +32,7 @@ export function comparePaths(a: string, b: string): number {
 /** Files Finder leaves behind, which neither the packager nor content ids count. */
 export const isJunk = (path: string): boolean => path === ".DS_Store" || path.endsWith("/.DS_Store");
 
-/**
- * DOS timestamps are local time, and fflate reads the Date's local fields; a
- * Date built from local fields gives 1980-01-01 00:00 in every time zone.
- */
+/** fflate writes the Date's local fields, so one built from local fields is 1980-01-01 00:00 in every time zone. */
 const EPOCH = new Date(1980, 0, 1, 0, 0, 0);
 const ENTRY: ZipOptions = { level: 9, mtime: EPOCH };
 
@@ -78,11 +66,7 @@ export function unpackIpcc(bytes: Uint8Array): Bundle {
   return { name, files };
 }
 
-/**
- * The bundle's own version, CFBundleVersion in its Info.plist: what the phone
- * compares to pick between an image copy and an OTA copy. Undefined when the
- * bundle has no readable Info.plist, which callers report.
- */
+/** CFBundleVersion from Info.plist; undefined when it has none. */
 export function bundleVersion(b: Bundle): string | undefined {
   const info = b.files.find((f) => f.path === "Info.plist");
   if (!info) return undefined;

@@ -4,6 +4,7 @@
  * exists fails the type check.
  */
 
+import type * as android from "./android.remote";
 import type * as bundles from "./bundles.remote";
 import type * as tables from "./tables.remote";
 
@@ -11,45 +12,52 @@ import type * as tables from "./tables.remote";
 export type RateClass = "scan" | "diff" | "bundle" | "base";
 
 export interface QueryPolicy {
-  rate: RateClass;
+  readonly rate: RateClass;
   /** Same bytes for everybody and asked for on most navigations, so the edge may keep it. */
-  shared?: true;
+  readonly shared?: true;
 }
 
-export type QueryName = keyof typeof bundles | keyof typeof tables;
+export type QueryName = keyof typeof android | keyof typeof bundles | keyof typeof tables;
 
-export const QUERIES: Record<QueryName, QueryPolicy> = {
+export const QUERIES = {
   getIndex: { rate: "base", shared: true },
-  getManifestFacts: { rate: "base", shared: true },
+  getManifestCounts: { rate: "base", shared: true },
   guessCarrier: { rate: "base" },
   guessCountry: { rate: "base" },
   getVisitorCountry: { rate: "base" },
-  guessCarrierName: { rate: "base" },
+  guessCarrierPages: { rate: "base" },
   getRelease: { rate: "base" },
-  // A bundle's current version, for the wiki's links: one cached timeline read.
-  getHead: { rate: "base", shared: true },
-  // Anything that can pull and unzip an .ipcc.
+  getAndroidBuilds: { rate: "base", shared: true },
+  // One read of the source's carrier document.
+  getBundleHead: { rate: "base", shared: true },
+  // Anything that can pull and unzip an .ipcc or decode a CarrierSettings.
   getBundle: { rate: "bundle" },
   getFile: { rate: "bundle" },
+  getAlerts: { rate: "bundle" },
   getBasebandDefaults: { rate: "bundle" },
   getBundleOverrides: { rate: "bundle" },
   getBasebandOverride: { rate: "bundle" },
   getOverridePlist: { rate: "bundle" },
-  // One cached read of the index run's rarity file.
+  getAndroid: { rate: "bundle" },
+  getAndroidSettings: { rate: "bundle" },
+  getAndroidApns: { rate: "bundle" },
+  getAndroidFiles: { rate: "bundle" },
+  // Two Profiles and a concept comparison.
+  getPair: { rate: "base" },
+  // One cached read of the scan run's rarity file.
   getRare: { rate: "base" },
-  // One cached read of the index run's feature file, the same for everybody.
+  // Built from every carrier document once per index, the same for everybody.
   getFeaturePhones: { rate: "base", shared: true },
   getFeatureTable: { rate: "base", shared: true },
   getFeatureSummary: { rate: "base", shared: true },
-  // Two bundles or packages and a full diff per miss.
+  // Two versions and a full diff per miss.
   getComparison: { rate: "diff" },
+  getAndroidChanges: { rate: "diff" },
   getBasebandDiff: { rate: "diff" },
-  // Every phone group's files against the copies that phone had before: several opens and diffs per miss.
   getPhoneChanges: { rate: "diff" },
   scanKey: { rate: "scan" },
   // A scan cut to a few numbers, the same for everybody: wiki pages show several at once.
   getSettingSummary: { rate: "base", shared: true },
-  getCbs: { rate: "base" },
   getPlmn: { rate: "base" },
   getBasebandBuilds: { rate: "base" },
   getModems: { rate: "base" },
@@ -57,6 +65,6 @@ export const QUERIES: Record<QueryName, QueryPolicy> = {
   getBaseband: { rate: "base" },
   getBasebandFile: { rate: "base" },
   getBasebandCombos: { rate: "base" },
-};
+} as const satisfies Record<QueryName, QueryPolicy>;
 
 export const isQueryName = (name: string): name is QueryName => Object.hasOwn(QUERIES, name);

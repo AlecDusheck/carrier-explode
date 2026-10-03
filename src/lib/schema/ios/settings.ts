@@ -1,11 +1,5 @@
-/**
- * The settings a phone runs with, as layers: carrier.plist, then the phone's
- * override plist, then (for an MVNO variant) an OverrideConfiguration. Merging
- * follows CommCenter (dictionaries combine key by key, anything else
- * replaces: see mergeSettings), and every value read remembers which layer it
- * came from, so a ConceptValue can name `overrides_V53_V54_V57.plist:IMSConfig...`
- * rather than a path that exists in no file.
- */
+/** A phone's settings as layers (carrier.plist, its override file, an MVNO configuration), merged as CommCenter merges them; each read names the file that set it. */
+
 
 import { isJsonDict, mergeSettings } from "#lib/decode/index.ts";
 import { toJson } from "../json.ts";
@@ -33,10 +27,7 @@ export function settings(layers: readonly Layer[]): Settings {
 /** A layer on top of `base`. */
 export const withLayer = (base: Settings, layer: Layer): Settings => settings([...base.layers, layer]);
 
-/**
- * Resolve a dotted path. Keys may contain dots themselves (`com.apple.voicemail.imap`),
- * so each step takes the longest run of segments that names a key at that level.
- */
+/** A dotted path; keys may hold dots themselves (`com.apple.voicemail.imap`), so each step takes the longest key that exists. */
 function resolve(root: unknown, dotted: string): { value: unknown; found: boolean } {
   const parts = dotted.split(".");
   let cur = root;

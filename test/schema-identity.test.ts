@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { linkSources, manifestSims, type LinkMember, type Links, type SimMatcher, type SourceRef } from "../src/lib/schema/index.ts";
-import { assignSlugs } from "../src/lib/schema/slug.ts";
+import { assignIds } from "../src/lib/schema/slug.ts";
 
 const NO_LINKS: Links = { link: [], split: [], names: {} };
 
@@ -57,8 +57,8 @@ describe("linkSources", () => {
 
   it("applies manual links, splits and names", () => {
     const links: Links = {
-      link: [["ios:carrier:Verizon_Visible_LTE_US", "android:carrier:visible_us", "keyed differently"]],
-      split: [["ios:carrier:Verizon_LTE_US", "android:carrier:verizon_us", "test"]],
+      link: [{ a: "ios:carrier:Verizon_Visible_LTE_US", b: "android:carrier:visible_us", why: "keyed differently" }],
+      split: [{ a: "ios:carrier:Verizon_LTE_US", b: "android:carrier:verizon_us", why: "test" }],
       names: { "android:carrier:visible_us": "Visible" },
     };
     const groups = linkSources([
@@ -82,23 +82,25 @@ describe("linkSources", () => {
   });
 });
 
-describe("assignSlugs", () => {
-  const sm = (platform: "ios" | "android", name: string, matchers: number) => ({ key: `${platform}:carrier:${name}`, platform, name, matchers });
+describe("assignIds", () => {
+  const im = (platform: "ios" | "android", name: string) => ({ key: `${platform}:carrier:${name}`, platform, name });
 
-  it("uses the iOS bundle with the most matchers, then the Android name, prefixed when it clashes", () => {
-    const slugs = assignSlugs([
-      [sm("ios", "ATT_US", 7), sm("ios", "ATT_NR_US", 9), sm("android", "att_us", 8)],
-      [sm("android", "fi_us", 3)],
-      [sm("ios", "Fi_US", 1)],
-      [sm("android", "Fi_US", 2)],
-    ]);
-    expect(slugs).toEqual(["ATT_NR_US", "fi_us", "Fi_US", "android-Fi_US"]);
+  it("names a carrier after its primary member, qualifying a name another carrier holds", () => {
+    expect(assignIds([[im("ios", "ATT_NR_US"), im("ios", "ATT_US")], [im("android", "fi_us")], [im("ios", "Fi_US")], [im("android", "Fi_US")]]))
+      .toEqual(["ATT_NR_US", "fi_us", "Fi_US", "android-Fi_US"]);
   });
 
-  it("keeps a published slug while it is still one of the carrier's names", () => {
+  it("keeps a previous id while it is still one of the carrier's names", () => {
     const previous = { "ios:carrier:ATT_US": "ATT_US", "android:carrier:att_us": "ATT_US" };
-    expect(assignSlugs([[sm("ios", "ATT_US", 7), sm("ios", "ATT_NR_US", 9), sm("android", "att_us", 8)]], previous)).toEqual(["ATT_US"]);
-    // A slug the carrier no longer has a member for is not kept.
-    expect(assignSlugs([[sm("ios", "ATT_NR_US", 9)]], { "ios:carrier:ATT_NR_US": "ATT_US" })).toEqual(["ATT_NR_US"]);
+    expect(assignIds([[im("ios", "ATT_NR_US"), im("ios", "ATT_US"), im("android", "att_us")]], previous)).toEqual(["ATT_US"]);
+    expect(assignIds([[im("ios", "ATT_NR_US")]], { "ios:carrier:ATT_NR_US": "ATT_US" })).toEqual(["ATT_NR_US"]);
+  });
+});
+
+describe("Apple device families", () => {
+  it("joins an iPhone, iPad and Watch bundle of one name into one carrier", () => {
+    const watch: LinkMember = { key: "watchos:carrier:Test_US", source: { platform: "watchos", kind: "carrier", name: "Test_US" }, sims: [], display: "Test", iso: ["us"] };
+    const groups = linkSources([m("ios", "Test_US", plain("310410")), watch, m("android", "test_us", plain("310410"))], NO_LINKS);
+    expect(groups.map((g) => g.members.map((x) => x.key).sort())).toEqual([["android:carrier:test_us", "ios:carrier:Test_US", "watchos:carrier:Test_US"]]);
   });
 });

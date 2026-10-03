@@ -1,13 +1,10 @@
 /**
- * Random access into one partition of a full payload. A read maps its blocks
- * to the operations that write them, fetches and decompresses only those
- * operations' blobs, and keeps the most recent ones: filesystem reads cluster
- * (an inode table, then a directory, then its files), so a small LRU of whole
- * operations turns many small reads into few fetches.
+ * Random access into one partition of a full payload. Filesystem reads cluster,
+ * so a small LRU of decompressed operations turns many reads into few fetches.
  */
 
 import { bytesToHex, sha256Hex } from "../binary/index.ts";
-import { MissingCodecError, type Decompress } from "./codecs.ts";
+import type { Decompress } from "./codecs.ts";
 import type { InstallOp, Payload } from "./payload.ts";
 
 export class PartitionError extends Error {
@@ -132,14 +129,14 @@ export class PartitionReader implements BlockReader {
     return load;
   }
 
-  private codec(op: InstallOp): Decompress | undefined {
+  private decompressor(op: InstallOp, index: number): Decompress {
     const { xz, bz2, zstd } = this.payload.decompressors;
     switch (op.type) {
       case "REPLACE": return (b) => b;
       case "REPLACE_XZ": return xz;
       case "REPLACE_BZ": return bz2;
       case "REPLACE_ZSTD": return zstd;
-      default: return undefined;
+      default: throw new PartitionError(`${this.label}: operation ${index} is ${op.type}; only full OTAs are readable`);
     }
   }
 
@@ -149,25 +146,15 @@ export class PartitionReader implements BlockReader {
     const size = op.dstExtents.reduce((n, e) => n + e.numBlocks, 0) * this.payload.blockSize;
     this.loaded++;
     if (op.type === "ZERO" || op.type === "DISCARD") return new Uint8Array(size);
-    if (!op.type.startsWith("REPLACE")) {
-      throw new PartitionError(`${this.label}: operation ${index} is ${op.type}, which needs the previous image (an incremental OTA)`);
-    }
-    const decompress = this.codec(op);
-    if (!decompress) throw new MissingCodecError(`${this.label}: operation ${index} is ${op.type} and no decompressor for it was given`);
+    const decompress = this.decompressor(op, index);
     const blob = await this.payload.source.read(this.payload.dataOffset + op.dataOffset, op.dataLength);
     if (this.verify && op.dataSha256) {
       const got = await sha256Hex(blob);
       if (got !== bytesToHex(op.dataSha256)) throw new PartitionError(`${this.label}: operation ${index} blob sha256 ${got} does not match the manifest`);
     }
     const data = await decompress(blob, size);
-    // REPLACE blobs may stop short of the last block (update_engine zero-fills); compressed ones must be exact.
-    if (data.length === size) return data;
-    if (op.type === "REPLACE" && data.length < size) {
-      const padded = new Uint8Array(size);
-      padded.set(data);
-      return padded;
-    }
-    throw new PartitionError(`${this.label}: operation ${index} (${op.type}) produced ${data.length} bytes, expected ${size}`);
+    if (data.length !== size) throw new PartitionError(`${this.label}: operation ${index} (${op.type}) produced ${data.length} bytes, expected ${size}`);
+    return data;
   }
 }
 

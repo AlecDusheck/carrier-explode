@@ -1,15 +1,6 @@
 /**
- * Regenerates src/lib/decode/android/fields.ts: every carrier config key AOSP
- * declares, with its javadoc, type, AOSP default, and the API level that
- * added it.
- *
+ * Regenerates src/lib/decode/android/fields.ts from AOSP (SOURCES), with `since` from RELEASES.
  *   NODE_USE_ENV_PROXY=1 node tools/android-fields/generate.ts [--out <file>]
- *
- * Sources (SOURCES): CarrierConfigManager.java with its nested classes (Ims,
- * ImsVoice, ImsWfc, Gps, Apn...), plus the QNS and IWLAN services' own config
- * classes, which own the `qns.*` and `iwlan.*` keys real files use. Gitiles
- * serves raw files as base64 with ?format=TEXT. `since` comes from reading
- * CarrierConfigManager at each release tag in RELEASES.
  */
 
 import { writeFileSync } from "node:fs";
@@ -79,10 +70,7 @@ function docOf(k: KeyConstant, since: number | undefined): ConfigDoc {
   };
 }
 
-/**
- * One constant per key string. Renamed keys leave a deprecated alias with the
- * same string (`KEY_A = KEY_B`): the current name and its javadoc win.
- */
+/** One entry per key string; a renamed key keeps a deprecated alias, and the current name wins. */
 function dedupe(keys: readonly KeyConstant[]): KeyConstant[] {
   const byKey = new Map<string, KeyConstant>();
   for (const k of keys) {
@@ -103,10 +91,7 @@ async function firstSeen(): Promise<Map<string, number>> {
   return seen;
 }
 
-/**
- * Keys in no release tag are newer than the newest one: since = one past it.
- * Keys from the other services get no since: their tags do not line up with SDK levels.
- */
+/** Keys from other services get no since: their tags do not track SDK levels. */
 function sinceOf(key: string, fromCcm: boolean, seen: ReadonlyMap<string, number>): number | undefined {
   if (!fromCcm) return undefined;
   const api = seen.get(key) ?? NEWEST_API + 1;

@@ -1,27 +1,7 @@
-/**
- * Linking sources across platforms into Carriers by the SIMs they claim.
- *
- * Two sources link only through an exact shared matcherKey (./sims.ts
- * normalises both platforms' spellings first): a plain MCC+MNC links only to a
- * plain MCC+MNC, a GID1 rule only to the same GID1 rule. That alone keeps an
- * MVNO apart from its host: Visible (`311480|gid1=BAE1` on Android, a GID2 on
- * iOS) never shares a key with Verizon's plain `311480`.
- *
- * Each source then picks the counterpart(s) on the other platform it shares
- * the most keys with. A pair links when the choice is mutual. A source left
- * without a mutual partner still joins its best counterpart when at least half
- * of its own keys are shared with it: AT&T's 5G SA SIM profile (Android
- * `att5gsa_us`, four GID1 rules) joins ATT_NR_US although that bundle's best
- * match is the 5G NSA profile. Below half, the overlap is a host's network
- * code an MVNO also lists, and the source stays on its own.
- *
- * ./links.ts then adds manual links and removes split pairs before the groups
- * are formed. Sources that are not carrier bundles (country bundles, Android's
- * default settings) never link by SIM.
- */
+/** Links sources into carriers by exact shared SIM rules; the rules and their reasons: docs/concepts.md#sim-linking. */
 
 import { LINKS, type Links } from "./links.ts";
-import { decoderFamily, matcherKey, type Carrier, type SimMatcher, type SourceRef } from "./types.ts";
+import { decoderFamily, matcherKey, type CarrierLink, type SimMatcher, type SourceRef } from "./types.ts";
 
 export interface LinkMember {
   /** sourceKey. */
@@ -32,14 +12,14 @@ export interface LinkMember {
   readonly iso: readonly string[];
 }
 
-export type LinkReason = Carrier["links"][number];
 
-/** A carrier before it has a slug. */
+
+/** A carrier before it has an id. */
 export interface LinkedGroup {
   readonly name: string;
   readonly iso: string | undefined;
   readonly members: readonly LinkMember[];
-  readonly links: readonly LinkReason[];
+  readonly links: readonly CarrierLink[];
 }
 
 const pairKey = (a: string, b: string): string => (a < b ? `${a}\n${b}` : `${b}\n${a}`);
@@ -129,14 +109,11 @@ function mostCommonIso(members: readonly LinkMember[]): string | undefined {
   return [...counts].sort((x, y) => y[1] - x[1] || x[0].localeCompare(y[0]))[0]?.[0];
 }
 
-/**
- * Group carrier sources into carriers. Sources of kind "country" are not
- * carriers and are left to the caller; "default" sources stand alone.
- */
+/** Carriers from sources; country bundles are not carriers and are left out. */
 export function linkSources(members: readonly LinkMember[], links: Links = LINKS): LinkedGroup[] {
   const linkable = members.filter((m) => m.source.kind === "carrier");
   const known = new Set(members.map((m) => m.key));
-  const splits = new Set(links.split.map(([a, b]) => pairKey(a, b)));
+  const splits = new Set(links.split.map(({ a, b }) => pairKey(a, b)));
   const groups = new Groups();
   const simShared = new Map<string, Set<string>>();
   const manual = new Set<string>();
@@ -152,7 +129,7 @@ export function linkSources(members: readonly LinkMember[], links: Links = LINKS
     if (first === undefined) appleByName.set(m.source.name, m.key);
     else groups.union(first, m.key);
   }
-  for (const [a, b] of links.link) {
+  for (const { a, b } of links.link) {
     if (!known.has(a) || !known.has(b)) continue;
     groups.union(a, b);
     manual.add(a);
@@ -164,8 +141,8 @@ export function linkSources(members: readonly LinkMember[], links: Links = LINKS
     const root = groups.find(m.key);
     byRoot.set(root, [...(byRoot.get(root) ?? []), m]);
   }
-  /** Why a member is in its group: the keys it shares across, or a manual link. Alone, it needs no reason. */
-  const reason = (m: LinkMember): LinkReason[] => {
+  /** A member alone needs no reason. */
+  const reason = (m: LinkMember): CarrierLink[] => {
     const keys = simShared.get(m.key);
     if (keys?.size) return [{ source: m.key, reason: "sims", shared: [...keys].sort() }];
     return manual.has(m.key) ? [{ source: m.key, reason: "manual" }] : [];

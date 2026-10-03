@@ -1,13 +1,6 @@
 /**
- * Read-only EROFS (linux fs/erofs/erofs_fs.h), which some Android builds use
- * for read-only partitions instead of ext4. Uncompressed layouts are read:
- * FLAT_PLAIN, FLAT_INLINE (tail packed after the inode) and CHUNK_BASED.
- * Compressed files (COMPRESSED_FULL / COMPRESSED_COMPACT) are detected and
- * refused with an error naming the layout, so a caller can tell "compressed
- * EROFS" apart from corruption.
- *
- *   superblock at 1024 | inodes at meta_blkaddr * blksz + nid * 32 (32-byte compact or 64-byte extended)
- *   dirent block: n × { u64 nid, u16 nameoff, u8 type, u8 _ } then names; n = first nameoff / 12
+ * Read-only EROFS (linux fs/erofs/erofs_fs.h): uncompressed layouts only.
+ * Compressed files throw ErofsCompressedError, so callers can tell that from corruption.
  */
 
 import { safeU64le, u16le, u32le, u8 } from "../binary/index.ts";

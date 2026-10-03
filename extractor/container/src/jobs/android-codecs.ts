@@ -1,12 +1,4 @@
-/**
- * The decompressors payload.bin operations need, for src/lib/firmware's
- * injectable Decompressors. They live here, not in firmware, so the site
- * (which imports firmware for zips) never bundles them.
- *
- *   REPLACE_XZ    xz-decompress (xz-embedded compiled to WASM)
- *   REPLACE_BZ    seek-bzip (pure JS)
- *   REPLACE_ZSTD  fzstd (pure JS)
- */
+/** payload.bin decompressors (xz-decompress, seek-bzip, fzstd), injected into firmware. */
 
 import { decompress as zstdDecompress } from "fzstd";
 import Bunzip from "seek-bzip";
@@ -16,11 +8,7 @@ import type { Decompressors } from "../../../../src/lib/firmware/index.ts";
 
 type XzStreamClass = typeof xzModule.XzReadableStream;
 
-/**
- * xz-decompress is a webpack UMD bundle: bundlers (esbuild) see its named
- * export, but Node's own ESM loader cannot detect it and exposes the bundle
- * only as `default`. Either way the class is checked before use.
- */
+/** Node ESM sees this UMD bundle only as `default`; bundlers see the named export. */
 function xzStreamClass(): XzStreamClass {
   if (typeof xzModule.XzReadableStream === "function") return xzModule.XzReadableStream;
   const bundle: unknown = Reflect.get(xzModule, "default");

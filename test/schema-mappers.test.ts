@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { zipSync } from "fflate";
 
 import { openIpcc } from "../src/lib/decode/index.ts";
-import type { CarrierList, CarrierSettings } from "../src/lib/decode/android/types.ts";
+import type { CarrierList, CarrierSettings } from "../src/lib/decode/android/index.ts";
 import { androidProfile, iosProfile, normaliseGid, parseSupportedSim, type ConceptValue, type Profile } from "../src/lib/schema/index.ts";
 
 /* ---------------------------------------------------------------- builders */
@@ -26,7 +26,16 @@ function bundle(name: string, files: Record<string, unknown>): ReturnType<typeof
   return openIpcc(zip);
 }
 
-const value = (p: Profile, id: string): ConceptValue["value"] | undefined => p.concepts[id]?.value;
+/** A reading's state or value; "unset" and undefined as such. */
+function value(p: Profile, id: string): unknown {
+  const r: ConceptValue | undefined = p.concepts[id];
+  if (r === undefined) return undefined;
+  return r.kind === "unset" ? "unset" : r.kind === "state" ? r.state : r.value;
+}
+const because = (p: Profile, id: string): string[] => {
+  const r = p.concepts[id];
+  return r === undefined || r.kind === "unset" ? [] : r.because.map((b) => b.path);
+};
 
 /* --------------------------------------------------------------------- iOS */
 
@@ -42,7 +51,7 @@ describe("iosProfile", () => {
         Media: { AudioCodecs: { 104: { EncodingName: "AMR-WB" }, 109: { EncodingName: "EVS" } } },
       },
       MMS: { MaxMessageSize: 1048576, MMSC: "http://mmsc.example", Proxy: "proxy.example:8080" },
-      apns: [{ "technology-mask": 24, configuration: [{ apn: "internet", "type-mask": 5, AllowedProtocolMask: 3, username: "", password: "" }] }],
+      apns: [{ "technology-mask": 24, configuration: [{ apn: "internet", "type-mask": 5, AllowedProtocolMask: 3, username: "", password: "pw" }] }],
       AttachAPN: { "3GPP": { apn: "ims", AllowedProtocolMask: 2 } },
       MVNOOverrides: {
         Configuration_1: { SupportedSIMs: ["310410_GID1-42"], OverrideConfiguration: { CarrierName: "Mvno", IMSConfig: { Voice: { EnableVolteByDefault: false } } } },
@@ -55,19 +64,19 @@ describe("iosProfile", () => {
 
   it("reads the newest phone's settings: carrier.plist with its override on top, naming the file each value came from", () => {
     expect(p.version).toBe("72.1");
-    expect(p.concepts["5g"]).toMatchObject({ value: "on", state: "on" });
-    expect(p.concepts["5g"]?.because[0]?.path).toBe("overrides_D93_D94_D47_D48.plist:Enable5GAutoByDefault");
+    expect(p.concepts["5g"]).toMatchObject({ kind: "state", state: "on", fidelity: "exact" });
+    expect(because(p, "5g")[0]).toBe("overrides_D93_D94_D47_D48.plist:Enable5GAutoByDefault");
     // Merged dictionaries: the override's ringing timer wins, carrier.plist's other IMS keys stay.
     expect(value(p, "ringing-timer")).toBe(60000);
     expect(value(p, "sip-timer-t1")).toBe(500);
-    expect(p.concepts["sip-ipsec"]?.because[0]?.path).toBe("carrier.plist:IMSConfig.Signaling.UseIPSec");
+    expect(because(p, "sip-ipsec")).toEqual(["carrier.plist:IMSConfig.Signaling.UseIPSec"]);
   });
 
   it("normalises codecs, MMS and APNs", () => {
     expect(value(p, "audio-codecs")).toEqual(["AMR-WB", "EVS"]);
     expect(value(p, "hd-voice-plus")).toBe("on");
     expect(value(p, "mms-proxy")).toBe("proxy.example:8080");
-    expect(p.apns[0]).toMatchObject({ apn: "internet", types: ["default", "mms"], protocol: "ipv4v6", bearers: ["lte", "nr"], mmsc: "http://mmsc.example", mmsProxy: "proxy.example", mmsPort: "8080", path: "carrier.plist:apns[0].configuration[0]" });
+    expect(p.apns[0]).toMatchObject({ apn: "internet", types: ["default", "mms"], protocol: "ipv4v6", bearers: ["lte", "nr"], mmsc: "http://mmsc.example", mmsProxy: "proxy.example", mmsPort: "8080", hasPassword: true, path: "carrier.plist:apns[0].configuration[0]" });
     expect(p.apns[1]).toMatchObject({ apn: "ims", types: ["ia"], protocol: "ipv6" });
     expect(value(p, "apn-attach")).toBe("ims");
   });
@@ -81,16 +90,17 @@ describe("iosProfile", () => {
 
   it("keeps MVNO configurations as variants holding only what differs", () => {
     const mvno = p.variants.find((v) => v.id === "mvno:Configuration_1");
-    expect(mvno?.when.sims).toEqual([{ mccmnc: "310410", gid1: "42" }]);
+    expect(mvno?.when).toEqual({ by: "sim", sims: [{ mccmnc: "310410", gid1: "42" }] });
     expect(mvno?.label).toBe("Mvno");
-    expect(mvno?.concepts.volte?.value).toBe("no");
-    expect(mvno?.concepts["carrier-name"]?.because[0]?.path).toBe("carrier.plist:MVNOOverrides.Configuration_1.OverrideConfiguration.CarrierName");
+    expect(mvno?.concepts.volte).toMatchObject({ kind: "state", state: "no" });
+    expect(mvno?.concepts["carrier-name"]).toMatchObject({ because: [{ path: "carrier.plist:MVNOOverrides.Configuration_1.OverrideConfiguration.CarrierName" }] });
     expect(mvno?.concepts["sip-timer-t1"]).toBeUndefined();
   });
 
   it("flattens every member into raw", () => {
     expect(p.raw["carrier.plist:CarrierName"]).toBe("Test");
     expect(p.raw["overrides_D93_D94_D47_D48.plist:Enable5GAutoByDefault"]).toBe(true);
+    expect(Object.keys(p.raw).filter((k) => /password/i.test(k))).toEqual([]);
   });
 });
 
@@ -112,7 +122,7 @@ describe("androidProfile", () => {
   const cs: CarrierSettings = {
     canonicalName: "test_us",
     version: "79000000034",
-    apns: [{ name: "Internet", value: "Fast.Example", type: ["DEFAULT", "IA", "MMS"], protocol: "IPV6", authtype: 0, mtu: 1440, bearerBitmask: "14|20", mmsc: "http://mmsc.example" }],
+    apns: [{ name: "Internet", value: "Fast.Example", type: ["DEFAULT", "IA", "MMS"], protocol: "IPV6", authtype: 0, mtu: 1440, bearerBitmask: "14|20", mmsc: "http://mmsc.example", password: "secret" }],
     configs: {
       carrier_volte_available_bool: { type: "bool", value: true },
       carrier_nr_availabilities_int_array: { type: "int_array", value: [1] },
@@ -129,13 +139,16 @@ describe("androidProfile", () => {
     vendorConfigs: [{ name: "client", value: "AAE=" }],
     unknown: [{ path: "", field: 99, wire: "varint", value: "1" }],
   };
-  const list: CarrierList = { entries: [{ canonicalName: "test_us", carrierIds: [{ mccMnc: "310410" }, { mccMnc: "310260", gid1: "6DFF" }] }] };
+  const list: CarrierList = {
+    entries: [{ canonicalName: "test_us", carrierIds: [{ mccMnc: "310410" }, { mccMnc: "310260", mvno: { kind: "gid1", value: "6DFF" } }] }],
+    unknown: [],
+  };
   const p = androidProfile(cs, { platform: "android", kind: "carrier", name: "test_us" }, "sha", list);
 
   it("decides feature states from the keys, falling back on named AOSP defaults", () => {
-    expect(p.concepts.volte).toMatchObject({ value: "on" });
-    expect(p.concepts.volte?.because.map((r) => r.path)).toEqual(["config:carrier_volte_available_bool", "default:enhanced_4g_lte_on_by_default_bool"]);
-    expect(p.concepts["wifi-calling"]?.because).toEqual([{ path: "default:carrier_wfc_ims_available_bool", value: false }]);
+    expect(value(p, "volte")).toBe("on");
+    expect(because(p, "volte")).toEqual(["config:carrier_volte_available_bool", "default:enhanced_4g_lte_on_by_default_bool"]);
+    expect(p.concepts["wifi-calling"]).toMatchObject({ because: [{ path: "default:carrier_wfc_ims_available_bool", value: false }] });
     expect(value(p, "wifi-calling")).toBe("no");
     expect(value(p, "5g-standalone")).toBe("no");
     expect(value(p, "nr-modes")).toEqual(["NSA"]);
@@ -147,9 +160,11 @@ describe("androidProfile", () => {
     expect(value(p, "audio-codecs")).toEqual(["AMR-WB"]);
     expect(value(p, "5g-icon-advanced")).toBe("5G+");
     expect(value(p, "apn-internet")).toBe("fast.example");
-    expect(p.apns[0]).toMatchObject({ types: ["default", "ia", "mms"], protocol: "ipv6", auth: "none", mtu: 1440, bearers: ["lte", "nr"], path: "apns[0]" });
+    expect(p.apns[0]).toMatchObject({ types: ["default", "ia", "mms"], protocol: "ipv6", auth: "none", mtu: 1440, bearers: ["lte", "nr"], hasPassword: true, path: "apns[0]" });
     // Unset keys without a known default stay unset rather than guessed.
-    expect(p.concepts["sip-timer-t1"]).toEqual({ value: null, because: [] });
+    expect(p.concepts["sip-timer-t1"]).toEqual({ kind: "unset" });
+    // A concept Android cannot express has no reading at all.
+    expect(p.concepts["wifi-calling-name"]).toBeUndefined();
   });
 
   it("takes SIM rules from carrier_list and keeps everything in raw", () => {
@@ -157,6 +172,7 @@ describe("androidProfile", () => {
     expect(p.identity.iso).toEqual(["us"]);
     expect(p.raw["config:imsvoice.audio_codec_capability_payload_types_bundle.imsvoice.amrwb_payload_type_int_array"]).toEqual([104]);
     expect(p.raw["apns[0].value"]).toBe("Fast.Example");
+    expect(Object.keys(p.raw).some((k) => k.includes("password"))).toBe(false);
     expect(p.raw["vendor:client"]).toBe("AAE=");
     expect(p.raw["unknown:#99"]).toBe("1");
     expect(p.variants).toEqual([]);

@@ -58,9 +58,9 @@ describe("R2 client against the fake r2.internal", () => {
 
   it("stores an artifact once, and its first origin", async () => {
     const bytes = new TextEncoder().encode("ipcc bytes");
-    const sha = await r2.putObj(bytes, { kind: "ios.ipcc", origin: { url: "https://a.example/1" } });
+    const sha = await r2.putObj(bytes, { kind: "apple.ipcc", origin: { via: "download", url: "https://a.example/1" } });
     expect(sha).toBe(sha256(bytes));
-    await r2.putObj(bytes, { kind: "ios.ipcc", origin: { url: "https://a.example/2" } });
+    await r2.putObj(bytes, { kind: "apple.ipcc", origin: { via: "download", url: "https://a.example/2" } });
     expect(await r2.getJson(keys.meta(sha))).toMatchObject({ sha256: sha, size: bytes.length, origin: { url: "https://a.example/1" } });
     expect(await r2.get(keys.obj(sha))).toEqual(bytes);
   });
@@ -70,10 +70,10 @@ describe("R2 client against the fake r2.internal", () => {
     const file = join(dir, "..", `big-${Date.now()}.bin`);
     await writeFile(file, big);
     try {
-      const sha = await r2.putObj({ file }, { kind: "ios.bbfw", origin: {} });
+      const sha = await r2.putObj({ file }, { kind: "apple.bbfw", origin: { via: "image", release: "23C55", device: "iPhone17,1", path: "Firmware/x.bbfw" } });
       expect(sha).toBe(sha256(big));
       expect(await readFile(join(dir, "obj", sha))).toEqual(Buffer.from(big));
-      expect(await r2.getJson(keys.meta(sha))).toMatchObject({ size: 2500, kind: "ios.bbfw" });
+      expect(await r2.getJson(keys.meta(sha))).toMatchObject({ size: 2500, kind: "apple.bbfw" });
     } finally {
       await rm(file, { force: true });
     }

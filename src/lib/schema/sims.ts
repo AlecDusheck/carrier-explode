@@ -1,23 +1,11 @@
-/**
- * SimMatcher normalisation, shared by both mappers so that equal rules give
- * equal matcherKeys. The two platforms write the same SIM facts differently:
- * iOS `310410_GID1-FFFF`, `23410_GID1-0AFFFF`, `354d`; Android `310410`,
- * `23410|gid1=0A`, `BAE1000000000000`. Normalising is what lets a plain
- * matcherKey comparison (./identity.ts) link them.
- */
+/** SimMatcher normalisation, so both platforms' spellings of one rule give one matcherKey. */
 
 import type { SimMatcher } from "./types.ts";
 
 /** 5 or 6 digits: MCC + 2- or 3-digit MNC. */
 export const isMccMnc = (s: string): boolean => /^\d{5,6}$/.test(s);
 
-/**
- * A GID value as a prefix: upper-case hex, with trailing FF bytes dropped.
- * GID files are FF-padded (3GPP TS 31.102 4.2.10), so `0AFFFF` and `0A`
- * match the same SIMs. An all-FF GID is an
- * unprogrammed GID file, i.e. no GID rule at all: returns undefined.
- * Trailing 00 bytes are kept: a prefix rule with zeros is narrower.
- */
+/** GID files are FF-padded (3GPP TS 31.102), so trailing FF bytes go; an all-FF GID is no rule at all. */
 export function normaliseGid(raw: string): string | undefined {
   let hex = raw.trim().toUpperCase();
   if (!/^[0-9A-F]+$/.test(hex)) return hex || undefined;
@@ -51,7 +39,3 @@ export function simMatcher(fields: {
     ...(iccidPrefix !== undefined ? { iccidPrefix } : {}),
   };
 }
-
-/** True when the rule is the bare network code: any SIM of that MCC+MNC no narrower rule claims. */
-export const isPlain = (m: SimMatcher): boolean =>
-  m.gid1 === undefined && m.gid2 === undefined && m.spn === undefined && m.imsiPrefix === undefined && m.iccidPrefix === undefined;

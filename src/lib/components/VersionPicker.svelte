@@ -1,24 +1,27 @@
 <script lang="ts">
-  import type { PublicEntry } from "#lib/types.ts";
   import { entryLabel } from "#lib/format.ts";
-  import IosIcon from "./ios/IosIcon.svelte";
+  import type { Version } from "#lib/types.ts";
+  import { VERSION_ICONS } from "./icons";
   import Picker from "./Picker.svelte";
 
-  let { label, timeline, current, head, href }: {
-    label?: string;
-    timeline: PublicEntry[];
+  interface Props {
+    label?: string | undefined;
+    timeline: readonly Version[];
     current: string;
-    /** The version phones on a release run now. */
+    /** The version a device on a release runs now. */
     head: string;
     href: (slug: string) => string;
-  } = $props();
+  }
+
+  let { label, timeline, current, head, href }: Props = $props();
 
   const active = $derived(timeline.find((e) => e.slug === current));
 </script>
 
-{#snippet option(e: PublicEntry)}
+{#snippet option(e: Version)}
+  {@const Icon = VERSION_ICONS[e.platform]}
   <span class="picker-opt">
-    <IosIcon version={e.ios[0]} />
+    <Icon version={e.images.at(-1) ?? e.ota[0]} />
     <span class="text">{entryLabel(e)}</span>
     {#if e.slug === head}<span class="picker-tag now">current release</span>
     {:else if e.beta}<span class="picker-tag">beta</span>{/if}

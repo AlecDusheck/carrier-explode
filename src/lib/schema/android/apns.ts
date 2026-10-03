@@ -1,6 +1,6 @@
 /** Android ApnItem -> Apn. Fields the file leaves out stay out: proto defaults are not facts about the carrier. */
 
-import type { AndroidApnType, AndroidProtocol, ApnItem } from "#lib/decode/android/types.ts";
+import type { AndroidApnType, AndroidProtocol, ApnItem } from "#lib/decode/android/index.ts";
 import type { Apn, ApnAuth, ApnType, IpProtocol } from "../types.ts";
 import { stringSet, text } from "../values.ts";
 
@@ -14,10 +14,7 @@ const PROTOCOLS: Readonly<Partial<Record<AndroidProtocol, IpProtocol>>> = { IP: 
 /** ApnSetting AUTH_TYPE_*; -1 is the proto's "unset". */
 const AUTH: ReadonlyMap<number, ApnAuth> = new Map([[0, "none"], [1, "pap"], [2, "chap"], [3, "pap_or_chap"]]);
 
-/**
- * ServiceState RIL_RADIO_TECHNOLOGY_* in bearer_bitmask, by radio family, named
- * the way the iOS mapper names technology-mask bits so the two compare.
- */
+/** bearer_bitmask's RIL_RADIO_TECHNOLOGY_* values, by radio family as the Apple mapper names them. */
 const RADIO_FAMILY: ReadonlyMap<number, string> = new Map([
   [1, "gsm"], [2, "gsm"], [16, "gsm"],
   [3, "umts"], [9, "umts"], [10, "umts"], [11, "umts"], [15, "umts"], [17, "umts"],
@@ -48,7 +45,7 @@ function apnOf(item: ApnItem, i: number): Apn {
     ...(roamingProtocol !== undefined ? { roamingProtocol } : {}),
     ...(auth !== undefined ? { auth } : {}),
     ...(user !== undefined ? { user } : {}),
-    ...(item.password !== undefined ? { hasPassword: item.password !== "" } : {}),
+    hasPassword: item.password !== undefined && item.password !== "",
     ...(proxy !== undefined ? { proxy } : {}),
     ...(port !== undefined ? { port } : {}),
     ...(mmsc !== undefined ? { mmsc } : {}),

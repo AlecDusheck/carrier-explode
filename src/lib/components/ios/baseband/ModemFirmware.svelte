@@ -1,8 +1,8 @@
 <script lang="ts">
   import { getModemPackageHeader } from "#lib/api/tables.remote.ts";
   import type { ModemCapabilities } from "#lib/decode/index.ts";
-  import { fileHref, humanBytes } from "#lib/format.ts";
-  import { imageSlug } from "#lib/names.ts";
+  import { humanBytes, link } from "#lib/format.ts";
+  import { sourcePath } from "#lib/schema/types.ts";
   import type { ImageModem } from "./types";
 
   // Other iOS versions with this modem are one pick away in the page's iOS picker.
@@ -37,7 +37,7 @@
     <p class="prose">
       No carrier config in the package: it all comes from the bundles' <span class="mono">.der.pri</span> and
       <span class="mono">.der.gri</span> files. Regional band tables are in Default.bundle's
-      <a class="mono" href={fileHref("carriers", "Default", imageSlug(version), "global_setting_G.der.gri")}>global_setting_G.der.gri</a>.
+      <a class="mono" href={link(sourcePath({ platform: "ios", kind: "carrier", name: "Default" }) + "/files")}>global_setting_G.der.gri</a>.
     </p>
   {:else if !caps?.plaintextDefaults}
     <p class="prose">No plaintext config in the package: carrier settings come from the bundles' <span class="mono">.der.pri</span> files.</p>

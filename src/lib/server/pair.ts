@@ -13,7 +13,7 @@
 
 import { error } from "@sveltejs/kit";
 import { keys } from "#lib/storage/keys.ts";
-import { compareProfiles, type ConceptRow, type ProfileComparison } from "#lib/schema/index.ts";
+import { compareProfiles, conceptById, type ConceptRow, type ProfileComparison } from "#lib/schema/index.ts";
 import { decoderFamily, sourceKey, type DeviceStates, type FeatureState, type Platform, type Profile, type SourceRef, type TimelineEntry } from "#lib/schema/types.ts";
 import type { Version } from "#lib/types.ts";
 import { perRequest } from "./cache";
@@ -64,7 +64,7 @@ export interface Pair {
   readonly apple: PairSide;
   readonly android: PairSide;
   /** A few concepts besides the features, Apple (a) against Android (b). */
-  readonly headline: readonly ConceptRow[];
+  readonly headline: ReadonlyArray<ConceptRow & { readonly name: string }>;
 }
 
 /** Concepts worth a line beside the features: the ones people ask a carrier about. */
@@ -129,7 +129,8 @@ export async function getPair(key: string, phones: { readonly apple?: string | u
   const [a, b] = await Promise.all([sideOf(apple, statesOf(apple), phones.apple), sideOf(android, statesOf(android), phones.android)]);
   if (!a || !b) return null;
   const rows = compareProfiles(a.profile, b.profile).groups.flatMap((g) => g.rows);
-  return { apple: a.side, android: b.side, headline: HEADLINE.flatMap((id) => rows.filter((r) => r.id === id)) };
+  const headline = HEADLINE.flatMap((id) => rows.filter((r) => r.id === id).map((r) => ({ ...r, name: conceptById(id)?.name ?? id })));
+  return { apple: a.side, android: b.side, headline };
 }
 
 export interface CrossSide {

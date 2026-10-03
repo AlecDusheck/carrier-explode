@@ -1,15 +1,6 @@
 /**
- * LZFSE decoder, whole-buffer: a port of Apple's reference decoder
- * (github.com/lzfse/lzfse, lzfse_decode_base.c, lzfse_fse.h, lzvn_decode_base.c),
- * using its 32-bit bit-stream variant so every value fits a JS number. AEA
- * archives compress each 1 MiB segment with it, and every iOS 18+ filesystem
- * image is such an archive.
- *
- * Handles the block kinds Apple's encoder writes: bvx2 (FSE, compressed
- * tables), bvxn (LZVN), bvx- (stored) and bvx$ (end). bvx1, the uncompressed-
- * table form, is not produced by any encoder still in use and is rejected.
- * Callers know the decoded size (AEA records it), and anything short of
- * exactly that size is an error.
+ * Whole-buffer LZFSE decoder, ported from Apple's reference (github.com/lzfse/lzfse) in its 32-bit
+ * bit-stream variant, so every value fits a JS number. Reads the blocks Apple's encoder writes (bvx2, bvxn, bvx-, bvx$).
  */
 
 import { byteAt, u16le, u32le, u64le } from "../../../../../../src/lib/binary/index.ts";
@@ -256,11 +247,7 @@ function copyBytes(dst: Uint8Array, pos: number, src: Uint8Array, from: number, 
   else for (let i = 0; i < n; i++) dst[pos + i] = src[from + i] ?? 0;
 }
 
-/**
- * The block's literals: four interleaved FSE states, as the encoder wrote them,
- * with a flush every two symbols. The hottest loop of the decoder, so the four
- * states live in locals and the table lookups are written out.
- */
+/** Four interleaved FSE states, flushed every two symbols; unrolled, as the decoder's hottest loop. */
 function decodeLiterals(lt: Int32Array, h: V2Header, lin: BitIn, out: Uint8Array): void {
   let [s0, s1, s2, s3] = h.literalState;
   let e = 0;

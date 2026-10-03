@@ -1,8 +1,4 @@
-/**
- * Google's carrier settings protobufs (AOSP tools/carrier_settings/proto) as
- * plain JSON. Field names are the proto's, camel-cased; proto2 `optional`
- * fields are optional here and never defaulted.
- */
+/** Google carrier settings protobufs as JSON: proto field names camel-cased, `optional` fields never defaulted. */
 
 /** CarrierConfig.Config's oneof value. */
 export type CarrierConfigValue =
@@ -60,11 +56,7 @@ export interface VendorConfigClient {
   readonly value?: string;
 }
 
-/**
- * A field the decoder has no name for, kept so nothing in a file goes unseen.
- * `path` is where it sat (`apns[2]`, `configs.foo_bundle`, `` for the root);
- * `value` is decimal for varints, little-endian hex for fixed32/64, base64 for bytes.
- */
+/** A field the decoder has no name for. `value`: decimal for varints, little-endian hex for fixed, base64 for bytes. */
 export interface UnknownField {
   readonly path: string;
   readonly field: number;

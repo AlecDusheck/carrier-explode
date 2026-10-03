@@ -1,24 +1,24 @@
 import { describe, expect, it } from "vitest";
 
-import type { OtaRef } from "../../src/lib/storage/keys.ts";
 import { mergeRefs, type Listed } from "../container/src/jobs/ota-archive/refs.ts";
 
 const listed = (os: string, url = `https://cdn.apple.com/${os}.ipcc`): Listed => ({ url, source: "ios:carrier:TMobile_us", os, build: "1" });
 const T0 = "2026-10-01T00:00:00.000Z";
 const T1 = "2026-10-03T00:00:00.000Z";
+const ARCHIVED = { state: "archived", sha: "a".repeat(64), cid: "c" } as const;
 
 describe("mergeRefs", () => {
-  it("adds new refs as live and reports a change", () => {
+  it("adds new refs as live and pending, and reports a change", () => {
     const { refs, changed } = mergeRefs([], [listed("27.0")], T0);
     expect(changed).toBe(true);
-    expect(refs).toEqual([{ ...listed("27.0"), firstSeen: T0, lastSeen: T0, live: true }]);
+    expect(refs).toEqual([{ ...listed("27.0"), archive: { state: "pending" }, firstSeen: T0, lastSeen: T0, live: true }]);
   });
 
-  it("only touches lastSeen for refs still listed", () => {
-    const prev: OtaRef[] = mergeRefs([], [listed("27.0")], T0).refs.map((r) => ({ ...r, sha: "a".repeat(64) }));
+  it("only moves lastSeen for refs still listed, keeping their archive", () => {
+    const prev = mergeRefs([], [listed("27.0")], T0).refs.map((r) => ({ ...r, archive: ARCHIVED }));
     const { refs, changed } = mergeRefs(prev, [listed("27.0")], T1);
     expect(changed).toBe(false);
-    expect(refs[0]).toMatchObject({ firstSeen: T0, lastSeen: T1, live: true, sha: "a".repeat(64) });
+    expect(refs[0]).toMatchObject({ firstSeen: T0, lastSeen: T1, live: true, archive: ARCHIVED });
   });
 
   it("keeps refs Apple dropped, marked not live", () => {

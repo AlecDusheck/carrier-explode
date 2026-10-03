@@ -1,10 +1,4 @@
-/**
- * Mobile Country Code -> ISO 3166 alpha-2, from ITU-T E.212. Only a fallback:
- * a source's own name (`_us`, `_gb`) or plist ISO keys win. Where an MCC spans
- * territories (310-316 also serve Guam and the US Virgin Islands by MNC, 340
- * the French Antilles) it maps to the main one; per-MNC detail would need the
- * whole MNC table for a guess that names already settle.
- */
+/** MCC -> ISO 3166 alpha-2 (ITU-T E.212), a fallback when names and plists say nothing; shared MCCs map to the main territory. */
 
 import { countryName, fold } from "#lib/names.ts";
 

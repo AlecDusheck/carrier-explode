@@ -1,9 +1,4 @@
-/**
- * HPKE (RFC 9180) open, base mode, for the one suite Apple wraps AEA archive
- * keys with: DHKEM(P-256, HKDF-SHA256), HKDF-SHA256, AES-256-GCM. Node has no
- * HPKE, but every primitive under it, so this is the RFC's key schedule spelled
- * out. Only single-shot open (sequence number 0) is needed.
- */
+/** HPKE (RFC 9180) single-shot open, base mode, for the suite Apple wraps AEA keys with: DHKEM(P-256), HKDF-SHA256, AES-256-GCM. */
 
 import { createDecipheriv, createECDH, createHmac, createPrivateKey } from "node:crypto";
 

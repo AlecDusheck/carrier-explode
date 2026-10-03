@@ -205,7 +205,7 @@ export const JOBS = {
   "ios.ipsw": { size: "heavy", timeout: "2 hours", writes: INGEST },
   "ios.modems": { size: "light", timeout: "1 hours", writes: [...INGEST, "decoded/"] },
   "ios.release": { size: "light", timeout: "30 minutes", writes: [...INGEST, "releases/ios/"] },
-  "ios.ota-archive": { size: "light", timeout: "1 hours", writes: [...INGEST, "feeds/ios-ota/"] },
+  "ios.ota-archive": { size: "light", timeout: "1 hours", writes: [...INGEST, "feeds/apple-ota/"] },
   "android.plan": { size: "light", timeout: "15 minutes", writes: [] },
   "android.ota": { size: "light", timeout: "1 hours", writes: INGEST },
   "android.release": { size: "light", timeout: "30 minutes", writes: ["releases/android/"] },

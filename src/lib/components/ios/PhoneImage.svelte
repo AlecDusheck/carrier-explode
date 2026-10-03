@@ -13,7 +13,7 @@
     "iphone-5c", "iphone-4s", "iphone-4", "iphone-3gs",
   ] as const;
 
-  let { name }: { name?: string } = $props();
+  let { name }: { id?: string | undefined; name?: string | undefined } = $props();
 
   // "iPhone 18 Pro Max (US)" looks like the model it is a variant of.
   const slug = $derived(PHONES.find((p) => p === name?.replace(/ \((US|China)\)$/, "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/-$/, "")));

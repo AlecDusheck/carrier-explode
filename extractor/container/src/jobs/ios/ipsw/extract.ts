@@ -1,27 +1,17 @@
-/**
- * The two bundle directories out of a filesystem image, by the apfs-extract
- * helper (./apfs-extract, a Go wrapper of go-apfs built into the container
- * image). No FUSE, no mount, no privileges: it reads the image as a file.
- */
+/** The bundle directories out of a filesystem image, by ./apfs-extract (no FUSE or mount needed). */
 
 import { spawn } from "node:child_process";
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
 
-import type { BundleKind } from "../store-bundle.ts";
+import { BUNDLE_DIRS, type BundleKind } from "../store-bundle.ts";
 
-/** Where the image keeps them. The same paths since iOS 8; the root volume, not a cryptex. */
-export const BUNDLE_DIRS = {
-  carrier: "/System/Library/Carrier Bundles/iPhone",
-  country: "/System/Library/CountryBundles/iPhone",
-} as const satisfies Record<BundleKind, string>;
-
-/** The helper's path: APFS_EXTRACT in the environment (local runs), else the image's PATH. */
-const helper = (): string => process.env.APFS_EXTRACT ?? "apfs-extract";
+/** APFS_EXTRACT points local runs at a built helper; the container image has it on PATH. */
+const helper = (): string => process.env["APFS_EXTRACT"] ?? "apfs-extract";
 
 function run(cmd: string, args: readonly string[]): Promise<void> {
   return new Promise((resolve, reject) => {
-    // stdout is go-apfs progress bars; stderr carries the errors worth reporting.
+    // stdout is go-apfs progress bars; stderr carries the errors.
     const child = spawn(cmd, args, { stdio: ["ignore", "ignore", "pipe"] });
     const err: Buffer[] = [];
     child.stderr.on("data", (b: Buffer) => err.push(b));
@@ -33,7 +23,6 @@ function run(cmd: string, args: readonly string[]): Promise<void> {
   });
 }
 
-/** Copies both directories out of `image` into `<dest>/carrier` and `<dest>/country`. */
 export async function extractBundleDirs(image: string, dest: string): Promise<Record<BundleKind, string>> {
   const out = { carrier: join(dest, "carrier"), country: join(dest, "country") };
   await mkdir(out.carrier, { recursive: true });

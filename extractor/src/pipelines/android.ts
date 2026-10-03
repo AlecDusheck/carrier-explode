@@ -30,8 +30,7 @@ export class AndroidPipeline extends Pipeline {
       return { id: done.id, output: done.output };
     });
 
-    // fanOut keeps input order, so read[i] is otas[i]'s result.
-    const failedBuilds = new Set(otas.filter((_, i) => !read[i]?.ok).map((o) => o.build.build));
+    const failedBuilds = new Set(read.flatMap((r) => (r.ok ? [] : [r.item.build.build])));
     const complete = builds.filter((b) => !failedBuilds.has(b.build));
     const released = await fanOut(complete, MAX_INSTANCES.light, async (b) => {
       const parts = succeeded(read).filter((r) => r.output.build === b.build);

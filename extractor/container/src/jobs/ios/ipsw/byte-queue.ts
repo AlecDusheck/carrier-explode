@@ -1,7 +1,4 @@
-/**
- * Exact-length reads off a stream of chunks, for parsers that walk a format
- * front to back (AEA) without ever holding more than the current record.
- */
+/** Exact-length reads off a stream of chunks, holding no more than the current record. */
 
 export class ByteQueue {
   readonly #it: AsyncIterator<Uint8Array>;

@@ -1,16 +1,8 @@
-/**
- * iOS bundle -> Profile.
- *
- * The profile describes what the newest phone the bundle names runs with:
- * carrier.plist with that phone's overrides_<boards>.plist on top. Modern
- * bundles keep most of what matters there (T-Mobile's carrier.plist has no 5G
- * key at all; every phone's override sets them), so carrier.plist alone would
- * describe an iPhone nobody buys. Other phone groups and the MVNOOverrides
- * configurations become variants holding only what differs.
- */
+/** Apple bundle -> Profile: the newest phone's settings (carrier.plist plus its override file); other phones and MVNOs are variants. */
 
 import { compareProducts, decodeFile, decodedPlist, flattenBundle, isJsonDict, type BundleFile, type OpenedBundle } from "#lib/decode/index.ts";
 import { canonical, toJson } from "../json.ts";
+import { readingKey } from "../values.ts";
 import { matcherKey, PROFILE_SCHEMA, type Apn, type ConceptValue, type Json, type Profile, type ProfileVariant, type SimMatcher, type SourceRef } from "../types.ts";
 import { iosApns } from "./apns.ts";
 import { iosDisplay, iosIso, supportedSims } from "./identity.ts";
@@ -19,7 +11,7 @@ import { origin, settings, withLayer, type Settings } from "./settings.ts";
 
 type Dict = Readonly<Record<string, unknown>>;
 
-/** A member decoded as a dictionary; undefined when absent or not a plist dictionary (a broken member simply contributes nothing, as on the phone). */
+/** A member as a dictionary; a broken or absent one contributes nothing, as on the phone. */
 function plistDict(b: OpenedBundle, path: string): Dict | undefined {
   if (!b.info.files.some((f) => f.path === path)) return undefined;
   const v = decodedPlist(decodeFile(b, path));
@@ -49,11 +41,8 @@ interface Mapped { concepts: Record<string, ConceptValue>; apns: Apn[] }
 function mapSettings(s: Settings, kind: SourceRef["kind"]): Mapped {
   const apns = iosApns(s);
   const all = iosConcepts({ settings: s, apns });
-  // A country bundle carries place settings (alerts, emergency numbers); the carrier
-  // features and unset carrier keys would only say "no" a hundred times.
-  const concepts = kind === "country"
-    ? Object.fromEntries(Object.entries(all).filter(([, v]) => v.state === undefined && v.value !== null))
-    : all;
+  // Country bundles carry place settings only; carrier features would read "no" throughout.
+  const concepts = kind === "country" ? Object.fromEntries(Object.entries(all).filter(([, v]) => v.kind === "value")) : all;
   return { concepts, apns };
 }
 
@@ -61,7 +50,7 @@ function mapSettings(s: Settings, kind: SourceRef["kind"]): Mapped {
 function differing(main: Readonly<Record<string, ConceptValue>>, other: Readonly<Record<string, ConceptValue>>): Record<string, ConceptValue> {
   return Object.fromEntries(Object.entries(other).filter(([id, v]) => {
     const m = main[id];
-    return m === undefined || canonical(m.value) !== canonical(v.value);
+    return m === undefined || readingKey(m) !== readingKey(v);
   }));
 }
 
@@ -71,14 +60,14 @@ function variant(id: string, label: string, when: ProfileVariant["when"], main: 
   const concepts = differing(main.concepts, other.concepts);
   const apnsDiffer = apnText(main.apns) !== apnText(other.apns);
   if (!Object.keys(concepts).length && !apnsDiffer) return undefined;
-  return { id, label, when, concepts, ...(apnsDiffer ? { apns: other.apns } : {}) };
+  return { id, label, when, concepts, apns: other.apns };
 }
 
 function phoneVariants(carrier: Settings, groups: readonly PhoneGroup[], main: Mapped, kind: SourceRef["kind"]): ProfileVariant[] {
   return groups.flatMap((g) => {
     const names = [...new Set((g.file.devices ?? []).map((d) => d.name ?? d.code))];
     const other = mapSettings(withLayer(carrier, { file: g.file.path, prefix: "", dict: g.dict }), kind);
-    const v = variant(`phones:${g.file.path}`, names.join(", ") || g.file.path, { devices: devicesOf(g.file) }, main, other);
+    const v = variant(`phones:${g.file.path}`, names.join(", ") || g.file.path, { by: "device", devices: devicesOf(g.file) }, main, other);
     return v ? [v] : [];
   });
 }
@@ -89,11 +78,11 @@ function mvnoVariants(s: Settings, main: Mapped, kind: SourceRef["kind"]): Profi
   return Object.entries(overrides).flatMap(([name, entry]) => {
     if (!isJsonDict(entry) || !isJsonDict(entry.OverrideConfiguration)) return [];
     const conf = entry.OverrideConfiguration;
-    // Always found (the entry came out of the merged tree); the fallback only satisfies the type.
-    const file = origin(s, `MVNOOverrides.${name}.OverrideConfiguration`)?.file ?? "carrier.plist";
+    const file = origin(s, `MVNOOverrides.${name}`)?.file;
+    if (file === undefined) throw new Error(`MVNOOverrides.${name} has no origin layer`);
     const other = mapSettings(withLayer(s, { file, prefix: `MVNOOverrides.${name}.OverrideConfiguration.`, dict: conf }), kind);
     const label = typeof conf.CarrierName === "string" && conf.CarrierName ? conf.CarrierName : name;
-    const v = variant(`mvno:${name}`, label, { sims: supportedSims(entry.SupportedSIMs) }, main, other);
+    const v = variant(`mvno:${name}`, label, { by: "sim", sims: supportedSims(entry.SupportedSIMs) }, main, other);
     return v ? [v] : [];
   });
 }
@@ -111,11 +100,16 @@ function bundleSims(s: Settings): SimMatcher[] {
   return [...byKey.values()];
 }
 
-/** Every leaf of every decodable member, keyed `<file>:<path>`. */
+/** APN passwords are never republished. */
+const isSecret = (path: string): boolean => /(^|\.)password$/i.test(path);
+
+/** Every leaf of every decodable member but secrets, keyed `<file>:<path>`. */
 function rawOf(b: OpenedBundle): Record<string, Json> {
   const out: Record<string, Json> = {};
   for (const [file, flat] of Object.entries(flattenBundle(b))) {
-    for (const [path, v] of Object.entries(flat)) out[`${file}:${path}`] = toJson(v) ?? null;
+    for (const [path, v] of Object.entries(flat)) {
+      if (!isSecret(path)) out[`${file}:${path}`] = toJson(v) ?? null;
+    }
   }
   return out;
 }

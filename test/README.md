@@ -7,6 +7,7 @@ run when `CORPUS` points at a local directory laid out as:
     prl/                    *.prl files pulled out of OTA bundles
     scan/                   one generation from `scripts/scan_index.ts build` (scan/<gen>/)
     bbcfg-manifest.json     reference listing for the whole-package bbfw test (optional)
+    android/CarrierSettings/  one Pixel's product/etc/CarrierSettings/*.pb
 
     CORPUS=~/corpus pnpm test
 
@@ -16,3 +17,6 @@ signatures, digests and certificate signatures are replaced, and the modem
 image slice keeps only its configuration images. Every format stays valid and
 values that must agree within a file are kept in agreement, so expected values
 in the tests are the altered ones. The corpus tests above run on real files.
+
+`fixtures/android/tree` holds two altered Pixel CarrierSettings files (names and
+APN strings changed); `make-images.sh` builds the ext4 and EROFS images from it.

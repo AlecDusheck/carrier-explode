@@ -13,7 +13,7 @@
     ["/carriers", "Carriers"],
     ["/countries", "Countries"],
     ["/features", "Features"],
-    ["/builds", "iOS builds"],
+    ["/builds", "Builds"],
     ["/compare", "Compare"],
     ["/wiki", "Wiki"],
   ];
@@ -23,7 +23,7 @@
   const meta = $derived(page.data.meta ?? seo(page.route.id, page.params));
   // One address per page: the compare tool is the only page with meaningful
   // search params, and its results are not what should be indexed.
-  const canonical = $derived(page.url.origin + page.url.pathname);
+  const canonical = $derived(page.url.origin + (page.data.canonical ?? page.url.pathname));
 </script>
 
 <svelte:head>
@@ -40,14 +40,14 @@
     <div class="titlebar">
       <span>carrier-explode</span>
       <span class="spacer"></span>
-      <span class="sub">iOS carrier and country bundles</span>
+      <span class="sub">iOS and Android carrier settings</span>
       <a class="github" href="https://github.com/AlecDusheck/carrier-explode" rel="noreferrer">GitHub</a>
     </div>
 
     <nav class="menubar">
       {#each MENU as [href, label] (href)}
         <!-- Compared unresolved: during SSR link() is relative to the page. -->
-        <a href={link(href)} aria-current={here === href || here.startsWith(href + "/") || (href === "/carriers" && (here === "/watch" || here.startsWith("/watch/"))) ? "page" : undefined}>{label}</a>
+        <a href={link(href)} aria-current={here === href || here.startsWith(href + "/") ? "page" : undefined}>{label}</a>
       {/each}
     </nav>
 

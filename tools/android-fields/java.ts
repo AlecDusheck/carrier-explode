@@ -1,10 +1,6 @@
 /**
- * Reads the Java files that declare carrier config keys (CarrierConfigManager,
- * QNS's and IWLAN's config classes) without a Java parser: they are regular
- * enough. Every `static final String KEY_* = <expr>;` is a config key; <expr>
- * is string literals joined with `+`, possibly with a class's prefix constant
- * (`Ims.KEY_PREFIX + "foo_bool"`) or another key (an alias). Defaults come
- * from `sDefaults.putX(KEY, value)` and, in nested classes, `defaults.putX(...)`.
+ * Reads carrier config keys from Java sources with regexes: `static final String KEY_* = <expr>;`
+ * with string concatenation and prefix constants, plus defaults from `sDefaults.putX(KEY, value)`.
  */
 
 import { typeBySuffix } from "./config-type.ts";
@@ -34,10 +30,7 @@ export interface KeyConstant extends Javadoc {
   readonly setter?: string;
 }
 
-/**
- * Blanks comments and string/char literals (keeping offsets) so brace
- * matching only sees code.
- */
+/** Blanks comments and literals, keeping offsets, so brace matching only sees code. */
 function codeOnly(src: string): string {
   return src.replace(/\/\*[\s\S]*?\*\/|\/\/[^\n]*|"(?:\\.|[^"\\\n])*"|'(?:\\.|[^'\\\n])*'/g, (m) => m.replace(/[^\n]/g, " "));
 }
@@ -86,12 +79,7 @@ function stringConstants(src: string, spans: readonly ClassSpan[]): StringConsta
   return out;
 }
 
-/**
- * Evaluates `"a" + KEY_PREFIX + "b"` and aliases (`KEY_A = KEY_B`): string
- * literals and other String constants (bare names are looked up in `cls`,
- * then in the outer class), joined with `+`. Undefined when it uses anything
- * else; `depth` stops alias cycles.
- */
+/** Evaluates `+`-joined string literals and String constants (bare names: `cls`, then the outer class). */
 function evalString(expr: string, cls: string, consts: StringConstants, outer: string, depth = 0): string | undefined {
   if (depth > 8) return undefined;
   let out = "";
@@ -140,11 +128,7 @@ export interface ParsedSource {
   readonly skipped: readonly string[];
 }
 
-/**
- * Whether a String constant is a config key: any KEY_* (but the prefixes),
- * or a differently named constant whose value looks like a typed key
- * (`IMSI_KEY_AVAILABILITY_INT = "imsi_key_availability_int"`).
- */
+/** A config key: any KEY_* but the prefixes, or a constant whose value is a typed key (`IMSI_KEY_AVAILABILITY_INT`). */
 function isKey(name: string, value: string): boolean {
   if (name === "KEY_PREFIX" || name === "PREFIX") return false;
   return name.startsWith("KEY_") || (/^[a-z][a-z0-9_.]*$/.test(value) && typeBySuffix(value) !== undefined);

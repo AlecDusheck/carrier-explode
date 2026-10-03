@@ -4,7 +4,8 @@
   import Confidence from "../../Confidence.svelte";
   import Variants from "../Variants.svelte";
   import type { Baseband } from "./types";
-  import BundleChip from "../../BundleChip.svelte";
+  import SourceChip from "../../SourceChip.svelte";
+  import { sourceKey } from "#lib/schema/types.ts";
 
   let { mdb, mccs }: { mdb: NonNullable<BasebandSummary["mdb"]>; mccs: Baseband["mccs"] } = $props();
 
@@ -67,7 +68,7 @@
               <tr>
                 <td class="countries">
                   {#each x.plmns as p (p)}<span class="chip mono">{p}</span>{/each}
-                  {#if bundles.length}<div>{#each bundles as n (n)}<BundleChip kind="carriers" name={n} />{/each}</div>{/if}
+                  {#if bundles.length}<div>{#each bundles as n (n)}<SourceChip source={sourceKey({ platform: "ios", kind: "carrier", name: n })} />{/each}</div>{/if}
                 </td>
                 <td class="mono">{dbName(d.path)}</td>
                 <td class="mono wrap">

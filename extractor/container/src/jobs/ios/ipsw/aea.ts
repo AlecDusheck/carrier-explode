@@ -1,20 +1,10 @@
 /**
- * Apple Encrypted Archive (AEA1), symmetric profile, decrypted as a stream.
- * Since iOS 18 an IPSW's filesystem images are `.dmg.aea`; the OS image alone
- * is ~9 GB, so decrypting from a downloaded copy would hold it twice on a 20 GB
- * disk. Here the member's bytes go straight from HTTP through this into the
- * plain image (a raw APFS container), which is all that lands on disk.
+ * Apple Encrypted Archive (AEA1, symmetric profile) decrypted as a stream, so a
+ * 9 GB .dmg.aea never sits on disk encrypted. Key schedule as blacktop/ipsw pkg/aea:
  *
- * Layout and key schedule follow blacktop/ipsw pkg/aea (pure Go), which
- * follows Apple's libAppleArchive:
- *
- *   header      "AEA1" u32 profile|scrypt<<24  u32 authLen  auth data (key/value metadata)
- *   prologue    salt[32]  rootHMAC[32]  encRootHeader[48]  firstClusterHMAC[32]
- *   cluster*    encSegmentHeaders[n*40]  nextClusterHMAC[32]  segmentHMACs[n*32]  segments...
- *   padding     rest, authenticated by the last cluster's next-HMAC
- *
- * Every HMAC is checked, so a truncated or corrupt download fails here rather
- * than as a confusing APFS error later.
+ *   "AEA1" u32 profile  u32 authLen  authData  salt[32]  rootMAC[32]  rootHeader[48]  clusterMAC[32]
+ *   per cluster: segmentHeaders[n*40]  nextClusterMAC[32]  segmentMACs[n*32]  segments...
+ *   padding, MACed by the last nextClusterMAC
  */
 
 import { createDecipheriv, createHash, createHmac, hkdfSync, timingSafeEqual } from "node:crypto";
@@ -36,7 +26,7 @@ export interface AeaHeader {
   readonly profile: number;
   /** The raw profile word, which the main key's derivation mixes in. */
   readonly profileWord: number;
-  /** Opaque to decryption, which only authenticates it; Apple's are key/value metadata (aeaMetadata). */
+  /** Authenticated, not interpreted; Apple's is key/value metadata (aeaMetadata). */
   readonly authData: Uint8Array;
   /** Header plus auth data: where the prologue starts. */
   readonly length: number;
@@ -72,12 +62,7 @@ export function aeaMetadata(authData: Uint8Array): AeaMetadata {
 
 const FcsResponse = v.object({ "enc-request": v.string(), "wrapped-key": v.string() });
 
-/**
- * The 32-byte archive key. Apple embeds it HPKE-wrapped (`fcs-response`) and
- * serves the unwrapping private key, unauthenticated, at `fcs-key-url`; so this
- * needs nothing but HTTPS, no Apple account and no key database. `fetchPem`
- * gets that URL's body (it redirects to fcs-keys-pub-prod.cdn-apple.com).
- */
+/** The archive key: HPKE-wrapped in `fcs-response`, unwrapped with the private key Apple serves openly at `fcs-key-url`. */
 export async function archiveKey(meta: AeaMetadata, fetchPem: (url: string) => Promise<string>): Promise<Uint8Array> {
   const response = meta.get("com.apple.wkms.fcs-response");
   const url = meta.get("com.apple.wkms.fcs-key-url");
@@ -125,11 +110,7 @@ function ctr(k: HeaderKey, data: Uint8Array): Uint8Array {
 
 const concat = (...parts: readonly Uint8Array[]): Uint8Array => Buffer.concat(parts);
 
-/**
- * What IPSW archives use, and all this reads: LZFSE segments ('e'), each with
- * a sha256 of its plain bytes. Anything else fails at the root header, before
- * a byte is written, rather than being half-supported.
- */
+/** What IPSW archives use, and all this reads: LZFSE segments with sha256 checksums. */
 const COMPRESSION_LZFSE = "e";
 const CHECKSUM_SHA256 = 2;
 /** A segment header: plain size, stored size, sha256. */
@@ -159,12 +140,7 @@ export interface DecryptHooks {
   onSize?(size: number): void;
 }
 
-/**
- * Decrypts the archive in `source` (its bytes from offset 0). Resolves with
- * the plain size once the padding's HMAC proves the archive ended where its
- * writer ended it. Segments are decoded in order on this thread (~100 MB/s of
- * LZFSE), which keeps pace with the download; a worker pool would not pay.
- */
+/** Decrypts `source` (the archive from offset 0) into `hooks.sink`, checking every MAC and checksum. Returns the plain size. */
 export async function decryptAea(source: AsyncIterable<Uint8Array>, key: Uint8Array, hooks: DecryptHooks): Promise<number> {
   const q = new ByteQueue(source);
   const prefix = await q.read(12);
@@ -195,7 +171,7 @@ export async function decryptAea(source: AsyncIterable<Uint8Array>, key: Uint8Ar
     for (let i = 0; i < root.segmentsPerCluster && written < root.fileSize; i++) {
       const h = segHdrs.subarray(i * SEGMENT_HEADER, (i + 1) * SEGMENT_HEADER);
       const size = u32le(h, 0);
-      // Segments sit at fixed slots in the plain file; writing in order is only right while every one before is full.
+      // Segments have fixed slots; streaming them in order is right only while each one before was full.
       const slot = (cluster * root.segmentsPerCluster + i) * root.segmentSize;
       if (slot !== written) throw new Error(`AEA: segment ${cluster}/${i} belongs at ${slot}, stream is at ${written}`);
       const stored = await q.read(u32le(h, 4));
@@ -213,8 +189,7 @@ export async function decryptAea(source: AsyncIterable<Uint8Array>, key: Uint8Ar
   }
   if (written !== root.fileSize) throw new Error(`AEA: wrote ${written} bytes, header says ${root.fileSize}`);
 
-  // Apple pads its archives (34 MB on the iOS 27 OS image) and MACs the padding with the last
-  // cluster's next-HMAC. Writers that add none leave that slot unset, so, as in ipsw, only padding is checked.
+  // Writers that add no padding leave its MAC unset, so (as in ipsw) only padding is checked.
   const padding = await q.rest();
   if (padding.length) {
     const pk = headerKey(mainKey, info("AEA_PAK"));

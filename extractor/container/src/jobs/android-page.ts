@@ -1,12 +1,4 @@
-/**
- * Google's Pixel OTA page (developers.google.com/android/ota), parsed into
- * devices and their full OTA builds. The page is behind a click-through:
- * the cookie `devsite_wall_acks=nexus-ota-tos` is the acknowledgement.
- *
- *   <h2 id="tokay" data-text='"tokay" for Pixel 9' ...>
- *   <tr id="..."><td>17.0.0 (CP3A.260905.009, Sep 2026[, Verizon])</td>
- *                <td><a href="https://dl.google.com/.../tokay-ota-cp3a.260905.009-7aa41d47.zip">Link</a></td> <td>sha256</td></tr>
- */
+/** Google's Pixel OTA page: devices and their full OTA builds. The cookie acknowledges its terms wall. */
 
 import { fetchWithRetry } from "../../../../src/lib/http/index.ts";
 

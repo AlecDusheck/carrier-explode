@@ -1,17 +1,15 @@
-/**
- * Hand-kept corrections to SIM linking (./identity.ts), for what the SIM rules
- * cannot say. Every entry names why.
- *
- * - `link`: sources that are one carrier although no SIM rule is shared exactly
- *   (the platforms key the same SIMs differently: iOS a GID2, Android a GID1).
- * - `split`: sources a shared rule would join that are different carriers.
- * - `names`: the display name for the carrier holding a source, where neither
- *   platform's name reads well.
- */
+/** Hand-kept corrections to SIM linking: `link` joins sources keyed differently, `split` parts sources one rule wrongly joins, `names` renames a carrier. */
+
+/** Two sourceKeys and why the rule holds. */
+export interface LinkRule {
+  readonly a: string;
+  readonly b: string;
+  readonly why: string;
+}
 
 export interface Links {
-  readonly link: ReadonlyArray<readonly [string, string, string]>;
-  readonly split: ReadonlyArray<readonly [string, string, string]>;
+  readonly link: readonly LinkRule[];
+  readonly split: readonly LinkRule[];
   readonly names: Readonly<Record<string, string>>;
 }
 
@@ -21,32 +19,32 @@ const android = (name: string): string => `android:carrier:${name}`;
 export const LINKS: Links = {
   link: [
     // One carrier, several SIM profiles: each profile gets its own bundle or canonical.
-    [ios("ATT_US"), ios("ATT_NR_US"), "AT&T's 5G SIMs (GID1 52/53) get their own iOS bundle"],
-    [ios("ATT_aio_US"), ios("ATT_aio_NR_US"), "Cricket's 5G SIMs get their own iOS bundle"],
-    [ios("KDDI_jp"), ios("KDDI_NR_jp"), "au's 5G network codes, split across two iOS bundles"],
-    [ios("KDDI_LTE_jp"), ios("KDDI_NR_jp"), "au's LTE and 5G iOS bundles"],
-    [ios("Verizon_Visible_LTE_US"), ios("Verizon_Core_Visible_LTE_US"), "Visible on Verizon's 5G core (GID2 1C) is still Visible"],
+    { a: ios("ATT_US"), b: ios("ATT_NR_US"), why: "AT&T's 5G SIMs (GID1 52/53) get their own iOS bundle" },
+    { a: ios("ATT_aio_US"), b: ios("ATT_aio_NR_US"), why: "Cricket's 5G SIMs get their own iOS bundle" },
+    { a: ios("KDDI_jp"), b: ios("KDDI_NR_jp"), why: "au's 5G network codes, split across two iOS bundles" },
+    { a: ios("KDDI_LTE_jp"), b: ios("KDDI_NR_jp"), why: "au's LTE and 5G iOS bundles" },
+    { a: ios("Verizon_Visible_LTE_US"), b: ios("Verizon_Core_Visible_LTE_US"), why: "Visible on Verizon's 5G core (GID2 1C) is still Visible" },
     // Same SIMs, keyed differently: iOS by GID2 or a short GID1, Android by a longer GID1 or SPN.
-    [ios("Verizon_Visible_LTE_US"), android("visible_us"), "iOS keys Visible by GID2 1A, Android by GID1 BAE1"],
-    [ios("Verizon_Comcast_LTE_US"), android("xfinity_us"), "Xfinity Mobile: iOS GID2 A3, Android GID1 BA0145"],
-    [android("xfinity_us"), android("xfinity2_us"), "both Android Xfinity Mobile profiles (GID1 BA0145, BA0164)"],
-    [ios("Verizon_Charter_LTE_US"), android("spectrum_us"), "Spectrum Mobile: iOS GID2 A7, Android GID1 BA0149"],
-    [ios("Verizon_Cox_LTE_US"), android("cox_us"), "Cox Mobile: iOS GID2 B1, Android by its own PLMN"],
-    [ios("Verizon_TFW_LTE_US"), android("tracfoneverizon_us"), "Tracfone on Verizon: iOS GID2 A1"],
-    [ios("TMobile_MetroPCS_US"), android("metropcs_us"), "Metro by T-Mobile: iOS GID1 6D, Android GID1 6D38"],
-    [ios("O2_Giffgaff_UK"), android("giffgaff_gb"), "giffgaff: iOS GID1 508F, Android GID1 50 or SPN"],
-    [ios("O2_Sky_uk"), android("sky_gb"), "Sky Mobile on O2"],
-    [ios("Telus_ca"), android("telus_ca"), "Android keys Telus by GID1 5455, iOS by plain network code"],
-    [ios("Telus_Koodo_ca"), android("koodo_ca"), "Koodo: Android GID1 4B4F"],
-    [ios("Telus_PublicMobile_ca"), android("publicmobile_ca"), "Public Mobile on Telus"],
-    [ios("Vodafone_Lowi_es"), android("lowi_es"), "Lowi on Vodafone Spain"],
+    { a: ios("Verizon_Visible_LTE_US"), b: android("visible_us"), why: "iOS keys Visible by GID2 1A, Android by GID1 BAE1" },
+    { a: ios("Verizon_Comcast_LTE_US"), b: android("xfinity_us"), why: "Xfinity Mobile: iOS GID2 A3, Android GID1 BA0145" },
+    { a: android("xfinity_us"), b: android("xfinity2_us"), why: "both Android Xfinity Mobile profiles (GID1 BA0145, BA0164)" },
+    { a: ios("Verizon_Charter_LTE_US"), b: android("spectrum_us"), why: "Spectrum Mobile: iOS GID2 A7, Android GID1 BA0149" },
+    { a: ios("Verizon_Cox_LTE_US"), b: android("cox_us"), why: "Cox Mobile: iOS GID2 B1, Android by its own PLMN" },
+    { a: ios("Verizon_TFW_LTE_US"), b: android("tracfoneverizon_us"), why: "Tracfone on Verizon: iOS GID2 A1" },
+    { a: ios("TMobile_MetroPCS_US"), b: android("metropcs_us"), why: "Metro by T-Mobile: iOS GID1 6D, Android GID1 6D38" },
+    { a: ios("O2_Giffgaff_UK"), b: android("giffgaff_gb"), why: "giffgaff: iOS GID1 508F, Android GID1 50 or SPN" },
+    { a: ios("O2_Sky_uk"), b: android("sky_gb"), why: "Sky Mobile on O2" },
+    { a: ios("Telus_ca"), b: android("telus_ca"), why: "Android keys Telus by GID1 5455, iOS by plain network code" },
+    { a: ios("Telus_Koodo_ca"), b: android("koodo_ca"), why: "Koodo: Android GID1 4B4F" },
+    { a: ios("Telus_PublicMobile_ca"), b: android("publicmobile_ca"), why: "Public Mobile on Telus" },
+    { a: ios("Vodafone_Lowi_es"), b: android("lowi_es"), why: "Lowi on Vodafone Spain" },
   ],
   split: [
     // 310470 is listed by both; Docomo Pacific and nTelos are different carriers.
-    [ios("nTelos_LTE_US"), android("docomopacific_us"), "nTelos (Virginia) is not Docomo Pacific (Guam)"],
+    { a: ios("nTelos_LTE_US"), b: android("docomopacific_us"), why: "nTelos (Virginia) is not Docomo Pacific (Guam)" },
     // KDDI's MVNO profile shares au's 5G SA network code; it is the MVNOs, not au.
-    [ios("KDDI_jp"), android("kddimvno5gsa_jp"), "KDDI MVNOs on 5G SA are not au"],
-    [ios("KDDI_NR_jp"), android("kddimvno5gsa_jp"), "KDDI MVNOs on 5G SA are not au"],
+    { a: ios("KDDI_jp"), b: android("kddimvno5gsa_jp"), why: "KDDI MVNOs on 5G SA are not au" },
+    { a: ios("KDDI_NR_jp"), b: android("kddimvno5gsa_jp"), why: "KDDI MVNOs on 5G SA are not au" },
   ],
   names: {
     // Brands the bundle names hide behind their host (Verizon_Comcast_LTE_US) or an old name (Orange_uk).

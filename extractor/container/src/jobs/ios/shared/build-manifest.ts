@@ -1,8 +1,4 @@
-/**
- * An IPSW's BuildManifest.plist: what it is (version, build, phones) and
- * where its parts are (the filesystem image, each board's modem package).
- * Pure, for the iOS decoder package.
- */
+/** An IPSW's BuildManifest.plist: version, build, phones, and where each board's parts are. */
 
 import * as v from "valibot";
 
@@ -56,15 +52,7 @@ export function parseBuildManifest(bytes: Uint8Array): BuildManifest {
   };
 }
 
-/**
- * The root filesystem image: the `OS` component of the install identities.
- * Since iOS 16 the dyld cache and apps moved to cryptexes (`Cryptex1,SystemOS`,
- * `Cryptex1,AppOS`), but /System/Library/Carrier Bundles and CountryBundles
- * stayed on the root volume. Recovery identities name a small recovery OS of
- * their own (250 MB on iOS 27), which has no bundles. Every install identity
- * names the same image; two different ones would mean this picture of the
- * format is wrong, so that fails.
- */
+/** The install identities' `OS` image, which holds the bundles (not a cryptex; recovery identities name their own small OS). */
 export function osImagePath(m: BuildManifest): string {
   const install = m.identities.filter((i) => !/recovery/i.test(i.variant));
   const paths = new Set(install.flatMap((i) => i.paths.get("OS") ?? []));
@@ -74,11 +62,7 @@ export function osImagePath(m: BuildManifest): string {
   return only;
 }
 
-/**
- * IPSW path -> boards it is the modem package of: `BasebandFirmware`
- * (Qualcomm, Intel) or a `Cellular1,*` component (Apple C1). Not the Rose
- * (`Rap,*`) or Wi-Fi (`Wireless1,*`) ftabs, which are not modems.
- */
+/** Modem package path -> its boards: `BasebandFirmware` (Qualcomm, Intel) or `Cellular1,*` (Apple C1), not Rose or Wi-Fi ftabs. */
 export function modemBoards(m: BuildManifest): ReadonlyMap<string, readonly string[]> {
   const out = new Map<string, Set<string>>();
   for (const id of m.identities) {

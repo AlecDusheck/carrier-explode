@@ -1,11 +1,4 @@
-/**
- * Protobuf wire-format reader: just enough of the encoding to walk proto2
- * messages field by field, with no schema. The decoders in this directory
- * drive it with their own field numbers; anything they do not ask for comes
- * back as an UnknownField instead of being dropped.
- *
- *   tag = varint(field << 3 | wire);  wire 0 varint, 1 fixed64, 2 length-delimited, 5 fixed32
- */
+/** Schema-less protobuf wire reader; decoders switch on field numbers and keep the rest as UnknownField. */
 
 import { bytesToBase64, bytesToHex, readVarint, slice, view } from "../../binary/index.ts";
 import type { UnknownField } from "./types.ts";
@@ -95,10 +88,7 @@ export class WireReader {
     return out;
   }
 
-  /**
-   * A repeated int32 / enum field. proto2 writers may pack it (one
-   * length-delimited run) or not (one varint per tag); both are accepted.
-   */
+  /** A repeated int32 or enum, packed or not: proto2 writers may do either. */
   int32s(wire: WireType): number[] {
     if (wire === "varint") return [this.int32()];
     if (wire !== "bytes") throw new ProtobufError(`repeated int32 sent as ${wire}`);

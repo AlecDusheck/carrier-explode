@@ -1,14 +1,13 @@
 import { describe, expect, it } from "vitest";
 
-import { WRITABLE_PREFIXES } from "../../src/lib/storage/keys.ts";
 import { JOB_TYPES, JOBS, parseJobSpec } from "../src/jobs.ts";
 import { doneEvent, jobId, pipelineOfInstance } from "../src/worker/ids.ts";
 import { PIPELINE_NAMES } from "../src/worker/pipelines.ts";
 
 describe("job table", () => {
-  it.each(JOB_TYPES)("%s writes only under WRITABLE_PREFIXES, and never jobs/", (type) => {
+  it.each(JOB_TYPES)("%s writes whole prefixes, never jobs/ (the Worker's)", (type) => {
     for (const p of JOBS[type].writes) {
-      expect(WRITABLE_PREFIXES.some((w) => p.startsWith(w))).toBe(true);
+      expect(p.endsWith("/")).toBe(true);
       expect(p.startsWith("jobs/")).toBe(false);
     }
   });

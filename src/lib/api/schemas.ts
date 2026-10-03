@@ -1,20 +1,23 @@
 /** Argument schemas the remote queries share. Every argument arrives from the client, so each is checked here. */
 
 import * as v from "valibot";
-import { VERSION_SLUG } from "#lib/schema/index.ts";
-import { PLATFORMS } from "#lib/schema/types.ts";
-import { KINDS } from "#lib/types.ts";
+import { isVersionSlug } from "#lib/schema/index.ts";
+import { parseSourceKey, PLATFORMS } from "#lib/schema/types.ts";
 
-export const kind = v.picklist(KINDS);
+/** A source key: `ios:carrier:ATT_US`. */
+export const source = v.pipe(v.string(), v.check((s) => parseSourceKey(s) !== undefined, "not a source key"));
 
-/** A timeline slug of either platform: ios-27.0, ota-72.1, android-cp3a.260905.009-tokay. */
-export const slug = v.pipe(v.string(), v.regex(VERSION_SLUG));
+/** A version segment: `72.0`, `50.1@2022-04-12`. */
+export const slug = v.pipe(v.string(), v.check(isVersionSlug, "not a version"));
 
-/** A page, at a version or at its head. */
-export const bundle = { kind, name: v.pipe(v.string(), v.maxLength(200)), slug: v.exactOptional(slug) };
+/** A source's line: a Pixel codename, or a model-specific Apple bundle's product type. */
+export const line = v.pipe(v.string(), v.regex(/^[\w,]{1,40}$/));
 
-/** A page at a named version. */
-export const pinned = { kind, name: v.pipe(v.string(), v.maxLength(200)), slug };
+/** A version as a URL names it; without `slug`, the line's head. */
+export const ver = { source, line: v.exactOptional(line), slug: v.exactOptional(slug) };
+
+/** A version a tab is pinned to. */
+export const pinned = { source, line: v.exactOptional(line), slug };
 
 export const platform = v.picklist(PLATFORMS);
 

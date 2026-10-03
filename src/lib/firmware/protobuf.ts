@@ -1,8 +1,4 @@
-/**
- * The few protobuf wire-format reads update_engine's manifest needs. The
- * firmware readers must not depend on a decoder package, so this is its own
- * minimal copy: a message becomes a list of fields, looked up by number.
- */
+/** The protobuf reads the payload manifest needs. firmware may not import a decoder, hence its own copy. */
 
 import { readVarint, slice, toSafe } from "../binary/index.ts";
 
