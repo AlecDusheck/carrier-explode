@@ -126,11 +126,12 @@ def plan_betas(entries: list[dict], device: str, cap: int) -> list[dict]:
     return out[:cap]
 
 
-def plan_rebuild(held: list[dict], ipsws_of) -> list[dict]:
+def plan_rebuild(held: list[dict], ipsws_of, released_of) -> list[dict]:
     """
     Every image held, again, newest first, so what phones run now is fixed first:
     for when what an extraction keeps has changed. Each keeps its recorded version as its label (a beta's or RC's name
-    is the planner's, not the image's) and the device that named it.
+    is the planner's, not the image's) and the device that named it, and gets its release day if it was
+    extracted before those were recorded.
     """
     out = []
     for b in sorted(held, key=lambda x: version_key(x["version"]), reverse=True):
@@ -140,7 +141,7 @@ def plan_rebuild(held: list[dict], ipsws_of) -> list[dict]:
             continue
         device = b.get("product") or max((d for d, _ in pairs), key=product_key)
         out.append({"version": b["version"], "build": b["build"], "device": device, "label": b["version"],
-                    "ipsws": distinct_ipsws(pairs, device), "released": b.get("released", "")})
+                    "ipsws": distinct_ipsws(pairs, device), "released": b.get("released") or released_of(b["build"])})
     return out
 
 
@@ -156,11 +157,22 @@ def main() -> None:
     a = ap.parse_args()
 
     held = json.loads(a.builds.read_text() or "[]") if a.builds.exists() else []
+    fws = lambda ident: [{**f, "identifier": ident} for f in ipsw_me(f"/device/{ident}?type=ipsw")["firmwares"]]
     if a.rebuild:
         every, _ = iphone_firmwares()
-        print(json.dumps(plan_rebuild(held, lambda b: every.get(b) or appledb_ipsws(b))))
+        # ipsw.me dates releases ("2026-09-15T17:05:25Z"); AppleDB dates betas.
+        days = {f["buildid"]: (f.get("releasedate") or "")[:10] for d in (a.device, newest_iphone()) for f in fws(d)}
+
+        def released_of(build: str) -> str:
+            if days.get(build):
+                return days[build]
+            try:
+                return str(appledb(f"iOS;{build}.json").get("released") or "")[:10]
+            except Exception:  # noqa: BLE001
+                return ""
+
+        print(json.dumps(plan_rebuild(held, lambda b: every.get(b) or appledb_ipsws(b), released_of)))
         return
-    fws = lambda ident: [{**f, "identifier": ident} for f in ipsw_me(f"/device/{ident}?type=ipsw")["firmwares"]]
     probe = newest_iphone()
     preferred, fallback = fws(a.device), (fws(probe) if probe != a.device else [])
     out = plan(held, preferred, fallback, a.version or None, a.since or None, a.max)

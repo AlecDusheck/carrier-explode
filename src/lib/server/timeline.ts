@@ -19,8 +19,8 @@ export interface ImageBuild {
   scheme?: number;
 }
 
-/** When an image came out: its release date, else the day it was extracted, which is close for recent images. */
-export const imageDate = (b: Pick<ImageBuild, "released" | "extractedAt">) => b.released || b.extractedAt.slice(0, 10);
+/** When an image came out. Never the day it was extracted: a re-extraction would make every old image new. */
+export const imageDate = (b: Pick<ImageBuild, "released">) => b.released ?? "";
 /** `id` is the content hash the blob is stored under; only comparable within one `scheme`. */
 export interface ImageBundle { id: string; size: number; build: string }
 export interface ImageIndex extends ImageBuild {
