@@ -51,8 +51,26 @@ packages/decode-ios       iOS decoder: .ipcc, plists, PRI, modem packages, Apple
 packages/decode-android   Android decoder: CarrierSettings / CarrierList protobufs, CarrierConfig docs
 packages/firmware         remote zip, payload.bin, ext4/EROFS readers (decoder-agnostic)
 packages/schema           unified model, concepts, per-platform mappers, identity, compare, index builder
-packages/storage          R2 v2 layout and record shapes
+packages/storage          R2 v2 layout, record shapes, scan-index format (written by extractor, read by site)
+packages/binary           byte helpers: hex/base64, LE/BE readers, sha256 (WebCrypto), streaming hash
+packages/http             fetch with retries/backoff, Range reads, http↔https fallback for old Apple hosts
+packages/tsconfig         shared strict tsconfig bases (lib, worker, svelte)
 ```
+
+**One copy of everything.** Each piece of shared logic has exactly one home:
+
+| Logic | Home | Consumers |
+|---|---|---|
+| Retrying fetch, Range requests, Apple host fallback | `http` | `firmware`, site (`fetchApple`), every extractor job |
+| Byte reading, hex, sha256 | `binary` | both decoders, `firmware`, `storage`, extractor |
+| Apple OTA manifest parsing | `decode-ios` | site (live freshness), `ios.ota-archive`, modem band-combo tags |
+| Remote zip (IPSW, Pixel OTA) | `firmware` | `ios.modems`, `ios.ipsw`, `android.ota` |
+| Timelines, carriers, countries, release summaries | `schema` (`buildIndexes`) | the extractor `index` job only. The site reads the result and never recomputes it. |
+| Concept comparison, APN matching | `schema` (`compareProfiles`) | the site, and later the scan |
+| R2 keys and the scan index format | `storage` | extractor (writes), site (reads) |
+| Strict compiler settings | `tsconfig` | every package |
+
+Every package's `package.json` declares its workspace deps (`"@carrier-explode/binary": "workspace:*"`), and its `exports` points at its `src/index.ts`. TypeScript is consumed as source, with no build step for internal packages: Vite, esbuild and vitest all resolve it. Under pnpm's strict linking, an undeclared import fails to resolve, so the dependency rules below are enforced by the package graph itself.
 
 The dependency rules are enforced, not merely followed:
 
