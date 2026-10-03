@@ -137,7 +137,7 @@ Bundle versions are `<major>.<minor>`. `ATT_US` was 3.1 in 2009, 18.1 for iOS 8.
 
 ## Image copies and OTA copies
 
-The copy of a bundle inside an iOS image only contains the overrides for the phones that image was built for. The iOS 27.0.1 image for the iPhone 16 Pro has `ATT_US` with only `overrides_D93_D94_D47_D48.*`. Copies published through the manifest (OTA) usually contain every phone's overrides. Because of this, two copies of the same bundle version can differ in size by a factor of six or more. carrier-explode extracts every iPhone image of a release and merges each bundle's files, so the image copies shown here carry every phone's overrides.
+The copy of a bundle inside an iOS image only contains the overrides for the phones that image was built for. The iOS 27.0.1 image for the iPhone 16 Pro has `ATT_US` with only `overrides_D93_D94_D47_D48.*`. Copies published through the manifest (OTA) usually contain every phone's overrides. Because of this, two copies of the same bundle version can differ in size by a factor of six or more.
 
 ## Special bundles
 
