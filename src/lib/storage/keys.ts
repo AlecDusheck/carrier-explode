@@ -1,83 +1,45 @@
-/** Every R2 key of the v2 layout (docs/architecture-v2.md). Nothing else spells a key out. */
+/** Every R2 key of the v2 layout. Nothing else spells a key out. */
 
-import { PROFILE_SCHEMA, type Archive, type Digest, type Platform, type ReleaseHeader } from "../schema/types.ts";
+import { PROFILE_SCHEMA, type ModemKind, type ReleasePlatform } from "../schema/types.ts";
 
 export const BUCKET = "carrier-explode-v2";
 
-export const keys = {
-  obj: (sha: string) => `obj/${sha}`,
-  meta: (sha: string) => `meta/${sha}.json`,
-  norm: (sha: string, schema: number = PROFILE_SCHEMA) => `norm/v${schema}/${sha}.json`,
-  decoded: (view: string, schema: number, sha: string) => `decoded/${view}/v${schema}/${sha}.json`,
-  release: (platform: Platform, id: string) => `releases/${platform}/${id}.json`,
-  releases: (platform: Platform) => `releases/${platform}/`,
-  otaRefs: () => "feeds/apple-ota/refs.json",
-  otaManifest: (sha1: string) => `feeds/apple-ota/manifests/${sha1}.plist`,
-  releaseIndex: () => "index/releases.json",
-  carrierIndex: () => "index/carriers.json",
-  carrier: (id: string) => `index/carriers/${id}.json`,
-  countryIndex: () => "index/countries.json",
-  sourceIndex: () => "index/sources.json",
-  legacy: () => "index/legacy.json",
-  job: (id: string) => `jobs/${id}.json`,
-} as const satisfies Record<string, (...args: never[]) => string>;
+/** What a job may be granted to write. jobs/ is the Worker's alone. */
+export const PREFIXES = [
+  "obj/", "meta/", "norm/", "decoded/", "releases/ios/", "releases/android/", "feeds/apple-ota/", "index/", "scan/",
+] as const;
+export type Prefix = (typeof PREFIXES)[number];
 
-export type ArtifactKind =
-  | "apple.ipcc"
-  | "apple.bbfw"
-  | "apple.ftab"
-  | "apple.ota-manifest"
-  | "android.carrier-settings"
-  | "android.carrier-list";
+export const releasePrefix = (platform: ReleasePlatform): Prefix => `releases/${platform}/`;
+
+export const keys = {
+  obj: (sha: string): string => `obj/${sha}`,
+  meta: (sha: string): string => `meta/${sha}.json`,
+  norm: (sha: string): string => `norm/v${PROFILE_SCHEMA}/${sha}.json`,
+  decoded: (view: string, schema: number, id: string): string => `decoded/${view}/v${schema}/${id}.json`,
+  release: (platform: ReleasePlatform, id: string): string => `${releasePrefix(platform)}${id}.json`,
+  otaFiles: (): string => "feeds/apple-ota/files.json",
+  otaManifest: (sha1: string): string => `feeds/apple-ota/manifests/${sha1}.plist`,
+  releaseIndex: (): string => "index/releases.json",
+  carrierIndex: (): string => "index/carriers.json",
+  carrier: (id: string): string => `index/carriers/${id}.json`,
+  countryIndex: (): string => "index/countries.json",
+  sourceIndex: (): string => "index/sources.json",
+  legacy: (): string => "index/legacy.json",
+  job: (id: string): string => `jobs/${id}.json`,
+} as const;
+
+export type ArtifactKind = "apple.ipcc" | `apple.${ModemKind}` | "apple.ota-manifest" | "android.carrier-settings" | "android.carrier-list";
 
 /** Where an artifact was first seen. */
 export type Origin =
-  | { readonly via: "download"; readonly url: string }
-  | { readonly via: "image"; readonly release: string; readonly device: string; readonly path: string };
+  | { readonly kind: "download"; readonly url: string }
+  | { readonly kind: "image"; readonly release: string; readonly device: string; readonly path: string };
+
+/** What a writer states about an artifact: putObj's argument. */
+export type ObjClaim =
+  | { readonly kind: "apple.ipcc"; readonly cid: string; readonly origin: Origin }
+  | { readonly kind: Exclude<ArtifactKind, "apple.ipcc">; readonly origin: Origin };
 
 /** meta/<sha>.json */
-export interface ObjMeta {
-  readonly sha256: string;
-  readonly size: number;
-  readonly kind: ArtifactKind;
-  /** Apple bundles: identifies the files, so it survives re-zipping. */
-  readonly cid?: string;
-  readonly origin: Origin;
-  readonly storedAt: string;
-}
-
-/** An Apple OTA manifest entry, kept after Apple drops it. */
-export interface OtaRef {
-  readonly url: string;
-  readonly source: string;
-  readonly os: string;
-  readonly build: string;
-  /** Model-specific bundles only (`iPhone7,1`). */
-  readonly model?: string;
-  readonly published?: string;
-  readonly digest?: Digest;
-  readonly archive: Archive;
-  readonly firstSeen: string;
-  readonly lastSeen: string;
-  /** In Apple's current manifest. */
-  readonly live: boolean;
-}
-
-export type ReleaseSummary = ReleaseHeader & { readonly sourceCount: number };
-
-export interface CarrierSummary {
-  readonly id: string;
-  readonly name: string;
-  readonly iso?: string;
-  readonly platforms: readonly Platform[];
-  /** YYYY-MM-DD of the newest change on any platform. */
-  readonly updated?: string;
-  readonly members: readonly string[];
-}
-
-export interface CountrySummary {
-  readonly iso: string;
-  readonly name: string;
-  readonly countryBundles: readonly string[];
-  readonly carriers: readonly string[];
-}
+export type ObjMeta = ObjClaim & { readonly sha: string; readonly size: number; readonly storedAt: string };

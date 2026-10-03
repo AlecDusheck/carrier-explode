@@ -39,7 +39,7 @@ Change a contract only together with every user of it, and say so in your report
 5. **Carrier**: SIM matchers link sources across platforms (`src/lib/schema/identity.ts`):
    - An iOS bundle and an Android canonical are linked when they share an exact `matcherKey`. A plain MCC+MNC links only to a plain MCC+MNC, and a GID1 rule only to the same GID1 rule.
    - Each source joins the carrier it shares the most matchers with. Ties and conflicts are resolved by `src/lib/schema/links.ts`, a hand-kept list of manual links and splits. Unmatched sources become their own carrier.
-   - The slug comes from the display name plus ISO (`t-mobile-us`). Slugs are stable: the index job reuses an existing slug for a carrier with the same members.
+   - A carrier's `id` is internal (it never appears in a URL) and stays stable across index rebuilds.
 6. **Android device lines**: a Pixel build ships different CarrierSettings per device generation, verified on CP3A.260905.009. Pixel 6, Fold, 9 and 10 Pro differ in 632 of 633 files, including VoLTE and Wi-Fi calling availability for over 100 carriers. Pixel 9 and 9 Pro Fold are identical, and `carrier_list.pb` is identical across devices. So every device is extracted, a release lists each source's distinct artifacts with the devices that carry them, and comparisons pick a device on each platform. This is the counterpart of iOS's per-phone override files.
 7. **Country**: ISO code. iOS country bundles plus every carrier whose ISO matches.
 
@@ -141,7 +141,7 @@ export function iosProfile(bundle: OpenedBundle, source: SourceRef, sha: string)
 export function androidProfile(cs: CarrierSettings, source: SourceRef, sha: string, list?: CarrierList): Profile; // android.ts
 export function compareProfiles(a: Profile, b: Profile): ProfileComparison;                                  // compare.ts
 export function buildIndexes(input: IndexInput): IndexOutput;                                                // index-build.ts
-//   IndexInput: { releases: Release[]; otaRefs: OtaRef[]; profiles: (sha) => Profile | undefined; previous?: { sources: Record<string,string> } }
+//   IndexInput: { releases: Release[]; otaRefs: OtaFile[]; profiles: (sha) => Profile | undefined; previous?: { sources: Record<string,string> } }
 //   IndexOutput: { releases: ReleaseSummary[]; carriers: CarrierSummary[]; docs: CarrierDoc[]; countries: CountrySummary[]; sources: Record<string,string> }
 export const CONCEPTS: ConceptDef[];                                                                         // concepts.ts
 ```
@@ -178,12 +178,12 @@ export const CONCEPTS: ConceptDef[];                                            
 
 **The visual design and layout don't change. The URL model does, so it can be honest about platforms.**
 
-- **Path shape:** `/<kind>/<platform>/<name>[/<line>]/<version>/<tab>`, where the line is the Pixel codename on Android. For example `/carriers/ios/Verizon_LTE/72.0/`, `/carriers/android/verizon_us/tokay/79000000034/settings`, `/carriers/ipados/Verizon_LTE/58.1/`, `/carriers/watchos/Vodafone_uk/…`, `/countries/ios/UnitedStates/…` and `/defaults/android/default/…`.
+- **Path shape:** `/<kind>/<platform>/<name>[/<line>]/<version>/<tab>`, where the line is a Pixel codename on Android, or a model on Apple's rare model-specific bundles (`iPhone7,1`). For example `/carriers/ios/Verizon_LTE/72.0/`, `/carriers/android/verizon_us/tokay/79000000034/settings`, `/carriers/ipados/Verizon_LTE/58.1/`, `/carriers/watchos/Vodafone_uk/…`, `/countries/ios/UnitedStates/…` and `/defaults/android/default/…`.
 - **Platforms:** `ios`, `ipados`, `watchos` and `android`. Apple's iPad and Watch bundles are separate files with their own version lines, so they're platforms, not slug suffixes or a `/watch` section. Paths come from `sourcePath()` and are never assembled by hand.
 - **Version identity:** each platform uses what it actually versions, measured on real data.
   - **Apple:** the bundle's own version (`/carriers/ios/Verizon_LTE/72.0/`). It's unique in 4,433 of 4,434 OTA groups.
   - **Android:** device + version (`/carriers/android/tmobile_us/tokay/79000000034/`). The version is a per-device counter: 479 of 1,544 (carrier, version) pairs differ by device within one build. Identical files on several Pixels share one canonical URL.
-  - **Reused versions** are named by where they first appeared: `50.1@2022-04-12`, `64.1@ios-26.0`, `79000000004@cp3a.260905.009`.
+  - **Reused versions** are named by where they first appeared: `50.1@2022-04-12` (OTA day), `64.1@23a341` (first iOS build; a build, not an OS label, because labels repeat across betas), `79000000004@cp3a.260905.009`. The grammar is `versionSlug`/`parseVersionSlug`.
   - **Copies** (image or OTA) are where a version came from, listed on its page. They aren't separate URLs.
 - **Lists:** `/carriers` lists every platform, with a filter, and `/carriers/<platform>` lists one platform. The two-pane explorer, bundle head, version strip, tabs and styling all stay as they are.
 - **Cross-platform links:** pages are per source. The Carrier (an internal id) links a page to its counterparts on other platforms, through the bundle head and one "iOS and Android" Overview section.
