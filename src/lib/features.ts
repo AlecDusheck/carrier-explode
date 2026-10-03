@@ -8,12 +8,13 @@
  */
 
 import { isJsonDict } from "#lib/decode/plist.ts";
+import { FEATURE_SLUGS, type FeatureSlug } from "../params.ts";
 
 /** on: available and on by default. available: a switch in Settings, or the carrier's server decides per plan. no: not offered. */
 export type FeatureState = "on" | "available" | "no";
 
 export interface Feature {
-  slug: string;
+  slug: FeatureSlug;
   name: string;
   /** One sentence a non-expert understands. */
   what: string;
@@ -45,16 +46,16 @@ function rules(...r: Array<[FeatureState, string, (e: Settings) => boolean]>) {
   };
 }
 
-export const FEATURES: Feature[] = [
-  {
-    slug: "5g", name: "5G",
+const DEFINITIONS: Record<FeatureSlug, Omit<Feature, "slug">> = {
+  "5g": {
+    name: "5G",
     what: "Your iPhone can use your carrier's 5G network instead of LTE.",
     where: "Settings › Cellular › Cellular Data Options › Voice & Data",
     keys: ["Enable5GAutoByDefault", "Show5GSwitch"],
     decide: rules(["on", "Enable5GAutoByDefault", (e) => yes(e, "Enable5GAutoByDefault")], ["available", "Show5GSwitch", (e) => yes(e, "Show5GSwitch")]),
   },
-  {
-    slug: "5g-standalone", name: "5G Standalone",
+  "5g-standalone": {
+    name: "5G Standalone",
     what: "5G without an LTE anchor: lower latency and, on some networks, faster speeds and better coverage indoors.",
     where: "Settings › Cellular › Cellular Data Options › Voice & Data › 5G Standalone",
     keys: ["Enable5GStandaloneByDefault", "Show5GStandaloneSwitch", "Supports5GStandalone"],
@@ -64,8 +65,8 @@ export const FEATURES: Feature[] = [
       ["available", "Supports5GStandalone", (e) => yes(e, "Supports5GStandalone")],
     ),
   },
-  {
-    slug: "voice-over-5g", name: "Voice over 5G (VoNR)",
+  "voice-over-5g": {
+    name: "Voice over 5G (VoNR)",
     what: "Calls stay on 5G instead of dropping your connection to LTE while you talk.",
     where: "Settings › Cellular › Cellular Data Options › Voice & Data › Voice over 5G",
     keys: ["IMSConfig.Voice.EnableVoNRByDefault", "SupportsVoNR", "ShowVoNRSwitch"],
@@ -75,8 +76,8 @@ export const FEATURES: Feature[] = [
       ["available", "SupportsVoNR", (e) => yes(e, "SupportsVoNR")],
     ),
   },
-  {
-    slug: "volte", name: "VoLTE",
+  "volte": {
+    name: "VoLTE",
     what: "HD voice calls over LTE, and data that keeps working during a call.",
     where: "Settings › Cellular › Cellular Data Options › Voice & Data",
     keys: ["IMSConfig.Voice.EnableVolteByDefault", "ShowVolteSwitch", "CarrierEntitlements.SupportedEntitlements"],
@@ -86,15 +87,15 @@ export const FEATURES: Feature[] = [
       ["available", "CarrierEntitlements.SupportedEntitlements", (e) => entitled(e, 6)],
     ),
   },
-  {
-    slug: "hd-voice-plus", name: "HD Voice+ (EVS)",
+  "hd-voice-plus": {
+    name: "HD Voice+ (EVS)",
     what: "Clearer calls with the EVS codec, which carries a wider range of your voice than standard HD Voice.",
     keys: ["IMSConfig.Media.AudioCodecs"],
     decide: rules(["on", "IMSConfig.Media.AudioCodecs", (e) =>
       Object.values(dict(at(e, "IMSConfig.Media.AudioCodecs")) ?? {}).some((c) => dict(c)?.EncodingName === "EVS")]),
   },
-  {
-    slug: "wifi-calling", name: "Wi-Fi Calling",
+  "wifi-calling": {
+    name: "Wi-Fi Calling",
     what: "Calls and texts over Wi-Fi when cellular coverage is poor.",
     keys: ["IMSConfig.EnableWiFiCallingByDefault", "CarrierEntitlements.SupportedEntitlements", "IMSConfig.EnableWiFiCallingWithoutEntitlement"],
     decide: rules(
@@ -103,14 +104,14 @@ export const FEATURES: Feature[] = [
       ["available", "IMSConfig.EnableWiFiCallingWithoutEntitlement", (e) => yes(e, "IMSConfig.EnableWiFiCallingWithoutEntitlement")],
     ),
   },
-  {
-    slug: "calls-on-other-devices", name: "Wi-Fi Calling on other devices",
+  "calls-on-other-devices": {
+    name: "Wi-Fi Calling on other devices",
     what: "Make and answer your iPhone's calls on your iPad, Mac or Apple Watch, even when the iPhone is not nearby.",
     keys: ["CarrierEntitlements.SupportedEntitlements"],
     decide: rules(["available", "CarrierEntitlements.SupportedEntitlements", (e) => entitled(e, 8)]),
   },
-  {
-    slug: "rcs", name: "RCS messaging",
+  "rcs": {
+    name: "RCS messaging",
     what: "Typing indicators, read receipts, high-quality photos and group chats with Android phones in Messages.",
     where: "Settings › Apps › Messages › RCS Messaging",
     keys: ["RCS.EnableRCSByDefault", "RCS.ShowRCSSwitch", "RCS.ProvisioningData"],
@@ -121,8 +122,8 @@ export const FEATURES: Feature[] = [
       ["available", "CarrierEntitlements.SupportedEntitlements", (e) => entitled(e, 22)],
     ),
   },
-  {
-    slug: "rcs-business-messaging", name: "RCS business messaging",
+  "rcs-business-messaging": {
+    name: "RCS business messaging",
     what: "Verified businesses can message you in Messages with branding, buttons and rich cards.",
     keys: ["RCS.EnableBusinessMessagingByDefault", "RCS.ShowBusinessMessagingSwitch"],
     decide: rules(
@@ -130,8 +131,8 @@ export const FEATURES: Feature[] = [
       ["available", "RCS.ShowBusinessMessagingSwitch", (e) => yes(e, "RCS.ShowBusinessMessagingSwitch")],
     ),
   },
-  {
-    slug: "satellite", name: "Carrier satellite features",
+  "satellite": {
+    name: "Carrier satellite features",
     what: "Texting through satellites when there is no cell signal, provided by your carrier rather than by Apple.",
     keys: ["SupportsSatellite", "ShowSatelliteSwitch", "CarrierEntitlements.SupportedEntitlements"],
     decide: rules(
@@ -140,8 +141,8 @@ export const FEATURES: Feature[] = [
       ["available", "CarrierEntitlements.SupportedEntitlements", (e) => entitled(e, 19)],
     ),
   },
-  {
-    slug: "visual-voicemail", name: "Visual Voicemail",
+  "visual-voicemail": {
+    name: "Visual Voicemail",
     what: "See and play voicemails in the Phone app without calling your mailbox.",
     keys: ["VisualVoicemailServiceName", "com.apple.voicemail.imap"],
     decide: rules(
@@ -149,8 +150,8 @@ export const FEATURES: Feature[] = [
       ["on", "com.apple.voicemail.imap", (e) => !!dict(e["com.apple.voicemail.imap"])],
     ),
   },
-  {
-    slug: "esim-transfer", name: "eSIM Quick Transfer",
+  "esim-transfer": {
+    name: "eSIM Quick Transfer",
     what: "Move your number to a new iPhone, or from a physical SIM to an eSIM, on the phone without calling your carrier.",
     keys: ["PhoneAccountTransfer", "CarrierEntitlements.SupportPhysicalSIMtoESIMTransfer", "CarrierEntitlements.SupportedEntitlements"],
     decide: rules(
@@ -159,20 +160,20 @@ export const FEATURES: Feature[] = [
       ["available", "CarrierEntitlements.SupportedEntitlements", (e) => entitled(e, 13)],
     ),
   },
-  {
-    slug: "esim-from-android", name: "eSIM transfer from Android",
+  "esim-from-android": {
+    name: "eSIM transfer from Android",
     what: "Move your eSIM from an Android phone to an iPhone during setup, without a new QR code from your carrier.",
     keys: ["CarrierEntitlements.SupportCrossPlatformSIMTransfer"],
     decide: rules(["available", "CarrierEntitlements.SupportCrossPlatformSIMTransfer", (e) => yes(e, "CarrierEntitlements.SupportCrossPlatformSIMTransfer")]),
   },
-  {
-    slug: "apple-watch-number-sharing", name: "Apple Watch cellular (number sharing)",
+  "apple-watch-number-sharing": {
+    name: "Apple Watch cellular (number sharing)",
     what: "A cellular Apple Watch can use your iPhone's phone number for calls and texts without the iPhone nearby.",
     keys: ["CarrierEntitlements.SupportedEntitlements"],
     decide: rules(["available", "CarrierEntitlements.SupportedEntitlements", (e) => entitled(e, 10)]),
   },
-  {
-    slug: "branded-calling", name: "Business caller ID",
+  "branded-calling": {
+    name: "Business caller ID",
     what: "Calls from verified businesses show their name and logo instead of just a number.",
     keys: ["IMSConfig.EnableBrandedCallingByDefault", "IMSConfig.ShowBrandedCallingSwitch", "IMSConfig.Signaling.EnableBrandedCallingByDefault", "IMSConfig.Signaling.ShowBrandedCallingSwitch"],
     decide: rules(
@@ -182,13 +183,16 @@ export const FEATURES: Feature[] = [
       ["available", "IMSConfig.Signaling.ShowBrandedCallingSwitch", (e) => yes(e, "IMSConfig.Signaling.ShowBrandedCallingSwitch")],
     ),
   },
-  {
-    slug: "spam-call-warnings", name: "Carrier spam call warnings",
+  "spam-call-warnings": {
+    name: "Carrier spam call warnings",
     what: "Your carrier marks likely spam calls on the incoming call screen, before you answer.",
     keys: ["IMSConfig.Signaling.SpamHeaderFeatureCapability"],
     decide: rules(["on", "IMSConfig.Signaling.SpamHeaderFeatureCapability", (e) => at(e, "IMSConfig.Signaling.SpamHeaderFeatureCapability") === "Enabled"]),
   },
-];
+};
+
+/** In FEATURE_SLUGS order, which is also the order of the index codes. */
+export const FEATURES: Feature[] = FEATURE_SLUGS.map((slug) => ({ slug, ...DEFINITIONS[slug] }));
 
 export const featureBySlug = (slug: string) => FEATURES.find((f) => f.slug === slug);
 
