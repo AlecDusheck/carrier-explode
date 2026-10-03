@@ -125,7 +125,9 @@ input[type="text"], input[type="search"], select {
 }
 select { padding: 2px; max-width: 100%; text-overflow: ellipsis; }
 label.lbl { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }
-label.lbl select { min-width: 0; flex: 1; }
+label.lbl select { min-width: 0; }
+/* WebKit still lets a select's text spill into its parent's scroll area; keep it inside the box. */
+select { overflow: hidden; }
 
 /* -------------------------------------------------------------- split pane */
 
