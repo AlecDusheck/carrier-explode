@@ -27,7 +27,7 @@ function walk(configs: Readonly<Record<string, CarrierConfigValue>>, top: Tally,
   }
 }
 
-function settingsIn(dir: string, file: string): CarrierSettings[] {
+function settingsIn(dir: string, file: string): readonly CarrierSettings[] {
   const bytes = readFileSync(join(dir, file));
   return file === "others.pb" ? decodeMultiCarrierSettings(bytes).settings : [decodeCarrierSettings(bytes)];
 }

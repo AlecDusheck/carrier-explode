@@ -31,7 +31,7 @@ async function profileAt(e: TimelineEntry): Promise<Profile | null> {
 }
 
 export interface PhoneName {
-  /** Apple product type or Pixel codename; "" for a side read for every device. */
+  /** Apple product type or Pixel codename. */
   readonly id: string;
   readonly name: string;
 }
@@ -49,7 +49,10 @@ export interface PairSide {
   readonly source: SourceRef;
   /** The version the side was read at. */
   readonly version: Version;
-  readonly phone: PhoneName;
+  /** The device read for; null when one file serves every device. */
+  readonly phone: PhoneName | null;
+  /** What the side is read for, in words: "iPhone 17 Pro", "every Pixel". */
+  readonly readFor: string;
   readonly phones: readonly PhoneName[];
   readonly states: Readonly<Record<string, FeatureState>>;
   /** Feature id -> answers per device, only where the devices disagree. */
@@ -100,7 +103,8 @@ async function sideOf(ref: SourceRef, groups: readonly DeviceStates[], wanted: s
     side: {
       source: ref,
       version: await versionOf(ref.platform, entry),
-      phone: id === undefined ? { id: "", name: EVERY[ref.platform] } : { id, name: naming.name(id) },
+      phone: id === undefined ? null : { id, name: naming.name(id) },
+      readFor: id === undefined ? EVERY[ref.platform] : naming.name(id),
       phones: ids.map((x) => ({ id: x, name: naming.name(x) })),
       states: group.states,
       spread: spreadOf(groups, ref.platform),

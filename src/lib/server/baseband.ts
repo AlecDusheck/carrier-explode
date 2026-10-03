@@ -9,7 +9,7 @@ import { error } from "@sveltejs/kit";
 import * as v from "valibot";
 import {
   MODEM_SUMMARY_SCHEMA, basebandComparable, byNewest, diffKeyed, parseBandCombos, summariseDiff,
-  type BasebandSummary, type DiffCounts, type FtabSummary, type ModemKind, type ModemSummary,
+  type BasebandSummary, type DiffCounts, type FtabSummary, type ModemSummary,
 } from "#lib/decode/index.ts";
 import { countryName, splitName } from "#lib/names.ts";
 import type { BasebandDiffPart } from "#lib/types.ts";
@@ -19,7 +19,7 @@ import { releaseList } from "./catalog";
 import { modemView, summaryKey, type ModemView } from "./modems";
 import { releaseModems } from "./releases";
 import { etagOf, readJson } from "./store";
-import type { ImageModem } from "./records";
+import type { ImageModem, ModemKind } from "#lib/schema/types.ts";
 import { keys } from "#lib/storage/keys.ts";
 
 const KEEP = 30 * 86400;
@@ -170,8 +170,8 @@ export type BasebandPage = BbfwView & { readonly build: string; readonly version
 /** A release's .bbfw package of `family`. */
 export async function getBaseband(build: string, family: string): Promise<BasebandPage> {
   const { version, m } = await releaseModem(build, family, "bbfw");
-  const view = await bbfwView(await mustBbfw(m.package.id));
-  return { build, version, family: m.family, id: m.package.id, ...view };
+  const view = await bbfwView(await mustBbfw(m.package.sha));
+  return { build, version, family: m.family, id: m.package.sha, ...view };
 }
 
 export type PackageFile = BasebandSummary["files"][number] & { readonly i: number };
@@ -202,16 +202,16 @@ export interface BasebandDiff {
 /** One family's package in build `b` against build `a`, part by part. A package pair is cached for a month. */
 export async function getBasebandDiff(a: string, b: string, family: string): Promise<BasebandDiff> {
   const [A, B] = await Promise.all([releaseModem(a, family, "bbfw"), releaseModem(b, family, "bbfw")]);
-  const diff = await cached(`bbdiff:v${MODEM_SUMMARY_SCHEMA}:${A.m.package.id}|${B.m.package.id}`, KEEP, async () => {
-    const [ca, cb] = (await Promise.all([mustBbfw(A.m.package.id), mustBbfw(B.m.package.id)])).map(basebandComparable);
+  const diff = await cached(`bbdiff:v${MODEM_SUMMARY_SCHEMA}:${A.m.package.sha}|${B.m.package.sha}`, KEEP, async () => {
+    const [ca, cb] = (await Promise.all([mustBbfw(A.m.package.sha), mustBbfw(B.m.package.sha)])).map(basebandComparable);
     const parts: BasebandDiffPart[] = Object.entries(cb ?? {}).flatMap(([section, after]) =>
       diffKeyed(ca?.[section] ?? {}, after, { maxRows: 300 }).map((p) => ({ section, ...p })));
     return { parts, counts: summariseDiff(parts) };
   });
   return {
     family,
-    a: { build: a, version: A.version, id: A.m.package.id },
-    b: { build: b, version: B.version, id: B.m.package.id },
+    a: { build: a, version: A.version, id: A.m.package.sha },
+    b: { build: b, version: B.version, id: B.m.package.sha },
     ...diff,
   };
 }

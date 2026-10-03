@@ -26,7 +26,7 @@ import { cached, fetchApple, perRequest } from "./cache";
 import { archivedSha, currentRelease, releaseList, resolve, isIndexed, versionOf, type Resolved, type Ver } from "./catalog";
 import { cbsRow } from "./cbs";
 import { modemView } from "./modems";
-import type { ImageModem } from "./records";
+import type { ImageModem } from "#lib/schema/types.ts";
 import { releaseModems } from "./releases";
 import { readBytes } from "./store";
 
@@ -414,7 +414,7 @@ export async function getBasebandDefaults(at: Ver, device?: string): Promise<Mod
   if (!v) return { missing: true, build: null };
   const phone = device ?? homePhone(at.line ? [at.line] : v.devices);
   const m = phone ? v.modems.find((x) => x.devices.includes(phone) && x.package.kind === "bbfw") : undefined;
-  const [{ opened, ref }, s] = await Promise.all([open(at), m ? bbfwSummary(m.package.id) : null]);
+  const [{ opened, ref }, s] = await Promise.all([open(at), m ? bbfwSummary(m.package.sha) : null]);
   if (!phone || !m || !s) return { missing: true, build: v.build };
 
   const name = ref.name;
@@ -434,7 +434,7 @@ export async function getBasebandDefaults(at: Ver, device?: string): Promise<Mod
   }
   const { release } = await releaseModems(v.build);
   return {
-    missing: false, build: v.build, version: release.version, family: m.family, id: m.package.id, phone, tags, overrides, otherXml,
+    missing: false, build: v.build, version: release.version, family: m.family, id: m.package.sha, phone, tags, overrides, otherXml,
     slug: v.entry.slug,
   };
 }

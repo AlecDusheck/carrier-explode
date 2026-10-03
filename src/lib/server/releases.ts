@@ -1,16 +1,10 @@
-/**
- * OS releases: an iOS build or a Pixel build, and what its image carries for
- * each source (releases/<platform>/<id>.json, written by the extractor).
- */
+/** OS releases (releases/<platform>/<id>.json): what an iOS or Pixel build carries for each source. */
 
 import { error } from "@sveltejs/kit";
-import * as v from "valibot";
-import { keys } from "#lib/storage/keys.ts";
-import type { Platform, Release, ReleaseSource } from "#lib/schema/types.ts";
-import type { ReleaseSummary } from "#lib/storage/keys.ts";
-import type { Kind } from "#lib/types.ts";
+import { keys, type ReleaseSummary } from "#lib/storage/keys.ts";
+import { sourcePath, parseSourceKey, type AppleRelease, type ImageModem, type Platform, type Release } from "#lib/schema/types.ts";
 import { perRequest } from "./cache";
-import { pageFor, releaseList } from "./catalog";
+import { isIndexed, releaseList } from "./catalog";
 import { readJson } from "./store";
 import * as records from "./records";
 
@@ -18,23 +12,23 @@ const releaseOf = perRequest((platform: Platform, id: string) => readJson(keys.r
 
 export async function mustRelease(platform: Platform, id: string): Promise<Release> {
   const r = await releaseOf(platform, id);
-  if (!r) error(404, `No ${platform === "ios" ? "iOS" : "Android"} release ${id}.`);
+  if (!r) error(404, `No ${platform} release ${id}.`);
   return r;
 }
 
-/** An iOS release's modem packages, in the v1 image index shape the baseband pages read. */
-export async function releaseModems(id: string): Promise<{ release: Release; modems: records.ImageModem[] }> {
+/** An iOS build and its modem packages. */
+export async function releaseModems(id: string): Promise<{ release: AppleRelease; modems: readonly ImageModem[] }> {
   const release = await mustRelease("ios", id);
-  const parsed = v.safeParse(v.array(records.imageModem), release.modems ?? []);
-  if (!parsed.success) error(500, `releases/ios/${id}.json: modems do not match their shape: ${v.summarize(parsed.issues)}`);
-  return { release, modems: parsed.output };
+  if (release.platform === "android") error(500, `releases/ios/${id}.json is an Android release`);
+  return { release, modems: release.modems };
 }
 
-/** One source's change between a release and the one before it on the same platform. */
 export interface SourceChange {
   readonly source: string;
-  readonly from?: string | undefined;
-  readonly to?: string | undefined;
+  /** Its source page, when the index has the source. */
+  readonly path: string | null;
+  readonly from: string | null;
+  readonly to: string | null;
 }
 
 export interface ReleaseView {
@@ -43,47 +37,44 @@ export interface ReleaseView {
   readonly added: readonly SourceChange[];
   readonly removed: readonly SourceChange[];
   readonly changed: readonly SourceChange[];
-  /** Where each listed source's page is; a source missing here is not indexed yet. */
-  readonly pages: Readonly<Record<string, { readonly kind: Kind; readonly name: string }>>;
 }
 
-/**
- * What identifies a source's content in a release, across its device groups:
- * iOS image bundles are re-zipped per extraction, so their content id; Android
- * files by their bytes.
- */
-const contentOf = (files: readonly ReleaseSource[]): string =>
-  files.map((f) => f.cid ?? f.sha).sort().join(",");
-
-/** The newest version a release carries for a source (Android device groups can differ). */
-const versionIn = (files: readonly ReleaseSource[] | undefined): string | undefined =>
-  files?.map((f) => f.version).sort().at(-1);
+/** A source's content in a release, and its version: Apple's bundle, or Android's files across device groups. */
+function contentOf(r: Release, key: string): { id: string; version: string } | null {
+  if (r.platform === "android") {
+    const files = r.sources[key];
+    return files?.length ? { id: files.map((f) => f.sha).sort().join(","), version: files.map((f) => f.version).sort().at(-1) ?? "" } : null;
+  }
+  const a = r.sources[key];
+  return a ? { id: a.cid, version: a.version } : null;
+}
 
 /** Sources added, removed and changed against the platform's previous release. */
 export async function getRelease(platform: Platform, id: string): Promise<ReleaseView> {
   const mine = (await releaseList()).filter((r) => r.platform === platform);
-  const at = mine.findIndex((r) => r.id === id);
-  const before = at >= 0 ? mine[at + 1] : undefined;
-  const [release, previous] = await Promise.all([mustRelease(platform, id), before ? mustRelease(platform, before.id) : null]);
-  const now = release.sources;
-  const was = previous?.sources ?? {};
-  const keysOf = (r: Record<string, unknown>): string[] => Object.keys(r).sort();
-  const listed = [...new Set([...keysOf(now), ...keysOf(was)])];
-  const pages = Object.fromEntries((await Promise.all(listed.map(async (k) => [k, await pageFor(k)] as const))).flatMap(([k, p]) => (p ? [[k, p]] : [])));
+  const before = mine[mine.findIndex((r) => r.id === id) + 1];
+  const [now, was] = await Promise.all([mustRelease(platform, id), before ? mustRelease(platform, before.id) : null]);
+  const all = [...new Set([...Object.keys(now.sources), ...Object.keys(was?.sources ?? {})])].sort();
+  const changes = await Promise.all(all.map(async (k): Promise<{ change: SourceChange; kind: "added" | "removed" | "changed" | "same" }> => {
+    const a = was ? contentOf(was, k) : null;
+    const b = contentOf(now, k);
+    const ref = parseSourceKey(k);
+    const path = ref && (await isIndexed(k)) ? sourcePath(ref) : null;
+    const change = { source: k, path, from: a?.version ?? null, to: b?.version ?? null };
+    const kind = !a ? (was ? "added" : "same") : !b ? "removed" : a.id === b.id ? "same" : "changed";
+    return { change, kind };
+  }));
+  const of = (kind: string): SourceChange[] => changes.filter((c) => c.kind === kind).map((c) => c.change);
   return {
-    release,
-    previous: previous && { id: previous.id, version: previous.version },
-    added: previous ? keysOf(now).filter((k) => !(k in was)).map((k) => ({ source: k, to: versionIn(now[k]) })) : [],
-    removed: keysOf(was).filter((k) => !(k in now)).map((k) => ({ source: k, from: versionIn(was[k]) })),
-    changed: keysOf(now).flatMap((k) => {
-      const a = was[k], b = now[k];
-      return a && b && contentOf(a) !== contentOf(b) ? [{ source: k, from: versionIn(a), to: versionIn(b) }] : [];
-    }),
-    pages,
+    release: now,
+    previous: was && { id: was.id, version: was.version },
+    added: of("added"),
+    removed: of("removed"),
+    changed: of("changed"),
   };
 }
 
-/** Every Android build, newest first: the Builds page's second table. */
-export async function androidBuilds(): Promise<ReleaseSummary[]> {
-  return (await releaseList()).filter((r) => r.platform === "android");
+/** Every release of a platform, newest first. */
+export async function releasesOf(platform: Platform): Promise<ReleaseSummary[]> {
+  return (await releaseList()).filter((r) => r.platform === platform);
 }

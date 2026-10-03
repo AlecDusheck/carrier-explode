@@ -125,7 +125,7 @@ const mmsProxy: Valued<string> = ({ settings }) => {
 };
 
 /** EmergencyCalling.EmergencyNumbers[] and the per-MCC lists of EmergencyNumbers.<mcc>[]. */
-const emergencyNumbers: IosReader = ({ settings }) => {
+const emergencyNumbers: Valued<string[]> = ({ settings }) => {
   const refs: NativeRef[] = [];
   const numbers: string[] = [];
   const take = (r: Read | undefined, list: unknown[]): void => {
@@ -137,50 +137,64 @@ const emergencyNumbers: IosReader = ({ settings }) => {
   take(calling, each(calling));
   const byMcc = read(settings, "EmergencyNumbers");
   take(byMcc, each(byMcc).flatMap((l) => (Array.isArray(l) ? l : [])));
-  return refs.length ? conceptValue(stringSet(numbers), refs) : unset();
+  return refs.length ? valueReading(stringSet(numbers), refs) : unset;
 };
 
 /** CellBroadcast.MessageIDParameters3GPP[] ranges as `from-to` (decimal), single ids as `id`. */
-const cbsChannels: IosReader = ({ settings }) => {
+const cbsChannels: Valued<string[]> = ({ settings }) => {
   const r = read(settings, "CellBroadcast.MessageIDParameters3GPP");
-  if (!r) return unset();
+  if (!r) return unset;
   const ranges = each(r).flatMap((e) => {
     if (!isJsonDict(e)) return [];
     const from = num(e.FromServiceID), to = num(e.ToServiceID);
     if (from === undefined) return [];
     return [to === undefined || to === from ? String(from) : `${from}-${to}`];
   });
-  return conceptValue(stringSet(ranges), [r.ref]);
+  return valueReading(stringSet(ranges), [r.ref]);
 };
 
 /** MTU[] entries whose technology-mask covers LTE (bit 3) or NR (bit 4). */
-const dataMtu: IosReader = ({ settings }) => {
+const dataMtu: Valued<number> = ({ settings }) => {
   const r = read(settings, "MTU");
-  if (!r) return unset();
+  if (!r) return unset;
   const sizes = each(r).flatMap((e) => {
     if (!isJsonDict(e)) return [];
     const mask = num(e["technology-mask"]) ?? 0, size = num(e.size);
     return size !== undefined && Math.floor(mask / 8) % 4 !== 0 ? [size] : [];
   });
   const size = sizes[0];
-  return size === undefined ? unset([r.ref]) : conceptValue(size, [r.ref], "approx");
+  return size === undefined ? unset : valueReading(size, [r.ref], "approx");
 };
 
-const countryIso: IosReader = ({ settings }) => {
+const countryIso: Valued<string> = ({ settings }) => {
   const r = read(settings, "ISOAlpha2CountryCode");
   const first = Array.isArray(r?.value) ? r.value[0] : r?.value;
   const t = text(first);
-  return r && t ? conceptValue(t.toLowerCase(), [r.ref]) : unset();
+  return r && t ? valueReading(t.toLowerCase(), [r.ref]) : unset;
 };
 
-const homeNetworks: IosReader = at("SupportedPLMNs", (raw) =>
+const homeNetworks: Valued<string[]> = at("SupportedPLMNs", (raw) =>
   Array.isArray(raw) ? stringSet(raw.flatMap((x: unknown) => (typeof x === "string" ? [x] : []))) : undefined, "approx");
 
-const ussd: IosReader = at("IMSConfig.Signaling.ussdEnabled", asBool, "approx");
+const ussd: Valued<boolean> = at("IMSConfig.Signaling.ussdEnabled", asBool, "approx");
 
-
-export const IOS_READERS: Readonly<Partial<Record<ConceptId, IosReader>>> = {
-  ...READERS_FEATURES,
+export const IOS_READERS = {
+  "5g": feature("5g"),
+  "5g-standalone": feature("5g-standalone"),
+  "voice-over-5g": feature("voice-over-5g"),
+  "volte": feature("volte"),
+  "hd-voice-plus": feature("hd-voice-plus"),
+  "wifi-calling": feature("wifi-calling"),
+  "calls-on-other-devices": feature("calls-on-other-devices"),
+  "rcs": feature("rcs"),
+  "rcs-business-messaging": feature("rcs-business-messaging"),
+  "satellite": feature("satellite"),
+  "visual-voicemail": feature("visual-voicemail"),
+  "esim-transfer": feature("esim-transfer"),
+  "esim-from-android": feature("esim-from-android"),
+  "apple-watch-number-sharing": feature("apple-watch-number-sharing"),
+  "branded-calling": feature("branded-calling"),
+  "spam-call-warnings": feature("spam-call-warnings"),
   // voice
   rtt: at("IMSConfig.Voice.RTTSupported", asBool),
   "volte-switch": at("ShowVolteSwitch", asBool),
@@ -228,7 +242,7 @@ export const IOS_READERS: Readonly<Partial<Record<ConceptId, IosReader>>> = {
   "sms-over-ims-networks": smsDomains,
   "mms-max-size": at("MMS.MaxMessageSize", asNum),
   "mms-max-recipients": at("MMS.MaxRecipients", asNum),
-  "mms-max-image": mmsImage,
+  "mms-max-image": at("MMS.MaxImageDimension", asNum),
   "mms-max-subject": at("MMS.MaxSubjectLenBytes", asNum, "approx"),
   "mms-group": at("MMS.GroupModeEnabled", asBool, "approx"),
   "mms-roaming-download": at("MMS.OnWhileRoaming", asBool, "approx"),
@@ -267,14 +281,10 @@ export const IOS_READERS: Readonly<Partial<Record<ConceptId, IosReader>>> = {
   "voicemail-roaming-number": at("RoamingVoicemailPilotNumber", asText),
   "satellite-name": at("SatelliteSystemName", asText),
   "entitlement-server": at("CarrierEntitlements.ServerAddress", asText),
-};
+} satisfies Readers<IosView>;
 
-/** Every concept iOS can express, read from one view. */
+/** Every concept an Apple bundle can express, read from one view. */
 export function iosConcepts(v: IosView): Record<string, ConceptValue> {
-  const out: Record<string, ConceptValue> = {};
-  for (const [id, reader] of Object.entries(IOS_READERS)) {
-    const value = reader?.(v);
-    if (value) out[id] = value;
-  }
-  return out;
+  const readers: Readers<IosView> = IOS_READERS;
+  return Object.fromEntries(Object.entries(readers).flatMap(([id, reader]) => (reader ? [[id, reader(v)]] : [])));
 }
