@@ -1,90 +1,62 @@
-/**
- * The platform-neutral data model. iOS bundles and Android CarrierSettings are
- * each decoded by their own decoder (src/lib/decode, src/lib/decode/android),
- * then mapped by a platform mapper (./ios.ts, ./android.ts) into a Profile.
- * Everything that compares across platforms works on Profiles only.
- *
- * Contract file: changing a shape here means bumping PROFILE_SCHEMA, because
- * norm/v<PROFILE_SCHEMA>/ in R2 is keyed by it and is rebuilt by the extractor's
- * `reindex` job.
- */
+/** The platform-neutral model. Each platform's mapper turns one decoded artifact into a Profile. */
 
+/** Bump when a stored shape changes: norm/v<N>/ is keyed by it and rebuilt by `reindex`. */
 export const PROFILE_SCHEMA = 1;
 
-/**
- * The OS that ships the settings, which is also the first URL segment after
- * the kind (`/carriers/ipados/Verizon_LTE/72.0/`). Apple's iPad and Watch
- * bundles are separate files with their own version lines (the manifest's
- * ByProductType "iPad" and CarrierBundles.Watch), so they are platforms, not
- * variants of iOS. ios, ipados and watchos share the iOS decoder.
- */
+/** The OS that ships the settings. iPad and Watch bundles are separate files with their own versions. */
 export const PLATFORMS = ["ios", "ipados", "watchos", "android"] as const;
 export type Platform = (typeof PLATFORMS)[number];
-export const isPlatform = (p: string): p is Platform => (PLATFORMS as readonly string[]).includes(p);
+export const isPlatform = (value: string): value is Platform => PLATFORMS.some((p) => p === value);
 
-/** Which decoder family reads a platform's artifacts. */
 export type DecoderFamily = "apple" | "android";
-export const decoderFamily = (p: Platform): DecoderFamily => (p === "android" ? "android" : "apple");
+export const decoderFamily = (platform: Platform): DecoderFamily => (platform === "android" ? "android" : "apple");
 
-/**
- * What a source is on its platform:
- * - carrier: an Apple carrier bundle or an Android canonical carrier
- * - country: an Apple country bundle (Android has none)
- * - default: settings that apply when nothing else does (Android default.pb, no_sim.pb)
- */
+/** `default`: Android's default.pb and no_sim.pb, which apply when no carrier matches. */
 export const SOURCE_KINDS = ["carrier", "country", "default"] as const;
 export type SourceKind = (typeof SOURCE_KINDS)[number];
-const isSourceKind = (k: string): k is SourceKind => (SOURCE_KINDS as readonly string[]).includes(k);
+const isSourceKind = (value: string): value is SourceKind => SOURCE_KINDS.some((k) => k === value);
 
-/** One named thing a platform ships settings under. `name` is native: `TMobile_us`, `tmobile_us`. */
+/** A named thing a platform ships settings under; `name` is native (`TMobile_us`, `tmobile_us`). */
 export interface SourceRef {
   readonly platform: Platform;
   readonly kind: SourceKind;
   readonly name: string;
 }
 
-/** `ios:carrier:TMobile_us`, `watchos:carrier:Vodafone_uk`, `android:carrier:tmobile_us`. Stable: R2 keys and indexes use it. */
+/** `ios:carrier:TMobile_us`. */
 export const sourceKey = (s: SourceRef): string => `${s.platform}:${s.kind}:${s.name}`;
 
 export function parseSourceKey(key: string): SourceRef | undefined {
   const [platform, kind, name, ...rest] = key.split(":");
-  if (platform === undefined || kind === undefined || name === undefined || name === "" || rest.length > 0) return undefined;
+  if (platform === undefined || kind === undefined || !name || rest.length > 0) return undefined;
   if (!isPlatform(platform) || !isSourceKind(kind)) return undefined;
   return { platform, kind, name };
 }
 
-/** The URL path segment for each kind: `/carriers/…`, `/countries/…`, `/defaults/…`. */
 export const KIND_SEGMENT = { carrier: "carriers", country: "countries", default: "defaults" } as const satisfies Record<SourceKind, string>;
 
-/** `/carriers/ios/Verizon_LTE`. Every page of a source lives under it: `/<version>/<tab>`. */
+/** `/carriers/ios/Verizon_LTE`. */
 export const sourcePath = (s: SourceRef): string => `/${KIND_SEGMENT[s.kind]}/${s.platform}/${encodeURIComponent(s.name)}`;
 
-/* ---------------------------------------------------------------- identity */
-
 /**
- * One rule a SIM can match. Every present field must match. Normalised:
- * mccmnc is 5 or 6 digits; hex values are upper-case; prefixes are prefixes.
- * iOS: manifest MobileDeviceCarriersByMccMnc (+ MVNOs) and carrier.plist SupportedSIMs
- *      (`<MCCMNC>`, `_GID1-`, `_GID2-`, `_ID-` ICCID prefix).
- * Android: carrier_list.pb CarrierId (mcc_mnc + one of spn / imsi prefix / gid1).
+ * A SIM rule; every present qualifier must match. mccmnc is 5–6 digits, hex is
+ * upper-case, prefixes are prefixes. Apple combines qualifiers; Android uses at most one.
  */
 export interface SimMatcher {
-  mccmnc: string;
-  gid1?: string;
-  gid2?: string;
-  spn?: string;
-  imsiPrefix?: string;
-  iccidPrefix?: string;
+  readonly mccmnc: string;
+  readonly gid1?: string;
+  readonly gid2?: string;
+  readonly spn?: string;
+  readonly imsiPrefix?: string;
+  readonly iccidPrefix?: string;
 }
 
-/** Canonical string for a matcher, for set operations: `310260`, `310260|gid1=6D`. */
+const QUALIFIERS = ["gid1", "gid2", "spn", "imsiPrefix", "iccidPrefix"] as const satisfies readonly (keyof SimMatcher)[];
+
+/** `310260`, `310260|gid1=6D`: equal rules give equal keys. */
 export function matcherKey(m: SimMatcher): string {
-  const parts = [m.mccmnc];
-  for (const k of ["gid1", "gid2", "spn", "imsiPrefix", "iccidPrefix"] as const) if (m[k] !== undefined) parts.push(`${k}=${m[k]}`);
-  return parts.join("|");
+  return [m.mccmnc, ...QUALIFIERS.flatMap((q) => (m[q] === undefined ? [] : [`${q}=${m[q]}`]))].join("|");
 }
-
-/* -------------------------------------------------------------------- APNs */
 
 export type ApnType =
   | "default" | "mms" | "supl" | "dun" | "hipri" | "fota" | "ims" | "cbs" | "ia" | "emergency"
@@ -92,296 +64,234 @@ export type ApnType =
 export type IpProtocol = "ip" | "ipv6" | "ipv4v6" | "ppp";
 export type ApnAuth = "none" | "pap" | "chap" | "pap_or_chap";
 
-/** A data connection profile, as both platforms describe it. Unknown or unset fields are omitted, never defaulted. */
+/** A data connection profile. Fields the source leaves unset are absent, never defaulted. */
 export interface Apn {
-  apn: string;
-  /** Human label (Android `name`, iOS has none for most). */
-  label?: string;
-  types: ApnType[];
-  protocol?: IpProtocol;
-  roamingProtocol?: IpProtocol;
-  auth?: ApnAuth;
-  user?: string;
-  /** Only whether one is set: passwords are not republished. */
-  hasPassword?: boolean;
-  proxy?: string;
-  port?: string;
-  mmsc?: string;
-  mmsProxy?: string;
-  mmsPort?: string;
-  mtu?: number;
-  /** RATs the APN is limited to, e.g. ["lte","nr"]; absent = any. */
-  bearers?: string[];
-  /** Native location, e.g. `carrier.plist:apns[0]` or `apns.apn[3]`. */
-  path: string;
+  readonly apn: string;
+  readonly label?: string;
+  readonly types: readonly ApnType[];
+  readonly protocol?: IpProtocol;
+  readonly roamingProtocol?: IpProtocol;
+  readonly auth?: ApnAuth;
+  readonly user?: string;
+  /** Passwords are never republished. */
+  readonly hasPassword: boolean;
+  readonly proxy?: string;
+  readonly port?: string;
+  readonly mmsc?: string;
+  readonly mmsProxy?: string;
+  readonly mmsPort?: string;
+  readonly mtu?: number;
+  /** Radio technologies it is limited to; absent means any. */
+  readonly bearers?: readonly string[];
+  /** Native location: `carrier.plist:apns[0]`, `apns[3]`. */
+  readonly path: string;
 }
 
-/* ---------------------------------------------------------------- concepts */
+export type Json = null | boolean | number | string | readonly Json[] | { readonly [k: string]: Json };
 
-export type Json = null | boolean | number | string | Json[] | { [k: string]: Json };
-
-/** For `state` concepts: on (and on by default), available (switch / server-decided / SIM-dependent), no. */
+/** on: on by default. available: a switch, or decided per plan or SIM. */
 export type FeatureState = "on" | "available" | "no";
 
-/** A native setting a concept value was read from. */
+/** A native setting a concept was read from: `carrier.plist:Enable5GAutoByDefault`, `config:carrier_volte_available_bool`. */
 export interface NativeRef {
-  /** iOS: `carrier.plist:Enable5GAutoByDefault`, `overrides_N104_N94.plist:...`; Android: `config:carrier_volte_available_bool`. */
-  path: string;
-  value: Json;
+  readonly path: string;
+  readonly value: Json;
 }
 
-/**
- * One concept's value in one profile. `value` is in the concept's own unit
- * (see ConceptDef.type in ./concepts.ts). Absent from Profile.concepts means
- * the platform has no way to express it, or the mapper does not know how yet;
- * `{ value: null }` means expressible but not set.
- */
-export interface ConceptValue {
-  value: Json;
-  state?: FeatureState;
-  because: NativeRef[];
-  /** How sure the mapping is: "exact" (same meaning), "derived" (computed from several keys), "approx" (closest equivalent). */
-  fidelity?: "exact" | "derived" | "approx";
-}
+/** exact: same meaning. derived: computed from several settings. approx: the closest equivalent. */
+export type Fidelity = "exact" | "derived" | "approx";
 
-/* ----------------------------------------------------------------- profile */
+/** A concept's reading in one profile. A concept the platform cannot express is absent from Profile.concepts. */
+export type ConceptValue =
+  | { readonly kind: "state"; readonly state: FeatureState; readonly because: readonly NativeRef[]; readonly fidelity: Fidelity }
+  | { readonly kind: "value"; readonly value: Json; readonly because: readonly NativeRef[]; readonly fidelity: Fidelity }
+  | { readonly kind: "unset" };
 
-/**
- * The normalised view of one stored artifact (one iOS bundle, one Android
- * CarrierSettings). Stored at norm/v<PROFILE_SCHEMA>/<sha>.json.
- */
+/** One stored artifact, normalised. Stored at norm/v<PROFILE_SCHEMA>/<sha>.json. */
 export interface Profile {
-  schema: typeof PROFILE_SCHEMA;
-  source: SourceRef;
-  /** sha256 of the artifact bytes (R2 obj/<sha>). */
-  sha: string;
-  /** The source's own version: iOS bundle CFBundleVersion, Android CarrierSettings.version. */
-  version: string;
-  identity: {
-    display?: string;
-    /** Lower-case ISO 3166 alpha-2 codes this source serves. */
-    iso: string[];
-    sims: SimMatcher[];
+  readonly schema: typeof PROFILE_SCHEMA;
+  readonly source: SourceRef;
+  readonly sha: string;
+  readonly version: string;
+  readonly identity: {
+    readonly display?: string;
+    /** Lower-case ISO 3166 alpha-2. */
+    readonly iso: readonly string[];
+    readonly sims: readonly SimMatcher[];
   };
-  apns: Apn[];
-  /** By ConceptId (./concepts.ts). */
-  concepts: Record<string, ConceptValue>;
-  /**
-   * Every native leaf, flattened (`flatten.ts` style), keyed `<file>:<path>`
-   * for iOS and `config:<key>` / `apns[<i>].<field>` / `vendor:<client>` for Android.
-   * What "what does everyone else put here" and raw diffs read.
-   */
-  raw: Record<string, Json>;
-  /**
-   * Settings that only apply in some situations: iOS MVNOOverrides and per-phone
-   * override files. Each is a partial Profile (concepts/apns that differ) plus
-   * what selects it. Android has none: its MVNOs are separate sources.
-   */
-  variants: ProfileVariant[];
+  readonly apns: readonly Apn[];
+  /** Keyed by concept id. */
+  readonly concepts: Readonly<Record<string, ConceptValue>>;
+  /** Every native leaf: `<file>:<path>` (Apple), `config:<key>`, `apns[<i>].<field>` (Android). */
+  readonly raw: Readonly<Record<string, Json>>;
+  /** Apple only: MVNO configurations and per-phone override files. */
+  readonly variants: readonly ProfileVariant[];
 }
 
+export type VariantSelector =
+  | { readonly by: "sim"; readonly sims: readonly SimMatcher[] }
+  | { readonly by: "device"; readonly devices: readonly string[] };
+
+/** The concepts and APNs that differ when the selector applies. */
 export interface ProfileVariant {
-  id: string;
-  label: string;
-  /** What selects it: a SIM rule (MVNO) or devices (override files). */
-  when: { sims?: SimMatcher[]; devices?: string[] };
-  concepts: Record<string, ConceptValue>;
-  apns?: Apn[];
+  readonly id: string;
+  readonly label: string;
+  readonly when: VariantSelector;
+  readonly concepts: Readonly<Record<string, ConceptValue>>;
+  readonly apns: readonly Apn[];
 }
 
-/* ---------------------------------------------------------------- carriers */
-
-/**
- * A carrier as people know it, across platforms: the sources both platforms
- * ship for it, linked by the SIMs they claim (./identity.ts) plus manual links.
- */
+/** A carrier across platforms: sources linked by the SIMs they claim. Links pages; never in a URL. */
 export interface Carrier {
-  /**
-   * Internal id for index/carriers/<id>.json, never shown in a URL: pages
-   * are per source (sourcePath), and a carrier is what links a source's page
-   * to its counterparts on other platforms. Stable across index rebuilds.
-   */
-  slug: string;
-  name: string;
-  iso?: string;
-  /** Every source that belongs to this carrier, any platform. */
-  members: SourceRef[];
-  /** The union of the members' SIM matchers. */
-  sims: SimMatcher[];
-  /** Why each member is linked: shared matcher keys, or "manual". */
-  links: Array<{ source: string; reason: "manual" | "sims"; shared?: string[] }>;
+  readonly id: string;
+  readonly name: string;
+  readonly iso?: string;
+  readonly members: readonly SourceRef[];
+  readonly sims: readonly SimMatcher[];
+  readonly links: readonly CarrierLink[];
 }
 
-/* ---------------------------------------------------------------- releases */
+export type CarrierLink =
+  | { readonly source: string; readonly reason: "sims"; readonly shared: readonly string[] }
+  | { readonly source: string; readonly reason: "manual" };
 
-/**
- * One OS image both platforms ship settings inside: an iOS build or a Pixel build.
- * Stored at releases/<platform>/<id>.json.
- */
-export interface Release {
-  platform: Platform;
-  /** iOS build (`23C55`) or Android build id (`CP3A.260905.009`). */
-  id: string;
-  /** iOS: "27.2", "27.2 beta 2". Android: "16", "16 QPR2". */
-  version: string;
-  /** Android security patch level / monthly tag, YYYY-MM. */
-  patch?: string;
-  released?: string;
-  prerelease?: boolean;
-  /** iPhone product types / Pixel codenames whose images this was built from. */
-  devices: string[];
-  extractedAt: string;
-  /**
-   * sourceKey -> the distinct artifacts the release carries for it, each with
-   * the devices that carry it. iOS: always one entry without `devices` (a
-   * bundle is merged across every iPhone IPSW, and per-phone differences live
-   * inside it as override files -> Profile.variants). Android: one entry per
-   * distinct file. A build ships different CarrierSettings per device
-   * generation (CP3A.260905.009: Pixel 6, Fold, 9 and 10 Pro differ in 632 of
-   * 633 files, VoLTE and Wi-Fi calling among them), and content addressing
-   * collapses the devices that agree (Pixel 9 = 9 Pro Fold).
-   */
-  sources: Record<string, ReleaseSource[]>;
-  /** Android: sha of carrier_list.pb (one per build: identical across devices). */
-  carrierList?: string;
-  /** iOS: modem packages (unchanged shape from the v1 index, see src/lib/server/timeline.ts ImageModem). */
-  modems?: unknown[];
+/** An OS image's settings. Stored at releases/<platform>/<id>.json. */
+export type Release = AppleRelease | AndroidRelease;
+export type ReleaseHeader = AppleReleaseHeader | AndroidReleaseHeader;
+
+interface ReleaseHeaderBase {
+  /** iOS build (`23C55`) or Pixel build (`CP3A.260905.009`). */
+  readonly id: string;
+  readonly version: string;
+  readonly released?: string;
+  readonly prerelease: boolean;
+  readonly devices: readonly string[];
+  readonly extractedAt: string;
 }
 
-export interface ReleaseSource {
-  sha: string;
-  /** The source's own version (Profile.version). */
-  version: string;
-  size: number;
-  /** iOS: the bundle's file-set content id (src/lib/decode/bundle.ts contentId), equal across re-zips. */
-  cid?: string;
-  /** Devices carrying exactly this artifact (Pixel codenames; Apple product types for model-specific entries). Absent: every device. */
-  devices?: string[];
+export interface AppleReleaseHeader extends ReleaseHeaderBase {
+  readonly platform: Exclude<Platform, "android">;
 }
 
-/* ---------------------------------------------------------------- timeline */
+export interface AndroidReleaseHeader extends ReleaseHeaderBase {
+  readonly platform: "android";
+  /** YYYY-MM. */
+  readonly patch: string;
+}
 
-/**
- * A version's identity is what each platform actually versions:
- *
- * - Apple: the bundle's own version (what Settings › About › Carrier shows).
- *   Measured on the OTA manifest: 4,434 (bundle, product, build) groups, one
- *   reused for different content (Hutchison_uk 50.1, re-issued in 2025 with
- *   five changed override files). Per-phone differences live inside the
- *   bundle as override files (Profile.variants), so no device dimension.
- * - Android: (device, CarrierSettings.version). The version is a counter per
- *   device line, not a content id: across four Pixels of CP3A.260905.009, 479
- *   of 1,544 (carrier, version) pairs carry different bytes per device.
- *
- * Within one line, a reused version keeps its bare form for the newest
- * content; each older content under it is named by where it first appeared:
- * `50.1@2022-04-12` (OTA publication date), `64.1@ios-26.0` (first image),
- * `79000000004@cp3a.260905.009` (first Pixel build). See versionSlug().
- */
+export interface AppleRelease extends AppleReleaseHeader {
+  /** One bundle per source, merged across every IPSW of the build. */
+  readonly sources: Readonly<Record<string, AppleArtifact>>;
+  readonly modems: readonly ImageModem[];
+}
 
-/** One version of a source on one line: one distinct content, however many copies of it exist. */
+export interface AndroidRelease extends AndroidReleaseHeader {
+  /** Each source's distinct files; devices that agree share one. */
+  readonly sources: Readonly<Record<string, readonly AndroidArtifact[]>>;
+  readonly carrierList: string;
+}
+
+export interface Artifact {
+  readonly sha: string;
+  readonly version: string;
+  readonly size: number;
+}
+
+/** `cid` identifies a bundle's files, so it survives re-zipping. */
+export interface AppleArtifact extends Artifact {
+  readonly cid: string;
+}
+
+export interface AndroidArtifact extends Artifact {
+  readonly devices: readonly string[];
+}
+
+export type ModemKind = "bbfw" | "ftab";
+
+export interface ImageModem {
+  readonly family: string;
+  readonly devices: readonly string[];
+  readonly package: { readonly sha: string; readonly size: number; readonly name: string; readonly crc32: string; readonly kind: ModemKind };
+}
+
+/** One distinct content of a source on one line, however many copies of it exist. */
 export interface TimelineEntry {
-  /** URL segment, unique within its line: `72.0`, `50.1@2022-04-12`. */
+  /** Unique within its line: `72.0`, or `50.1@2022-04-12` for an older content under a reused version. */
   readonly slug: string;
   readonly version: string;
-  /** Every copy of this content. Non-empty. */
-  readonly copies: readonly TimelineCopy[];
-  /** Only ever in beta images: newest, but not what a device on a release runs. */
+  readonly copies: readonly [TimelineCopy, ...TimelineCopy[]];
+  /** Only ever in betas. */
   readonly beta: boolean;
-  /** False when the content equals the previous entry's on this line. */
+  /** Content differs from the previous entry on this line. */
   readonly changed: boolean;
 }
 
-/** Where a copy first appeared, which names a reused version. */
-export type FirstSeen =
-  | { readonly via: "ota"; readonly published: string }      // YYYY-MM-DD, or YYYY (publishedOn)
-  | { readonly via: "image"; readonly release: string };     // `ios-26.0`, `cp3a.260905.009`
-
-/** One place a version's bytes come from. */
 export type TimelineCopy =
-  | {
-      readonly via: "image";
-      /** Release ids carrying it (iOS builds, Pixel builds), newest first. */
-      readonly releases: readonly string[];
-      readonly sha: string;
-      readonly cid?: string;
-    }
+  | { readonly via: "image"; readonly releases: readonly string[]; readonly sha: string; readonly cid?: string }
   | {
       readonly via: "ota";
-      /** OS keys the manifest lists it under. */
       readonly os: readonly string[];
       readonly url: string;
       readonly published?: string;
-      /** Set once archived to R2; until then the site fetches `url`. */
-      readonly sha?: string;
-      readonly cid?: string;
-      readonly sha1?: string;
-      readonly sha384?: string;
+      readonly digest?: Digest;
+      readonly archive: Archive;
     };
 
-/**
- * A source's history, shaped by its platform's identity (see above). Apple
- * has one line; the rare model-specific manifest entries (iPhone7,1) are
- * lines of their own. Android has one line per device.
- */
+export interface Digest {
+  readonly algorithm: "sha1" | "sha384";
+  readonly hex: string;
+}
+
+/** An OTA file's copy in R2. Until it is archived the site fetches it from Apple. */
+export type Archive =
+  | { readonly state: "archived"; readonly sha: string; readonly cid: string }
+  | { readonly state: "pending" }
+  | { readonly state: "failed"; readonly error: string };
+
+/** Where a reused version's older content first appeared; it names the version. */
+export type FirstSeen =
+  | { readonly via: "ota"; readonly published: string }
+  | { readonly via: "image"; readonly release: string };
+
+export const versionSlug = (version: string, firstSeen?: FirstSeen): string =>
+  firstSeen === undefined ? version : `${version}@${firstSeen.via === "ota" ? firstSeen.published : firstSeen.release}`;
+
+/** Apple: one line, plus one per model-specific bundle. Android: one line per device. */
 export type Timeline =
   | {
       readonly family: "apple";
       readonly entries: readonly TimelineEntry[];
-      /** Product type -> its own line, for model-specific bundles. */
       readonly models: Readonly<Record<string, readonly TimelineEntry[]>>;
     }
   | {
       readonly family: "android";
-      /** Pixel codename -> its line. */
       readonly devices: Readonly<Record<string, readonly TimelineEntry[]>>;
-      /**
-       * sha -> the codename whose URL is canonical for that content (several
-       * Pixels often carry the same file): the newest device carrying it.
-       */
+      /** sha -> the device whose URL is canonical for it. */
       readonly canonical: Readonly<Record<string, string>>;
     };
 
-/** The version segment for an entry: the bare version, or `<version>@<first seen>` when the version is reused. */
-export const versionSlug = (version: string, firstSeen?: FirstSeen): string =>
-  firstSeen === undefined ? version : `${version}@${firstSeen.via === "ota" ? firstSeen.published : firstSeen.release}`;
-
-/**
- * Where a version lives: `/carriers/ios/Verizon_LTE/72.0`,
- * `/carriers/android/tmobile_us/tokay/79000000034`. `line` is the Pixel
- * codename on Android, or the product type of a model-specific Apple bundle.
- */
+/** `/carriers/ios/Verizon_LTE/72.0`, `/carriers/android/tmobile_us/tokay/79000000034`. */
 export const versionPath = (s: SourceRef, slug: string, line?: string): string =>
   [sourcePath(s), ...(line === undefined ? [] : [encodeURIComponent(line)]), encodeURIComponent(slug)].join("/");
 
-/** A v1 URL prefix and the v2 path it permanently redirects to. */
+/** A v1 path prefix and its v2 path. */
 export interface LegacyRoute {
   readonly from: string;
   readonly to: string;
 }
 
-/** index/carriers/<slug>.json: everything a carrier page needs before opening any artifact. */
+/** index/carriers/<id>.json. */
 export interface CarrierDoc {
-  carrier: Carrier;
-  /** sourceKey -> timeline. */
-  timelines: Record<string, Timeline>;
-  /**
-   * sourceKey -> feature states per device group at the head, so a page can say
-   * "VoLTE: on for Pixel 8 and later, off on Pixel 6" without opening artifacts.
-   */
-  states: Record<string, DeviceStates[]>;
+  readonly carrier: Carrier;
+  readonly timelines: Readonly<Record<string, Timeline>>;
+  /** sourceKey -> feature states at the head, per group of devices that agree. */
+  readonly states: Readonly<Record<string, readonly DeviceStates[]>>;
 }
 
-/** The `state` concepts of one device group of a source. */
 export interface DeviceStates {
-  /**
-   * Pixel codenames or iPhone product types it applies to. Absent: every device
-   * no other group names (iOS: carrier.plist with the newest phone's overrides).
-   */
-  devices?: string[];
-  /** The version path segment (and Android line) the states were read from. */
-  slug: string;
-  line?: string;
-  /** Concept id -> state. */
-  states: Record<string, FeatureState>;
+  /** "rest": every device no other group names. */
+  readonly devices: readonly string[] | "rest";
+  readonly slug: string;
+  readonly line?: string;
+  readonly states: Readonly<Record<string, FeatureState>>;
 }
