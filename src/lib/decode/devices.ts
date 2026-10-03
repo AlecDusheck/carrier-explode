@@ -143,6 +143,11 @@ export const DEVICE_CODENAMES: Record<string, { name: string; ids: string }> = {
   "V54": { name: "iPhone 17 Pro Max", ids: "iPhone18,2" },
   "V57": { name: "iPhone 17", ids: "iPhone18,3" },
   "V59": { name: "iPhone 16e", ids: "iPhone17,5" },
+  // ipsw.me board configs, October 2026. V64 is the US model (Qualcomm modem), V64s the rest (Apple modem);
+  // V64s is listed so the trailing-letter fallback below cannot fold it into the US model.
+  "V63": { name: "iPhone 18 Pro", ids: "iPhone19,2" },
+  "V64": { name: "iPhone 18 Pro Max (US)", ids: "iPhone19,3" },
+  "V64s": { name: "iPhone 18 Pro Max", ids: "iPhone19,7" },
   "mvno1": { name: "MVNO override set (not a device)", ids: "" },
 };
 

@@ -1,7 +1,9 @@
 <script lang="ts">
   import { goto } from "$app/navigation";
   import { page } from "$app/state";
-  import { getBundle, getComparison } from "#lib/api/bundles.remote.ts";
+  import { getBundle, getComparison, getPhoneChanges } from "#lib/api/bundles.remote.ts";
+  import { routineReason } from "#lib/changes.ts";
+  import PhoneChanges from "#lib/components/PhoneChanges.svelte";
   import { bundleArgs, entryLabel, link, withParams } from "#lib/format.ts";
   import Pane from "#lib/components/Pane.svelte";
   import BundleCompare from "#lib/components/BundleCompare.svelte";
@@ -21,17 +23,8 @@
   const set = (changes: Record<string, string | null>) =>
     goto(withParams(page.url, changes), { reset: false });
 
-  /** Files that change with every build whatever the settings: the version, signatures and translations. */
-  const packaging = (path: string) =>
-    path === "Info.plist" || path.startsWith("signatures/") || path.includes(".lproj/") || path.endsWith(".loctable");
-
-  /** The answer to "did any setting change?", ahead of the file list. */
-  function summary(diff: BundleDiff) {
-    const settings = diff.files.filter((f) => f.kind === "changed" && !packaging(f.path)).map((f) => f.path);
-    const groups = (kind: "added" | "removed") =>
-      diff.files.filter((f) => f.kind === kind && /^overrides_.*\.plist$/.test(f.path)).length;
-    return { settings, added: groups("added"), removed: groups("removed") };
-  }
+  /** Files every phone reads whose difference is not routine: carrier.plist and the like. Override files are compared per phone. */
+  const shared = (diff: BundleDiff) => diff.files.filter((f) => !routineReason(f, true));
 
   /** The timeline runs newest first. */
   function notNewer(timeline: Array<{ slug: string }>, x: string, y: string) {
@@ -85,17 +78,20 @@
         </table>
       {/if}
       {#if !file}
-        {@const s = summary(cmp.diff)}
-        <p class="gap-above">
-          {#if s.settings.length}
-            Settings changed in {#each s.settings as p, i (p)}{i ? ", " : ""}<a href={withParams(page.url, { file: p })} class="mono">{p}</a>{/each}.
+        {@const files = shared(cmp.diff)}
+        <fieldset class="hgroup">
+          <legend>Every phone</legend>
+          {#if files.length}
+            <p class="note">
+              Changed in files every phone reads:
+              {#each files as f, i (f.path)}{i ? ", " : ""}<a href="#file-{f.path.replace(/[^\w.-]/g, "_")}" class="mono">{f.path}</a> <span class="dimtext">({f.kind})</span>{/each}.
+            </p>
           {:else}
-            <strong>No settings changed</strong> in the files both versions have.
+            <p class="note"><b>No change</b> in carrier.plist or any other file every phone reads.</p>
           {/if}
-          {#if s.added}Overrides for {s.added} phone {s.added === 1 ? "group" : "groups"} added.{/if}
-          {#if s.removed}Overrides for {s.removed} phone {s.removed === 1 ? "group" : "groups"} removed.{/if}
-          {#if s.added || s.removed}<span class="dimtext">(A copy inside an iOS image only has the overrides for that image's phones.)</span>{/if}
-        </p>
+        </fieldset>
+        {@const phones = await getPhoneChanges({ kind: params.kind, name: params.name, slug: params.version, against: against ?? undefined })}
+        {#if phones?.groups.length}<PhoneChanges changes={phones} />{/if}
       {/if}
       <BundleCompare
         diff={cmp.diff}
@@ -104,6 +100,7 @@
         left={older ? "Before" : "Other"}
         right={older ? "After" : "This"}
         narrowHref={(path) => withParams(page.url, { file: path })}
+        routine={file ? undefined : (f) => routineReason(f, true)}
       />
     {/if}
   </Pane>

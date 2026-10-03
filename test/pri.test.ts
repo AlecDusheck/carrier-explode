@@ -1807,12 +1807,14 @@ describe("describeDevices", () => {
     expect(describeDevices("N61x")).toEqual([{ code: "N61x", name: "iPhone 6", ids: "iPhone7,2" }]);
     expect(describeDevices("D27x")).toEqual([{ code: "D27x", name: "iPhone 14", ids: "iPhone14,7" }]);
     // The fallback strips exactly one lowercase letter and gives up if that misses.
-    expect(describeDevices("V64s")).toEqual([{ code: "V64s" }]);
+    expect(describeDevices("V99s")).toEqual([{ code: "V99s" }]);
     expect(describeDevices("N61xy")).toEqual([{ code: "N61xy" }]);
   });
 
   it("prefers an exact table hit over the suffix fallback", () => {
     expect(describeDevices("D53g")[0].ids).toBe("iPhone13,2");
+    // V64s is the iPhone 18 Pro Max sold outside the US, not the US V64.
+    expect(describeDevices("V64s")[0].ids).toBe("iPhone19,7");
     expect(describeDevices("D53p")[0].ids).toBe("iPhone13,3");
     expect(describeDevices("D331p")[0].ids).toBe("iPhone11,6");
     expect(describeDevices("D331")[0].ids).toBe("iPhone11,4");

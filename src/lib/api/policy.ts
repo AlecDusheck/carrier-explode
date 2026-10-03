@@ -39,6 +39,8 @@ export const QUERIES: Record<QueryName, QueryPolicy> = {
   // Two bundles or packages and a full diff per miss.
   getComparison: { rate: "diff" },
   getBasebandDiff: { rate: "diff" },
+  // Every phone group's files against the copies that phone had before: several opens and diffs per miss.
+  getPhoneChanges: { rate: "diff" },
   scanKey: { rate: "scan" },
   // A scan cut to a few numbers, the same for everybody: wiki pages show several at once.
   getSettingSummary: { rate: "base", shared: true },

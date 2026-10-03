@@ -37,6 +37,7 @@
   <VersionTimeline
     timeline={bundle.timeline}
     current={bundle.entry.slug}
+    head={bundle.head}
     href={(slug) => bundleHref(bundle.kind, bundle.name, slug, tab)}
   />
 {/snippet}

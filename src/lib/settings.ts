@@ -11,7 +11,20 @@ import type { RareSetting } from "#lib/server/keyscan.ts";
 
 export const SETTING_GROUPS: Array<[string, string[]]> = [
   ["Identity", ["CarrierName", "HomeBundleIdentifier", "CountryName", "ISOAlpha2CountryCode", "SupportedSIMs", "SupportedPLMNs", "SupportedCarrierIds", "SupportedCountryIds", "MVNOOverrides"]],
-  ["Data", ["apns", "AttachAPN", "MTU", "MMS", "DataIndicatorOverrideForLTE", "DataIndicatorOverrideForNRMmwave", "PcoOptions", "APNEditabilityTypemask", "APNEditabilityTypemaskNew"]],
+  // The keys behind the Cellular switches in Settings, and what they default to; from the keys bundles actually set.
+  ["Cellular: 5G, LTE, calling and roaming", [
+    "Show5GSwitch", "Enable5GAutoByDefault", "Enable5GAutoAfterUpgrade", "Show5GWarningUnsupportedCarrier",
+    "Supports5GStandalone", "Show5GStandaloneSwitch", "Show5GStandaloneSwitchOnlyWhenEntitled", "Enable5GStandaloneByDefault", "Enable5GStandaloneAfterUpgrade",
+    "SupportsVoNR", "ShowVoNRSwitch", "EnableVoNRByDefault", "ShowVoNRWarningUnsupportedCarrier",
+    "ShowHighDataModeSwitch", "SupportsNRNSAInboundRoaming", "NRSlicing", "DataIndicatorOverrideForNRMmwave", "EnableMmWaveSisOutrank", "IgnoreDSDForUI5G",
+    "ShowVolteSwitch", "ShowVolteWarningUnsupportedCarrier", "SupportsVolteCapability", "MultiSimVoLteOnly",
+    "Show4GSwitch", "Show4GSwitchWith5G", "Enable4GByDefault", "EnableLTEAfterUpgrade", "ShowLTEWarningUnsupportedCarrier", "DataIndicatorOverrideForLTE", "UseLTEAlternateBarMapping",
+    "Show3GSwitch", "Show3GSwitchWith4G", "Show3GSwitchWith5G", "Show3GSwitchWithVolte", "AllowsHighQualityVideoOver3G",
+    "ShowWiFiCallingWarningUnsupportedCarrier", "ShowWiFiCallingRoamingSwitch",
+    "ShowVoiceRoamingSwitch", "IntlDataRoamingSwitch", "IntlDataRoamingAllowed", "IntlDataRoamingExceptions", "IgnoresIntlDataRoamingServiceList",
+    "AllowCSCallsForInboundDomesticRoaming", "CDMAInternationalRoaming", "SupportsRoamingOnCDMA",
+  ]],
+  ["Data", ["apns", "AttachAPN", "MTU", "MMS", "PcoOptions", "APNEditabilityTypemask", "APNEditabilityTypemaskNew"]],
   ["Entitlements and eSIM", ["CarrierEntitlements", "RemoteCardProvisioningSettings", "PhoneAccountTransfer", "CellularPlanProvisioningSettings", "OTAActivation", "EncryptedIdentity", "QuickSwitch"]],
   ["Voice and IMS", ["IMSConfig", "TechSettings", "RCS", "VoicemailPilotNumber", "PhoneNumberRegistrationGatewayAddress", "SMSSettings", "PushSettings", "VisualVoicemailServiceName"]],
   ["Emergency and alerts", ["CellBroadcast", "EmergencyCalling", "EmergencyNumbers", "e_only_whitelist", "TestEmergencyNumber", "Location", "SUPL", "DisallowedDialingPrefixes"]],
@@ -75,4 +88,25 @@ export function rareBadges(rows: RareSetting[]): Record<string, KeyBadge[]> {
     out[top] = [{ text: rareLabel(r), tone: "rare", title: `${what} in ${r.holders} of ${r.of} bundles${also}` }];
   }
   return out;
+}
+
+/**
+ * What people call a feature, and words its keys use: a filter for "VoNR" or "Wi-Fi Calling"
+ * should find the settings even when no key spells it that way.
+ */
+const TERMS: Array<[RegExp, string[]]> = [
+  [/^(vonr|voiceovernr|voice over 5g|vo5g)$/, ["vonr"]],
+  [/^(sa|5gsa|standalone|5g standalone)$/, ["standalone"]],
+  [/^(wifi ?calling|wi-fi calling|vowifi|wfc)$/, ["wificalling", "vowifi", "epdg", "iwlan"]],
+  [/^(volte|voice over lte|4g calling|hd voice)$/, ["volte", "ims"]],
+  [/^(hotspot|tethering|personal hotspot)$/, ["tethering", "wirelessmodem", "hotspot"]],
+  [/^(5g|nr)$/, ["5g", "nr"]],
+];
+
+/** The filter text itself, plus the key words its feature uses; all lowercase, matched as substrings. */
+export function searchTerms(filter: string): string[] {
+  const q = filter.trim().toLowerCase();
+  if (!q) return [];
+  const extra = TERMS.find(([re]) => re.test(q))?.[1] ?? [];
+  return [q, ...extra];
 }

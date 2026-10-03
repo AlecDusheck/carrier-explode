@@ -1,6 +1,7 @@
 <script lang="ts">
   import { SvelteMap, SvelteSet } from "svelte/reactivity";
-  import { summariseDiff, type BundleDiff, type DiffKind } from "#lib/decode/index.ts";
+  import { summariseDiff, type BundleDiff, type DiffKind, type FileDiff } from "#lib/decode/index.ts";
+  import { ROUTINE_LABEL, type RoutineReason } from "#lib/changes.ts";
   import type { Kind, PublicEntry } from "#lib/types.ts";
   import { DIFF_CHIP, fileHref } from "#lib/format.ts";
   import { Folding, toggleIn, type FoldToggle } from "#lib/ui-state.svelte.ts";
@@ -8,7 +9,7 @@
 
   interface Side { kind: Kind; name: string; entry: PublicEntry }
 
-  let { diff, a, b, left = "Before", right = "After", narrowHref }: {
+  let { diff, a, b, left = "Before", right = "After", narrowHref, routine }: {
     diff: BundleDiff;
     a: Side;
     b: Side;
@@ -16,6 +17,8 @@
     right?: string;
     /** Link that narrows the comparison to one file. */
     narrowHref?: (path: string) => string;
+    /** Why a file's difference is routine; those are counted together rather than listed one by one. */
+    routine?: (f: FileDiff) => RoutineReason | undefined;
   } = $props();
 
   const KINDS = ["changed", "added", "removed"] as const satisfies DiffKind[];
@@ -26,10 +29,15 @@
   let query = $state("");
 
   const q = $derived(query.trim().toLowerCase());
-  const byKind = $derived(summariseDiff(diff.files));
+
+  // A filter that names a routine file shows it like any other.
+  const routineOf = (f: FileDiff) => (q ? undefined : routine?.(f));
+  const folded = $derived(diff.files.map((f) => ({ f, why: routineOf(f) })).filter((x) => x.why !== undefined));
+  // The kind buttons count what they list: routine files are counted with their group.
+  const byKind = $derived(summariseDiff(diff.files.filter((f) => routineOf(f) === undefined)));
   const visible = $derived(
     diff.files
-      .filter((f) => kinds.has(f.kind))
+      .filter((f) => kinds.has(f.kind) && routineOf(f) === undefined)
       .map((f) => {
         const whole = !q || f.path.toLowerCase().includes(q);
         return { f, whole, rows: whole ? f.rows : f.rows.filter((r) => r.path.toLowerCase().includes(q)) };
@@ -37,10 +45,8 @@
       .filter((x) => x.whole || x.rows.length),
   );
   // Few files open by default; a text filter opens whatever it matched.
-  const auto = $derived(!!q || diff.files.length <= 6);
-  // Version stamps and signature digests change with every build; they start closed.
-  const routine = (path: string) => /^(Info|version)\.plist$|^signatures\//.test(path);
-  const isOpen = (path: string) => fold.openFor(auto && (!!q || !routine(path)), toggled.get(path));
+  const auto = $derived(!!q || visible.length <= 6);
+  const isOpen = (path: string) => fold.openFor(auto, toggled.get(path));
   const toggle = (path: string) => toggled.set(path, fold.toggle(!isOpen(path)));
 
   const total = (c: BundleDiff["counts"]) => c.added + c.removed + c.changed;
@@ -63,7 +69,26 @@
     <button class="btn" onclick={() => fold.collapseAll()}>Collapse all</button>
   </div>
 
-  {#if diff.files.length > 1}
+  {#if folded.length}
+    {@const reasons = [...new Set(folded.map((x) => x.why!))]}
+    <details class="more">
+      <summary>Routine changes ({folded.length} files): {reasons.map((r) => ROUTINE_LABEL[r]).join(", ")}</summary>
+      <table class="grid">
+        <thead><tr><th>File</th><th>Kind</th><th>Why it is routine</th></tr></thead>
+        <tbody>
+          {#each folded as { f, why } (f.path)}
+            <tr>
+              <td class="mono wrap">{#if narrowHref}<a href={narrowHref(f.path)}>{f.path}</a>{:else}{f.path}{/if}</td>
+              <td><span class="chip {DIFF_CHIP[f.kind]}">{f.kind}</span></td>
+              <td class="dimtext">{ROUTINE_LABEL[why!]}</td>
+            </tr>
+          {/each}
+        </tbody>
+      </table>
+    </details>
+  {/if}
+
+  {#if visible.length > 1}
     <table class="grid gap-above">
       <thead><tr><th>File</th><th>Kind</th><th class="num">Added</th><th class="num">Removed</th><th class="num">Changed</th></tr></thead>
       <tbody>
@@ -96,9 +121,10 @@
         {#if f.kind !== "removed"}{@render sideLink(b, f.path, right)}{/if}
         {#if narrowHref && diff.files.length > 1}<a class="chip" href={narrowHref(f.path)}>only this file</a>{/if}
       </legend>
-      {#if open}
+      <!-- Rendered closed as well, so every row is in the page and can be linked to. -->
+      <div hidden={!open}>
         {#if rows.length}
-          <DiffRows {rows} {left} {right} />
+          <DiffRows {rows} {left} {right} anchor={anchor(f.path)} />
           {#if !whole}<p class="dimtext after">{rows.length} of {f.rows.length} rows match.</p>{/if}
           {#if f.truncated}
             <p class="dimtext after">
@@ -110,10 +136,10 @@
         {:else}
           <span class="dimtext">Only in {f.kind === "added" ? right : left}.</span>
         {/if}
-      {/if}
+      </div>
     </fieldset>
   {:else}
-    <p class="dimtext">Nothing matches the filter.</p>
+    <p class="dimtext">{q ? "Nothing matches the filter." : folded.length ? "Only routine changes." : "Nothing to show."}</p>
   {/each}
 {:else}
   <p class="dimtext">Identical.</p>

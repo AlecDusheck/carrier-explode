@@ -14,12 +14,13 @@ import { error } from "@sveltejs/kit";
 import { getRequestEvent } from "$app/server";
 import { env } from "cloudflare:workers";
 import {
-  MODEM_SUMMARY_SCHEMA, basebandComparable, carriedBy, compareBundles, contentId, decodeFile, decodedPlist, decodedPri,
+  MODEM_SUMMARY_SCHEMA, basebandComparable, carriedBy, comparable, compareBundles, contentId, decodeFile, decodedPlist, decodedPri,
   diffKeyed, diffValues, isRecord, mergeComboSets, openIpcc, parseBandCombos, priReplacements, priText,
   summariseDiff,
-  type BasebandSummary, type BundleFile, type ModemKind, type ModemSummary, type OpenedBundle, type PriReplacement,
+  type BasebandSummary, type BundleFile, type DiffCounts, type DiffRow, type ModemKind, type ModemSummary, type OpenedBundle,
+  type PriReplacement,
 } from "#lib/decode/index.ts";
-import { imageSlug, isPrerelease } from "#lib/names.ts";
+import { compareVersions, imageSlug, isPrerelease } from "#lib/names.ts";
 import { byNewest, homePhone, knowsPhone, overridesFor, sharedPri } from "#lib/phones.ts";
 import type { BasebandDiffPart, Kind, PublicEntry, TimelineEntry } from "#lib/types.ts";
 import { cached, digestHex, fetchApple, perRequest } from "./cache";
@@ -325,6 +326,8 @@ export async function getBundle(kind: Kind, name: string, slug?: string) {
     entry: publicEntry(entry),
     previous: previous && publicEntry(previous),
     timeline: timeline.map(publicEntry),
+    /** The version phones on a release run: the newest plain, non-beta copy. */
+    head: timeline[headIndex(timeline)].slug,
     info: opened.info,
     downloadSize: bytes.length,
     contentId: id,
@@ -373,6 +376,99 @@ export async function getComparison(a: Side | null, b: Side, path?: string) {
     const [A, B] = await Promise.all([open(left.entry.src), open(right.entry.src)]);
     const diff = compareBundles(A.opened, B.opened, { path, maxRows: path ? 2000 : 400 });
     return { a: side(left), b: side(right), diff };
+  });
+}
+
+/** One override file of a phone group, against what that phone had before. */
+export interface PhoneFileChange {
+  /** The file in this version, and in the copy compared against. */
+  path: string;
+  before?: string;
+  kind: "same" | "changed" | "added" | "removed";
+  counts: DiffCounts;
+  rows: DiffRow[];
+  truncated: boolean;
+}
+
+export interface PhoneChange {
+  phones: Array<{ id: string; name?: string; family?: string }>;
+  /**
+   * "compared": against the version compared against itself. "older": that version's copy has no files for
+   * this phone, so against `from`, the newest copy before it that does; the difference spans more than one update.
+   * "new": copies from then knew the phone and gave it no files. "unknown": no copy that old has a file for it.
+   */
+  status: "compared" | "older" | "new" | "unknown";
+  from?: PublicEntry;
+  plist?: PhoneFileChange;
+  modem?: PhoneFileChange;
+}
+
+const PHONE_ROWS = 300;
+const isPhonePlist = (f: Pick<BundleFile, "path">) => /^overrides_.+\.plist$/.test(f.path);
+const isPhoneModem = (f: Pick<BundleFile, "kind">) => f.kind === "pri-der" || f.kind === "pri-plain";
+
+function fileChange(A: OpenedBundle | null, before: string | undefined, B: OpenedBundle, path: string | undefined): PhoneFileChange | undefined {
+  const value = (o: OpenedBundle, p: string) => { try { return comparable(decodeFile(o, p)); } catch { return null; } };
+  if (!path && !before) return undefined;
+  if (!path) return { path: before!, before, kind: "removed", counts: summariseDiff([]), rows: [], truncated: false };
+  if (!A || !before) return { path, kind: "added", counts: summariseDiff([]), rows: [], truncated: false };
+  const rows = diffValues(value(A, before), value(B, path));
+  return { path, before, kind: rows.length ? "changed" : "same", counts: summariseDiff(rows), rows: rows.slice(0, PHONE_ROWS), truncated: rows.length > PHONE_ROWS };
+}
+
+/**
+ * A version's phone groups, each one's override plist and modem file against what that phone
+ * had at the version compared against: that version's own files when it carries them, else the
+ * newest copy no newer than it that does. An image copy carries only its own phones' files, so
+ * comparing two copies file by file reports every other phone as added; this compares per phone.
+ */
+export async function getPhoneChanges(kind: Kind, name: string, slug: string, against?: string) {
+  const { timeline, entry: b, previous } = await resolve(kind, name, slug);
+  const a = against ? (await resolve(kind, name, against)).entry : previous;
+  const vb = await phoneCopies(kind, name, slug);
+  if (!a || !vb) return null;
+  // What a phone could have had at `a`: `a`, then OTA copies no newer than it, newest first.
+  const candidates = [a, ...timeline
+    .filter((e) => e !== a && e.source === "ota" && !e.beta && compareVersions(e.build || "0", a.build || "0") <= 0)
+    .sort((x, y) => compareVersions(y.build || "0", x.build || "0"))].slice(0, OTA_COPIES + 1);
+  const key = `phonechanges:v2:${b.src}|${fingerprint(candidates.map((e) => e.src))}|${fingerprint(vb.phones.map((p) => p.id))}`;
+  return cached(key, 30 * 86400, async () => {
+    const B = (await open(b.src)).opened;
+    /** A phone's override files in a copy: its plist and its modem file, by the boards in their names. */
+    const filesFor = (o: OpenedBundle, phone: string) => o.info.files.filter((f) => f.devices?.some((d) => d.ids === phone));
+    // Phone groups as this version files them: phones that read the same files.
+    const groups = new Map<string, { files: BundleFile[]; phones: PhoneChange["phones"] }>();
+    for (const p of vb.phones) {
+      const files = filesFor(B, p.id);
+      if (!files.length) continue;
+      const k = files.map((f) => f.path).sort().join("|");
+      const g = groups.get(k) ?? { files, phones: [] };
+      g.phones.push({ id: p.id, name: p.name, family: p.family });
+      groups.set(k, g);
+    }
+    const out: PhoneChange[] = [];
+    for (const { files, phones } of groups.values()) {
+      const phone = phones[0].id;
+      let found: { entry: TimelineEntry; files: BundleFile[]; opened: OpenedBundle } | undefined;
+      let knew = false;
+      for (const e of candidates) {
+        // A per-model copy only speaks for its own model.
+        if (e.productType && e.productType !== phone) continue;
+        const opened = (await open(e.src)).opened;
+        const mine = filesFor(opened, phone);
+        if (mine.length) { found = { entry: e, files: mine, opened }; break; }
+        knew ||= knowsPhone(opened.info.files, phone);
+      }
+      const before = found?.files ?? [];
+      out.push({
+        phones,
+        status: found ? (found.entry === a ? "compared" : "older") : knew ? "new" : "unknown",
+        from: found && publicEntry(found.entry),
+        plist: fileChange(found?.opened ?? null, before.find(isPhonePlist)?.path, B, files.find(isPhonePlist)?.path),
+        modem: fileChange(found?.opened ?? null, before.find(isPhoneModem)?.path, B, files.find(isPhoneModem)?.path),
+      });
+    }
+    return { from: publicEntry(a), groups: out };
   });
 }
 
@@ -563,7 +659,7 @@ const phoneCopies = perRequest(async (kind: Kind, name: string, slug: string) =>
   if (!build || !idx) return null;
   const phones: Phone[] = byNewest(idx.modems.map(modemView)).flatMap((m) => m.devices.map((d) => ({ ...d, family: m.family })));
   const head = timeline[headIndex(timeline)];
-  const key = `phonecopies:v1:${head.src}|${entry.src}|${fingerprint(phones.map((p) => `${p.family}/${p.id}`))}`;
+  const key = `phonecopies:v2:${head.src}|${entry.src}|${fingerprint(phones.map((p) => `${p.family}/${p.id}`))}`;
   const { found } = await cached(key, 7 * 86400, async () => {
     const found = await Promise.all(phones.map((p) => firstCopyWith(
       overrideCandidates(timeline, entry, p.id, OTA_COPIES),

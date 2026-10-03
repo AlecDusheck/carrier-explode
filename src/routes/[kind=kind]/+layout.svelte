@@ -19,7 +19,12 @@
   let { params, children } = $props();
 
   type Row = { name: string; display: string; cc?: string };
-  const matches = (c: Row, q: string) => c.name.toLowerCase().includes(q) || c.display.toLowerCase().includes(q) || c.cc === q;
+  // Letters and digits only, so "AT&T" finds ATT_US and "Red Pocket" finds ATT_RedPocket_US.
+  const fold = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, "");
+  const matches = (c: Row, q: string) => {
+    const f = fold(q);
+    return c.cc === q || (!!f && (fold(c.name).includes(f) || fold(c.display).includes(f)));
+  };
 
   // Carriers come from the network the request arrived on, countries from where
   // it arrived from. Watch bundles have neither.

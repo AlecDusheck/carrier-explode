@@ -4,6 +4,7 @@
   import { describeField, describeValue, isBigInt, isBlob, isDate, isJsonDict, isUid } from "#lib/decode/index.ts";
   import { menuTrigger, copyText, scan, type Folding, type FoldToggle, type MenuItem } from "#lib/ui-state.svelte.ts";
   import { hexDump, plainJson } from "#lib/format.ts";
+  import { searchTerms } from "#lib/settings.ts";
   import type { KeyBadge, TreeCtx } from "./Tree.svelte";
 
   let {
@@ -49,13 +50,15 @@
 
   const open = $derived(fold.openFor(depth < 2 || !!filter, toggled));
 
+  // The filter text and the key words of the feature it names ("VoNR", "Wi-Fi Calling").
+  const terms = $derived(searchTerms(filter));
   const matches = $derived.by(() => {
-    if (!filter) return true;
-    const f = filter.toLowerCase();
-    if (name.toLowerCase().includes(f)) return true;
-    if (labels?.some((l) => l.label.toLowerCase().includes(f))) return true;
+    if (!terms.length) return true;
+    const hit = (s: string) => terms.some((t) => s.toLowerCase().includes(t));
+    if (hit(name)) return true;
+    if (labels?.some((l) => hit(l.label))) return true;
     try {
-      return JSON.stringify(value).toLowerCase().includes(f);
+      return hit(JSON.stringify(value));
     } catch {
       return false;
     }

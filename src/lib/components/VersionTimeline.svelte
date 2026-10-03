@@ -3,9 +3,11 @@
   import type { PublicEntry } from "#lib/types.ts";
   import { entryLabel } from "#lib/format.ts";
 
-  let { timeline, current, href }: {
+  let { timeline, current, head, href }: {
     timeline: PublicEntry[];
     current: string;
+    /** The version phones on a release run now. */
+    head: string;
     href: (slug: string) => string;
   } = $props();
 
@@ -15,18 +17,23 @@
   const reveal: Attachment<HTMLElement> = (node) => node.scrollIntoView({ block: "nearest" });
 </script>
 
+{#snippet flags(e: PublicEntry)}
+  {#if e.slug === head}<span class="flag now">current release</span>
+  {:else if e.beta}<span class="flag">beta</span>{/if}
+  {#if !e.changed && e.slug !== current}<span class="flag">same content</span>{/if}
+{/snippet}
+
 {#snippet rows()}
   <ol class="timeline">
     {#each timeline as e (e.slug)}
       <li>
         {#if e.slug === current}
           <a href={href(e.slug)} aria-current="true" onclick={() => (open = false)} {@attach reveal}>
-            <span class="what">{entryLabel(e)}</span>
+            <span class="what">{entryLabel(e)}</span>{@render flags(e)}
           </a>
         {:else}
           <a href={href(e.slug)} onclick={() => (open = false)}>
-            <span class="what">{entryLabel(e)}</span>
-            {#if !e.changed}<span class="flag">same content</span>{/if}
+            <span class="what">{entryLabel(e)}</span>{@render flags(e)}
           </a>
         {/if}
       </li>

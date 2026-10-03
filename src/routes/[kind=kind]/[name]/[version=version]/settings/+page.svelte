@@ -44,7 +44,7 @@
     {@const carrier = asDict(bundle.quick["carrier.plist"])}
     {@const ov = bundle.kind === "countries" ? null : await getBundleOverrides(args)}
     {@const rows = phoneRows(bundle.entry, bundle.info.files, ov).filter((r) => r.phones.length)}
-    {@const row = pickPhoneRow(rows, { file: sp.get("file"), copy: sp.get("copy") ?? undefined }, ov?.home)}
+    {@const { row, missing } = pickPhoneRow(rows, { file: sp.get("file"), copy: sp.get("copy") ?? undefined })}
     {@const over = row ? await getOverridePlist({ ...args, slug: row.copy ?? bundle.entry.slug, path: row.path }) : null}
     {@const phoneDict = asDict(over?.plist)}
     {@const rare = await getRare(args)}
@@ -52,6 +52,9 @@
     {@const homeDict = asDict(home?.quick["carrier.plist"])}
 
     <PhonePicker {rows} selected={row} />
+    {#if missing}
+      <div class="banner">No phone reads <span class="mono">{missing}</span> in this version; showing {row ? phoneList(row.phones) : "carrier.plist alone"} instead.</div>
+    {/if}
     <TreeToolbar state={tree} label="filter settings">
       {#each VIEWS as [v, label] (v)}
         {#if v !== "phone" || phoneDict}

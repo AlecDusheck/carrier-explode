@@ -42,7 +42,8 @@ describe("phones", () => {
   });
 
   it("lists phones compactly, unnamed ones last", () => {
-    expect(phoneList(MODEMS[2].devices)).toBe("iPhone 17, 17 Pro, 17 Pro Max, iPhone19,3");
+    expect(phoneList(MODEMS[2].devices)).toBe("iPhone 17, 17 Pro, 17 Pro Max, 18 Pro Max (US)");
+    expect(phoneList(phones("iPhone99,1", "iPhone18,1"))).toBe("iPhone 17 Pro, iPhone99,1");
     expect(phoneList(MODEMS[4].devices)).toBe("iPhone 11, 11 Pro, 11 Pro Max, SE (2nd generation)");
     expect(phoneList([{ id: "iPhone9,1", name: "iPhone 7" }, { id: "iPhone9,3", name: "iPhone 7" }])).toBe("iPhone 7");
     expect(sortPhones(phones("iPhone9,3", "iPhone9,1")).map((p) => p.id)).toEqual(["iPhone9,3", "iPhone9,1"]);

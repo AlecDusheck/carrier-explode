@@ -26,6 +26,12 @@
       {#if bundle.related.country}
         <tr><td class="k">Country bundle</td><td><a href={bundleHref("countries", bundle.related.country)}>{bundle.related.country}</a></td></tr>
       {/if}
+      {#if typeof carrier?.CarrierName === "string" && bundle.entry.build}
+        <tr>
+          <td class="k">On the iPhone</td>
+          <td>{carrier.CarrierName} {bundle.entry.build} <span class="dimtext">in Settings › General › About › Carrier</span></td>
+        </tr>
+      {/if}
       <tr>
         <td class="k">Version</td>
         <td>

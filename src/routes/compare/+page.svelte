@@ -6,6 +6,7 @@
   import { entryLabel, withParams } from "#lib/format.ts";
   import Pane from "#lib/components/Pane.svelte";
   import BundleCompare from "#lib/components/BundleCompare.svelte";
+  import { routineReason } from "#lib/changes.ts";
 
   const sp = $derived(page.url.searchParams);
   const file = $derived(sp.get("file"));
@@ -99,6 +100,7 @@
               left="Left"
               right="Right"
               narrowHref={(path) => withParams(page.url, { file: path })}
+              routine={page.url.searchParams.get("file") ? undefined : (f) => routineReason(f)}
             />
           {/if}
         </Pane>

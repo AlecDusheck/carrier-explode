@@ -2,8 +2,10 @@
   import type { DiffRow } from "#lib/decode/index.ts";
   import { DIFF_CHIP, shortValue } from "#lib/format.ts";
 
-  let { rows, head = "Key path", left = "Before", right = "After", lines = false }: {
+  let { rows, head = "Key path", left = "Before", right = "After", lines = false, anchor }: {
     rows: DiffRow[];
+    /** Gives each row an id under this prefix, so a single change can be linked to. */
+    anchor?: string;
     /** First column's title. */
     head?: string;
     left?: string;
@@ -42,8 +44,11 @@
     <thead><tr><th>{head}</th><th>{left}</th><th>{right}</th></tr></thead>
     <tbody>
       {#each rows as r, i (i)}
-        <tr>
-          <td class="mono wrap at"><span class="chip {DIFF_CHIP[r.kind]}" title={r.kind}>{r.kind[0]}</span>{at(r.path)}</td>
+        {@const id = anchor && `${anchor}--${r.path.replace(/[^\w.-]/g, "_")}`}
+        <tr {id}>
+          <td class="mono wrap at">
+            <span class="chip {DIFF_CHIP[r.kind]}" title={r.kind}>{r.kind[0]}</span>{#if id}<a href="#{id}" class="row-link">{at(r.path)}</a>{:else}{at(r.path)}{/if}
+          </td>
           <td class="mono wrap">{@render value(r.a, r.kind !== "added")}</td>
           <td class="mono wrap">{@render value(r.b, r.kind !== "removed")}</td>
         </tr>
@@ -56,4 +61,7 @@
   td { min-width: 60px; }
   details.long > summary { cursor: pointer; }
   details.long[open] > summary { color: var(--text-dim); }
+  .row-link { color: inherit; text-decoration: none; }
+  .row-link:hover { text-decoration: underline; }
+  tr:target { background: var(--sel-row); }
 </style>

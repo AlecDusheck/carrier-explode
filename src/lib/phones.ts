@@ -57,9 +57,16 @@ export const overridesFor = <F extends Pick<BundleFile, "kind" | "devices">>(fil
 export const knowsPhone = <F extends Pick<BundleFile, "kind" | "devices">>(files: F[], productType: string) =>
   files.some((f) => isPri(f) && f.devices?.some((d) => d.ids && compareProducts(d.ids, productType) >= 0));
 
-/** Modem files named for no phone: global_setting_*.der.gri, an MVNO set. */
+/** An override file's codes that name no phone the table knows: a board newer than the table. */
+const unknownBoards = (f: Pick<BundleFile, "devices">) => (f.devices ?? []).filter((d) => d.name === undefined).map((d) => d.code);
+
+/** Modem files named for no phone: global_setting_*.der.gri, an MVNO set. Not a board the table has yet to learn. */
 export const sharedPri = <F extends Pick<BundleFile, "kind" | "devices">>(files: F[]) =>
-  files.filter((f) => isPri(f) && !f.devices?.some((d) => d.ids));
+  files.filter((f) => isPri(f) && !f.devices?.some((d) => d.ids) && !unknownBoards(f).length);
+
+/** Modem files named only for boards the table does not know yet, each shown as its board code. */
+export const unrecognisedPri = <F extends Pick<BundleFile, "kind" | "devices">>(files: F[]) =>
+  files.filter((f) => isPri(f) && !f.devices?.some((d) => d.ids) && unknownBoards(f).length);
 
 /** One phone group's modem override file, and the copy of the bundle it was read from when not this one. */
 export interface PhoneRow {
@@ -79,13 +86,25 @@ export function phoneRows(
   files: Array<Pick<BundleFile, "kind" | "devices" | "path">>,
   ov: { files: Array<{ slug: string; path: string; phones: Array<Phone & { family?: string }> }> } | null,
 ): PhoneRow[] {
+  // Newest phone first, whichever modem it uses.
+  const newestIn = (f: { phones: Phone[] }) => f.phones.map((p) => p.id).sort(compareProducts).at(-1) ?? "";
   return [
-    ...(ov?.files ?? []).map((f) => ({ ...f, copy: f.slug === here.slug ? undefined : f.slug })),
+    ...[...(ov?.files ?? [])].sort((x, y) => compareProducts(newestIn(y), newestIn(x)))
+      .map((f) => ({ ...f, copy: f.slug === here.slug ? undefined : f.slug })),
+    ...unrecognisedPri(files).map((f) => ({
+      ...here, path: f.path, copy: undefined,
+      phones: unknownBoards(f).map((code) => ({ id: code, name: `Unrecognised phone (${code})` })),
+    })),
     ...sharedPri(files).map((f) => ({ ...here, path: f.path, copy: undefined, phones: [] })),
   ];
 }
 
-/** The row a `?file=&copy=` selection names, else the version's own phone, else the first. */
-export const pickPhoneRow = (rows: PhoneRow[], sel: { file: string | null; copy?: string }, home?: string) =>
-  (sel.file ? rows.find((r) => r.path === sel.file && r.copy === sel.copy) : undefined)
-  ?? rows.find((r) => r.phones.some((p) => p.id === home)) ?? rows[0];
+/**
+ * The row a `?file=&copy=` selection names, else the newest phone's. `missing` says a named
+ * file is not read by any phone in this version, so the page can say so instead of quietly
+ * showing another phone.
+ */
+export function pickPhoneRow(rows: PhoneRow[], sel: { file: string | null; copy?: string }) {
+  const named = sel.file ? rows.find((r) => r.path === sel.file && (r.copy === sel.copy || !sel.copy)) : undefined;
+  return { row: named ?? rows[0], missing: !!sel.file && !named ? sel.file : undefined };
+}

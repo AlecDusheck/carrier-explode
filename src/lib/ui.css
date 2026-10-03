@@ -19,11 +19,16 @@
   --meaning: #5b3d0c;
   --key: #1b3d6b;
   --doc-underline: #8a93a6;
-  /* Chip states: good, warn, bad. */
+  /* Chip and badge states: good, warn, bad, info. */
   --good-bg: #dff0dd;
   --good-border: #8ab98a;
+  --good-text: #1f5130;
   --warn-bg: #fff0cf;
   --warn-border: #d9b96a;
+  --warn-text: #6b4a00;
+  --info-bg: #e8eef8;
+  --info-border: #7d98c4;
+  --info-text: #1e3d6e;
   --bad-bg: #f6dede;
   --bad-border: #c08a8a;
   /* Confidence marks: "likely", and "unverified" / "unnamed". */
@@ -123,11 +128,10 @@ input[type="text"], input[type="search"], select {
   border: 2px solid; border-color: var(--shadow) var(--light) var(--light) var(--shadow);
   min-height: 26px; max-width: 100%;
 }
-select { padding: 2px; max-width: 100%; text-overflow: ellipsis; }
+/* overflow: WebKit otherwise lets a long option's text widen its parent's scroll area, and an iPhone pans sideways. */
+select { padding: 2px; max-width: 100%; text-overflow: ellipsis; overflow: hidden; }
 label.lbl { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }
 label.lbl select { min-width: 0; }
-/* WebKit still lets a select's text spill into its parent's scroll area; keep it inside the box. */
-select { overflow: hidden; }
 
 /* -------------------------------------------------------------- split pane */
 
@@ -254,9 +258,9 @@ th.sticky-col { z-index: 3; }
   display: inline-block; margin-left: 5px; padding: 0 4px; font: 10px/14px var(--ui); font-weight: normal;
   border: 1px solid var(--shadow); background: var(--face-hi); color: var(--text-dim); vertical-align: 1px; white-space: nowrap;
 }
-.badge.phone { border-color: #7d98c4; background: #e8eef8; color: #1e3d6e; }
-.badge.rare { border-color: var(--warn-border); background: var(--warn-bg); color: #6b4a00; }
-.badge.country { border-color: var(--good-border); background: var(--good-bg); color: #1f5130; }
+.badge.phone { border-color: var(--info-border); background: var(--info-bg); color: var(--info-text); }
+.badge.rare { border-color: var(--warn-border); background: var(--warn-bg); color: var(--warn-text); }
+.badge.country { border-color: var(--good-border); background: var(--good-bg); color: var(--good-text); }
 .tree .val { color: #14442a; word-break: break-word; }
 .tree .val.str { color: #7a2f2f; }
 .tree .val.num { color: #1f3f8a; }
@@ -375,6 +379,8 @@ p.note { margin: 0 0 6px; }
 .timeline a:hover { background: #eef2f7; }
 .timeline a[aria-current="true"] { background: var(--sel); color: var(--sel-text); }
 .timeline .flag { margin-left: auto; font-size: 10.5px; color: var(--text-dim); }
+.timeline .flag + .flag { margin-left: 6px; }
+.timeline .flag.now { color: var(--good-text); font-weight: bold; }
 
 /* ------------------------------------------------------------ context menu */
 

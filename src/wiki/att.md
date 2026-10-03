@@ -41,7 +41,7 @@ GID1 `FFFF` is an unset GID1, so these presumably mean "AT&T's own SIMs, not an 
 
 ## Per-phone files
 
-`ATT_US` 72.1 has 14 overrides pairs, one per group of phones, from the iPhone 11 to the iPhone 17 family, plus boards `V63`, `V64`, `V64s` and `V68`, which do not match an announced device. ??? Each sets its own APN list (`nxtgenphone`, `hotspot`, `ims`, `sos`), 5G defaults and IMS settings, and carries a [.der.pri](/wiki/der-pri) for the modem.
+`ATT_US` 72.1 has 14 overrides pairs, one per group of phones, from the iPhone 11 to the iPhone 18 family. The iPhone 18 Pro (`V63`) and the iPhone 18 Pro Max sold outside the US (`V64s`) share a file in the Apple-modem format with board `V68`, which matches no announced device ???; the US iPhone 18 Pro Max (`V64`, Qualcomm X80) has its own. Each sets its own APN list (`nxtgenphone`, `hotspot`, `ims`, `sos`), 5G defaults and IMS settings, and carries a [.der.pri](/wiki/der-pri) for the modem.
 
 Only the modem files for Apple's own modems (`overrides_D23`, `overrides_V59`, `overrides_V159`: iPhone Air, iPhone 16e, iPhone 17e) set:
 

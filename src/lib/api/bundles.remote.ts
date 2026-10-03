@@ -20,5 +20,8 @@ export const getComparison = query(
 export const getRelease = query(build, (b) => data.getRelease(b));
 /** Settings few other bundles share; and a phone's override plist beside its modem file. */
 export const getRare = query(v.object(bundle), (a) => data.getRare(a.kind, a.name, a.slug));
+/** A version's phone groups against what each phone had at the version compared against. */
+export const getPhoneChanges = query(v.object({ ...pinned, against: v.optional(v.string()) }), (a) =>
+  data.getPhoneChanges(a.kind, a.name, a.slug, a.against));
 export const getOverridePlist = query(v.object({ ...pinned, path: v.string() }), (a) =>
   data.getOverridePlist(a.kind, a.name, a.slug, a.path));
