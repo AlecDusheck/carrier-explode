@@ -1,7 +1,7 @@
 /**
  * Carrier logos, by the words of a bundle's name (split on "_"). Each logo is
- * static/carriers/<slug>.webp: a carrier icon, on a 96px
- * white tile. A rule word with "_" in it is a run of words, for a carrier the
+ * static/carriers/<slug>.svg: the brand's initials in its colours on a beveled
+ * tile, drawn for this site. A rule word with "_" in it is a run of words, for a carrier the
  * plain brand word would mistake for another (Cellcom_il is not CellcomWI).
  *
  * The longest run that matches wins, then the one further right, so an MVNO

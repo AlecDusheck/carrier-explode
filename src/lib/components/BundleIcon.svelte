@@ -20,7 +20,7 @@
 {#if kind === "countries"}
   {#if flag(cc)}<span class="flag" aria-hidden="true">{flag(cc)}</span>{/if}
 {:else if slug}
-  <img class="logo" src={asset(`carriers/${slug}.webp`)} alt="" width="20" height="20" loading="lazy" decoding="async" />
+  <img class="logo" src={asset(`carriers/${slug}.svg`)} alt="" width="20" height="20" loading="lazy" decoding="async" />
 {:else}
   <span class="logo initials" style:--hue={hue} aria-hidden="true">{initials}</span>
 {/if}
