@@ -13,7 +13,7 @@ python3 ftab.py hwid     ftab.bin              # HWID -> blob set (rcpi) joined 
 python3 ftab.py verify   ftab.bin              # SHA-384 of every entry vs. the rcpi manifest
 python3 ftab.py segments ftab.bin [rkos]       # 'fwsg' segment table of a code image
 python3 ftab.py car      ftab.bin [CAR2]       # section table of a CAR image
-python3 ftab.py fetch    <ipsw-url> ftab.bin   # copy the modem ftab out of a remote IPSW (HTTP Range, scripts/net.py)
+python3 ftab.py fetch    <ipsw-url> ftab.bin   # copy the modem ftab out of a remote IPSW (HTTP Range, net.py)
 ```
 
 Add `--json` before the subcommand to get machine-readable output. `lzfse.py` is a standalone
@@ -22,16 +22,16 @@ LZFSE/LZVN decoder. It uses libcompression on macOS and falls back to pure Pytho
 24A437 blobs, and the LZVN (`bvxn`) and raw (`bvx-`) block paths are tested too.
 
 The Intel-heritage `.der.pri` / `.der.gri` carrier files the C1 consumes are decoded by the
-site's own decoder, `src/lib/decode/pri.ts` (with `intel.ts` for the key tree). To dump one,
+site's own decoder, `packages/decode-ios/src/pri.ts` (with `intel.ts` for the key tree). To dump one,
 from the repo root after `pnpm install`:
 
 ```
-cat > /tmp/pri.ts <<'EOF'
+cat > packages/decode-ios/pri-dump.ts <<'EOF'
 import { readFileSync } from "node:fs";
-import { decodePri } from "$lib/decode/pri";
+import { decodePri } from "./src/index.ts";
 console.log(JSON.stringify(decodePri(readFileSync(process.argv[2])), null, 1));
 EOF
-npx vite-node /tmp/pri.ts overrides_V59.der.pri
+node packages/decode-ios/pri-dump.ts overrides_V59.der.pri
 ```
 
 Entry extraction and blob decompression are also in blacktop/ipsw (`ipsw fw c1`,

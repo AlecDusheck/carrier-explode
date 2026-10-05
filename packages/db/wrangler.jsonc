@@ -1,0 +1,14 @@
+// Only for the index's migrations, which we apply by hand: `pnpm --filter @carrier-explode/db migrate` (remote), or
+// `migrate:local` for a local state directory. The apps bind the same database and never migrate it.
+{
+  "name": "carrier-explode-v2-db",
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "carrier-explode-v2",
+      "database_id": "a0c212c0-c6e0-4b54-af0e-9d454ea47d55",
+      "migrations_dir": "migrations",
+      "migrations_pattern": "migrations/*/migration.sql"
+    }
+  ]
+}

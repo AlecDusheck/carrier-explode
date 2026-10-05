@@ -1,0 +1,22 @@
+{
+  "name": "@carrier-explode/android-fields",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "description": "Generates packages/decode-android/src/fields.ts from AOSP's CarrierConfigManager javadoc.",
+  "scripts": {
+    "generate": "node generate.ts",
+    "coverage": "node coverage.ts",
+    "check": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@carrier-explode/binary": "workspace:*",
+    "@carrier-explode/decode-android": "workspace:*",
+    "@carrier-explode/http": "workspace:*"
+  },
+  "devDependencies": {
+    "@carrier-explode/tsconfig": "workspace:*",
+    "@types/node": "^22.20.3",
+    "typescript": "^6.0.0"
+  }
+}

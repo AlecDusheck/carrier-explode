@@ -1,0 +1,6 @@
+{
+  // The Worker (workerd). Tests: tsconfig.test.json.
+  "extends": "@carrier-explode/tsconfig/base.json",
+  "compilerOptions": { "types": ["./worker-configuration.d.ts"] },
+  "include": ["src"]
+}

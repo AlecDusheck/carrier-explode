@@ -1,0 +1,5 @@
+{
+  // The Worker (workerd). The container, dev tools and tests: tsconfig.node.json.
+  "extends": "@carrier-explode/tsconfig/worker.json",
+  "include": ["src"]
+}

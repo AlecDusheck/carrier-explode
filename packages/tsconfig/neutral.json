@@ -1,0 +1,10 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  // Package sources: they run in browsers, Workers and Node, so they see only
+  // the web platform APIs all three share (fetch, WebCrypto, TextDecoder), never Node's.
+  "extends": "./base.json",
+  "compilerOptions": {
+    "lib": ["ES2024", "DOM", "DOM.Iterable"],
+    "types": []
+  }
+}

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Parser for Apple C1/C1X modem firmware packages (Firmware/c4000*/Release/patched/ftab.bin).
-The .der.pri / .der.gri carrier files they consume are decoded by src/lib/decode/pri.ts.
+The .der.pri / .der.gri carrier files they consume are decoded by packages/decode-ios/src/pri.ts.
 
 Subcommands (add --json for machine-readable output):
   info     FTAB                 build string, entry table, entry kinds
@@ -11,7 +11,7 @@ Subcommands (add --json for machine-readable output):
   car      FTAB [TAG]           section table of a CAR2/CAR3 image
   fetch    IPSW_URL OUT         copy the modem ftab member out of a remote IPSW via HTTP ranges
 
-Only the Python standard library is required; fetch also uses the repo's scripts/net.py.
+Only the Python standard library is required; fetch also uses net.py beside this file.
 LZFSE uses libcompression when present (macOS) and a pure-Python decoder otherwise (lzfse.py).
 """
 import argparse
@@ -28,9 +28,7 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import lzfse  # noqa: E402
 
-# ---------------------------------------------------------------------------
 # ftab container
-# ---------------------------------------------------------------------------
 
 
 def parse_ftab(buf):
@@ -81,9 +79,7 @@ def classify(tag, d):
     return ""
 
 
-# ---------------------------------------------------------------------------
 # board blobs (CRnn / R1nn / RPnn / R203)
-# ---------------------------------------------------------------------------
 BLOB_MAGIC = {0xDEADC101: "R", 0xDEADC201: "R203", 0xDEADC301: "RP"}
 
 
@@ -117,9 +113,7 @@ def fwsg_table(d):
     return segs
 
 
-# ---------------------------------------------------------------------------
 # rcpi: HWID -> blob set, SHA-384 manifest, chip revisions, signing authority
-# ---------------------------------------------------------------------------
 
 
 def parse_rcpi(d):
@@ -190,9 +184,7 @@ def hwid_table(ents):
     return rc, rows, board
 
 
-# ---------------------------------------------------------------------------
 # CAR images
-# ---------------------------------------------------------------------------
 
 
 def parse_car(d):
@@ -210,14 +202,11 @@ def parse_car(d):
             "end": base + sum(s["size"] for s in secs), "file_size": len(d)}
 
 
-# ---------------------------------------------------------------------------
 # remote IPSW member fetch (HTTP Range)
-# ---------------------------------------------------------------------------
 
 
 def fetch(url, out, pattern=r"^Firmware/c\d+[^/]*/.*ftab\.bin$"):
-    # The repo's range reader (scripts/net.py); only this subcommand needs it.
-    sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "scripts"))
+    # The range reader beside this file; only this subcommand needs it.
     from net import open_zip
 
     with open_zip(url) as z:
@@ -229,9 +218,7 @@ def fetch(url, out, pattern=r"^Firmware/c\d+[^/]*/.*ftab\.bin$"):
     return names[0]
 
 
-# ---------------------------------------------------------------------------
 # CLI
-# ---------------------------------------------------------------------------
 
 
 def _out(args, obj, text):

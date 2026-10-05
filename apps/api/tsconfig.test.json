@@ -1,0 +1,6 @@
+{
+  // The tests, which run the app in Node against wrangler's local D1 and R2.
+  "extends": "@carrier-explode/tsconfig/base.json",
+  "compilerOptions": { "types": ["./worker-configuration.d.ts", "node"] },
+  "include": ["src", "test", "vitest.config.ts"]
+}

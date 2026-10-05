@@ -1,0 +1,23 @@
+{
+  "name": "@carrier-explode/storage",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "check": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@carrier-explode/schema": "workspace:*",
+    "valibot": "^1.5.0",
+    "@carrier-explode/values": "workspace:*"
+  },
+  "devDependencies": {
+    "@carrier-explode/tsconfig": "workspace:*",
+    "@types/node": "^22.20.3",
+    "typescript": "^6.0.0"
+  }
+}

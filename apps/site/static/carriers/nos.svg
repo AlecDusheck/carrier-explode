@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24">
+  <rect x="0.5" y="0.5" width="23" height="23" rx="5.5" fill="#ffffff" stroke="#9a958a"/>
+  <g fill="none" stroke="#231f20" stroke-width="1.5">
+    <path d="M12 4v4" transform="rotate(0 12 12)"/>
+    <path d="M12 4v4" transform="rotate(20 12 12)"/>
+    <path d="M12 4v4" transform="rotate(40 12 12)"/>
+    <path d="M12 4v4" transform="rotate(60 12 12)"/>
+    <path d="M12 4v4" transform="rotate(80 12 12)"/>
+    <path d="M12 4v4" transform="rotate(100 12 12)"/>
+    <path d="M12 4v4" transform="rotate(120 12 12)"/>
+    <path d="M12 4v4" transform="rotate(140 12 12)"/>
+    <path d="M12 4v4" transform="rotate(160 12 12)"/>
+    <path d="M12 4v4" transform="rotate(180 12 12)"/>
+    <path d="M12 4v4" transform="rotate(200 12 12)"/>
+    <path d="M12 4v4" transform="rotate(220 12 12)"/>
+    <path d="M12 4v4" transform="rotate(240 12 12)"/>
+    <path d="M12 4v4" transform="rotate(260 12 12)"/>
+    <path d="M12 4v4" transform="rotate(280 12 12)"/>
+    <path d="M12 4v4" transform="rotate(300 12 12)"/>
+    <path d="M12 4v4" transform="rotate(320 12 12)"/>
+    <path d="M12 4v4" transform="rotate(340 12 12)"/>
+  </g>
+</svg>

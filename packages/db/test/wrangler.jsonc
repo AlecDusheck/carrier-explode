@@ -1,0 +1,10 @@
+// The D1s the tests run against: local, in memory, migrated by the tests from ../migrations. UPGRADE holds the rows
+// earlier migrations left, to see later ones carry them over.
+{
+  "name": "db-test",
+  "compatibility_date": "2026-09-01",
+  "d1_databases": [
+    { "binding": "DB", "database_name": "index-test", "database_id": "00000000-0000-0000-0000-000000000000" },
+    { "binding": "UPGRADE", "database_name": "upgrade-test", "database_id": "00000000-0000-0000-0000-000000000001" }
+  ]
+}

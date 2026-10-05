@@ -1,0 +1,50 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "carrier-explode-v2-site",
+  "main": ".svelte-kit/cloudflare/_worker.js",
+  "compatibility_date": "2025-09-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "routes": [{ "pattern": "carrierexplode.com", "custom_domain": true }],
+  "workers_dev": true,
+  "assets": { "binding": "ASSETS", "directory": ".svelte-kit/cloudflare" },
+  // The v2 store (packages/storage/src/keys.ts), written only by the extractor worker.
+  // `pnpm dev` reads local R2 (.wrangler/state), which the extractor's seed
+  // script fills; add "remote": true here to browse the real bucket instead.
+  "r2_buckets": [{ "binding": "BUCKET", "bucket_name": "carrier-explode-data" }],
+  // The index (packages/db), written by the extractor's publishes. Read through one session per request, so reads
+  // go to the nearest replica (read replication is on) and stay in order within the request.
+  "d1_databases": [{ "binding": "DB", "database_name": "carrier-explode-v2", "database_id": "a0c212c0-c6e0-4b54-af0e-9d454ea47d55" }],
+  // Cloudflare checks this worker's own cache before running it, and honours the
+  // Cache-Control that src/hooks.server.ts puts on every response. Zone cache
+  // settings — Cache Everything, cache rules, page rules — never apply to what a
+  // worker returns, only to the subrequests it makes.
+  "cache": { "enabled": true },
+  // Per-IP budgets enforced in src/hooks.server.ts. Limits are per Cloudflare
+  // location, and a period may only be 10 or 60 seconds.
+  "ratelimits": [
+    { "name": "RL_SCAN", "namespace_id": "7010", "simple": { "limit": 10, "period": 60 } },
+    { "name": "RL_DIFF", "namespace_id": "7020", "simple": { "limit": 20, "period": 60 } },
+    { "name": "RL_BUNDLE", "namespace_id": "7030", "simple": { "limit": 60, "period": 60 } },
+    { "name": "RL_BASE", "namespace_id": "7040", "simple": { "limit": 120, "period": 60 } }
+  ],
+  "vars": {
+    // Seconds, by what a response holds (src/lib/server/cache-policy.ts). A publish purges the pages and data it changes.
+    "CACHE_TTL": {
+      // A pinned version's files never change; its page also lists every version, which a publish's purge refreshes.
+      "pinned": 2592000,
+      "latest": 86400,
+      // Usually a typo or a crawler, and the answer changes when Apple ships: absorbs a hammering, heals quickly.
+      "missing": 60,
+      // A bundle member never changes under its URL. Browsers keep it a day, so a mistake does not outlive the edge's month.
+      "raw": 2592000,
+      "rawBrowser": 86400,
+      "staleWhileRevalidate": 86400,
+      // Derived JSON in the colo cache, keyed by the content it came from (src/lib/server/cache.ts).
+      "derived": 2592000
+    }
+  },
+  // For /internal/purge; set with `wrangler secret put PURGE_TOKEN`.
+  "secrets": { "required": ["PURGE_TOKEN"] },
+  "observability": { "enabled": true },
+  "placement": { "mode": "smart" }
+}

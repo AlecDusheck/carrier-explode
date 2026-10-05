@@ -14,9 +14,7 @@ import struct
 
 __all__ = ["decompress", "decompress_py"]
 
-# ---------------------------------------------------------------------------
 # libcompression fast path (macOS)
-# ---------------------------------------------------------------------------
 _COMPRESSION_LZFSE = 0x801
 _libc = None
 try:
@@ -68,9 +66,7 @@ def decompress(src, size_hint=None):
     return decompress_py(src)
 
 
-# ---------------------------------------------------------------------------
 # pure-Python decoder
-# ---------------------------------------------------------------------------
 L_SYMS, M_SYMS, D_SYMS, LIT_SYMS = 20, 20, 64, 256
 L_STATES, M_STATES, D_STATES, LIT_STATES = 64, 64, 256, 1024
 L_XBITS = [0] * 16 + [2, 3, 5, 8]

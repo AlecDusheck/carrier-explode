@@ -1,0 +1,5 @@
+{
+  // The container, dev tools and tests (Node 22). The Worker: tsconfig.json.
+  "extends": "@carrier-explode/tsconfig/node.json",
+  "include": ["container/src", "container/test", "container/build.mjs", "dev", "test", "vitest.config.ts"]
+}

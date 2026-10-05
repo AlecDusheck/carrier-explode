@@ -1,0 +1,33 @@
+{
+  "name": "@carrier-explode/schema",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": "./src/index.ts",
+    "./types": "./src/types.ts",
+    "./records": "./src/records.ts"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "check": "tsc -p tsconfig.json && tsc -p tsconfig.test.json"
+  },
+  "dependencies": {
+    "@carrier-explode/decode-android": "workspace:*",
+    "@carrier-explode/decode-ios": "workspace:*",
+    "valibot": "^1.5.0",
+    "@carrier-explode/decode-qualcomm": "workspace:*",
+    "@carrier-explode/decode-shannon": "workspace:*",
+    "@carrier-explode/decode-mediatek": "workspace:*",
+    "@carrier-explode/binary": "workspace:*",
+    "@carrier-explode/values": "workspace:*"
+  },
+  "devDependencies": {
+    "@carrier-explode/tsconfig": "workspace:*",
+    "@types/node": "^22.20.3",
+    "fflate": "^0.8.2",
+    "typescript": "^6.0.0",
+    "vitest": "^5.0.3"
+  }
+}

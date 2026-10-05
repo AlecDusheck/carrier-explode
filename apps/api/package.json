@@ -1,0 +1,31 @@
+{
+  "name": "@carrier-explode/api",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "test": "vitest run",
+    "check": "wrangler types && tsc -p tsconfig.json && tsc -p tsconfig.test.json",
+    "gen": "wrangler types"
+  },
+  "dependencies": {
+    "@carrier-explode/db": "workspace:*",
+    "@carrier-explode/schema": "workspace:*",
+    "@carrier-explode/storage": "workspace:*",
+    "@hono/swagger-ui": "^0.6.1",
+    "@hono/zod-openapi": "^1.6.3",
+    "@valibot/to-json-schema": "^1.8.0",
+    "hono": "^4.13.13",
+    "valibot": "^1.5.0",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "@carrier-explode/tsconfig": "workspace:*",
+    "@types/node": "^22.20.3",
+    "typescript": "^6.0.3",
+    "vitest": "^5.0.3",
+    "wrangler": "^4.147.0"
+  }
+}

@@ -1,0 +1,20 @@
+{
+  "name": "@carrier-explode/tsconfig",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "files": [
+    "base.json",
+    "neutral.json",
+    "node.json",
+    "worker.json",
+    "svelte.json"
+  ],
+  "exports": {
+    "./base.json": "./base.json",
+    "./neutral.json": "./neutral.json",
+    "./worker.json": "./worker.json",
+    "./node.json": "./node.json",
+    "./svelte.json": "./svelte.json"
+  }
+}

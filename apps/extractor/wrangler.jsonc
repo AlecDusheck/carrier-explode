@@ -1,0 +1,86 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  // The extractor: a Workflow instance per unit of work, each job a Cloudflare Container that
+  // reads and writes R2 over its S3 API. The only writer of the v2 bucket.
+  "name": "carrier-explode-v2-extractor",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-09-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "observability": { "enabled": true },
+  // No public routes: /run, /runs and /jobs are bearer-authed on the workers.dev URL.
+  "workers_dev": true,
+
+  "r2_buckets": [{ "binding": "BUCKET", "bucket_name": "carrier-explode-data" }],
+  // The index the site reads (packages/db), which publishes write. Its migrations are packages/db's, applied by hand.
+  "d1_databases": [{ "binding": "DB", "database_name": "carrier-explode-v2", "database_id": "a0c212c0-c6e0-4b54-af0e-9d454ea47d55" }],
+
+  // One image, two sizes. A start past max_instances fails, and its Workflow step retries it.
+  "containers": [
+    {
+      "class_name": "HeavyExtractor",
+      "image": "./container/Dockerfile",
+      "image_build_context": "../..",
+      "instance_type": "standard-4",
+      // An iOS build is about 25 IPSWs, one container each: 40 lets four builds run at once (160 of the account's 1,500 vCPU).
+      "max_instances": 40
+    },
+    {
+      "class_name": "LightExtractor",
+      "image": "./container/Dockerfile",
+      "image_build_context": "../..",
+      "instance_type": "standard-1",
+      "max_instances": 32
+    }
+  ],
+  "durable_objects": {
+    "bindings": [
+      { "name": "HEAVY", "class_name": "HeavyExtractor" },
+      { "name": "LIGHT", "class_name": "LightExtractor" }
+    ]
+  },
+  // Declarative Durable Object classes, instead of `migrations`. Containers need SQLite storage.
+  "exports": {
+    "HeavyExtractor": { "type": "durable-object", "storage": "sqlite" },
+    "LightExtractor": { "type": "durable-object", "storage": "sqlite" },
+    "JobLock": { "type": "durable-object", "state": "deleted" }
+  },
+
+  // One Workflow per pipeline (src/worker/pipelines.ts); an instance per build, manifest, reindex or publish.
+  "workflows": [
+    { "binding": "IOS_BUILD", "name": "ios-build", "class_name": "IosBuildWorkflow" },
+    { "binding": "ANDROID_BUILD", "name": "android-build", "class_name": "AndroidBuildWorkflow" },
+    { "binding": "IOS_OTA", "name": "ios-ota", "class_name": "IosOtaWorkflow" },
+    { "binding": "REINDEX", "name": "reindex", "class_name": "ReindexWorkflow" },
+    { "binding": "PUBLISH", "name": "publish", "class_name": "PublishWorkflow" },
+    { "binding": "LABELS", "name": "labels", "class_name": "LabelsWorkflow" }
+  ],
+
+  // Workers AI and the Web Search API, for the labels Workflow.
+  "ai": { "binding": "AI" },
+
+  // Exactly the FEEDS[...].cron values and LABELS_CRON in src/worker/pipelines.ts (test/tables.test.ts checks).
+  "triggers": { "crons": ["*/10 * * * *", "5 * * * *", "17 4 * * 1"] },
+
+  "vars": {
+    // The readers whose caches a publish purges, each at PURGE_PATH (packages/storage). PURGE_TOKEN (a secret, the value
+    // both readers hold) must be set too, or the purge step fails; drop this var to deploy without purging.
+    "PURGE_ORIGINS": ["https://carrierexplode.com", "https://api.carrierexplode.com"],
+    // The bucket over R2's S3 API, passed to each container with the secrets below.
+    "R2_ENDPOINT": "https://9ab285e18346f1da40ea714445264fbe.r2.cloudflarestorage.com",
+    "R2_BUCKET": "carrier-explode-data",
+    // Tuning, in the shape src/worker/tuning.ts gives it.
+    "FEED_WINDOWS": { "ios-images": 4, "ios-ota": 1, "android": 2 },
+    "JOB_ATTEMPTS": 3,
+    // Half a day: a backfill can hold every container of a class for hours.
+    "START_RETRY_MINUTES": 720,
+    // A few minutes of downloads each.
+    "OTA_FILES_PER_JOB": 200,
+    // Bounds one normalize job, and what a failed one redoes.
+    "NORMALIZE_CHUNK": 500,
+    "REINDEX_SHARDS": 16,
+    "LABELLER": { "gateway": "default", "provider": "exa", "model": "@cf/deepseek-ai/deepseek-v4-pro-0813", "perKind": 25 }
+  },
+  // RUN_TOKEN: bearer for /run, /runs, /jobs. R2_*: an R2 API token's S3 key, scoped to the bucket.
+  // PURGE_TOKEN: required while PURGE_ORIGINS is set, see vars.
+  "secrets": { "required": ["RUN_TOKEN", "R2_ACCESS_KEY_ID", "R2_SECRET_ACCESS_KEY"] }
+}

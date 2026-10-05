@@ -1,0 +1,10 @@
+{
+  "extends": ["$app/tsconfig", "@carrier-explode/tsconfig/svelte.json"],
+  "compilerOptions": {
+    // No source here is JavaScript; after a build, worker-configuration.d.ts imports the built worker.
+    "allowJs": false,
+    "checkJs": false,
+    "types": ["$app/types", "./worker-configuration.d.ts", "node"]
+  },
+  "include": ["src", "test", "vite.config.ts"]
+}

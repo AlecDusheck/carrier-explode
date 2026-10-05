@@ -1,0 +1,47 @@
+{
+  "name": "@carrier-explode/site",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "prepare": "svelte-kit sync",
+    "dev": "vite dev",
+    "build": "vite build",
+    "preview": "wrangler dev",
+    "deploy": "vite build && wrangler deploy",
+    "test": "vitest run",
+    "check": "wrangler types && svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
+    "gen": "wrangler types"
+  },
+  "imports": {
+    "#lib/*": "./src/lib/*"
+  },
+  "dependencies": {
+    "@carrier-explode/binary": "workspace:*",
+    "@carrier-explode/db": "workspace:*",
+    "@carrier-explode/decode-android": "workspace:*",
+    "@carrier-explode/decode-ios": "workspace:*",
+    "@carrier-explode/decode-qualcomm": "workspace:*",
+    "@carrier-explode/schema": "workspace:*",
+    "@carrier-explode/storage": "workspace:*",
+    "@carrier-explode/values": "workspace:*",
+    "drizzle-orm": "1.0.0-rc.4",
+    "valibot": "^1.5.0"
+  },
+  "devDependencies": {
+    "@carrier-explode/tsconfig": "workspace:*",
+    "@sveltejs/adapter-cloudflare": "^8.0.0",
+    "@sveltejs/kit": "^3.0.0",
+    "@sveltejs/vite-plugin-svelte": "^7.3.1",
+    "@types/node": "^22.20.3",
+    "fflate": "^0.8.2",
+    "mdsvex": "^0.12.8",
+    "svelte": "^5.57.1",
+    "svelte-check": "^4.7.6",
+    "tsx": "^4.23.15",
+    "typescript": "^6.0.0",
+    "vite": "^8.3.2",
+    "vitest": "^5.0.3",
+    "wrangler": "^4.147.0"
+  }
+}

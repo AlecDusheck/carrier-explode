@@ -1,0 +1,82 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<policy mcfg_db_ver="1.2.3" name="generic">
+  <initial>
+    <tristate_define name="iin" value="undef" />
+    <tristate_define name="3gpp_imsi" value="undef" />
+    <tristate_define name="3gpp2_imsi" value="undef" />
+    <tristate_define name="impi" value="undef" />
+    <tristate_define name="gid1" value="undef" />
+    <tristate_define name="gid2" value="undef" />
+    <tristate_define name="customid" value="undef" />
+    <tristate_define name="spn" value="undef" />
+  </initial>
+  <if>
+    <any_of evaluate_all="true">
+      <tristate_reset_all return="false" />
+      <iin_in not_present="false" store_in="iin">8981100</iin_in>
+      <imsi_3gpp_plmn_in not_present="false" store_in="3gpp_imsi">440-10</imsi_3gpp_plmn_in>
+    </any_of>
+    <then>
+      <SelRecord carrier_name="DCM" country_code="356" iin="iin" imsi_3gpp="3gpp_imsi" mcfg_carrier_index="13" volte="true" vowifi="false" />
+    </then>
+  </if>
+  <if>
+    <any_of evaluate_all="true">
+      <tristate_reset_all return="false" />
+      <iin_in not_present="false" store_in="iin">898130</iin_in>
+      <!-- altered fixture comment -->
+      <imsi_3gpp_plmn_in not_present="false" store_in="3gpp_imsi">440-51 440-50</imsi_3gpp_plmn_in>
+    </any_of>
+    <then>
+      <SelRecord carrier_name="KDDI" country_code="392" iin="iin" imsi_3gpp="3gpp_imsi" mcfg_carrier_index="7" volte="true" vowifi="false" />
+    </then>
+  </if>
+  <if>
+    <any_of evaluate_all="true">
+      <tristate_reset_all return="false" />
+      <iin_in not_present="false" store_in="iin">8991840 8991854 8991855 8991856 8991857 8991858 8991859 8991860 8991861 8991862 8991863 8991864 8991865 8991866 8991867 8991868 8991869 8991870 8991871 8991872 8991873 8991874</iin_in>
+      <imsi_3gpp_plmn_in not_present="false" store_in="3gpp_imsi">405-840 405-854 405-855 405-856 405-857 405-858 405-859 405-860 405-861 405-862 405-863 405-864 405-865 405-866 405-867 405-868 405-869 405-870 405-871 405-872 405-873 405-874</imsi_3gpp_plmn_in>
+    <impi_in not_present="false" store_in="impi">
+	      mnc840.mcc405 mnc854.mcc405 mnc855.mcc405 mnc856.mcc405 mnc857.mcc405 mnc858.mcc405 mnc859.mcc405 mnc860.mcc405 mnc861.mcc405 mnc862.mcc405 mnc863.mcc405 mnc864.mcc405 mnc865.mcc405 mnc866.mcc405 mnc867.mcc405 mnc868.mcc405 mnc869.mcc405 mnc870.mcc405 mnc871.mcc405 mnc872.mcc405 mnc873.mcc405 mnc874.mcc405
+      </impi_in>
+    </any_of>
+    <then>
+      <SelRecord carrier_name="Reliance" country_code="356" iin="iin" imsi_3gpp="3gpp_imsi" impi="impi" mcfg_carrier_index="27" volte="true" vowifi="false" />
+    </then>
+  </if>
+  <!-- fixture -->
+  <if>
+    <all_of>
+      <tristate_reset_all return="true" />
+      <imsi_3gpp_plmn_in not_present="false" store_in="3gpp_imsi">302-720</imsi_3gpp_plmn_in>
+      <any_of>
+        <gid_in not_present="false" store_in="gid1">D2</gid_in>
+        <customid_in not_present="false" store_in="customid">20</customid_in>
+      </any_of>
+    </all_of>
+    <then>
+      <SelRecord carrier_name="Chatr" country_code="124" imsi_3gpp="3gpp_imsi" gid1="gid1" customid="customid" mcfg_carrier_index="200" volte="false" vowifi="false" />
+    </then>
+  </if>
+  <!-- fixture -->
+  <if>
+    <all_of>
+    <tristate_reset_all return="true" />
+    <any_of evaluate_all="true">
+      <iin_in not_present="false" store_in="iin">8901580</iin_in>
+      <imsi_3gpp_plmn_in not_present="false" store_in="3gpp_imsi">310-730 311-220 311-580 311-220 311-221 311-222 311-223 311-224 311-225 311-226 311-227 311-228 311-229 311-581 311-582 311-583 311-584 311-585 311-586 311-587 311-588 311-589</imsi_3gpp_plmn_in>
+    </any_of>
+    <customid_in not_present="false" store_in="customid">11</customid_in>
+    </all_of>
+    <then>
+      <SelRecord carrier_name="USCC-Fi" country_code="840" iin="iin" imsi_3gpp="3gpp_imsi" customid="customid" mcfg_carrier_index="251" volte="false" vowifi="false" />
+    </then>
+  </if>
+  <!-- fixture -->
+  <if>
+    <tristate_reset_all return="true" />
+    <then>
+      <SelRecord carrier_name="ROW" iin="iin" imsi_3gpp="3gpp_imsi" mcfg_carrier_index="8" />
+    </then>
+  </if>
+</policy>

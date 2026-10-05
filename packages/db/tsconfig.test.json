@@ -1,0 +1,5 @@
+{
+  "extends": "@carrier-explode/tsconfig/node.json",
+  "compilerOptions": { "types": ["node", "@cloudflare/workers-types"] },
+  "include": ["src", "test"]
+}

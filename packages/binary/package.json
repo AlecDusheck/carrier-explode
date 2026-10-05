@@ -1,0 +1,23 @@
+{
+  "name": "@carrier-explode/binary",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "check": "tsc -p tsconfig.json && tsc -p tsconfig.test.json"
+  },
+  "devDependencies": {
+    "@carrier-explode/tsconfig": "workspace:*",
+    "@types/node": "^22.20.3",
+    "typescript": "^6.0.0",
+    "vitest": "^5.0.3"
+  },
+  "dependencies": {
+    "fflate": "^0.8.2"
+  }
+}

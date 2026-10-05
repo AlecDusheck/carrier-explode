@@ -1,0 +1,85 @@
+<script lang="ts">
+  import { isPlistKind, type DecodedFile, type PlistKind } from "@carrier-explode/decode-ios";
+  import type { WithPhones } from "#lib/apple/phones.ts";
+  import { hexDump } from "#lib/format.ts";
+  import Tree, { type TreeCtx } from "../Tree.svelte";
+  import FileDevices from "./FileDevices.svelte";
+  import IntelPriView from "./IntelPriView.svelte";
+  import PrlView from "./PrlView.svelte";
+  import CertView from "./CertView.svelte";
+  import DmuView from "./DmuView.svelte";
+  import AudioView from "./AudioView.svelte";
+  import SignatureView from "./SignatureView.svelte";
+
+  interface Props {
+    file: WithPhones<DecodedFile>;
+    /** Where the file is, for the tree's "compare across" menu. */
+    ctx: TreeCtx;
+    /** The member as-is, for images and audio. */
+    raw: string;
+    /** Off where a phone picker already names the devices and their modem. */
+    devices?: boolean;
+  }
+
+  let { file, ctx, raw, devices = true }: Props = $props();
+
+  let showRaw = $state(false);
+
+  const isTree = (f: DecodedFile): f is Extract<DecodedFile, { kind: PlistKind }> => isPlistKind(f.kind);
+</script>
+
+{#snippet rawBody()}
+  {#if file.text}
+    <pre class="code">{file.text}</pre>
+  {:else if file.hex}
+    <pre class="code hex">{hexDump(file.hex, true)}</pre>
+  {:else}
+    <p class="dimtext">Not decodable.</p>
+  {/if}
+{/snippet}
+
+<!-- Structured views keep the raw text or bytes one click away rather than dumping them underneath. -->
+{#snippet rawToggle()}
+  <button class="btn" onclick={() => (showRaw = !showRaw)}>{showRaw ? "Hide" : "Show"} {file.text ? "text" : "bytes"}</button>
+  {#if showRaw}{@render rawBody()}{/if}
+{/snippet}
+
+{#if devices}<FileDevices devices={file.devices} />{/if}
+
+{#if file.note}<div class="banner">{file.note}</div>{/if}
+{#if file.error}
+  <div class="banner">
+    {file.error.reason === "failed" ? "Could not decode" : "Not the format its name says"}{file.error.message ? `: ${file.error.message}` : ""}; showing the raw
+    {file.text ? "text" : "bytes"}.
+  </div>
+{/if}
+
+<!-- A Qualcomm override file reads as its ModemConfig; its caller shows that instead. -->
+{#if file.kind === "pri-der"}
+  <IntelPriView pri={file.pri} {devices} />
+{:else if file.kind === "prl"}
+  {#if file.prl}<PrlView prl={file.prl} />{@render rawToggle()}{:else}{@render rawBody()}{/if}
+{:else if file.kind === "certificate"}
+  {#if file.certificates.length}<CertView certs={file.certificates} />{@render rawToggle()}{:else}{@render rawBody()}{/if}
+{:else if file.kind === "dmu"}
+  {#if file.dmu}<DmuView dmu={file.dmu} />{@render rawToggle()}{:else}{@render rawBody()}{/if}
+{:else if file.kind === "audio"}
+  {#if file.audio}<AudioView audio={file.audio} src={raw} />{:else}{@render rawBody()}{/if}
+{:else if file.kind === "image"}
+  {#if file.image}
+    <div class="banner">
+      PNG, {file.image.width} by {file.image.height} pixels{#if file.image.cgbi}; Apple CgBI form, converted to standard PNG when served{/if}
+    </div>
+  {/if}
+  <span class="checker frame"><img src={raw} alt={file.path} /></span>
+{:else if isTree(file)}
+  {#if file.signature}<SignatureView sig={file.signature} />{/if}
+  {#if file.plist !== undefined}<Tree value={file.plist} {ctx} />{:else}{@render rawBody()}{/if}
+{:else}
+  {@render rawBody()}
+{/if}
+
+<style>
+  .frame { display: inline-block; padding: 10px; border: 1px solid var(--shadow); }
+  img { image-rendering: pixelated; max-width: 100%; display: block; }
+</style>

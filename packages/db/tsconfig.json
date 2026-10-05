@@ -1,0 +1,5 @@
+{
+  "extends": "@carrier-explode/tsconfig/neutral.json",
+  "compilerOptions": { "types": ["@cloudflare/workers-types"] },
+  "include": ["src"]
+}

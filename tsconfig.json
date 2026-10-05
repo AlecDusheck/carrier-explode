@@ -1,11 +1,5 @@
 {
-  "extends": "$app/tsconfig",
-  "compilerOptions": {
-    "strict": true,
-    "noUnusedLocals": true,
-    // No source here is JavaScript; after a build, worker-configuration.d.ts imports the built worker.
-    "checkJs": false,
-    "types": ["$app/types", "./worker-configuration.d.ts", "node"]
-  },
-  "include": ["src", "test", "vite.config.ts"]
+  // The workspace scripts (scripts/). Each package and app has its own tsconfig.
+  "extends": "@carrier-explode/tsconfig/node.json",
+  "include": ["scripts"]
 }
