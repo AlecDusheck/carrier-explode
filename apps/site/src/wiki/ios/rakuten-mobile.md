@@ -49,9 +49,9 @@ RemoteCardProvisioningSettings.MinCompatibileWatchOS    8.5
 
 ## Other
 
-* `IMSConfig.Media.DTMFVolume` (10) is only here and in `Docomo_jp`.
-* `com.apple.voicemail.imap.GreetingNotification` is false in Rakuten and two other bundles, out of 230.
+- `IMSConfig.Media.DTMFVolume` (10) is only here and in `Docomo_jp`.
+- `com.apple.voicemail.imap.GreetingNotification` is false in Rakuten and two other bundles, out of 230.
 
 ## See also
 
-* [Carrier.plist § Extreme values](/wiki/ios/carrier-plist#extreme-values)
+- [Carrier.plist § Extreme values](/wiki/ios/carrier-plist#extreme-values)

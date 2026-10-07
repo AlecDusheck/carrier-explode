@@ -15,15 +15,15 @@ AT&T's main bundle is <Bundle name="ATT_US" version />. It is one of the oldest 
 
 ## Bundles
 
-| Bundle | |
-|--------|---|
-| <Bundle name="ATT_US" /> | AT&T postpaid and prepaid |
-| <Bundle name="ATT_NR_US" /> | ??? (shares most of `ATT_US`'s rare keys) |
-| <Bundle name="ATT_FirstNet_US" /> | FirstNet, the public safety network |
-| <Bundle name="ATT_Defense_US" /> | US government |
-| <Bundle name="ATT_CC_US" /> | Cricket ??? |
-| <Bundle name="ATT_MVNO_US" />, <Bundle name="ATT_Puretalk_US" />, <Bundle name="ATT_RedPocket_US" />, <Bundle name="ATT_TFW_US" />, <Bundle name="ATT_KORE_US" />, <Bundle name="ATT_Dish_MVNO_US" /> | MVNOs on AT&T |
-| <Bundle name="ATT_aio_US" />, <Bundle name="ATT_aio_NR_US" /> | ??? |
+| Bundle                                                                                                                                                                                                |                                           |
+| ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------- |
+| <Bundle name="ATT_US" />                                                                                                                                                                              | AT&T postpaid and prepaid                 |
+| <Bundle name="ATT_NR_US" />                                                                                                                                                                           | ??? (shares most of `ATT_US`'s rare keys) |
+| <Bundle name="ATT_FirstNet_US" />                                                                                                                                                                     | FirstNet, the public safety network       |
+| <Bundle name="ATT_Defense_US" />                                                                                                                                                                      | US government                             |
+| <Bundle name="ATT_CC_US" />                                                                                                                                                                           | Cricket ???                               |
+| <Bundle name="ATT_MVNO_US" />, <Bundle name="ATT_Puretalk_US" />, <Bundle name="ATT_RedPocket_US" />, <Bundle name="ATT_TFW_US" />, <Bundle name="ATT_KORE_US" />, <Bundle name="ATT_Dish_MVNO_US" /> | MVNOs on AT&T                             |
+| <Bundle name="ATT_aio_US" />, <Bundle name="ATT_aio_NR_US" />                                                                                                                                         | ???                                       |
 
 `ATT_US` matches these SIMs:
 
@@ -79,11 +79,11 @@ The hex in the Wi-Fi Calling registration header decodes to `arcticsecondary!`. 
 
 ## eSIM
 
-`RemoteCardProvisioningSettings.ActivatingStateSubscriptionCheckTimerIntervals` is how often the phone checks whether a new eSIM has been activated. AT&T's first checks are 15, 30, 60 and 90 seconds. The median across all bundles is <Setting path="RemoteCardProvisioningSettings.ActivatingStateSubscriptionCheckTimerIntervals[*]" show="median" /> seconds (*live*).
+`RemoteCardProvisioningSettings.ActivatingStateSubscriptionCheckTimerIntervals` is how often the phone checks whether a new eSIM has been activated. AT&T's first checks are 15, 30, 60 and 90 seconds. The median across all bundles is <Setting path="RemoteCardProvisioningSettings.ActivatingStateSubscriptionCheckTimerIntervals[*]" show="median" /> seconds (_live_).
 
 `CarrierAuthHost` (`https://www.att.com/buy/byod/`) is only set by `ATT_US` and `ATT_NR_US`.
 
 ## See also
 
-* [Carrier Bundle](/wiki/ios/carrier-bundle)
-* [Verizon](/wiki/ios/verizon), [T-Mobile US](/wiki/ios/t-mobile-us)
+- [Carrier Bundle](/wiki/ios/carrier-bundle)
+- [Verizon](/wiki/ios/verizon), [T-Mobile US](/wiki/ios/t-mobile-us)

@@ -2,72 +2,70 @@
   import { goto } from "$app/navigation";
   import { page } from "$app/state";
   import { getSourceHead } from "#lib/api/sources.remote.ts";
-  import { refOf, verOf } from "#lib/at.ts";
+  import { headAt, verOf } from "#lib/at.ts";
   import { link, versionHref } from "#lib/format.ts";
-  import { linePath } from "@carrier-explode/schema/types";
-  import type { At } from "#lib/types.ts";
+  import { linePath, type SourceRef } from "@carrier-explode/schema/types";
+  import type { SourceHead } from "#lib/server/head.ts";
   import { visitorDevice } from "#lib/visitor.ts";
-  import { tabView } from "#lib/components/views.ts";
+  import { tabView, type TabView } from "#lib/components/views.ts";
   import { TABS } from "../../../../params.ts";
   import LinePicker from "#lib/components/LinePicker.svelte";
   import Tabs from "#lib/components/Tabs.svelte";
   import Pane from "#lib/components/Pane.svelte";
   import SourceIcon from "#lib/components/SourceIcon.svelte";
+  import SourceName from "#lib/components/SourceName.svelte";
   import VersionPicker from "#lib/components/VersionPicker.svelte";
 
   let { params, children } = $props();
 
-  const where = $derived({ ...params, line: page.params.line, version: page.params.version });
-  const ref = $derived(refOf(where));
+  const ver = $derived(verOf({ ...params, line: page.params.line, version: page.params.version }));
   // Switching version keeps the tab, but not the file or query within it.
   const open = $derived(TABS.find((t) => t === page.params.tab));
   const tab = $derived(open ?? "");
-  const view = $derived(open === undefined ? undefined : tabView(params.platform, open));
-  const versioned = $derived(view?.versioned ?? true);
-  const choice = $derived(open !== undefined && view?.Choice ? { Choice: view.Choice, tab: open } : null);
-  const lineHref = (line: string | null): string => link(linePath(ref, line) + (tab ? `/${tab}` : ""));
+  const lineHref = (ref: SourceRef, line: string): string => link(linePath(ref, line) + (tab ? `/${tab}` : ""));
+  // What the head shows comes from the head alone: while another source loads, the URL already names it.
+  const viewOf = (h: SourceHead): TabView | undefined => (open === undefined ? undefined : tabView(h.ref.platform, open));
 
   // A URL naming no line shows the default line; at its head, the visitor's own line, where the source has it, is a better default.
   $effect(() => {
     if (page.params.line !== undefined) return;
-    const ver = verOf(where);
+    const head = getSourceHead(ver);
     const from = page.url.href;
-    void Promise.all([getSourceHead(ver), visitorDevice()]).then(async ([h, { line }]) => {
+    void (async () => {
+      const [h, { line }] = await Promise.all([head, visitorDevice()]);
       const better = line !== null && line !== h.line && h.entry.slug === h.head && h.lines.some((l) => l.id === line);
-      if (better && page.url.href === from) await goto(lineHref(line), { replace: true });
-    });
+      if (better && page.url.href === from) await goto(lineHref(h.ref, line), { replace: true });
+    })();
   });
 </script>
 
 <!-- Name, then the page's choices in order (device, version, a tab's phone), and the tab row: each keeps its height while the version loads, so the pane below never jumps. -->
 <div class="bundle-head">
   <span class="ident">
-    <span class="picture-slot">
-      <Pane quiet>
-        {@const h = await getSourceHead(verOf(where))}
-        <SourceIcon picture={h.picture} />
-      </Pane>
-    </span>
-    <b>{ref.name}</b>
+    <Pane quiet>
+      {@const h = await getSourceHead(ver)}
+      <span class="picture-slot"><SourceIcon picture={h.picture} /></span>
+      <b><SourceName brand={h.brand} code={h.ref.name} withCode /></b>
+    </Pane>
   </span>
   <div class="choices">
     <Pane quiet>
-      {@const h = await getSourceHead(verOf(where))}
-      <LinePicker head={h} href={lineHref} />
-      {#if versioned}
-        <VersionPicker timeline={h.timeline} current={h.entry.slug} head={h.head} href={(slug) => versionHref({ ref, line: h.line, version: slug }, tab)} />
+      {@const h = await getSourceHead(ver)}
+      {@const view = viewOf(h)}
+      <LinePicker head={h} href={(line) => lineHref(h.ref, line)} />
+      {#if view?.versioned ?? true}
+        <VersionPicker timeline={h.timeline} current={h.entry.slug} head={h.head} href={(slug) => versionHref({ ...headAt(h), version: slug }, tab)} />
       {/if}
-      {#if choice}
-        <choice.Choice at={{ ref, line: h.line, version: h.entry.slug }} tab={choice.tab} />
+      {#if open && view?.Choice}
+        <view.Choice at={headAt(h)} tab={open} />
       {/if}
     </Pane>
   </div>
 </div>
-<nav class="tabs tabs-slot">
+<nav class="tabs-slot">
   <Pane quiet>
-    {@const h = await getSourceHead(verOf(where))}
-    {@const at: At = { ref, line: h.line, version: h.entry.slug }}
-    <Tabs {at} {tab} />
+    {@const h = await getSourceHead(ver)}
+    <Tabs at={headAt(h)} />
   </Pane>
 </nav>
 

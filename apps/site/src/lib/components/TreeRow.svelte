@@ -23,7 +23,7 @@
 <div>
   <div class="row" {@attach menu}>
     {#if body}
-      <button type="button" class="twist" aria-expanded={open} onclick={() => (toggled = !open)}>{open ? "▾" : "▸"}</button>
+      <button type="button" class="twist" aria-expanded={open} aria-label={open ? "Fold" : "Unfold"} onclick={() => (toggled = !open)}>{open ? "▾" : "▸"}</button>
     {:else}
       <span class="twist" aria-hidden="true">·</span>
     {/if}

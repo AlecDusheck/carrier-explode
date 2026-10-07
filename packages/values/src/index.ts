@@ -4,5 +4,13 @@
  */
 
 export { canonical, isRecord } from "./canonical.ts";
-export { diffValues, summariseDiff, type DiffCounts, type DiffKind, type DiffRow } from "./diff.ts";
+export {
+	diffValues,
+	summariseDiff,
+	type DiffCounts,
+	type DiffKind,
+	type DiffRow,
+	type PairKeys,
+} from "./diff.ts";
 export { lookup, lookupAll, pathPattern, type Flat } from "./paths.ts";
+export { compareDotted, versionSegments } from "./versions.ts";

@@ -1,10 +1,10 @@
 {
-  "$schema": "https://json.schemastore.org/tsconfig",
-  // Code that runs in workerd. Workers types replace the DOM and Node globals,
-  // so a Node API used by mistake fails here instead of at deploy.
-  "extends": "./base.json",
-  "compilerOptions": {
-    "lib": ["ES2024"],
-    "types": ["@cloudflare/workers-types"]
-  }
+	"$schema": "https://json.schemastore.org/tsconfig",
+	// Code that runs in workerd. Workers types replace the DOM and Node globals,
+	// so a Node API used by mistake fails here instead of at deploy.
+	"extends": "./base.json",
+	"compilerOptions": {
+		"lib": ["ES2024"],
+		"types": ["@cloudflare/workers-types"]
+	}
 }

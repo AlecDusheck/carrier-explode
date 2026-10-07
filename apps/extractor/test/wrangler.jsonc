@@ -1,0 +1,9 @@
+// The D1 and bucket the Index tests run against: local, in memory, migrated by the tests from packages/db's migrations.
+{
+	"name": "extractor-test",
+	"compatibility_date": "2026-09-01",
+	"d1_databases": [
+		{ "binding": "DB", "database_name": "index-test", "database_id": "00000000-0000-0000-0000-000000000000" },
+	],
+	"r2_buckets": [{ "binding": "BUCKET", "bucket_name": "ingest-test" }],
+}

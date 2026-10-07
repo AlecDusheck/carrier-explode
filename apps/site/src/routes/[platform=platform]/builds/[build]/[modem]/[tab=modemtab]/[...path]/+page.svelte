@@ -7,4 +7,4 @@
   const Body = $derived(modemTabView(data.platform, params.tab)?.body);
 </script>
 
-{#if Body}<Body build={params.build} modem={params.modem} path={params.path} />{/if}
+{#if Body}<Body platform={data.platform} build={params.build} modem={params.modem} path={params.path} />{/if}

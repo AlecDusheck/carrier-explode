@@ -1,16 +1,16 @@
 {
-  "name": "@carrier-explode/phone-drawings",
-  "private": true,
-  "version": "0.0.0",
-  "type": "module",
-  "description": "Generates the iPhone and Pixel drawings in apps/site/src/lib/drawings and the outlines in apps/site/static/phones.",
-  "scripts": {
-    "generate": "node generate.ts",
-    "check": "tsc -p tsconfig.json"
-  },
-  "devDependencies": {
-    "@carrier-explode/tsconfig": "workspace:*",
-    "@types/node": "^22.20.3",
-    "typescript": "^6.0.0"
-  }
+	"name": "@carrier-explode/phone-drawings",
+	"version": "0.0.0",
+	"private": true,
+	"description": "Generates the iPhone and Pixel drawings in apps/site/src/lib/drawings and the outlines in apps/site/static/phones.",
+	"type": "module",
+	"scripts": {
+		"generate": "node generate.ts",
+		"check": "tsc -p tsconfig.json"
+	},
+	"devDependencies": {
+		"@carrier-explode/tsconfig": "workspace:*",
+		"@types/node": "^22.20.3",
+		"typescript": "^6.0.0"
+	}
 }

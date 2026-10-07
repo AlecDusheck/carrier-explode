@@ -16,8 +16,8 @@ Bundles are distributed as [IPCC](/wiki/ios/ipcc) files. A copy of most bundles 
 
 There are two kinds:
 
-* **Carrier bundles**, named `<Carrier>_<cc>` (`ATT_US`, `Vodafone_uk`, `KDDI_UQ_NR_jp`). Chosen from the SIM. See [Bundle Selection](/wiki/ios/bundle-selection).
-* **Country bundles**, named after a country (`Australia`, `UnitedStates`, `SaudiArabia`). Chosen from the MCC of the network the phone is on, whatever SIM is inserted. These are small and mostly carry cell broadcast (emergency alert) settings and a handful of regulatory switches. Of these, <Bundle name="SaudiArabia" kind="countries" /> is the only bundle with `ShowIMEIsInLockScreen`, and <Bundle name="Taiwan" kind="countries" /> and <Bundle name="HongKong" kind="countries" /> the only ones with `Show2GRegulatorySwitch`.
+- **Carrier bundles**, named `<Carrier>_<cc>` (`ATT_US`, `Vodafone_uk`, `KDDI_UQ_NR_jp`). Chosen from the SIM. See [Bundle Selection](/wiki/ios/bundle-selection).
+- **Country bundles**, named after a country (`Australia`, `UnitedStates`, `SaudiArabia`). Chosen from the MCC of the network the phone is on, whatever SIM is inserted. These are small and mostly carry cell broadcast (emergency alert) settings and a handful of regulatory switches. Of these, <Bundle name="SaudiArabia" kind="countries" /> is the only bundle with `ShowIMEIsInLockScreen`, and <Bundle name="Taiwan" kind="countries" /> and <Bundle name="HongKong" kind="countries" /> the only ones with `Show2GRegulatorySwitch`.
 
 There are also a few bundles that do not belong to any carrier or country: `Default`, `Unknown`, `OtherKnown`, `CarrierLab`, `NonPublicNetwork`, `Bootstrap_ATT_US`, `Bootstrap_Verizon_US`, `OQCFactoryMultimode` and `OQCFactoryUMTS`. See [Special bundles](#special-bundles).
 
@@ -105,9 +105,9 @@ The `2` signatures are 256 bytes (RSA-2048 sized). The `3` signatures are DER `S
 
 ### profile.mobileconfig
 
-Profiles ship in <Setting path="PayloadContent[*].PayloadType" file="profile.mobileconfig" /> carrier bundles (*live*). In October 2026, 167 of their 175 payloads were `com.apple.wifi.managed`: carrier hotspots and EAP-SIM/AKA networks. AT&T's sets up `attwifi` and `AT&T Secure Wi-Fi` (EAP-AKA, `MCCAndMNCs` 310410). Apple's own key in it is misspelled: `EAPSIMAKAPsudeonymIdentityLifetimeHours`.
+Profiles ship in <Setting path="PayloadContent[*].PayloadType" file="profile.mobileconfig" /> carrier bundles (_live_). In October 2026, 167 of their 175 payloads were `com.apple.wifi.managed`: carrier hotspots and EAP-SIM/AKA networks. AT&T's sets up `attwifi` and `AT&T Secure Wi-Fi` (EAP-AKA, `MCCAndMNCs` 310410). Apple's own key in it is misspelled: `EAPSIMAKAPsudeonymIdentityLifetimeHours`.
 
-The rest are more interesting. The Spectrum and Xfinity Mobile bundles (`Verizon_Charter_LTE_US`, `TMobile_Charter_US`, `Verizon_Comcast_LTE_US`, `TMobile_Comcast_US`) install a root certificate (`DigiCert Global Root CA`, `AAA Certificate Services`), presumably so the phone trusts the RADIUS servers behind their Wi-Fi networks. `8ta_za` installs `VeriSign Class 3 Public Primary Certification Authority - G5`. The three `iusacell` bundles in Mexico add a `com.apple.domains` payload.
+The Spectrum and Xfinity Mobile bundles (`Verizon_Charter_LTE_US`, `TMobile_Charter_US`, `Verizon_Comcast_LTE_US`, `TMobile_Comcast_US`) install a root certificate (`DigiCert Global Root CA`, `AAA Certificate Services`), presumably so the phone trusts the RADIUS servers behind their Wi-Fi networks. `8ta_za` installs `VeriSign Class 3 Public Primary Certification Authority - G5`. The three `iusacell` bundles in Mexico add a `com.apple.domains` payload.
 
 ### .lproj folders
 
@@ -125,11 +125,11 @@ Ten bundles (`Softbank_jp`, `Rogers_ca`, `ATT_NR_US` and others) use the newer s
 
 ### Other files
 
-| File | Where | What |
-|------|-------|------|
-| `ERI.plist` | 93 bundles, mostly US | CDMA/LTE roaming indicator table |
-| `supported_devices.plist` | 87 bundles | `SupportedDevices`, `SupportedDevicesExactMatch`, `SupportedSIMOverrides` |
-| `bundle.metadata` | `TIM_br` only | Apple's internal build metadata, shipped by mistake. See below |
+| File                      | Where                 | What                                                                      |
+| ------------------------- | --------------------- | ------------------------------------------------------------------------- |
+| `ERI.plist`               | 93 bundles, mostly US | CDMA/LTE roaming indicator table                                          |
+| `supported_devices.plist` | 87 bundles            | `SupportedDevices`, `SupportedDevicesExactMatch`, `SupportedSIMOverrides` |
+| `bundle.metadata`         | `TIM_br` only         | Apple's internal build metadata, shipped by mistake. See below            |
 
 ## Versions
 
@@ -141,14 +141,14 @@ The copy of a bundle inside an iOS image only contains the overrides for the pho
 
 ## Special bundles
 
-* `Default` - fallback settings, plus 18 MB of data that belongs to no carrier: emergency alert sounds, network name and country code tables, the regional modem tables (`.der.gri`) and on-body detection thresholds. See [Default bundle](/wiki/ios/default-bundle).
-* `Unknown` - presumably used for SIMs no bundle matches. It is the only bundle with `ApplyGSMASettings`.
-* `OtherKnown` - listed in the manifest under `CarrierBundles.iPhone.OtherKnownSettings`. `region_lookup_1.plist` maps an MCC/MNC to a configuration in `gsma_1.plist` (`Configuration_20221`, `Configuration_20614_GID1-0E`), so carriers without a bundle of their own still get APNs.
-* `CarrierLab` - test bundle. Uses alert types named `AT1_Presidential` to `AT7_Test` and `AT1_Quake`, an XCAP BSF at `bsf.test.3gpp.com`, and is the only bundle with `SupportsFauxCard`.
-* `NonPublicNetwork` - presumably private LTE/5G networks. It is the only bundle with `Show5GSAWarningUnsupportedCarriers`.
-* `Bootstrap_ATT_US`, `Bootstrap_Verizon_US` - probably used while an eSIM is being set up. They are the only bundles with `BootstrapOverrideOperatorName` and `CellularPlanSettings`, and `Bootstrap_ATT_US` is the only one of 44 bundles with `RemoteDiagnosticsWWANAllowed` set to false.
-* `OQCFactoryMultimode`, `OQCFactoryUMTS` - factory test. OQC is probably outgoing quality control.
-* `Defense_US`, `ATT_Defense_US`, `ATT_FirstNet_US` - US government and public safety networks.
+- `Default` - fallback settings, plus 18 MB of data that belongs to no carrier: emergency alert sounds, network name and country code tables, the regional modem tables (`.der.gri`) and on-body detection thresholds. See [Default bundle](/wiki/ios/default-bundle).
+- `Unknown` - presumably used for SIMs no bundle matches. It is the only bundle with `ApplyGSMASettings`.
+- `OtherKnown` - listed in the manifest under `CarrierBundles.iPhone.OtherKnownSettings`. `region_lookup_1.plist` maps an MCC/MNC to a configuration in `gsma_1.plist` (`Configuration_20221`, `Configuration_20614_GID1-0E`), so carriers without a bundle of their own still get APNs.
+- `CarrierLab` - test bundle. Uses alert types named `AT1_Presidential` to `AT7_Test` and `AT1_Quake`, an XCAP BSF at `bsf.test.3gpp.com`, and is the only bundle with `SupportsFauxCard`.
+- `NonPublicNetwork` - presumably private LTE/5G networks. It is the only bundle with `Show5GSAWarningUnsupportedCarriers`.
+- `Bootstrap_ATT_US`, `Bootstrap_Verizon_US` - probably used while an eSIM is being set up. They are the only bundles with `BootstrapOverrideOperatorName` and `CellularPlanSettings`, and `Bootstrap_ATT_US` is the only one of 44 bundles with `RemoteDiagnosticsWWANAllowed` set to false.
+- `OQCFactoryMultimode`, `OQCFactoryUMTS` - factory test. OQC is probably outgoing quality control.
+- `Defense_US`, `ATT_Defense_US`, `ATT_FirstNet_US` - US government and public safety networks.
 
 ### `TIM_br` bundle.metadata
 
@@ -168,14 +168,14 @@ filesModified       overrides_D63_D64_D16_D17.plist, overrides_D79.plist,
 ipccPath            /Users/<engineer>/Documents/Carriers/BR-Vivo/Emergency Numbers Update/iPhone/TIM_br_iPhone_165.7.3.ipcc
 ```
 
-The path has been shortened here; the original has the engineer's home folder. A few things can be read from it. Bundle edits are tracked against an iOS train (`LuckB`; build 23B53 is iOS 26.1). The version went from 65.7.2 to 165.7.3, with 100 added to the major, probably to mark an engineering build. The folders say the change was an emergency numbers update, filed under Vivo, a different Brazilian carrier. `C743` does not match any announced device. ???
+The path has been shortened here; the original has the engineer's home folder. Bundle edits are tracked against an iOS train (`LuckB`; build 23B53 is iOS 26.1). The version went from 65.7.2 to 165.7.3, with 100 added to the major, probably to mark an engineering build. The folders say the change was an emergency numbers update, filed under Vivo, a different Brazilian carrier. `C743` does not match any announced device. ???
 
 ## See also
 
-* [IPCC](/wiki/ios/ipcc)
-* [Carrier.plist](/wiki/ios/carrier-plist)
-* [Bundle Selection](/wiki/ios/bundle-selection)
-* [.der.pri](/wiki/ios/der-pri), [PRI](/wiki/ios/pri), [.der.gri](/wiki/ios/der-gri)
-* [Default bundle](/wiki/ios/default-bundle)
-* [Carrier Bundle Manifest](/wiki/ios/carrier-bundle-manifest)
-* [Carrier Bundle](https://theapplewiki.com/wiki/Carrier_Bundle) on The Apple Wiki
+- [IPCC](/wiki/ios/ipcc)
+- [Carrier.plist](/wiki/ios/carrier-plist)
+- [Bundle Selection](/wiki/ios/bundle-selection)
+- [.der.pri](/wiki/ios/der-pri), [PRI](/wiki/ios/pri), [.der.gri](/wiki/ios/der-gri)
+- [Default bundle](/wiki/ios/default-bundle)
+- [Carrier Bundle Manifest](/wiki/ios/carrier-bundle-manifest)
+- [Carrier Bundle](https://theapplewiki.com/wiki/Carrier_Bundle) on The Apple Wiki

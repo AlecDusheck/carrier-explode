@@ -29,9 +29,9 @@ iOS sends a CDMA-teleservice SMS to `10659401` with the template filled in: `$MO
 
 Two more China Telecom keys relate to reporting the device to the carrier:
 
-| Key | Bundle | Note |
-|-----|--------|------|
-| `SaveICCIDToCache` | `ChinaTelecom_USIM_cn` | caches the ICCID; the only bundle that sets it |
+| Key                                              | Bundle                 | Note                                                                                                     |
+| ------------------------------------------------ | ---------------------- | -------------------------------------------------------------------------------------------------------- |
+| `SaveICCIDToCache`                               | `ChinaTelecom_USIM_cn` | caches the ICCID; the only bundle that sets it                                                           |
 | `CarrierEntitlements.SendSelfRegistrationUpdate` | `ChinaTelecom_USIM_cn` | "Send self-registration updates to the entitlement server", per CommCenter; the only bundle that sets it |
 
 The custom teleservice IDs next to them (`SMSSettings.CustomTeleserviceIDs.FDEA = 1004`, `FDED = 1002`) are set in all four China Telecom bundles.
@@ -66,7 +66,7 @@ http://dm.wo.com.cn:%d       China Unicom (wo.com.cn is Unicom's "WO" brand)
 coap://m.fxltsbl.com:%d      ???
 ```
 
-`json_report_cmcc.json` is the China Mobile dialect and `json_report_cu.json` the China Unicom one. None of this reaches the [baseband](/ios/builds/24A446/Mav24) decode on this site: the strings sit in the `qdsp6sw.mbn` code image, which the decoder does not decompress, so they do not appear in a package's file list.
+`json_report_cmcc.json` is the China Mobile dialect and `json_report_cu.json` the China Unicom one. These strings are in the compressed `qdsp6sw.mbn` code image, so they are not in a [baseband](/ios/builds/24A446/Mav24) package's file list on this site.
 
 ## zzhc
 
@@ -76,11 +76,11 @@ The literal string `zhcc` does not appear in any modem package; the firmware tok
 
 ## China SKU flag
 
-The Qualcomm [.der.gri](/wiki/ios/der-gri) files in the [Default bundle](/wiki/ios/default-bundle), and the firmware itself, write `/nv/item_files/modem/mav/mav_china_sku_nal_supp`. It is a China-SKU hardware flag (`NAL` ???) and is presumably unrelated to self-registration, which is per-carrier and runs off EFS and bundle settings rather than a global SKU switch.
+The Qualcomm [.der.gri](/wiki/ios/der-gri) files in the [Default bundle](/wiki/ios/default-bundle), and the firmware itself, write `/nv/item_files/modem/mav/mav_china_sku_nal_supp`. It is a China-SKU hardware flag (`NAL` ???) and is presumably unrelated to self-registration.
 
 ## See also
 
-* [Carrier Bundle](/wiki/ios/carrier-bundle)
-* [Carrier.plist](/wiki/ios/carrier-plist)
-* [.der.pri](/wiki/ios/der-pri)
-* [.der.gri](/wiki/ios/der-gri)
+- [Carrier Bundle](/wiki/ios/carrier-bundle)
+- [Carrier.plist](/wiki/ios/carrier-plist)
+- [.der.pri](/wiki/ios/der-pri)
+- [.der.gri](/wiki/ios/der-gri)

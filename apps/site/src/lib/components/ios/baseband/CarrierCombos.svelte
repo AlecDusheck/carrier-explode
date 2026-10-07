@@ -2,29 +2,29 @@
   import { SvelteSet } from "svelte/reactivity";
   import { getBasebandCombos } from "#lib/api/apple.remote.ts";
   import { qualcommRows } from "#lib/combos.ts";
-  import { mergeComboSets, type BandComboSet, type CarrierMapping } from "@carrier-explode/decode-ios";
+  import type { RoutedBundles } from "@carrier-explode/db";
+  import { comboTagPlmns, mergeComboSets, type BandComboSet } from "@carrier-explode/decode-ios";
   import { toggleIn } from "#lib/ui-state.svelte.ts";
   import Pane from "../../Pane.svelte";
   import ComboTable from "../../ComboTable.svelte";
   import ComboStatsTable from "../ComboStatsTable.svelte";
   import SourceChip from "../../SourceChip.svelte";
-  import { sourceKey } from "@carrier-explode/schema/types";
 
-  let { id, bandCombos, carrierMap }: {
+  let { id, bandCombos, tagBundles }: {
     /** The package, for fetching one carrier's combo list. */
     id: string;
     bandCombos: BandComboSet[];
-    carrierMap: Record<string, CarrierMapping> | null;
+    tagBundles: Readonly<Record<string, RoutedBundles>>;
   } = $props();
 
-  const carriers = $derived.by(() => {
-    const listed = bandCombos.flatMap((s) => s.carriers);
-    return [...new Set(listed.map((c) => c.tag))].map((tag) => {
-      const map = carrierMap?.[tag];
-      const plmns = map?.plmns ?? listed.find((c) => c.tag === tag)?.plmns ?? [];
-      return { tag, map, plmns, rows: mergeComboSets(bandCombos, tag) };
-    });
-  });
+  const carriers = $derived(
+    [...comboTagPlmns(bandCombos)].map(([tag, plmns]) => ({
+      tag,
+      map: tagBundles[tag],
+      plmns,
+      rows: mergeComboSets(bandCombos, tag),
+    })),
+  );
   /** Open combo lists, by tag + sha1. */
   const open = new SvelteSet<string>();
 </script>
@@ -43,12 +43,12 @@
       {#if map}
         <div class="rowflex">
           <span class="dimtext">Bundles</span>
-          {#each map.bundles as n (n)}<SourceChip source={sourceKey({ platform: "ios", kind: "carrier", name: n })} />{:else}<span class="dimtext">none mapped</span>{/each}
+          {#each map.bundles as n (n)}<SourceChip source={n} />{:else}<span class="dimtext">none mapped</span>{/each}
         </div>
         {#if map.mvnoBundles.length}
           <details>
             <summary class="dimtext">{map.mvnoBundles.length} MVNO bundles on these PLMNs</summary>
-            {#each map.mvnoBundles as n (n)}<SourceChip source={sourceKey({ platform: "ios", kind: "carrier", name: n })} />{/each}
+            {#each map.mvnoBundles as n (n)}<SourceChip source={n} />{/each}
           </details>
         {/if}
       {/if}
@@ -60,7 +60,7 @@
       </ComboStatsTable>
       {#each rows as r (r.sha1)}
         {#if open.has(tag + r.sha1)}
-          <Pane>
+          <Pane awaiting={{ kind: "decode", name: "band_combos_per_plmn.xml" }}>
             <ComboTable rows={qualcommRows(await getBasebandCombos({ id, sha1: r.sha1, tag }))} />
           </Pane>
         {/if}

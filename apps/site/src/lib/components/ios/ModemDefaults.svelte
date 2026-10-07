@@ -27,7 +27,7 @@
   const closeHref = $derived(withParams(page.url, { pri: null, efs: null, base: null }));
 </script>
 
-<Pane>
+<Pane awaiting={{ kind: "decode", name: "modem defaults" }}>
   {@const d = await getBasebandDefaults({ ...verArgs(at), device })}
   {#if d.missing}
     {#if d.build}<p class="dimtext note">No {phone} modem package stored for {d.build}.</p>{/if}
@@ -82,7 +82,7 @@
 
       {#if selection}
         <div id="override" class="override">
-          <Pane>
+          <Pane awaiting={{ kind: "decode", name: selection.efs }}>
             {@const o = await getBasebandOverride({ ...verArgs(at), slug: d.slug, id: d.id, ...selection })}
             <div class="rowflex">
               <b class="mono">{o.efs}</b>

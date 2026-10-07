@@ -44,7 +44,7 @@
       {#if phone?.family && ov}
         <a href={modemHref("ios", ov.build, phone.family.code)}>Modem package</a>{caps?.carrierConfigIn === "bundle" ? "; this file is its whole carrier config" : ""}.
       {:else if sel.phones.length}
-        for board {sel.phones.map((p) => p.code).join(", ")}, a phone this site cannot name yet.
+        for {phoneList(sel.phones)}; the release this version is read against has no modem package for {sel.phones.length > 1 ? "them" : "it"}.
       {:else}
         not named for a phone; read alongside each phone's own file where its modem uses this kind of file.
       {/if}

@@ -2,15 +2,12 @@
 
 `pnpm test` runs each package's tests against its own `test/fixtures`; the site's
 tests and its v2 fixture bucket (`apps/site/test/fixtures/v2`) read the .ipcc and
-manifest fixtures here. A few corpus tests (decode-ios, decode-qualcomm, decode-android,
-the site's scan test) also run when `CORPUS` points at a local directory laid out as:
+manifest fixtures here. A few corpus tests (decode-qualcomm, the site's scan test) also
+run when `CORPUS` points at a local directory laid out as:
 
-    image/                  one extracted iOS image: System/Library/{Carrier Bundles,CountryBundles}, Firmware/*.bbfw
     prl/                    *.prl files pulled out of OTA bundles
     scan/                   one generation from the extractor's `scan` job (scan/<gen>/)
-    bbcfg-manifest.json     reference listing for the whole-package bbfw test (optional)
-    android/CarrierSettings/  one Pixel's product/etc/CarrierSettings/*.pb
-    android/mbn/              one Pixel 1–5a's vendor rfs/msm/mpss/readonly/vendor/mbn (mcfg_sw/, mcfg_hw/)
+    android/mbn/            one Pixel 1–5a's vendor rfs/msm/mpss/readonly/vendor/mbn (mcfg_sw/, mcfg_hw/)
 
     CORPUS=~/corpus pnpm test
 

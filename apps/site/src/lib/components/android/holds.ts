@@ -6,6 +6,12 @@ import type { At } from "#lib/types.ts";
 import type { Holds } from "../views.ts";
 
 export async function androidHolds(at: At): Promise<Holds> {
-  const v = await getAndroid(verArgs(at));
-  return { settings: v.counts.configs, apns: v.counts.apns, modem: v.counts.modems > 0, files: true, changes: v.previous !== null };
+	const v = await getAndroid(verArgs(at));
+	return {
+		settings: v.counts.settings,
+		apns: v.counts.apns,
+		modem: v.counts.modems > 0,
+		files: v.counts.files,
+		changes: v.previous !== null,
+	};
 }

@@ -8,7 +8,7 @@
 </script>
 
 <div class="scroll pad">
-  <Pane>
+  <Pane awaiting={{ kind: "decode", name: modem }}>
     <PackageConfigs bb={await getBaseband({ build, family: modem })} />
   </Pane>
 </div>

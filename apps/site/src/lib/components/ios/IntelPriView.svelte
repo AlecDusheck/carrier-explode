@@ -3,6 +3,7 @@
   import PriValueCell from "./PriValueCell.svelte";
   import Confidence from "../Confidence.svelte";
   import IntelView from "./IntelView.svelte";
+  import DecodeNotes from "../modem/DecodeNotes.svelte";
   import Facts from "../modem/Facts.svelte";
 
   /** An Intel / Apple C1 override file: no Qualcomm items, so no ModemConfig; its keys read as the Intel tree. */
@@ -28,8 +29,6 @@
   ]);
 </script>
 
-{#each pri.errors as error, i (i)}<div class="banner err">{error}</div>{/each}
-
 <Facts {facts} />
 
 {#snippet keyList(q: string)}
@@ -53,7 +52,7 @@
 {/snippet}
 
 <fieldset class="hgroup">
-  <legend>Baseband overrides ({pri.efs.length})</legend>
+  <legend>Baseband overrides ({pri.efs.length})<DecodeNotes errors={pri.errors} /></legend>
   {#if pri.intel}
     <IntelView tree={pri.intel} flat={keyList} />
   {:else}

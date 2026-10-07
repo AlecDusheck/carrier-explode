@@ -1,7 +1,7 @@
 <script lang="ts">
   import type { CertInfo } from "@carrier-explode/decode-ios";
 
-  let { certs, signer }: { certs: CertInfo[]; signer?: number | undefined } = $props();
+  let { certs, signer }: { certs: readonly CertInfo[]; signer?: number | undefined } = $props();
 
   const now = new Date().toISOString();
   const status = (c: CertInfo) => (c.notAfter < now ? "expired" : c.notBefore > now ? "not yet valid" : "valid now");

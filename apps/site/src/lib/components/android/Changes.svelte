@@ -26,7 +26,7 @@
   <a href={compareHref({ source: at.ref, slug: chosen || undefined, line: at.line }, { source: at.ref, slug: at.version, line: at.line })}>Compare with another source…</a>
 </div>
 
-<Pane>
+<Pane awaiting={{ kind: "diff", name: at.version }}>
   {@const c = await getAndroidChanges({ ...verArgs(at), ...(against ? { against } : {}) })}
   {#if !c.a}
     <p class="dimtext">Nothing older to compare against.</p>

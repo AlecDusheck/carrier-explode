@@ -1,17 +1,17 @@
-/** Bundle versions as both platforms write them: dotted numbers (`9.1`, `72.0`, `79000000034`). Apple's OS labels, betas included, are decode-ios's compareVersions. */
+/** A sort key for bundle versions; their order is values' compareDotted, Apple's OS labels with betas decode-ios's compareVersions. */
 
-const segments = (v: string): number[] =>
-  v.split(".").map((part) => {
-    const n = Number.parseInt(part, 10);
-    return Number.isNaN(n) ? -1 : n;
-  });
+import { versionSegments } from "@carrier-explode/values";
 
-/** Numeric by segment, a missing segment counting as 0; a segment that is not a number sorts below every number. */
-export function compareDotted(a: string, b: string): number {
-  const x = segments(a), y = segments(b);
-  for (let i = 0; i < Math.max(x.length, y.length); i++) {
-    const d = (x[i] ?? 0) - (y[i] ?? 0);
-    if (d !== 0) return d;
-  }
-  return 0;
+/** Wide enough for any OS version a feed states. */
+const KEY_SEGMENTS = 4;
+const KEY_DIGITS = 6;
+
+/** A version as text that sorts as compareDotted does; each segment shifted by one, so a non-number sorts below 0. */
+export function dottedKey(v: string): string {
+	const parts = versionSegments(v);
+	if (parts.length > KEY_SEGMENTS || parts.some((n) => n + 1 >= 10 ** KEY_DIGITS))
+		throw new Error(`version ${v} is too long for a sort key`);
+	return Array.from({ length: KEY_SEGMENTS }, (_, i) =>
+		String((parts[i] ?? 0) + 1).padStart(KEY_DIGITS, "0"),
+	).join(".");
 }

@@ -8,8 +8,8 @@
 </script>
 
 <div class="scroll pad">
-  <Pane>
+  <Pane awaiting={{ kind: "decode", name: modem }}>
     {@const bb = await getBaseband({ build, family: modem })}
-    {#if bb.mdb}<NetworkDbs mdb={bb.mdb} mccs={bb.mccs} />{:else}<p class="dimtext note">This package has no network databases.</p>{/if}
+    {#if bb.mdb}<NetworkDbs mdb={bb.mdb} mccs={bb.mccs} bundles={bb.networkBundles} />{:else}<p class="dimtext note">This package has no network databases.</p>{/if}
   </Pane>
 </div>

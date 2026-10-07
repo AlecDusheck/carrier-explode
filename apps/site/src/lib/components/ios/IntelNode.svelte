@@ -46,7 +46,7 @@
 </script>
 
 {#snippet twist()}
-  <button type="button" class="twist" aria-expanded={open} onclick={() => (toggled = !open)}>{open ? "▾" : "▸"}</button>
+  <button type="button" class="twist" aria-expanded={open} aria-label="{open ? 'Fold' : 'Unfold'} {node.name}" onclick={() => (toggled = !open)}>{open ? "▾" : "▸"}</button>
 {/snippet}
 
 {#snippet unused(l: IntelList)}

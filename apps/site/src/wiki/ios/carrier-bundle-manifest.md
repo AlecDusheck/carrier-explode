@@ -20,16 +20,16 @@ It is the same file iTunes has always checked for its own updates, and still has
 
 ## Keys
 
-| Key | Entries (live) | What |
-|-----|---------|------|
-| `MobileDeviceCarrierBundlesByProductVersion` | <Manifest table="MobileDeviceCarrierBundlesByProductVersion" /> | carrier bundles by name, then by iOS version |
-| `MobileDeviceCarrierBundles` | <Manifest table="MobileDeviceCarrierBundles" /> | the original 2009-2010 list, one file per bundle |
-| `MobileDeviceCarriersByMccMnc` | <Manifest table="MobileDeviceCarriersByMccMnc" /> | MCC+MNC to bundle name, with MVNOs |
-| `MobileDeviceCarriers` | <Manifest table="MobileDeviceCarriers" /> | ICCID prefix to bundle name |
-| `MobileDeviceCarriersByCarrierID` | <Manifest table="MobileDeviceCarriersByCarrierID" /> | CDMA-era carrier ID to bundle name |
-| `CarrierBundles` | | Watch bundles, and `iPhone.OtherKnownSettings` |
-| `CountryBundles` | | country bundles for iPhone and Watch |
-| `CarrierBundleSignatures`, `CountryBundleSignatures` | | `Format1`, `Format2`, each holding a `signature3` |
+| Key                                                  | Entries (live)                                                  | What                                              |
+| ---------------------------------------------------- | --------------------------------------------------------------- | ------------------------------------------------- |
+| `MobileDeviceCarrierBundlesByProductVersion`         | <Manifest table="MobileDeviceCarrierBundlesByProductVersion" /> | carrier bundles by name, then by iOS version      |
+| `MobileDeviceCarrierBundles`                         | <Manifest table="MobileDeviceCarrierBundles" />                 | the original 2009-2010 list, one file per bundle  |
+| `MobileDeviceCarriersByMccMnc`                       | <Manifest table="MobileDeviceCarriersByMccMnc" />               | MCC+MNC to bundle name, with MVNOs                |
+| `MobileDeviceCarriers`                               | <Manifest table="MobileDeviceCarriers" />                       | ICCID prefix to bundle name                       |
+| `MobileDeviceCarriersByCarrierID`                    | <Manifest table="MobileDeviceCarriersByCarrierID" />            | CDMA-era carrier ID to bundle name                |
+| `CarrierBundles`                                     |                                                                 | Watch bundles, and `iPhone.OtherKnownSettings`    |
+| `CountryBundles`                                     |                                                                 | country bundles for iPhone and Watch              |
+| `CarrierBundleSignatures`, `CountryBundleSignatures` |                                                                 | `Format1`, `Format2`, each holding a `signature3` |
 
 ## MobileDeviceCarrierBundlesByProductVersion
 
@@ -132,6 +132,6 @@ Bundles
 
 ## See also
 
-* [IPCC](/wiki/ios/ipcc)
-* [Bundle Selection](/wiki/ios/bundle-selection)
-* [Carrier OTA Updates](https://theapplewiki.com/wiki/Carrier_OTA_Updates) on The Apple Wiki (iOS 5 to 8 carrier seeds, a different thing)
+- [IPCC](/wiki/ios/ipcc)
+- [Bundle Selection](/wiki/ios/bundle-selection)
+- [Carrier OTA Updates](https://theapplewiki.com/wiki/Carrier_OTA_Updates) on The Apple Wiki (iOS 5 to 8 carrier seeds, a different thing)

@@ -47,4 +47,4 @@ The last of the intervals at which the phone checks whether a new eSIM has been 
 
 ## See also
 
-* [Vodafone_Travel § Typos and placeholders](/wiki/ios/carrier-plist#typos-and-placeholders) (`Key New` = `Value`)
+- [Vodafone_Travel § Typos and placeholders](/wiki/ios/carrier-plist#typos-and-placeholders) (`Key New` = `Value`)

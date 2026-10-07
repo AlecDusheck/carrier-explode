@@ -4,9 +4,11 @@
   import { getSelectedBy } from "#lib/api/apple.remote.ts";
   import { humanBytes, verArgs } from "#lib/format.ts";
   import { asDict } from "#lib/apple/settings.ts";
+  import { selectionRows } from "#lib/settings.ts";
   import { PLATFORM_DEVICES } from "#lib/platforms.ts";
   import type { TabProps } from "#lib/types.ts";
   import { sourceKey } from "@carrier-explode/schema/types";
+  import CarrierMembers from "../../CarrierMembers.svelte";
   import Copies from "../../Copies.svelte";
   import Rare from "../../Rare.svelte";
   import SelectionTable from "../../SelectionTable.svelte";
@@ -65,7 +67,7 @@
 {#if at.ref.kind === "carrier"}
   {@const rules = await getSelectedBy(sourceKey(at.ref))}
   <fieldset class="hgroup">
-    <legend>Selected by ({rules.length})</legend>
+    <legend>Selected by ({selectionRows(rules).length})</legend>
     {#if rules.length}
       <p class="dimtext note">
         The SIMs Apple's manifest sends to this bundle. An MVNO rule is checked before the plain MCC-MNC entry.
@@ -76,6 +78,7 @@
       <p class="dimtext note">No SIM is sent here by the manifest; another bundle's MVNO configuration or an older iOS picks it.</p>
     {/if}
   </fieldset>
+  <CarrierMembers {at} />
 {/if}
 
 {#if bundle.home}

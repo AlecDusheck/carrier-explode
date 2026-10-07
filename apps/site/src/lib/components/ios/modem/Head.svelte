@@ -2,7 +2,7 @@
   import { getBaseband, getModemPackages } from "#lib/api/apple.remote.ts";
   import { getBuilds } from "#lib/api/builds.remote.ts";
   import { buildHref, modemHref } from "#lib/format.ts";
-  import { modemCapabilities } from "@carrier-explode/decode-ios";
+  import { isTextFile, modemCapabilities } from "@carrier-explode/decode-ios";
   import type { ModemTab } from "../../../../params.ts";
   import type { ModemProps } from "../../views.ts";
   import BuildPicker from "../../BuildPicker.svelte";
@@ -33,18 +33,18 @@
   </div>
 </div>
 {#if plaintext}
-  <nav class="tabs tabs-slot">
+  <nav class="tabs-slot">
     <Pane quiet>
       {@const bb = await getBaseband({ build, family: modem })}
       {@const items: Array<[string, string]> = [
         [href(), "Overview"],
         [href("carriers"), "Carriers"],
-        [href("policy"), `Policy files (${bb.files.filter((f) => f.readable).length})`],
+        [href("policy"), `Policy files (${bb.files.filter(isTextFile).length})`],
         ...(bb.mdb ? [[href("networks"), "Network databases"] as [string, string]] : []),
         [href("configs"), "Configs"],
         [href("changes"), "Changes"],
       ]}
-      <TabLinks {items} current={href(tab)} />
+      <TabLinks {items} />
     </Pane>
   </nav>
 {/if}

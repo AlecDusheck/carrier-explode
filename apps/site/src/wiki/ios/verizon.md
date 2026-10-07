@@ -15,16 +15,16 @@ Verizon's main bundle is <Bundle name="Verizon_LTE_US" version />. The `_LTE_` i
 
 ## Bundles
 
-| Bundle | |
-|--------|---|
-| <Bundle name="Verizon_LTE_US" /> | Verizon |
-| <Bundle name="Verizon_MVNO_US" /> | MVNOs without their own bundle; shares most of Verizon's rare keys |
-| <Bundle name="Verizon_Visible_LTE_US" />, <Bundle name="Verizon_Core_Visible_LTE_US" /> | Visible |
-| <Bundle name="Verizon_Comcast_LTE_US" /> | Xfinity Mobile |
-| <Bundle name="Verizon_Charter_LTE_US" /> | Spectrum Mobile |
-| <Bundle name="Verizon_Cox_LTE_US" /> | Cox Mobile |
-| <Bundle name="Verizon_Response_LTE_US" /> | Verizon Response ??? |
-| <Bundle name="Verizon_Credo_LTE_US" />, <Bundle name="Verizon_Ting_LTE_US" />, <Bundle name="Verizon_TFW_LTE_US" /> | other MVNOs |
+| Bundle                                                                                                              |                                                                    |
+| ------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------ |
+| <Bundle name="Verizon_LTE_US" />                                                                                    | Verizon                                                            |
+| <Bundle name="Verizon_MVNO_US" />                                                                                   | MVNOs without their own bundle; shares most of Verizon's rare keys |
+| <Bundle name="Verizon_Visible_LTE_US" />, <Bundle name="Verizon_Core_Visible_LTE_US" />                             | Visible                                                            |
+| <Bundle name="Verizon_Comcast_LTE_US" />                                                                            | Xfinity Mobile                                                     |
+| <Bundle name="Verizon_Charter_LTE_US" />                                                                            | Spectrum Mobile                                                    |
+| <Bundle name="Verizon_Cox_LTE_US" />                                                                                | Cox Mobile                                                         |
+| <Bundle name="Verizon_Response_LTE_US" />                                                                           | Verizon Response ???                                               |
+| <Bundle name="Verizon_Credo_LTE_US" />, <Bundle name="Verizon_Ting_LTE_US" />, <Bundle name="Verizon_TFW_LTE_US" /> | other MVNOs                                                        |
 
 ## SIM matching
 
@@ -53,7 +53,7 @@ A 911 call started on cellular stays on cellular, even if Wi-Fi Calling would ot
 
 ## MMS
 
-`MMS.MaxVideoBitrate` is 15360000 (15 Mbit/s). The median across bundles that set it is <Setting path="MMS.MaxVideoBitrate" show="median" /> (*live*).
+`MMS.MaxVideoBitrate` is 15360000 (15 Mbit/s). The median across bundles that set it is <Setting path="MMS.MaxVideoBitrate" show="median" /> (_live_).
 
 ## Call end reasons
 
@@ -61,5 +61,5 @@ Verizon's `IMSConfig.Signaling.CallEndReasons` has an entry named `MediaserverCr
 
 ## See also
 
-* [AT&T](/wiki/ios/att), [T-Mobile US](/wiki/ios/t-mobile-us)
-* [Bundle Selection](/wiki/ios/bundle-selection)
+- [AT&T](/wiki/ios/att), [T-Mobile US](/wiki/ios/t-mobile-us)
+- [Bundle Selection](/wiki/ios/bundle-selection)

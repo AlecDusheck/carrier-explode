@@ -32,7 +32,7 @@
           {#if on}
             <tr>
               <td colspan="3">
-                <Pane><ComboTable rows={combinationRows(await getModemCombos(s.key))} /></Pane>
+                <Pane awaiting={{ kind: "decode", name: s.sources[0] ?? "combos" }}><ComboTable rows={combinationRows(await getModemCombos(s.key))} /></Pane>
               </td>
             </tr>
           {/if}

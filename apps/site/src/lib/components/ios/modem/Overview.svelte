@@ -13,7 +13,7 @@
 </script>
 
 <div class="scroll pad">
-  <Pane>
+  <Pane awaiting={{ kind: "decode", name: modem }}>
     {@const mods = await getModemPackages(build)}
     {@const pkg = mods.modems.find((x) => x.family.code === modem)}
     {#if pkg}
@@ -22,7 +22,6 @@
     {/if}
     {#if caps?.plaintextDefaults}
       {@const bb = await getBaseband({ build, family: modem })}
-      <p class="dimtext note">Load order: the modem's built-in config, then bbcfg.mbn's per-platform defaults, then the bundle's .der.pri.</p>
       {#if bb.ssgccs?.length}<FbsSection groups={bb.ssgccs} />{/if}
       {#if bb.amprNs.length}<PowerTable tables={bb.amprNs} mccs={bb.mccs} />{/if}
     {/if}

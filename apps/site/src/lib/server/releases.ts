@@ -1,86 +1,150 @@
-/** OS releases (releases/<platform>/<id>.json): what an iPhone or Pixel build carries for each source. */
+/** OS releases as the index has them: a build's header, its neighbours, and what it changed for each source. */
 
 import { error } from "@sveltejs/kit";
-import { keys } from "@carrier-explode/storage";
-import { changesOf } from "@carrier-explode/db/d1";
 import {
-  lineOf, sourceOf, versionPath, type AppleRelease, type ImageModem, type Release, type ReleaseChange, type ReleasedEntry, type ReleasePlatform, type ReleaseSummary, type SourceKey,
-} from "@carrier-explode/schema";
-import { releaseSchema } from "@carrier-explode/schema/records";
+	changesOf,
+	neighbours,
+	releaseOf,
+	shippedIn,
+	type ListedRelease,
+	type Page,
+	type ShownChange,
+	type ShownEnd,
+} from "@carrier-explode/db";
+import { sourceOf, versionPath, type ReleasePlatform, type SourceKey } from "@carrier-explode/schema/types";
 import type { Picture } from "#lib/types.ts";
 import { perRequest } from "./cache";
-import { isIndexed, locate, releaseList } from "./catalog";
-import { db } from "./db";
-import { pictureOf } from "./pictures";
-import { readJson } from "./store";
+import { db, everyPage } from "./db";
+import { releasesOf } from "./catalog";
+import { getCarriers, listEntries } from "./lists";
 
-const releaseOf = perRequest((platform: ReleasePlatform, id: string) => readJson(keys.release(platform, id), releaseSchema));
+const releaseRow = perRequest(async (platform: ReleasePlatform, id: string) =>
+	releaseOf(await db(), platform, id),
+);
 
-type ReleaseOf<P extends ReleasePlatform> = Extract<Release, { readonly platform: P }>;
-
-const isOf = <P extends ReleasePlatform>(r: Release, platform: P): r is ReleaseOf<P> => r.platform === platform;
-
-export async function mustRelease<P extends ReleasePlatform>(platform: P, id: string): Promise<ReleaseOf<P>> {
-  const r = await releaseOf(platform, id);
-  if (!r) error(404, `No ${platform} release ${id}.`);
-  if (!isOf(r, platform)) error(500, `releases/${platform}/${id}.json holds an ${r.platform} release`);
-  return r;
+/** A build the index has: a missing one is its page's 404. */
+export async function mustRelease(platform: ReleasePlatform, id: string): Promise<ListedRelease> {
+	const r = await releaseRow(platform, id);
+	if (!r) error(404, `No ${platform} release ${id}.`);
+	return r;
 }
 
-/** An iOS build and its modem packages. */
-export async function releaseModems(id: string): Promise<{ release: AppleRelease; modems: readonly ImageModem[] }> {
-  const release = await mustRelease("ios", id);
-  return { release, modems: release.modems };
-}
+/** Whether the index holds a build of `platform` before `id`: the oldest one has no changes to list. */
+export const hasPrevious = async (platform: ReleasePlatform, id: string): Promise<boolean> =>
+	(await neighbours(await db(), platform, id)).previous !== null;
 
-/** A source's version in one release, linked to that version's page when the index has the source. */
+/** A build's name, or null when the index lacks it. */
+export const releaseNamed = async (platform: ReleasePlatform, id: string): Promise<ListedRelease | null> =>
+	(await releaseRow(platform, id)) ?? null;
+
+/** A source's version in one release, linked to that version's page. */
 export interface ReleasedVersion {
-  readonly version: string;
-  readonly path: string | null;
+	readonly version: string;
+	readonly path: string;
 }
 
 export interface SourceChange {
-  readonly source: SourceKey;
-  readonly picture: Picture | null;
-  readonly from: ReleasedVersion | null;
-  readonly to: ReleasedVersion | null;
+	readonly source: SourceKey;
+	/** What people call its carrier, and its picture; null for a source no list shows yet. */
+	readonly brand: string | null;
+	readonly picture: Picture | null;
+	readonly from: ReleasedVersion | null;
+	readonly to: ReleasedVersion | null;
 }
 
 export interface ReleaseView {
-  readonly release: ReleaseSummary;
-  readonly previous: ReleaseSummary | null;
-  readonly added: readonly SourceChange[];
-  readonly removed: readonly SourceChange[];
-  readonly changed: readonly SourceChange[];
+	readonly release: ListedRelease;
+	readonly previous: ListedRelease | null;
+	readonly added: readonly SourceChange[];
+	readonly removed: readonly SourceChange[];
+	readonly changed: readonly SourceChange[];
 }
 
-/** The version of an Apple source on its main line that an iOS build shipped; null when the index has none. */
-export async function shippedVersion(build: string, key: SourceKey): Promise<ReleasedVersion | null> {
-  if (!(await isIndexed(key))) return null;
-  const { ref, timeline } = await locate(key);
-  const entry = lineOf(timeline, null).find((e) => e.copies.some((c) => c.kind === "image" && c.releases.includes(build)));
-  return entry === undefined ? null : { version: entry.version, path: versionPath(ref, { line: null, slug: entry.slug }) };
+const shipped = perRequest(async (platform: ReleasePlatform, build: string) =>
+	shippedIn(await db(), platform, build),
+);
+
+/** The version of a source on one line that a build shipped; null when it shipped none. */
+export async function shippedVersion(
+	platform: ReleasePlatform,
+	build: string,
+	key: SourceKey,
+	line: string,
+): Promise<ReleasedVersion | null> {
+	const copy = (await shipped(platform, build)).find((c) => c.source === key && c.line === line);
+	return copy === undefined ? null : { version: copy.version, path: versionPath(sourceOf(key), copy) };
+}
+
+/** How many of each of a platform's builds' sources its carrier list lists, by build. */
+export async function carriersShipped(platform: ReleasePlatform): Promise<Array<readonly [string, number]>> {
+	const [builds, carriers] = await Promise.all([releasesOf(platform), getCarriers(platform)]);
+	const listed = new Set(carriers.map((c) => c.key));
+	return Promise.all(
+		builds.map(async (b) => {
+			const copies = await shipped(platform, b.id);
+			return [b.id, new Set(copies.flatMap((c) => (listed.has(c.source) ? [c.source] : []))).size] as const;
+		}),
+	);
+}
+
+/** A source a build ships, at its version there. */
+export interface ShippedSource {
+	readonly source: SourceKey;
+	readonly line: string;
+	/** What people call its carrier; null for a source no list shows yet. */
+	readonly brand: string | null;
+	readonly picture: Picture | null;
+	readonly at: ReleasedVersion;
+}
+
+/** Every source a build ships, by its carrier's name. */
+export async function getShipped(platform: ReleasePlatform, build: string): Promise<ShippedSource[]> {
+	const copies = await shipped(platform, build);
+	const listed = await listEntries([...new Set(copies.map((c) => c.source))]);
+	return copies
+		.map((c): ShippedSource => {
+			const entry = listed.get(c.source);
+			return {
+				source: c.source,
+				line: c.line,
+				brand: entry?.brand ?? null,
+				picture: entry?.picture ?? null,
+				at: { version: c.version, path: versionPath(sourceOf(c.source), c) },
+			};
+		})
+		.toSorted(
+			(a, b) => (a.brand ?? a.source).localeCompare(b.brand ?? b.source) || a.source.localeCompare(b.source),
+		);
 }
 
 /** A build: what it added, removed and changed against its platform's previous release. */
 export async function getRelease(platform: ReleasePlatform, id: string): Promise<ReleaseView> {
-  const mine = (await releaseList()).filter((r) => r.platform === platform);
-  const release = mine.find((r) => r.id === id);
-  if (!release) error(404, `No ${platform} release ${id}.`);
-  const rows = await changesOf(await db(), platform, id);
-  const changes = rows.map(({ change, carrier }) => {
-    const ref = sourceOf(change.source);
-    const shown = (e: ReleasedEntry): ReleasedVersion => ({ version: e.version, path: carrier === null ? null : versionPath(ref, e) });
-    return {
-      kind: change.kind,
-      view: {
-        source: change.source,
-        picture: carrier === null ? null : pictureOf(ref, carrier),
-        from: change.kind === "added" ? null : shown(change.from),
-        to: change.kind === "removed" ? null : shown(change.to),
-      },
-    };
-  });
-  const of = (kind: ReleaseChange["kind"]): SourceChange[] => changes.filter((c) => c.kind === kind).map((c) => c.view);
-  return { release, previous: mine[mine.indexOf(release) + 1] ?? null, added: of("added"), removed: of("removed"), changed: of("changed") };
+	const d = await db();
+	const [release, { previous }, changes] = await Promise.all([
+		mustRelease(platform, id),
+		neighbours(d, platform, id),
+		everyPage(
+			(page: Page<SourceKey>) => changesOf(d, platform, id, page),
+			(c) => c.source,
+		),
+	]);
+	const [before, listed] = await Promise.all([
+		previous === null ? null : releaseNamed(platform, previous),
+		listEntries(changes.map((c) => c.source)),
+	]);
+	const view = (c: ShownChange): SourceChange => {
+		const shown = (e: ShownEnd): ReleasedVersion => ({
+			version: e.version,
+			path: versionPath(sourceOf(c.source), e),
+		});
+		return {
+			source: c.source,
+			brand: listed.get(c.source)?.brand ?? null,
+			picture: listed.get(c.source)?.picture ?? null,
+			from: c.kind === "added" ? null : shown(c.from),
+			to: c.kind === "removed" ? null : shown(c.to),
+		};
+	};
+	const of = (kind: ShownChange["kind"]): SourceChange[] => changes.filter((c) => c.kind === kind).map(view);
+	return { release, previous: before, added: of("added"), removed: of("removed"), changed: of("changed") };
 }

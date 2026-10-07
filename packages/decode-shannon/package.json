@@ -1,24 +1,25 @@
 {
-  "name": "@carrier-explode/decode-shannon",
-  "private": true,
-  "version": "0.0.0",
-  "type": "module",
-  "sideEffects": false,
-  "exports": {
-    ".": "./src/index.ts"
-  },
-  "scripts": {
-    "test": "vitest run --passWithNoTests",
-    "check": "tsc -p tsconfig.json && tsc -p tsconfig.test.json"
-  },
-  "dependencies": {
-    "@carrier-explode/binary": "workspace:*",
-    "@carrier-explode/sqlite": "workspace:*"
-  },
-  "devDependencies": {
-    "@carrier-explode/tsconfig": "workspace:*",
-    "@types/node": "^22.20.3",
-    "typescript": "^6.0.0",
-    "vitest": "^5.0.3"
-  }
+	"name": "@carrier-explode/decode-shannon",
+	"version": "0.0.0",
+	"private": true,
+	"type": "module",
+	"sideEffects": false,
+	"exports": {
+		".": "./src/index.ts"
+	},
+	"scripts": {
+		"test": "vitest run --passWithNoTests",
+		"check": "tsc -p tsconfig.json && tsc -p tsconfig.worker.json && tsc -p tsconfig.test.json"
+	},
+	"dependencies": {
+		"@carrier-explode/binary": "workspace:*",
+		"@carrier-explode/sqlite": "workspace:*"
+	},
+	"devDependencies": {
+		"@carrier-explode/tsconfig": "workspace:*",
+		"@cloudflare/workers-types": "^5.20261003.1",
+		"@types/node": "^22.20.3",
+		"typescript": "^6.0.0",
+		"vitest": "^5.0.3"
+	}
 }

@@ -1,10 +1,13 @@
 /** Whether a phone has a 5G radio, as its own settings show: no table of models. */
 
-/** The phones some settings configure, and those of them they configure for 5G. */
-export interface RadioEvidence {
-  readonly configured: ReadonlySet<string>;
-  readonly fiveG: ReadonlySet<string>;
+import type { ConfigRadio } from "./modem/index.ts";
+
+/** A phone lacks 5G when some of its settings configure its radio and none for 5G; null when none of them say. */
+export function has5g(radios: Iterable<ConfigRadio>): boolean | null {
+	const read = [...radios].filter((r) => r !== "unread");
+	return read.length === 0 ? null : read.includes("nr");
 }
 
-/** A phone lacks 5G when settings configure it and none for 5G; one no settings cover is not judged, and keeps its 5G features. */
-export const has5GBy = (e: RadioEvidence) => (device: string): boolean => !e.configured.has(device) || e.fiveG.has(device);
+/** A modem configuration's base layers configure the modem as much as its own items do. */
+export const layeredRadio = (own: ConfigRadio, base: ConfigRadio | null): ConfigRadio =>
+	base === "nr" ? "nr" : own;

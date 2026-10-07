@@ -1,0 +1,10 @@
+{
+	"rules": [
+		{
+			"id": "tmp-expire-1d",
+			"enabled": true,
+			"conditions": { "prefix": "tmp/" },
+			"deleteObjectsTransition": { "condition": { "type": "Age", "maxAge": 86400 } }
+		}
+	]
+}

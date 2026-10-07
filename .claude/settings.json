@@ -1,0 +1,16 @@
+{
+	"hooks": {
+		"PreToolUse": [
+			{
+				"matcher": "Edit|Write|NotebookEdit",
+				"hooks": [
+					{
+						"type": "command",
+						"command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/no-as-any.cjs\"",
+						"statusMessage": "Checking for 'as' casts and 'any' types..."
+					}
+				]
+			}
+		]
+	}
+}

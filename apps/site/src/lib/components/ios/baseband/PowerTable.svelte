@@ -6,8 +6,11 @@
 
   let { tables, mccs }: { tables: BasebandSummary["amprNs"]; mccs: Baseband["mccs"] } = $props();
 
-  /** More MCCs than this fold behind a summary. */
+  /** More countries than this fold behind a summary. */
   const FOLD = 8;
+
+  /** A group's MCCs by country, so each country is one entry however many codes it has. */
+  const byCountry = (codes: readonly string[]): Array<[string, string[]]> => [...Map.groupBy(codes, (m) => mccs[m]?.name ?? m)];
 
   let picked = $state(0);
   let query = $state("");
@@ -21,6 +24,10 @@
   });
 </script>
 
+{#snippet chips(countries: Array<[string, string[]]>)}
+  {#each countries as [name, codes] (name)}<span class="chip">{name}{#if codes[0] !== name}<span class="mono dimtext sp">{codes.join(" ")}</span>{/if}</span>{/each}
+{/snippet}
+
 <fieldset class="hgroup" id="power">
   <legend>Power: A-MPR network signalling</legend>
   <p class="dimtext note">pt.mbn NV 64628: the NS value signalled per LTE band, without and with carrier aggregation, by MCC.</p>
@@ -29,7 +36,7 @@
       <label class="lbl">
         Table
         <select name="ampr" bind:value={picked}>
-          {#each tables as x, i (x.sha1)}
+          {#each tables as x, i (i)}
             <option value={i}>{i + 1}: {x.variants.length} variants, platforms {[...new Set(x.variants.map((v) => v.platform))].join(", ")}</option>
           {/each}
         </select>
@@ -41,18 +48,19 @@
     <table class="grid">
       <thead><tr><th>Countries</th><th class="num">Band</th><th class="num">NS</th><th class="num">NS with CA</th></tr></thead>
       <tbody>
-        {#each groups as g, gi (gi)}
+        {#each groups as g (g)}
           {#each g.bands as b, bi (bi)}
             <tr>
               {#if bi === 0}
+                {@const countries = byCountry(g.mccs)}
                 <td rowspan={g.bands.length} class="countries">
-                  {#if g.mccs.length > FOLD}
+                  {#if countries.length > FOLD}
                     <details>
-                      <summary>{g.mccs.length} MCCs: {[...new Set(g.mccs.map((m) => mccs[m]?.name ?? m))].slice(0, 4).join(", ")}, …</summary>
-                      {#each g.mccs as m (m)}<span class="chip" title={mccs[m]?.name}>{m} {mccs[m]?.cc.toUpperCase() ?? ""}</span>{/each}
+                      <summary>{countries.length} countries: {countries.slice(0, 4).map(([name]) => name).join(", ")}, …</summary>
+                      {@render chips(countries)}
                     </details>
                   {:else}
-                    {#each g.mccs as m (m)}<span class="chip" title={mccs[m]?.name}>{m} {mccs[m]?.name ?? ""}</span>{/each}
+                    {@render chips(countries)}
                   {/if}
                 </td>
               {/if}

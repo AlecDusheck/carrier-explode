@@ -6,7 +6,6 @@
 
   let { children } = $props();
 
-  // By route rather than by href: during SSR link() is relative to the page.
   const current = (path?: string) => (page.params.path === path ? "page" : undefined);
   const here = $derived(page.params.path === undefined ? undefined : article(page.params.path));
 

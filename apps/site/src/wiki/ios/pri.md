@@ -11,12 +11,12 @@ PRI is Qualcomm's name for a carrier's configuration: NV items and EFS files to 
 
 ## Files
 
-| File | Bundles | For |
-|------|---------|-----|
-| `carrier.pri` | 41 | every phone without a file of its own |
-| `overrides_<boards>.pri` | many, for older boards | `N41_N42` (iPhone 5), `N48_N51`, `N48_N49_N51_N53` (5c, 5s), `N56_N61` (6 Plus, 6), `N66_N71` (6s Plus, 6s), `N69` (SE), `J72`-`J99a` (cellular iPads) |
-| `carrier_ota.pri` | `Sprint_LTE_US`, `Sprint_Virgin_LTE_US` | ??? |
-| `carrier.prl` | CDMA carriers | Preferred Roaming List, binary |
+| File                     | Bundles                                 | For                                                                                                                                                    |
+| ------------------------ | --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `carrier.pri`            | 41                                      | every phone without a file of its own                                                                                                                  |
+| `overrides_<boards>.pri` | many, for older boards                  | `N41_N42` (iPhone 5), `N48_N51`, `N48_N49_N51_N53` (5c, 5s), `N56_N61` (6 Plus, 6), `N66_N71` (6s Plus, 6s), `N69` (SE), `J72`-`J99a` (cellular iPads) |
+| `carrier_ota.pri`        | `Sprint_LTE_US`, `Sprint_Virgin_LTE_US` | ???                                                                                                                                                    |
+| `carrier.prl`            | CDMA carriers                           | Preferred Roaming List, binary                                                                                                                         |
 
 From the iPhone 6s on, a board's `.pri` comes with a `.der.pri` of the same revision, and later boards only have the `.der.pri`. `Nemont_US` 23.1 (iOS 9.2) has both for the 6s:
 
@@ -74,10 +74,10 @@ Roaming Broker
 
 Values like `Default:000000[pESN4]` look like templates filled in on the phone: here, presumably, an MDN of six zeros followed by the last four digits of the pseudo-ESN.
 
-The per-board file can differ in more than the obvious ways. In the same bundle, `carrier.pri` sets the GSM ciphers to `A5_1` and `GEA_1`, while `overrides_N66_N71.pri` for the iPhone 6s sets `A5_3` and `GEA_3`.
+In the same bundle, `carrier.pri` sets the GSM ciphers to `A5_1` and `GEA_1`, while `overrides_N66_N71.pri` for the iPhone 6s sets `A5_3` and `GEA_3`.
 
 ## See also
 
-* [.der.pri](/wiki/ios/der-pri)
-* [.der.gri](/wiki/ios/der-gri)
-* [Carrier Bundle](/wiki/ios/carrier-bundle)
+- [.der.pri](/wiki/ios/der-pri)
+- [.der.gri](/wiki/ios/der-gri)
+- [Carrier Bundle](/wiki/ios/carrier-bundle)

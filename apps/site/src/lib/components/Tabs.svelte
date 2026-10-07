@@ -6,12 +6,12 @@
   import { VIEWS } from "./views.ts";
 
   /** A version's tab row: the Overview, then each of its platform's tabs this version has something for. */
-  let { at, tab }: { at: At; tab: string } = $props();
+  let { at }: { at: At } = $props();
 
   const view = $derived(VIEWS[at.ref.platform]);
   const holds = $derived(await view.holds(at));
-  const items = $derived([
-    [versionHref(at), "Overview"] as [string, string],
+  const items = $derived<Array<[string, string]>>([
+    [versionHref(at), "Overview"],
     ...TABS.flatMap((seg): Array<[string, string]> => {
       const [t, held] = [view.tabs[seg], holds[seg]];
       if (t === undefined || held === undefined || held === false) return [];
@@ -20,4 +20,4 @@
   ]);
 </script>
 
-<TabLinks {items} current={versionHref(at, tab)} />
+<TabLinks {items} />

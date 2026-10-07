@@ -1,16 +1,13 @@
 <script lang="ts">
-  import type { SelectedBy } from "#lib/server/android/settings.ts";
-  import { simRule } from "#lib/settings.ts";
+  import type { CarrierListView } from "#lib/server/android/carrier-list.ts";
+  import type { SelectionRule } from "#lib/settings.ts";
   import SelectionTable from "../SelectionTable.svelte";
 
-  /** carrier_list.pb's rules for one canonical name: a SIM matching any of them loads its file. */
-  let { name, selectedBy }: { name: string; selectedBy: SelectedBy } = $props();
-
-  const rules = $derived(selectedBy.sims.map(simRule));
+  /** carrier_list.pb's rules for one canonical name; `list` is the version's own file, null for the newest build's. */
+  let { rules, list }: { rules: readonly SelectionRule[]; list: Pick<CarrierListView, "version" | "total"> | null } = $props();
 </script>
 
 <p class="dimtext note">
-  {rules.length} of {selectedBy.total} rules in carrier_list.pb{selectedBy.version ? ` version ${selectedBy.version}` : ""} name {name}.
-  A SIM can match several carriers' rules.
+  {#if list}{rules.length} of {list.total} rules in carrier_list.pb{list.version ? ` version ${list.version}` : ""}.{:else}From the newest build's carrier_list.pb.{/if}
 </p>
 {#if rules.length}<SelectionTable {rules} />{/if}

@@ -1,20 +1,14 @@
 /**
- * Modem package families. An IPSW carries one package per modem it supports:
- * Qualcomm and Intel `Firmware/<Family>-<version>.Release.bbfw`, or an Apple
- * `Firmware/c<chip>…/Release/…/ftab.bin`. Names are that path without
- * `Firmware/` (the ios.modems job picks the members); the family is read off it.
+ * Modem package families, read off the package's path without `Firmware/`: Qualcomm and Intel
+ * `<Family>-<version>.Release.bbfw`, or an Apple `c<chip>…/Release/…/ftab.bin`.
  */
 
 import type { BasebandSummary } from "./baseband-summary.ts";
 import type { FtabSummary } from "./ftab.ts";
 import type { PriDialect } from "./pri.ts";
 
-/**
- * Version of the stored summary shape. It names the storage path (see
- * src/lib/server/modems.ts), so a change the stored summaries must be rebuilt
- * for bumps it and the new ones land beside the old.
- */
-export const MODEM_SUMMARY_SCHEMA = 2;
+/** Names the stored summaries' path: a change they must be rebuilt for bumps it, and new ones land beside the old. */
+export const MODEM_SUMMARY_SCHEMA = 3;
 
 /** A decoded modem package, as stored. */
 export type ModemSummary = BasebandSummary | FtabSummary;
@@ -36,63 +30,66 @@ export const modemChip = (name: string): string | undefined => FTAB_NAME.exec(na
 
 /** "Mav25", "ICE19", "C1"; an Apple chip without a known name is its id ("c4020"). */
 export function modemGeneration(name: string): string | undefined {
-  const bbfw = BBFW_NAME.exec(name);
-  if (bbfw) {
-    const [, series = "", number = ""] = bbfw;
-    return series + number;
-  }
-  const chip = modemChip(name);
-  return chip && (Object.hasOwn(APPLE_MODEM_CHIPS, chip) ? APPLE_MODEM_CHIPS[chip] : chip);
+	const bbfw = BBFW_NAME.exec(name);
+	if (bbfw) {
+		const [, series = "", number = ""] = bbfw;
+		return series + number;
+	}
+	const chip = modemChip(name);
+	return chip && (Object.hasOwn(APPLE_MODEM_CHIPS, chip) ? APPLE_MODEM_CHIPS[chip] : chip);
 }
 
 export function modemVendor(generation: string): PackageVendor | undefined {
-  const prefix = /^[A-Za-z]+/.exec(generation)?.[0] ?? "";
-  if (Object.hasOwn(BBFW_VENDORS, prefix)) return BBFW_VENDORS[prefix];
-  if (Object.values(APPLE_MODEM_CHIPS).includes(generation) || /^c\d{4}$/.test(generation)) return "apple";
-  return undefined;
+	const prefix = /^[A-Za-z]+/.exec(generation)?.[0] ?? "";
+	if (Object.hasOwn(BBFW_VENDORS, prefix)) return BBFW_VENDORS[prefix];
+	if (Object.values(APPLE_MODEM_CHIPS).includes(generation) || /^c\d{4}$/.test(generation)) return "apple";
+	return undefined;
 }
 
 const VENDOR_NAMES: Record<PackageVendor, string> = { qualcomm: "Qualcomm", intel: "Intel", apple: "Apple" };
 
 /** "Qualcomm X80", "Apple C1", "Intel": the modem as sold, by its label where someone has named the generation, else by its vendor. */
 export function modemName(generation: string, label: string | undefined): string | undefined {
-  if (label !== undefined) return label;
-  const v = modemVendor(generation);
-  if (!v) return undefined;
-  return v === "apple" && Object.values(APPLE_MODEM_CHIPS).includes(generation) ? `Apple ${generation}` : VENDOR_NAMES[v];
+	if (label !== undefined) return label;
+	const v = modemVendor(generation);
+	if (!v) return undefined;
+	return v === "apple" && Object.values(APPLE_MODEM_CHIPS).includes(generation)
+		? `Apple ${generation}`
+		: VENDOR_NAMES[v];
 }
 
 /** "Qualcomm X80 · Mav25", "Apple C1", "Intel · ICE19", "Apple · c4020". */
 export function modemLabel(generation: string, label: string | undefined): string {
-  const name = modemName(generation, label);
-  if (!name) return generation;
-  return name.endsWith(" " + generation) ? name : `${name} · ${generation}`;
+	const name = modemName(generation, label);
+	if (!name) return generation;
+	return name.endsWith(" " + generation) ? name : `${name} · ${generation}`;
 }
 
 export interface ModemCapabilities {
-  /** The package ships its carrier defaults as plaintext files a bundle's .der.pri can be compared against. */
-  plaintextDefaults: boolean;
-  /** Where the modem's carrier config lives: package defaults the bundle overrides, or the bundle alone. */
-  carrierConfigIn: "package" | "bundle";
+	/** The package ships its carrier defaults as plaintext files a bundle's .der.pri can be compared against. */
+	plaintextDefaults: boolean;
+	/** Where the modem's carrier config lives: package defaults the bundle overrides, or the bundle alone. */
+	carrierConfigIn: "package" | "bundle";
 }
 
 const CAPABILITIES: Record<PackageVendor, ModemCapabilities> = {
-  qualcomm: { plaintextDefaults: true, carrierConfigIn: "package" },
-  intel: { plaintextDefaults: false, carrierConfigIn: "package" },
-  apple: { plaintextDefaults: false, carrierConfigIn: "bundle" },
+	qualcomm: { plaintextDefaults: true, carrierConfigIn: "package" },
+	intel: { plaintextDefaults: false, carrierConfigIn: "package" },
+	apple: { plaintextDefaults: false, carrierConfigIn: "bundle" },
 };
 
 /** What a generation's package holds, so views need not branch on the vendor. */
 export function modemCapabilities(generation: string): ModemCapabilities | undefined {
-  const v = modemVendor(generation);
-  return v && CAPABILITIES[v];
+	const v = modemVendor(generation);
+	return v && CAPABILITIES[v];
 }
 
 const DIALECT_LABELS: Record<Exclude<PriDialect, "unknown">, string> = {
-  qualcomm: "Qualcomm",
-  intel: "Intel or Apple C1",
-  mixed: "Qualcomm and Intel / Apple C1",
+	qualcomm: "Qualcomm",
+	intel: "Intel or Apple C1",
+	mixed: "Qualcomm and Intel / Apple C1",
 };
 
 /** The modems a PRI dialect is written for; undefined when the tags do not say. */
-export const dialectLabel = (d: PriDialect): string | undefined => (d === "unknown" ? undefined : DIALECT_LABELS[d]);
+export const dialectLabel = (d: PriDialect): string | undefined =>
+	d === "unknown" ? undefined : DIALECT_LABELS[d];

@@ -1,18 +1,21 @@
-/** The extractor Worker: a Workflow per unit of work, each job a container, and the only writer of the v2 bucket. */
+/** The extractor Worker: feed checks start a Workflow instance per unit; each unit extracts to R2 and queues its records, which the index queue's consumer writes into D1. */
 
-import { handleApi } from "./worker/api.ts";
-import { scheduled } from "./worker/cron.ts";
-import type { Env } from "./worker/env.ts";
+import type { Env } from "./env.ts";
+import { handleApi } from "./http.ts";
+import { queue } from "./queues.ts";
+import { scheduled } from "./runs.ts";
 
-export { HeavyExtractor, LightExtractor } from "./worker/extractor.ts";
-export { AndroidBuildWorkflow } from "./workflows/android-build.ts";
-export { IosBuildWorkflow } from "./workflows/ios-build.ts";
-export { IosOtaWorkflow } from "./workflows/ios-ota.ts";
-export { LabelsWorkflow } from "./workflows/labels.ts";
-export { PublishWorkflow } from "./workflows/publish.ts";
-export { ReindexWorkflow } from "./workflows/reindex.ts";
+// The Extractor class's outbound proxy, which serves its containers' bucket requests.
+export { ContainerProxy } from "@cloudflare/containers";
+export { IosBuildWorkflow, AppleOtaWorkflow } from "./apple/workflows.ts";
+export { Extractor } from "./container.ts";
+export { GalaxyBuildWorkflow } from "./galaxy/workflows.ts";
+export { PixelDeviceWorkflow, PixelOtaWorkflow } from "./pixel/workflows.ts";
+export { LabelsWorkflow, ReindexWorkflow } from "./workflows.ts";
+export { DatasetWorkflow } from "./dataset/workflow.ts";
 
 export default {
-  fetch: handleApi,
-  scheduled,
+	fetch: handleApi,
+	scheduled,
+	queue,
 } satisfies ExportedHandler<Env>;

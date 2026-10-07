@@ -1,18 +1,24 @@
 {
-  "name": "carrier-explode",
-  "private": true,
-  "type": "module",
-  "scripts": {
-    "dev": "pnpm --filter @carrier-explode/site dev",
-    "build": "pnpm -r build",
-    "test": "pnpm -r test",
-    "check": "pnpm -r check && tsc -p tsconfig.json && pnpm check:deps",
-    "check:deps": "node scripts/check-deps.ts"
-  },
-  "devDependencies": {
-    "@carrier-explode/tsconfig": "workspace:*",
-    "@types/node": "^22.20.3",
-    "typescript": "^6.0.0"
-  },
-  "packageManager": "pnpm@10.19.0"
+	"name": "carrier-explode",
+	"private": true,
+	"type": "module",
+	"scripts": {
+		"dev": "pnpm --filter @carrier-explode/site dev",
+		"build": "pnpm -r build",
+		"test": "pnpm -r test",
+		"lint": "oxlint --deny-warnings",
+		"fmt": "oxfmt",
+		"knip": "knip",
+		"check": "pnpm -r check && tsc -p tsconfig.json && pnpm check:deps && oxlint --deny-warnings && oxfmt --check && knip",
+		"check:deps": "node scripts/check-deps.ts"
+	},
+	"devDependencies": {
+		"@carrier-explode/tsconfig": "workspace:*",
+		"@types/node": "^22.20.3",
+		"knip": "6.39.0",
+		"oxfmt": "0.67.0",
+		"oxlint": "1.82.0",
+		"typescript": "^6.0.0"
+	},
+	"packageManager": "pnpm@10.19.0"
 }

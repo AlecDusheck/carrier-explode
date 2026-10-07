@@ -1,26 +1,28 @@
 {
-  "name": "@carrier-explode/firmware",
-  "private": true,
-  "version": "0.0.0",
-  "type": "module",
-  "sideEffects": false,
-  "exports": {
-    ".": "./src/index.ts"
-  },
-  "scripts": {
-    "test": "vitest run",
-    "check": "tsc -p tsconfig.json && tsc -p tsconfig.test.json"
-  },
-  "dependencies": {
-    "@carrier-explode/binary": "workspace:*",
-    "@carrier-explode/http": "workspace:*",
-    "valibot": "^1.5.0"
-  },
-  "devDependencies": {
-    "@carrier-explode/tsconfig": "workspace:*",
-    "@types/node": "^22.20.3",
-    "fflate": "^0.8.2",
-    "typescript": "^6.0.0",
-    "vitest": "^5.0.3"
-  }
+	"name": "@carrier-explode/firmware",
+	"version": "0.0.0",
+	"private": true,
+	"type": "module",
+	"sideEffects": false,
+	"exports": {
+		".": "./src/index.ts"
+	},
+	"scripts": {
+		"test": "vitest run",
+		"check": "tsc -p tsconfig.json && tsc -p tsconfig.worker.json && tsc -p tsconfig.test.json"
+	},
+	"dependencies": {
+		"@carrier-explode/binary": "workspace:*",
+		"@carrier-explode/http": "workspace:*",
+		"valibot": "^1.5.0"
+	},
+	"devDependencies": {
+		"@carrier-explode/tsconfig": "workspace:*",
+		"@cloudflare/workers-types": "^5.20261003.1",
+		"@types/node": "^22.20.3",
+		"fflate": "^0.8.2",
+		"typescript": "^6.0.0",
+		"vitest": "^5.0.3",
+		"wrangler": "^4.147.0"
+	}
 }

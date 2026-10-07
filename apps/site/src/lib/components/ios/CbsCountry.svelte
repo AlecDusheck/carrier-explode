@@ -7,27 +7,27 @@
   const range = (r: { from: number; to: number }) => (r.from === r.to ? String(r.from) : r.from + "-" + r.to);
   const yes = (v?: boolean) => (v === undefined ? "" : v ? "yes" : "no");
 
-  function sound(row: CbsRow, configuration?: string) {
-    const cfg = row.alertConfigurations.find((c) => c.name === configuration);
+  function sound(cbs: CbsRow, configuration?: string) {
+    const cfg = cbs.alertConfigurations.find((c) => c.name === configuration);
     return cfg ? (cfg.sound ?? "") + " / " + (cfg.vibration ?? "") : (configuration ?? "");
   }
 
   /** Bundle-level settings; empty ones are left out. */
-  function settings(row: CbsRow): Array<[string, string]> {
+  function settings(cbs: CbsRow): Array<[string, string]> {
     const dup = [
-      row.duplicateWindowMinutes !== undefined ? row.duplicateWindowMinutes + " min window" : "",
-      row.interSimDuplicateDetection !== undefined ? "inter-SIM " + yes(row.interSimDuplicateDetection) : "",
-      row.intraSimDuplicateDetection !== undefined ? "intra-SIM " + yes(row.intraSimDuplicateDetection) : "",
+      cbs.duplicateWindowMinutes !== undefined ? cbs.duplicateWindowMinutes + " min window" : "",
+      cbs.interSimDuplicateDetection !== undefined ? "inter-SIM " + yes(cbs.interSimDuplicateDetection) : "",
+      cbs.intraSimDuplicateDetection !== undefined ? "intra-SIM " + yes(cbs.intraSimDuplicateDetection) : "",
     ].filter(Boolean).join(", ");
     const rows: Array<[string, string]> = [
-      ["Device geofencing", row.geofencing === undefined ? "" : row.geofencing ? "enabled" : "disabled"],
+      ["Device geofencing", cbs.geofencing === undefined ? "" : cbs.geofencing ? "enabled" : "disabled"],
       ["Duplicate suppression", dup],
-      ["Emergency numbers", row.emergencyNumbers.join(", ")],
-      ["AML SMS destination", row.amlDestination ?? ""],
-      ["Alert languages", row.languages.join(", ")],
-      ["CBMessage localisations", row.cbMessageLocales.join(" ")],
-      ["Alert sound / vibration", [...new Set(row.mappings.map((m) => sound(row, m.configuration)).filter(Boolean))].join(", ")],
-      ["ISO codes", row.iso.join(", ")],
+      ["Emergency numbers", cbs.emergencyNumbers.join(", ")],
+      ["AML SMS destination", cbs.amlDestination ?? ""],
+      ["Alert languages", cbs.languages.join(", ")],
+      ["CBMessage localisations", cbs.cbMessageLocales.join(" ")],
+      ["Alert sound / vibration", [...new Set(cbs.mappings.map((m) => sound(cbs, m.configuration)).filter(Boolean))].join(", ")],
+      ["ISO codes", cbs.iso.join(", ")],
     ];
     return rows.filter(([, v]) => v);
   }

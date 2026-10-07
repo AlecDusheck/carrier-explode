@@ -1,8 +1,10 @@
 <script lang="ts">
   import { page } from "$app/state";
+  import { jsonLdScript } from "#lib/seo.ts";
   import { getFeaturePhone, getFeaturePhones, getFeatureTable, getVisitorCountry, guessCarrierPages } from "#lib/api/sources.remote.ts";
-  import { FEATURE_PAGES } from "#lib/feature-pages.ts";
+  import { deviceWords, FEATURE_PAGES } from "#lib/feature-pages.ts";
   import { PLATFORM_DEVICES } from "#lib/platforms.ts";
+  import type { ReleasePlatform } from "@carrier-explode/schema/types";
   import { link } from "#lib/format.ts";
   import Pane from "#lib/components/Pane.svelte";
   import CarrierList from "#lib/components/features/CarrierList.svelte";
@@ -14,18 +16,24 @@
   const feature = $derived(data.feature);
   let hideNo = $state(true);
 
+  const SHIPPED = {
+    ios: "Apple ships them per iPhone model",
+    android: "Google ships them per Pixel",
+    samsung: "Samsung ships them per Galaxy firmware",
+  } as const satisfies Record<ReleasePlatform, string>;
+
   const FAQ = $derived([
     {
       q: `Why does ${feature.name} depend on my phone?`,
-      a: "Carrier settings differ by phone: Apple ships them per iPhone model, and Google per Pixel. The same carrier can offer a feature on newer phones and not on older ones, or the other way round.",
+      a: `Carrier settings differ by phone: ${feature.platforms.map((p) => SHIPPED[p]).join("; ")}. The same carrier can offer a feature on newer phones and not on older ones, or the other way round.`,
     },
     {
       q: "Where do these answers come from?",
-      a: "From the carrier settings Apple and Google ship for each carrier, read for each iPhone and Pixel. Some features also need your plan to include them; those show as available.",
+      a: `From the carrier settings shipped for each carrier, read for each ${deviceWords(feature.platforms, "and")}. Some features also need your plan to include them; those show as available.`,
     },
   ]);
 
-  const jsonLd = $derived(JSON.stringify([
+  const jsonLd = $derived(jsonLdScript([
     {
       "@context": "https://schema.org",
       "@type": "FAQPage",
@@ -39,7 +47,7 @@
         { "@type": "ListItem", position: 2, name: feature.name, item: page.url.origin + page.url.pathname },
       ],
     },
-  ]).replace(/</g, "\\u003c"));
+  ]));
 
   const offers = (state: string) => state === "on" || state === "available";
 
@@ -47,15 +55,14 @@
   let mine: readonly string[] = $state([]);
   let home: string | null = $state(null);
   $effect(() => {
-    void Promise.all([guessCarrierPages(), getVisitorCountry()]).then(([pages, country]) => {
-      mine = pages;
-      home = country;
-    });
+    void (async () => {
+      [mine, home] = await Promise.all([guessCarrierPages(), getVisitorCountry()]);
+    })();
   });
 </script>
 
 <svelte:head>
-  {@html `<script type="application/ld+json">${jsonLd}</script>`}
+  {@html jsonLd}
 </svelte:head>
 
 <div class="view">
@@ -66,8 +73,8 @@
       <p class="lead">{feature.what}</p>
 
       <Pane>
-        {@const phones = await getFeaturePhones()}
-        {@const phone = await getFeaturePhone(page.url.searchParams.get("phone") ?? undefined)}
+        {@const phones = (await getFeaturePhones()).filter((p) => feature.platforms.includes(p.platform))}
+        {@const phone = await getFeaturePhone({ phone: page.url.searchParams.get("phone") ?? undefined, slug: feature.slug })}
         {@const where = phone ? feature.where[phone.platform] : undefined}
         {#if where}<p>Where to turn it on: <b>{where}</b>.</p>{/if}
         <FeaturePhonePicker {phones} {phone} />
@@ -82,17 +89,20 @@
             {@const yours = rows.find((r) => mine.includes(r.path))}
             {#if yours}
               <p class="answer">
-                {yours.brand} on the {phone.name}: <FeatureStatus state={yours.state} />
+                {yours.brand} on the {phone.name}: <FeatureStatus state={yours.state} defaulted={yours.defaulted} />
               </p>
               <p class="dimtext">Guessed from the network you are on. Not yours? Find it below.</p>
             {/if}
 
             {@const offered = rows.filter((r) => offers(r.state)).length}
             {@const notOffered = rows.filter((r) => r.state === "no").length}
-            {@const unknown = rows.length - offered - notOffered}
+            {@const unset = rows.filter((r) => r.state === "unset").length}
+            {@const unknown = rows.filter((r) => r.state === "unknown").length}
+            {@const byDefault = rows.filter((r) => offers(r.state) && r.defaulted?.layer === "default.pb" && r.defaulted.part === "all").length}
             <h2>Carriers</h2>
             <p>
-              <b>{offered} carrier{offered === 1 ? "" : "s"}</b> offer {feature.name} on the {phone.name}, and {notOffered} don't.
+              <b>{offered} carrier{offered === 1 ? "" : "s"}</b> offer {feature.name} on the {phone.name}{#if byDefault}{" "}({byDefault} of them by the build's default){/if}{#if notOffered}, and {notOffered} don't{/if}.
+              {#if unset}<span class="dimtext">{unset} leave it unset.</span>{/if}
               {#if unknown}<span class="dimtext">For {unknown} more we don't have the carrier's settings for the {phone.name} yet, so they show as unknown.</span>{/if}
             </p>
             <CarrierList
@@ -101,7 +111,7 @@
               column={feature.name}
             >
               {#snippet filters()}
-                <label class="lbl"><input type="checkbox" bind:checked={hideNo} /> Hide carriers that don't offer it</label>
+                {#if notOffered}<label class="lbl"><input type="checkbox" bind:checked={hideNo} /> Hide carriers that don't offer it</label>{/if}
               {/snippet}
             </CarrierList>
           {/if}
@@ -114,12 +124,18 @@
         <p>{x.a}</p>
       {/each}
 
-      <h2>Other features</h2>
-      <ul class="others">
-        {#each FEATURE_PAGES.filter((x) => x.slug !== feature.slug) as x (x.slug)}
-          <li><a href={link(`/features/${x.slug}`) + page.url.search}>{x.name}</a></li>
-        {/each}
-      </ul>
+      <Pane quiet>
+        {@const phone = await getFeaturePhone({ phone: page.url.searchParams.get("phone") ?? undefined, slug: feature.slug })}
+        {@const others = FEATURE_PAGES.filter((x) => x.slug !== feature.slug && (!phone || x.platforms.includes(phone.platform)))}
+        {#if others.length}
+          <h2>Other features</h2>
+          <ul class="others">
+            {#each others as x (x.slug)}
+              <li><a href={link(`/features/${x.slug}`) + page.url.search}>{x.name}</a></li>
+            {/each}
+          </ul>
+        {/if}
+      </Pane>
     </article>
   </div>
 </div>

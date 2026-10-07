@@ -1,5 +1,7 @@
 {
-  // The container, dev tools and tests (Node 22). The Worker: tsconfig.json.
-  "extends": "@carrier-explode/tsconfig/node.json",
-  "include": ["container/src", "container/test", "container/build.mjs", "dev", "test", "vitest.config.ts"]
+	// The container (Node 22). It shares the Worker's job contracts and bucket protocol, so it sees Workers types as the
+	// tests do. The Worker: tsconfig.json; its tests: tsconfig.test.json.
+	"extends": "@carrier-explode/tsconfig/node.json",
+	"compilerOptions": { "types": ["node", "@cloudflare/workers-types"] },
+	"include": ["container/src", "container/test", "container/build.mjs", "src/galaxy/data-module.d.ts"]
 }

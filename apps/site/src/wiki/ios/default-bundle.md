@@ -13,19 +13,19 @@ It is only shipped inside iOS images, in `/System/Library/Carrier Bundles/iPhone
 
 From iOS 27.0.1 (24A446, iPhone 16 Pro image):
 
-| Files | What |
-|-------|------|
-| `carrier.plist` | fallback settings; names the lookup tables below |
-| `overrides_D93.plist`, `overrides_D93.der.pri` | for the phone the image is for |
-| `global_setting_B.der.gri` to `_L` | regional modem tables. See [.der.gri](/wiki/ios/der-gri) |
-| `cbs_*.caf` (17) | emergency alert sounds |
-| `cbs_vibe_ca.plist`, `cbs_vibe_cl.plist`, `cbs_vibe_us.plist` | emergency alert vibration patterns |
-| `TS25.txt`, `TS25_Annex.txt` | network names |
-| `SIDTable.txt` | CDMA SIDs |
-| `equivalent_bundle_table.txt` | networks that count as the same carrier |
-| `MCC2ISO.plist`, `ISO2MCC.plist`, `MNC2ISO.plist`, `MCCMNC2ISO3.plist`, `ISO3ToMCCMNC.plist`, `EUISO.plist` | country code tables |
-| `com.apple.bodythreshold_*.plist` (29) | on-body detection thresholds |
-| `*.loctable` | localised strings: `Akey`, `AlertDialog`, `Carriers`, `CellBroadcast`, `Ciphering`, `DataUsage`, `Otasp`, `UserLabels` |
+| Files                                                                                                       | What                                                                                                                   |
+| ----------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| `carrier.plist`                                                                                             | fallback settings; names the lookup tables below                                                                       |
+| `overrides_D93.plist`, `overrides_D93.der.pri`                                                              | for the phone the image is for                                                                                         |
+| `global_setting_B.der.gri` to `_L`                                                                          | regional modem tables. See [.der.gri](/wiki/ios/der-gri)                                                               |
+| `cbs_*.caf` (17)                                                                                            | emergency alert sounds                                                                                                 |
+| `cbs_vibe_ca.plist`, `cbs_vibe_cl.plist`, `cbs_vibe_us.plist`                                               | emergency alert vibration patterns                                                                                     |
+| `TS25.txt`, `TS25_Annex.txt`                                                                                | network names                                                                                                          |
+| `SIDTable.txt`                                                                                              | CDMA SIDs                                                                                                              |
+| `equivalent_bundle_table.txt`                                                                               | networks that count as the same carrier                                                                                |
+| `MCC2ISO.plist`, `ISO2MCC.plist`, `MNC2ISO.plist`, `MCCMNC2ISO3.plist`, `ISO3ToMCCMNC.plist`, `EUISO.plist` | country code tables                                                                                                    |
+| `com.apple.bodythreshold_*.plist` (29)                                                                      | on-body detection thresholds                                                                                           |
+| `*.loctable`                                                                                                | localised strings: `Akey`, `AlertDialog`, `Carriers`, `CellBroadcast`, `Ciphering`, `DataUsage`, `Otasp`, `UserLabels` |
 
 `Akey` and `Otasp` are CDMA-era strings (A-key exchange, over-the-air service provisioning). `Ciphering` is presumably the warning shown when the network turns encryption off.
 
@@ -134,5 +134,5 @@ Whether the phone is held against the body matters for transmit power limits (SA
 
 ## See also
 
-* [.der.gri](/wiki/ios/der-gri)
-* [Carrier Bundle § Special bundles](/wiki/ios/carrier-bundle#special-bundles)
+- [.der.gri](/wiki/ios/der-gri)
+- [Carrier Bundle § Special bundles](/wiki/ios/carrier-bundle#special-bundles)

@@ -6,17 +6,23 @@ import { defineConfig } from "vitest/config";
 import { headingIds } from "./src/lib/wiki-headings.ts";
 
 export default defineConfig({
-  plugins: [
-    sveltekit({
-      adapter: adapter(),
-      // Wiki articles (src/wiki/*.md) are markdown compiled to components.
-      extensions: [".svelte", ".md"],
-      preprocess: [vitePreprocess(), mdsvex({ extensions: [".md"], highlight: false, rehypePlugins: [headingIds] })],
-      compilerOptions: { experimental: { async: true } },
-      experimental: { remoteFunctions: true },
-    }),
-  ],
-  // Workspace packages are TypeScript source: bundle them rather than leave them to Node at build time.
-  ssr: { noExternal: [/^@carrier-explode\//] },
-  test: { include: ["test/**/*.test.ts"] },
+	plugins: [
+		sveltekit({
+			// `vite dev` binds wrangler.jsonc's local `dev` environment.
+			adapter: adapter({ platformProxy: { environment: "dev" } }),
+			// Wiki articles (src/wiki/*.md) are markdown compiled to components.
+			extensions: [".svelte", ".md"],
+			preprocess: [
+				vitePreprocess(),
+				mdsvex({ extensions: [".md"], highlight: false, rehypePlugins: [headingIds] }),
+			],
+			compilerOptions: { experimental: { async: true } },
+			experimental: { remoteFunctions: true },
+			// Root-absolute asset and link URLs: a page-relative one breaks wherever HTML is served at another depth.
+			paths: { relative: false },
+		}),
+	],
+	// Workspace packages are TypeScript source: bundle them rather than leave them to Node at build time.
+	ssr: { noExternal: [/^@carrier-explode\//] },
+	test: { include: ["test/**/*.test.ts"] },
 });

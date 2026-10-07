@@ -28,11 +28,11 @@
 {#if file}
   <div class="filters"><span class="mono breakall">{file.path}</span></div>
   {#if file.kind === "settings"}
-    <!-- The message's own fields, each where the scan index files it, so "compare across" reads the same keys. -->
+    <!-- The message's own fields, each under the file the index files it in, so "compare across" reads the same keys. -->
     <table class="grid fit">
       <tbody>
         <tr><td class="k mono">canonical_name</td><td class="mono">{file.canonicalName}</td></tr>
-        <tr><td class="k mono">version</td><td class="mono">{file.version ?? "none of its own: a part of others.pb"}</td></tr>
+        <tr><td class="k mono">version</td><td class="mono">{file.version ?? "unset: a part of others.pb takes others.pb's"}</td></tr>
       </tbody>
     </table>
     <TreeToolbar state={tree} label="filter the file" />
@@ -56,7 +56,7 @@
     <p class="dimtext note">Opaque to Android: read only by the vendor client it is named for.</p>
     <pre class="code hex">{hexDump(file.hex, true)}</pre>
   {:else}
-    <SelectedBy name={at.ref.name} selectedBy={file.selectedBy} />
+    <SelectedBy rules={file.rules} list={file} />
   {/if}
 {:else}
   <table class="grid">

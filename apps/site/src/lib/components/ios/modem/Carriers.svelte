@@ -8,8 +8,8 @@
 </script>
 
 <div class="scroll pad">
-  <Pane>
+  <Pane awaiting={{ kind: "decode", name: modem }}>
     {@const bb = await getBaseband({ build, family: modem })}
-    <CarrierCombos id={bb.id} bandCombos={bb.bandCombos} carrierMap={bb.carrierMap} />
+    <CarrierCombos id={bb.id} bandCombos={bb.bandCombos} tagBundles={bb.tagBundles} />
   </Pane>
 </div>

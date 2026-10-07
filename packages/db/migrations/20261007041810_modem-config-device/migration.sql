@@ -1,0 +1,1 @@
+ALTER TABLE `modem_configs` ADD `device` text;

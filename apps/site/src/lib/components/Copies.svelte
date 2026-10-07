@@ -1,7 +1,7 @@
 <script lang="ts">
   import type { Version } from "#lib/types.ts";
 
-  /** Every place this version's bytes come from: OS images and Apple's OTA feed. One version is one content, so they are the same files. */
+  /** Every place this version's bytes come from: OS images and the OTA feeds. One version is one content, so they are the same files. */
   let { entry }: { entry: Version } = $props();
 </script>
 
@@ -10,7 +10,7 @@
   <tbody>
     {#each entry.copies as c, i (i)}
       <tr>
-        {#if c.kind === "image"}
+        {#if c.kind === "release"}
           <td>Image</td>
           <td class="mono">{c.releases.join(", ")}</td>
         {:else}

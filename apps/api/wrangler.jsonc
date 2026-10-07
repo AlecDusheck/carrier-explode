@@ -1,32 +1,64 @@
 {
-  "$schema": "./node_modules/wrangler/config-schema.json",
-  // The public API: the index and the decoded records the site reads, as JSON.
-  "name": "carrier-explode-v2-api",
-  "main": "src/index.ts",
-  "compatibility_date": "2026-09-01",
-  "routes": [{ "pattern": "api.carrierexplode.com", "custom_domain": true }],
-  "workers_dev": true,
-  // The site's bucket and index, read the same way: the API never writes either.
-  "r2_buckets": [{ "binding": "BUCKET", "bucket_name": "carrier-explode-data" }],
-  "d1_databases": [{ "binding": "DB", "database_name": "carrier-explode-v2", "database_id": "a0c212c0-c6e0-4b54-af0e-9d454ea47d55" }],
-  // Cloudflare answers from this worker's own cache before running it; src/cache.ts sets what it keeps, and a publish purges it.
-  "cache": { "enabled": true },
-  // The site's namespaces, so a client's budget is shared across both (test/config.test.ts checks they match).
-  "ratelimits": [
-    { "name": "RL_BUNDLE", "namespace_id": "7030", "simple": { "limit": 60, "period": 60 } },
-    { "name": "RL_BASE", "namespace_id": "7040", "simple": { "limit": 120, "period": 60 } }
-  ],
-  "vars": {
-    // Seconds; the site's values for the same kinds of response.
-    "CACHE_TTL": {
-      "pinned": 2592000,
-      "latest": 86400,
-      "missing": 60,
-      "staleWhileRevalidate": 86400
-    }
-  },
-  // For /internal/purge: the site's value, so one extractor publish purges both.
-  "secrets": { "required": ["PURGE_TOKEN"] },
-  "observability": { "enabled": true },
-  "placement": { "mode": "smart" }
+	"$schema": "./node_modules/wrangler/config-schema.json",
+	// The public API: the index and the decoded records the site reads, as JSON.
+	"name": "carrier-explode-api",
+	"main": "src/index.ts",
+	"compatibility_date": "2026-09-01",
+	"observability": { "enabled": true },
+	"env": {
+		"dev": {
+			"name": "carrier-explode-api-dev",
+			"workers_dev": true,
+			"r2_buckets": [{ "binding": "BUCKET", "bucket_name": "carrier-explode-ingest-dev" }],
+			"d1_databases": [
+				{
+					"binding": "DB",
+					"database_name": "carrier-explode-index-dev",
+					"database_id": "ae71cafc-0b64-4b70-9dce-a4c0c6eaa12f",
+				},
+			],
+			"cache": { "enabled": true },
+			"ratelimits": [
+				{ "name": "RL_BUNDLE", "namespace_id": "7030", "simple": { "limit": 120, "period": 60 } },
+				{ "name": "RL_BASE", "namespace_id": "7040", "simple": { "limit": 300, "period": 60 } },
+			],
+			"vars": {
+				"CACHE_TTL": { "pinned": 2592000, "latest": 86400, "missing": 60, "staleWhileRevalidate": 86400 },
+			},
+			"secrets": { "required": ["PURGE_TOKEN"] },
+		},
+		"production": {
+			"name": "carrier-explode-api",
+			"routes": [{ "pattern": "api.carrierexplode.com", "custom_domain": true }],
+			"workers_dev": false,
+			// The site's bucket and index, read the same way: the API never writes either.
+			"r2_buckets": [{ "binding": "BUCKET", "bucket_name": "carrier-explode-ingest" }],
+			"d1_databases": [
+				{
+					"binding": "DB",
+					"database_name": "carrier-explode-index",
+					"database_id": "02fef939-84a4-4509-9727-deaa7fc8cbf7",
+				},
+			],
+			// Cloudflare answers from this worker's own cache before running it; src/cache.ts sets what it keeps, and a publish purges it.
+			"cache": { "enabled": true },
+			// The site's namespaces, so a client's budget is shared across both (test/config.test.ts checks they match).
+			"ratelimits": [
+				{ "name": "RL_BUNDLE", "namespace_id": "7030", "simple": { "limit": 120, "period": 60 } },
+				{ "name": "RL_BASE", "namespace_id": "7040", "simple": { "limit": 300, "period": 60 } },
+			],
+			"vars": {
+				// Seconds; the site's values for the same kinds of response.
+				"CACHE_TTL": {
+					"pinned": 2592000,
+					"latest": 86400,
+					"missing": 60,
+					"staleWhileRevalidate": 86400,
+				},
+			},
+			// For /internal/purge: the site's value, so one extractor publish purges both.
+			"secrets": { "required": ["PURGE_TOKEN"] },
+			"placement": { "mode": "smart" },
+		},
+	},
 }

@@ -9,8 +9,11 @@ import type { Tab } from "../../../params.ts";
 
 /** Settings shows a phone's own file; Modem every file, those named for no phone too. Country bundles hold none. */
 export async function tabPhoneRows(at: At, tab: Tab): Promise<PhoneRow[]> {
-  const args = verArgs(at);
-  const [bundle, ov] = await Promise.all([getAppleBundle(args), at.ref.kind === "country" ? null : getBundleOverrides(args)]);
-  const rows = phoneRows(at.version, bundle.info.files, ov);
-  return tab === "settings" ? rows.filter((r) => r.phones.length) : rows;
+	const args = verArgs(at);
+	const [bundle, ov] = await Promise.all([
+		getAppleBundle(args),
+		at.ref.kind === "country" ? null : getBundleOverrides(args),
+	]);
+	const rows = phoneRows(at.version, bundle.info.files, ov);
+	return tab === "settings" ? rows.filter((r) => r.phones.length) : rows;
 }

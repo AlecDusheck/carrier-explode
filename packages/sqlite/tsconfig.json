@@ -1,4 +1,4 @@
 {
-  "extends": "@carrier-explode/tsconfig/neutral.json",
-  "include": ["src"]
+	"extends": "@carrier-explode/tsconfig/neutral.json",
+	"include": ["src"]
 }

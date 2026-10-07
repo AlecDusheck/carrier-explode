@@ -1,13 +1,12 @@
 <script lang="ts" generics="T">
   import type { Snippet } from "svelte";
+  import { listKeys } from "#lib/keys.ts";
   import { fold } from "#lib/names.ts";
   import { isNavigatingTo } from "#lib/navigating.ts";
 
   /**
-   * The one dropdown for choosing a version, a phone or a source: a button showing
-   * the choice, opening a list where each item carries its picture and links to
-   * the page it chooses. The list is a native popover, so it closes on an outside
-   * tap or Escape.
+   * The one dropdown for choosing a version, a phone or a source: each item links to the page it chooses.
+   * The list is a native popover, so it closes on an outside tap or Escape and hands focus back to the button.
    */
   interface Props {
     label?: string | undefined;
@@ -40,9 +39,13 @@
   // The list closes on a pick; the button carries on showing that the choice is loading.
   const loading = $derived(items.some((item) => isNavigatingTo(href(item))));
 
-  // Opening scrolls the chosen item into view, so a long list starts where you are.
+  // Opening starts a long list where you are, and the keys there too unless a find box takes them.
   function ontoggle(e: ToggleEvent & { currentTarget: HTMLElement }) {
-    if (e.newState === "open") e.currentTarget.querySelector("[aria-selected='true']")?.scrollIntoView({ block: "nearest" });
+    if (e.newState !== "open") return;
+    const list = e.currentTarget;
+    const chosen = list.querySelector<HTMLElement>("[aria-current='true']");
+    chosen?.scrollIntoView({ block: "nearest" });
+    if (!search) (chosen ?? list.querySelector("a"))?.focus({ preventScroll: true });
   }
 
   const close = (e: Event & { currentTarget: HTMLElement }) => e.currentTarget.closest<HTMLElement>("[popover]")?.hidePopover();
@@ -50,11 +53,11 @@
 
 <div class="picker">
   {#if label}<span class="lbl" id="{id}-label">{label}</span>{/if}
-  <button class="btn picker-btn" popovertarget="{id}-list" aria-haspopup="listbox" aria-labelledby={label ? `${id}-label` : undefined} aria-busy={loading || undefined} style:anchor-name="--{id}">
+  <button class="btn picker-btn" popovertarget="{id}-list" aria-labelledby={label ? `${id}-label` : undefined} aria-busy={loading || undefined} style:anchor-name="--{id}">
     {#if selected}{@render option(selected)}{:else}<span class="dimtext">Choose</span>{/if}
     {#if loading}<span class="caret busy-spin" aria-hidden="true"></span>{:else}<span class="caret" aria-hidden="true">▾</span>{/if}
   </button>
-  <div popover id="{id}-list" class="picker-list" role="listbox" {ontoggle} style:position-anchor="--{id}">
+  <div popover id="{id}-list" class="picker-list" {ontoggle} style:position-anchor="--{id}" {@attach listKeys("input, a")}>
     {#if search}
       <!-- svelte-ignore a11y_autofocus -->
       <input class="picker-find" type="search" placeholder="Find" aria-label="Find" bind:value={query} autofocus />
@@ -65,7 +68,7 @@
       {#if heading !== undefined && (prev === undefined || section?.(prev) !== heading)}
         <div class="picker-section" role="presentation">{heading}</div>
       {/if}
-      <a role="option" aria-selected={isSelected(item)} href={href(item)} onclick={close}>{@render option(item)}</a>
+      <a aria-current={isSelected(item) || undefined} href={href(item)} onclick={close}>{@render option(item)}</a>
     {:else}
       <div class="picker-section" role="presentation">No match</div>
     {/each}

@@ -1,72 +1,166 @@
-import { readFile } from "node:fs/promises";
-
 import * as v from "valibot";
 import { describe, expect, it } from "vitest";
 
-import { JOB_TYPES, JOBS, parseJobSpec } from "../src/jobs.ts";
-import { instanceId, jobId, pipelineOfInstance, timedInstanceId } from "../src/worker/ids.ts";
-import { FEED_NAMES, FEEDS, LABELS_CRON, PIPELINE_NAMES, PIPELINES } from "../src/worker/pipelines.ts";
-import { tuningSchema } from "../src/worker/tuning.ts";
+import { type NormArtifact, normBatches } from "../src/normalize.ts";
+import { instanceId, iosRun, pipelineOfInstance, reindexRun, runOf } from "../src/runs.ts";
+import { FEED_NAMES, PIPELINE_NAMES, type PipelineParams, PIPELINES } from "../src/pipelines.ts";
+import { QUEUES } from "../src/queues.ts";
+import { tuningSchema } from "../src/env.ts";
+import { readers, wrangler } from "./wrangler.ts";
 
-describe("job table", () => {
-  it.each(JOB_TYPES)("%s writes and deletes whole prefixes, never jobs/, and never deletes artifacts", (type) => {
-    const { writes, deletes } = JOBS[type];
-    for (const p of [...writes, ...deletes]) {
-      expect(p.endsWith("/")).toBe(true);
-      expect(p.startsWith("jobs/")).toBe(false);
-    }
-    expect(deletes).not.toContain("obj/");
-    expect(deletes).not.toContain("meta/");
-  });
+/** What a queue carries, by its name. */
+const role = (queue: string): string | undefined =>
+	Object.entries(QUEUES).find(([named]) => named === queue)?.[1];
 
-  it("validates params by type", () => {
-    expect(() => parseJobSpec({ id: "x:normalize:0", type: "normalize", params: { shas: ["nope"] } })).toThrow();
-    expect(parseJobSpec({ id: "x:normalize:0", type: "normalize", params: { shard: 0, of: 4, boards: { d93: "iPhone17,1" } } }).type).toBe("normalize");
-    expect(() => parseJobSpec({ id: "x:bogus:0", type: "bogus", params: {} })).toThrow();
-  });
-});
+const sha = (i: number): string => i.toString(16).padStart(64, "0");
 
 describe("ids", () => {
-  it("names an instance by its unit, in the characters Workflows accept", () => {
-    expect(instanceId("android-build", "CP3A.260905.009")).toBe("android-build-CP3A_260905_009");
-    expect(timedInstanceId("publish", new Date("2026-10-03T05:17:00Z"))).toMatch(/^publish-20261003T051700-[0-9a-f]{6}$/);
-  });
+	it("names an instance by its unit, in the characters Workflows accept", () => {
+		expect(instanceId("pixel-device", "CP3A.260905.009-tokay")).toBe("pixel-device-CP3A_260905_009-tokay");
+		expect(() => instanceId("ios-build", "x".repeat(100))).toThrow(/too long/);
+	});
 
-  it("builds job ids from the instance, type and unit", () => {
-    expect(jobId("ios-build-24A446", "ios.ipsw", "iPhone17,1", 2)).toBe("ios-build-24A446:ios.ipsw:iPhone17_1.r2");
-  });
+	it("reads the pipeline back from an instance id", () => {
+		expect(pipelineOfInstance("apple-ota-0123")).toBe("apple-ota");
+		expect(pipelineOfInstance("nope-1")).toBeUndefined();
+	});
 
-  it("reads the pipeline back from an instance id", () => {
-    expect(pipelineOfInstance("ios-ota-0123")).toBe("ios-ota");
-    expect(pipelineOfInstance("publish-20261003T051700-ab12cd")).toBe("publish");
-    expect(pipelineOfInstance("nope-1")).toBeUndefined();
-  });
+	it("names a planned unit by its build and device alone, so a check never starts it twice", () => {
+		const params = {
+			build: "CP3A.260905.009",
+			version: "17",
+			patch: "2026-09",
+			device: "tokay",
+			url: "https://dl.google.com/t.zip",
+		};
+		expect(runOf({ pipeline: "pixel-device", params }).id).toBe("pixel-device-CP3A_260905_009-tokay");
+	});
+
+	it("names an iOS build by the phones its record holds, so a build has one live instance however its IPSWs change", () => {
+		const build = { build: "24A446", version: "27.0", label: "27.0", prerelease: false };
+		const one = { ...build, ipsws: [{ device: "iPhone18,1", url: "https://u/a" }] };
+		const two = { ...build, ipsws: [...one.ipsws, { device: "iPhone18,3", url: "https://u/b" }] };
+		// A phone listed while the first instance runs: the same unit, so the check counts it live and starts nothing.
+		expect(iosRun(two, undefined).id).toBe(iosRun(one, undefined).id);
+		expect(iosRun(one, undefined).id).toBe("ios-build-24A446");
+		// Once its record holds one phone, a phone it lacks plans it again, under a new id.
+		const held = iosRun(two, new Set(["iPhone18,1"])).id;
+		expect(held).toMatch(/^ios-build-24A446-[0-9a-f]{8}$/);
+		expect(iosRun(two, new Set(["iPhone18,1", "iPhone18,3"])).id).not.toBe(held);
+		expect(iosRun(one, new Set(["iPhone18,1"])).id).toBe(held);
+	});
+
+	it("names a reindex by its target and the second it was asked for, so the same target reindexes again", async () => {
+		const release: PipelineParams<"reindex"> = {
+			target: { kind: "release", release: { platform: "android", id: ["CP3A.260905.009", "tokay"] } },
+		};
+		expect((await reindexRun(release, new Date("2026-10-05T21:55:01.250Z"))).id).toBe(
+			"reindex-android-CP3A_260905_009-tokay-20261005215501",
+		);
+		expect((await reindexRun(release, new Date("2026-10-05T22:10:00Z"))).id).toBe(
+			"reindex-android-CP3A_260905_009-tokay-20261005221000",
+		);
+	});
+
+	it("names a reindex of an OTA file by its record's key, within the id limit", async () => {
+		const file = await reindexRun(
+			{
+				target: { kind: "ota", feed: "apple", url: `https://updates.cdn-apple.com/${"x".repeat(200)}.ipcc` },
+			},
+			new Date("2026-10-05T21:55:01Z"),
+		);
+		expect(file.id).toMatch(/^reindex-apple-[0-9a-f]{64}-20261005215501$/);
+	});
 });
 
-/** The parts of wrangler.jsonc the Worker's tables must agree with. */
-const wranglerSchema = v.object({
-  workflows: v.array(v.object({ binding: v.string(), name: v.string() })),
-  triggers: v.object({ crons: v.array(v.string()) }),
-  vars: v.record(v.string(), v.unknown()),
+/** Worker and Workflow names are account-wide: each environment's are its own. */
+const named = (env: "dev" | "production", name: string): string =>
+	`carrier-explode-${name}${env === "dev" ? "-dev" : ""}`;
+
+describe.each(["dev", "production"] as const)("wrangler.jsonc's %s environment", (name) => {
+	const env = wrangler.env[name];
+	const tuning = v.parse(tuningSchema, env.vars);
+
+	it("names the Worker and its Workflows for the environment", () => {
+		expect(env.name).toBe(named(name, "extractor"));
+		expect(env.workflows.map((w) => w.name)).toEqual(
+			env.workflows.map((w) =>
+				named(name, PIPELINE_NAMES.find((p) => PIPELINES[p].binding === w.binding) ?? w.binding),
+			),
+		);
+	});
+
+	it("binds one Workflow per pipeline (labels only with the AI binding and LABELLER), and the container's Durable Object", () => {
+		const labelling = env.ai !== undefined;
+		expect(tuning.LABELLER !== undefined).toBe(labelling);
+		const bound = PIPELINE_NAMES.filter((p) => labelling || p !== "labels");
+		expect(env.workflows.map((w) => w.binding).toSorted()).toEqual(
+			bound.map((p) => PIPELINES[p].binding).toSorted(),
+		);
+		expect(env.durable_objects.bindings.map((b) => b.name).toSorted()).toEqual(["EXTRACTOR"]);
+	});
+
+	it("produces to and consumes the index queue and the purge queue, each one batch at a time", () => {
+		const { producers, consumers } = env.queues;
+		expect(producers.map((p) => [p.binding, role(p.queue)]).toSorted()).toEqual([
+			["INDEX_QUEUE", "index"],
+			["PURGE_QUEUE", "purge"],
+		]);
+		expect(consumers.map((c) => c.queue).toSorted()).toEqual(producers.map((p) => p.queue).toSorted());
+		const index = consumers.find((c) => role(c.queue) === "index");
+		const purge = consumers.find((c) => role(c.queue) === "purge");
+		expect([index?.max_batch_size, index?.max_concurrency, purge?.max_concurrency]).toEqual([1, 1, 1]);
+	});
+
+	it("shares all but one of the container class's max_instances among the pipelines that hold one", () => {
+		expect(Object.values(tuning.CONTAINER_SHARE).reduce((a, b) => a + b, 0) + 1).toBe(
+			env.containers[0].max_instances,
+		);
+	});
 });
 
-/** JSONC to JSON: comments go, strings (which hold `//` in URLs) stay. */
-const stripComments = (text: string): string => text.replace(/("(?:\\.|[^"\\])*")|\/\/[^\n]*|\/\*[\s\S]*?\*\//g, (_, str: string | undefined) => str ?? "");
+describe("wrangler.jsonc's environments", () => {
+	it("has the site and the API read in dev the index and bucket the extractor writes", () => {
+		const { d1_databases, r2_buckets } = wrangler.env.dev;
+		for (const reader of Object.values(readers))
+			expect([reader.env.dev.d1_databases, reader.env.dev.r2_buckets]).toEqual([d1_databases, r2_buckets]);
+	});
 
-describe("wrangler.jsonc", async () => {
-  const config = v.parse(wranglerSchema, JSON.parse(stripComments(await readFile(new URL("../wrangler.jsonc", import.meta.url), "utf8"))));
+	it("names the site and the API for each environment", () => {
+		for (const [app, reader] of Object.entries(readers)) {
+			expect([reader.env.dev.name, reader.env.production.name]).toEqual([
+				named("dev", app),
+				named("production", app),
+			]);
+		}
+	});
 
-  it("sets the tuning the Worker reads, in its shape", () => {
-    expect(v.safeParse(tuningSchema, config.vars).issues).toBeUndefined();
-  });
+	it("schedules only the feeds' crons in production, and none in dev", () => {
+		const feedCrons = new Set<string>(FEED_NAMES.map((f) => PIPELINES[f].cron));
+		expect(wrangler.env.production.triggers.crons.filter((c) => !feedCrons.has(c))).toEqual([]);
+		expect(wrangler.env.dev.triggers.crons).toEqual([]);
+	});
+});
 
-  it("schedules exactly the feeds' crons and the labels run's", () => {
-    const crons = [...new Set([...FEED_NAMES.map((f) => FEEDS[f].cron), LABELS_CRON])];
-    expect([...config.triggers.crons].sort()).toEqual(crons.sort());
-  });
-
-  it("binds one Workflow per pipeline, named after it", () => {
-    const bound = config.workflows.map((w) => [w.name, w.binding]).sort();
-    expect(bound).toEqual(PIPELINE_NAMES.map((p) => [p, PIPELINES[p].binding]).sort());
-  });
+describe("the normalize table", () => {
+	it("cuts a pending list into steps: up to each kind's perStep, never mixing kinds", () => {
+		const settings = Array.from({ length: 250 }, (_, i): NormArtifact => ({
+			kind: "android.carrier-settings",
+			sha: sha(i),
+			source: "android:carrier:x",
+		}));
+		const configs = Array.from({ length: 12 }, (_, i): NormArtifact => ({
+			kind: "android.modem-config",
+			sha: sha(1000 + i),
+			source: null,
+		}));
+		expect(normBatches([...settings, ...configs])).toEqual([
+			[0, 100],
+			[100, 200],
+			[200, 250],
+			[250, 260],
+			[260, 262],
+		]);
+		expect(normBatches([])).toEqual([]);
+	});
 });

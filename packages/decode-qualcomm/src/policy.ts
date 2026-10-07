@@ -1,27 +1,26 @@
 /**
- * Qualcomm policyman XML as the baseband package ships it: a lenient XML tree
- * parser (no DOM) that tags each node with its role in a rule, plus the
- * band_combos_per_plmn.xml and A-MPR NS tables. Self-contained, no dependencies.
+ * Qualcomm policyman XML: a lenient, DOM-free tree parser that tags each node with its role in a rule, plus the
+ * band_combos_per_plmn.xml and A-MPR NS tables.
  */
 
 /** Role of a node in a policyman rule. */
-export type PolicyKind =
-  | "policy" // <policy>, <policy_list>
-  | "branch" // if / then / else / select / case
-  | "logic" // any_of / all_of / not
-  | "condition" // a test under if, case or a logic node
-  | "action" // a statement under then, else, actions or policy
-  | "define" // a declaration under initial
-  | "comment"
-  | "data"; // everything else: list members, plain config XML
+type PolicyKind =
+	| "policy" // <policy>, <policy_list>
+	| "branch" // if / then / else / select / case
+	| "logic" // any_of / all_of / not
+	| "condition" // a test under if, case or a logic node
+	| "action" // a statement under then, else, actions or policy
+	| "define" // a declaration under initial
+	| "comment"
+	| "data"; // everything else: list members, plain config XML
 
 export interface PolicyNode {
-  tag: string;
-  kind: PolicyKind;
-  attrs: Record<string, string>;
-  /** Trimmed text content, when there is any. */
-  text?: string;
-  children: PolicyNode[];
+	tag: string;
+	kind: PolicyKind;
+	attrs: Record<string, string>;
+	/** Trimmed text content, when there is any. */
+	text?: string;
+	children: PolicyNode[];
 }
 
 // Element roles from the policyman grammar census (bbcfg.mbn + qdsp6sw.mbn + iOS 27.0 .der.pri XML)
@@ -31,188 +30,207 @@ const TEST_PARENTS = new Set(["if", "case", "any_of", "all_of", "not"]);
 const ACTION_PARENTS = new Set(["then", "else", "actions", "policy"]);
 
 function kindOf(tag: string, parent?: PolicyNode): PolicyKind {
-  if (tag === "policy" || tag === "policy_list") return "policy";
-  if (LOGIC.has(tag)) return "logic";
-  if (BRANCH.has(tag) || tag === "actions" || tag === "initial") return "branch";
-  if (!parent) return "data";
-  if (TEST_PARENTS.has(parent.tag)) return "condition";
-  if (parent.tag === "initial" || parent.kind === "define") return "define";
-  if (ACTION_PARENTS.has(parent.tag)) return "action";
-  return "data";
+	if (tag === "policy" || tag === "policy_list") return "policy";
+	if (LOGIC.has(tag)) return "logic";
+	if (BRANCH.has(tag) || tag === "actions" || tag === "initial") return "branch";
+	if (!parent) return "data";
+	if (TEST_PARENTS.has(parent.tag)) return "condition";
+	if (parent.tag === "initial" || parent.kind === "define") return "define";
+	if (ACTION_PARENTS.has(parent.tag)) return "action";
+	return "data";
 }
 
 const ENTITIES: Record<string, string> = { lt: "<", gt: ">", amp: "&", quot: '"', apos: "'" };
 
 function unescape(s: string): string {
-  return s.replace(/&(#x[0-9a-f]+|#\d+|\w+);/gi, (m, e: string) => {
-    if (e[0] === "#") {
-      const n = e[1] === "x" || e[1] === "X" ? parseInt(e.slice(2), 16) : parseInt(e.slice(1), 10);
-      return Number.isFinite(n) && n <= 0x10ffff ? String.fromCodePoint(n) : m;
-    }
-    return ENTITIES[e] ?? m;
-  });
+	return s.replace(/&(#x[0-9a-f]+|#\d+|\w+);/gi, (m, e: string) => {
+		if (e[0] === "#") {
+			const n = e[1] === "x" || e[1] === "X" ? parseInt(e.slice(2), 16) : parseInt(e.slice(1), 10);
+			return Number.isFinite(n) && n <= 0x10ffff ? String.fromCodePoint(n) : m;
+		}
+		return ENTITIES[e] ?? m;
+	});
 }
 
 const ATTR = /([^\s=/>]+)\s*(?:=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+)))?/g;
 
-/**
- * Parses XML into a node list (normally one root). Tolerates the things the
- * firmware files do: trailing NULs, unclosed or stray end tags, bare `&`.
- */
+/** A node list (normally one root), tolerating what firmware files do: trailing NULs, unclosed or stray end tags, bare `&`. */
 export function parsePolicyXml(xml: string): PolicyNode[] {
-  const root: PolicyNode = { tag: "#root", kind: "data", attrs: {}, children: [] };
-  const stack: PolicyNode[] = [root];
-  // Close tags never pop the root, so the stack is never empty.
-  const top = (): PolicyNode => stack.at(-1) ?? root;
-  const addText = (s: string) => {
-    const t = unescape(s).trim();
-    if (!t) return;
-    const n = top();
-    n.text = n.text ? `${n.text} ${t}` : t;
-  };
-  let i = 0;
-  while (i < xml.length) {
-    const lt = xml.indexOf("<", i);
-    if (lt < 0) { addText(xml.slice(i).replace(/\0+$/, "")); break; }
-    if (lt > i) addText(xml.slice(i, lt));
-    if (xml.startsWith("<!--", lt)) {
-      const end = xml.indexOf("-->", lt + 4);
-      const body = xml.slice(lt + 4, end < 0 ? xml.length : end).trim();
-      top().children.push({ tag: "#comment", kind: "comment", attrs: {}, text: body, children: [] });
-      i = end < 0 ? xml.length : end + 3;
-      continue;
-    }
-    if (xml.startsWith("<![CDATA[", lt)) {
-      const end = xml.indexOf("]]>", lt + 9);
-      const body = xml.slice(lt + 9, end < 0 ? xml.length : end).trim();
-      if (body) {
-        const n = top();
-        n.text = n.text ? `${n.text} ${body}` : body;
-      }
-      i = end < 0 ? xml.length : end + 3;
-      continue;
-    }
-    const gt = xml.indexOf(">", lt + 1);
-    if (gt < 0) break;
-    const inner = xml.slice(lt + 1, gt);
-    i = gt + 1;
-    if (inner[0] === "?" || inner[0] === "!") continue; // <?xml ?>, <!DOCTYPE>
-    if (inner[0] === "/") {
-      const name = inner.slice(1).trim();
-      const at = stack.map((n) => n.tag).lastIndexOf(name);
-      if (at > 0) stack.length = at;
-      continue;
-    }
-    const selfClosing = inner.endsWith("/");
-    const body = selfClosing ? inner.slice(0, -1) : inner;
-    const m = /^\s*([^\s/>]+)/.exec(body);
-    if (!m) continue;
-    const [opening, tag = ""] = m;
-    const attrs: Record<string, string> = {};
-    for (const [, name = "", dq, sq, bare] of body.slice(opening.length).matchAll(ATTR)) attrs[name] = unescape(dq ?? sq ?? bare ?? "");
-    const parent = top();
-    const node: PolicyNode = { tag, kind: kindOf(tag, parent === root ? undefined : parent), attrs, children: [] };
-    parent.children.push(node);
-    if (!selfClosing) stack.push(node);
-  }
-  return root.children;
+	const root: PolicyNode = { tag: "#root", kind: "data", attrs: {}, children: [] };
+	const stack: PolicyNode[] = [root];
+	// Close tags never pop the root, so the stack is never empty.
+	const top = (): PolicyNode => stack.at(-1) ?? root;
+	const addText = (s: string) => {
+		const t = unescape(s).trim();
+		if (!t) return;
+		const n = top();
+		n.text = n.text ? `${n.text} ${t}` : t;
+	};
+	let i = 0;
+	while (i < xml.length) {
+		const lt = xml.indexOf("<", i);
+		if (lt < 0) {
+			addText(xml.slice(i).replace(/\0+$/, ""));
+			break;
+		}
+		if (lt > i) addText(xml.slice(i, lt));
+		if (xml.startsWith("<!--", lt)) {
+			const end = xml.indexOf("-->", lt + 4);
+			const body = xml.slice(lt + 4, end < 0 ? xml.length : end).trim();
+			top().children.push({ tag: "#comment", kind: "comment", attrs: {}, text: body, children: [] });
+			i = end < 0 ? xml.length : end + 3;
+			continue;
+		}
+		if (xml.startsWith("<![CDATA[", lt)) {
+			const end = xml.indexOf("]]>", lt + 9);
+			const body = xml.slice(lt + 9, end < 0 ? xml.length : end).trim();
+			if (body) {
+				const n = top();
+				n.text = n.text ? `${n.text} ${body}` : body;
+			}
+			i = end < 0 ? xml.length : end + 3;
+			continue;
+		}
+		const gt = xml.indexOf(">", lt + 1);
+		if (gt < 0) break;
+		const inner = xml.slice(lt + 1, gt);
+		i = gt + 1;
+		if (inner[0] === "?" || inner[0] === "!") continue; // <?xml ?>, <!DOCTYPE>
+		if (inner[0] === "/") {
+			const name = inner.slice(1).trim();
+			const at = stack.map((n) => n.tag).lastIndexOf(name);
+			if (at > 0) stack.length = at;
+			continue;
+		}
+		const selfClosing = inner.endsWith("/");
+		const body = selfClosing ? inner.slice(0, -1) : inner;
+		const m = /^\s*([^\s/>]+)/.exec(body);
+		if (!m) continue;
+		const [opening, tag = ""] = m;
+		const attrs: Record<string, string> = {};
+		for (const [, name = "", dq, sq, bare] of body.slice(opening.length).matchAll(ATTR))
+			attrs[name] = unescape(dq ?? sq ?? bare ?? "");
+		const parent = top();
+		const node: PolicyNode = {
+			tag,
+			kind: kindOf(tag, parent === root ? undefined : parent),
+			attrs,
+			children: [],
+		};
+		parent.children.push(node);
+		if (!selfClosing) stack.push(node);
+	}
+	return root.children;
 }
 
 /** Every node in document order. */
 export function* walkPolicy(nodes: PolicyNode[]): Generator<PolicyNode> {
-  for (const n of nodes) {
-    yield n;
-    yield* walkPolicy(n.children);
-  }
+	for (const n of nodes) {
+		yield n;
+		yield* walkPolicy(n.children);
+	}
 }
 
 export interface ComboComponent {
-  rat: "lte" | "nr";
-  band: number;
-  /** Downlink bandwidth class, with its MIMO layers when given ("A[4]"). */
-  dl: string;
-  /** Uplink class when the component carries uplink. */
-  ul?: string;
+	rat: "lte" | "nr";
+	band: number;
+	/** Downlink bandwidth class, with its MIMO layers when given ("A[4]"). */
+	dl: string;
+	/** Uplink class when the component carries uplink. */
+	ul?: string;
 }
 
 /** EN-DC (LTE + NR), NR only, or LTE only. */
 export type ComboType = "endc" | "nr" | "lte";
 
 export interface Combo {
-  /** Undefined when no component parsed. */
-  type?: ComboType;
-  components: ComboComponent[];
-  /** NR-DC (FR1 + FR2): the `-dc` suffix. */
-  nrdc: boolean;
-  /** Uplink Tx switching: the `-swul` suffix. */
-  swul: boolean;
+	/** Undefined when no component parsed. */
+	type?: ComboType;
+	components: ComboComponent[];
+	/** NR-DC (FR1 + FR2): the `-dc` suffix. */
+	nrdc: boolean;
+	/** Uplink Tx switching: the `-swul` suffix. */
+	swul: boolean;
 }
 
 /** One combo string, e.g. `b66AA-b2A-n77AA-swul`; unknown tokens are skipped. */ // band_combos_per_plmn.xml
 export function parseCombo(s: string): Combo {
-  const out: Combo = { components: [], nrdc: false, swul: false };
-  for (const tok of s.trim().split("-")) {
-    if (tok === "dc") { out.nrdc = true; continue; }
-    if (tok === "swul") { out.swul = true; continue; }
-    const m = /^([bn])(\d+)((?:[A-Z](?:\[[^\]]*\])?)+)$/.exec(tok);
-    if (!m) continue;
-    const [, rat, band, classes = ""] = m;
-    const [dl = "", ul] = classes.match(/[A-Z](?:\[[^\]]*\])?/g) ?? [];
-    out.components.push({ rat: rat === "b" ? "lte" : "nr", band: Number(band), dl, ...(ul ? { ul } : {}) });
-  }
-  const lte = out.components.some((x) => x.rat === "lte"), nr = out.components.some((x) => x.rat === "nr");
-  if (lte || nr) out.type = lte && nr ? "endc" : nr ? "nr" : "lte";
-  return out;
+	const out: Combo = { components: [], nrdc: false, swul: false };
+	for (const tok of s.trim().split("-")) {
+		if (tok === "dc") {
+			out.nrdc = true;
+			continue;
+		}
+		if (tok === "swul") {
+			out.swul = true;
+			continue;
+		}
+		const m = /^([bn])(\d+)((?:[A-Z](?:\[[^\]]*\])?)+)$/.exec(tok);
+		if (!m) continue;
+		const [, rat, band, classes = ""] = m;
+		const [dl = "", ul] = classes.match(/[A-Z](?:\[[^\]]*\])?/g) ?? [];
+		out.components.push({ rat: rat === "b" ? "lte" : "nr", band: Number(band), dl, ...(ul ? { ul } : {}) });
+	}
+	const lte = out.components.some((x) => x.rat === "lte"),
+		nr = out.components.some((x) => x.rat === "nr");
+	if (lte || nr) out.type = lte && nr ? "endc" : nr ? "nr" : "lte";
+	return out;
 }
 
 /** "n77 n78" / "B2 B66": band numbers as 3GPP writes them (TS 36.101 / 38.101). */
-export const bandList = (bands: readonly number[], rat: "lte" | "nr"): string => bands.map((b) => (rat === "nr" ? "n" : "B") + b).join(" ");
+export const bandList = (bands: readonly number[], rat: "lte" | "nr"): string =>
+	bands.map((b) => (rat === "nr" ? "n" : "B") + b).join(" ");
 
 export interface BandComboCarrier {
-  /** Element name, e.g. "ATT", "KDDI-LEGACY". */
-  tag: string;
-  /** "310-150" style, as listed in the PLMN-ID element before it. */
-  plmns: string[];
-  combos: string[];
+	/** Element name, e.g. "ATT", "KDDI-LEGACY". */
+	tag: string;
+	/** "310-150" style, as listed in the PLMN-ID element before it. */
+	plmns: string[];
+	combos: string[];
 }
 
 /** `<PLMN-ID>…</PLMN-ID><TAG>combo;combo;…</TAG>` pairs; comments are dropped. */ // bbcfg.mbn: /policyman/band_combos_per_plmn.xml
 export function parseBandCombos(xml: string): BandComboCarrier[] {
-  const x = xml.replace(/<!--[\s\S]*?-->/g, "");
-  const out: BandComboCarrier[] = [];
-  for (const [, plmns = "", tag = "", combos = ""] of x.matchAll(/<PLMN-ID>([\s\S]*?)<\/PLMN-ID>\s*<([\w-]+)>([\s\S]*?)<\/\2>/g)) {
-    out.push({
-      tag,
-      plmns: plmns.split(/\s+/).filter(Boolean),
-      combos: combos.split(";").map((c) => c.trim()).filter(Boolean),
-    });
-  }
-  return out;
+	const x = xml.replace(/<!--[\s\S]*?-->/g, "");
+	const out: BandComboCarrier[] = [];
+	for (const [, plmns = "", tag = "", combos = ""] of x.matchAll(
+		/<PLMN-ID>([\s\S]*?)<\/PLMN-ID>\s*<([\w-]+)>([\s\S]*?)<\/\2>/g,
+	)) {
+		out.push({
+			tag,
+			plmns: plmns.split(/\s+/).filter(Boolean),
+			combos: combos
+				.split(";")
+				.map((c) => c.trim())
+				.filter(Boolean),
+		});
+	}
+	return out;
 }
 
 export interface ComboStats {
-  combos: number;
-  /** LTE + NR components (EN-DC). */
-  endc: number;
-  /** NR-only (SA / NR-CA, single NR bands included). */
-  nr: number;
-  lte: number;
-  nrdc: number;
-  swul: number;
-  /** Most component carriers in one combo. */
-  maxComponents: number;
-  /** NR bands used in a multi-carrier combination: more than one component, or intra-band CA (class B and up). */
-  nrBands: number[];
-  /** NR bands that only appear alone at class A: each tag's section ends with the same single-band list. */
-  singleBands: number[];
-  /** Multi-carrier NR bands below n257 (FR1). */
-  fr1Bands: number[];
-  /** Multi-carrier NR bands from n257 up (FR2). */
-  fr2Bands: number[];
-  /** LTE bands that anchor an EN-DC combo. */
-  lteAnchors: number[];
-  /** Supplementary-uplink NR bands (n80..n86, n89, n95, n97, n98), when any appear. */
-  sulBands: number[];
+	combos: number;
+	/** LTE + NR components (EN-DC). */
+	endc: number;
+	/** NR-only (SA / NR-CA, single NR bands included). */
+	nr: number;
+	lte: number;
+	nrdc: number;
+	swul: number;
+	/** Most component carriers in one combo. */
+	maxComponents: number;
+	/** NR bands used in a multi-carrier combination: more than one component, or intra-band CA (class B and up). */
+	nrBands: number[];
+	/** NR bands that only appear alone at class A: each tag's section ends with the same single-band list. */
+	singleBands: number[];
+	/** Multi-carrier NR bands below n257 (FR1). */
+	fr1Bands: number[];
+	/** Multi-carrier NR bands from n257 up (FR2). */
+	fr2Bands: number[];
+	/** LTE bands that anchor an EN-DC combo. */
+	lteAnchors: number[];
+	/** Supplementary-uplink NR bands (n80..n86, n89, n95, n97, n98), when any appear. */
+	sulBands: number[];
 }
 
 // TS 38.101-1 Table 5.2-1: SUL operating bands
@@ -220,79 +238,97 @@ const SUL = new Set([80, 81, 82, 83, 84, 86, 89, 95, 97, 98, 99]);
 // TS 38.101-2 Table 5.2-1: FR2 bands start at n257
 const FR2_FIRST = 257;
 
-const sorted = (s: Set<number>) => [...s].sort((a, b) => a - b);
+const sorted = (s: Set<number>) => [...s].toSorted((a, b) => a - b);
 
 export function comboStats(combos: string[]): ComboStats {
-  const nrBands = new Set<number>(), alone = new Set<number>(), anchors = new Set<number>();
-  const st = { combos: combos.length, endc: 0, nr: 0, lte: 0, nrdc: 0, swul: 0, maxComponents: 0 };
-  for (const s of combos) {
-    const c = parseCombo(s);
-    // `n14AA` on its own says the band exists, not that this carrier combines it with anything.
-    const multi = c.components.length > 1 || c.components.some((x) => !x.dl.startsWith("A"));
-    for (const x of c.components) if (x.rat === "nr") (multi ? nrBands : alone).add(x.band);
-    if (c.type) st[c.type]++;
-    if (c.type === "endc") for (const x of c.components) if (x.rat === "lte") anchors.add(x.band);
-    if (c.nrdc) st.nrdc++;
-    if (c.swul) st.swul++;
-    st.maxComponents = Math.max(st.maxComponents, c.components.length);
-  }
-  const nrs = sorted(nrBands);
-  return {
-    ...st, nrBands: nrs, singleBands: sorted(alone).filter((b) => !nrBands.has(b)),
-    fr1Bands: nrs.filter((b) => b < FR2_FIRST), fr2Bands: nrs.filter((b) => b >= FR2_FIRST), lteAnchors: sorted(anchors), sulBands: nrs.filter((b) => SUL.has(b)),
-  };
+	const nrBands = new Set<number>(),
+		alone = new Set<number>(),
+		anchors = new Set<number>();
+	const st = { combos: combos.length, endc: 0, nr: 0, lte: 0, nrdc: 0, swul: 0, maxComponents: 0 };
+	for (const s of combos) {
+		const c = parseCombo(s);
+		// `n14AA` on its own says the band exists, not that this carrier combines it with anything.
+		const multi = c.components.length > 1 || c.components.some((x) => !x.dl.startsWith("A"));
+		for (const x of c.components) if (x.rat === "nr") (multi ? nrBands : alone).add(x.band);
+		if (c.type) st[c.type]++;
+		if (c.type === "endc") for (const x of c.components) if (x.rat === "lte") anchors.add(x.band);
+		if (c.nrdc) st.nrdc++;
+		if (c.swul) st.swul++;
+		st.maxComponents = Math.max(st.maxComponents, c.components.length);
+	}
+	const nrs = sorted(nrBands);
+	return {
+		...st,
+		nrBands: nrs,
+		singleBands: sorted(alone).filter((b) => !nrBands.has(b)),
+		fr1Bands: nrs.filter((b) => b < FR2_FIRST),
+		fr2Bands: nrs.filter((b) => b >= FR2_FIRST),
+		lteAnchors: sorted(anchors),
+		sulBands: nrs.filter((b) => SUL.has(b)),
+	};
 }
 
 export interface AmprGroup {
-  mccs: string[];
-  bands: Array<{ band: number; nsNoCa?: number; nsWithCa?: number }>;
+	mccs: string[];
+	bands: Array<{ band: number; nsNoCa?: number; nsWithCa?: number }>;
 }
+
+const childNumber = (n: PolicyNode, tag: string) => {
+	const v = n.children.find((c) => c.tag === tag)?.text;
+	return v !== undefined && /^\d+$/.test(v) ? Number(v) : undefined;
+};
 
 /** `<ampr_configured_ns><mcc id="…"><band id><ns_no_ca/><ns_with_ca/>` */ // pt.mbn: RFNV 64628
 export function parseAmprNs(xml: string): AmprGroup[] {
-  const root = parsePolicyXml(xml).find((n) => n.tag === "ampr_configured_ns");
-  if (!root) return [];
-  const num = (n: PolicyNode, tag: string) => {
-    const v = n.children.find((c) => c.tag === tag)?.text;
-    return v !== undefined && /^\d+$/.test(v) ? Number(v) : undefined;
-  };
-  return root.children
-    .filter((m) => m.tag === "mcc")
-    .map((m) => ({
-      mccs: [...new Set((m.attrs.id ?? "").split(/\s+/).filter(Boolean))],
-      bands: m.children
-        .filter((b) => b.tag === "band")
-        .map((b) => {
-          const nsNoCa = num(b, "ns_no_ca"), nsWithCa = num(b, "ns_with_ca");
-          return { band: Number(b.attrs.id), ...(nsNoCa !== undefined ? { nsNoCa } : {}), ...(nsWithCa !== undefined ? { nsWithCa } : {}) };
-        }),
-    }));
+	const root = parsePolicyXml(xml).find((n) => n.tag === "ampr_configured_ns");
+	if (!root) return [];
+	return root.children
+		.filter((m) => m.tag === "mcc")
+		.map((m) => ({
+			mccs: [...new Set((m.attrs.id ?? "").split(/\s+/).filter(Boolean))],
+			bands: m.children
+				.filter((b) => b.tag === "band")
+				// oxlint-disable-next-line oxc/no-map-spread -- the spreads only leave out absent optional fields; nothing is copied.
+				.map((b) => {
+					const nsNoCa = childNumber(b, "ns_no_ca"),
+						nsWithCa = childNumber(b, "ns_with_ca");
+					return {
+						band: Number(b.attrs.id),
+						...(nsNoCa !== undefined ? { nsNoCa } : {}),
+						...(nsWithCa !== undefined ? { nsWithCa } : {}),
+					};
+				}),
+		}));
 }
 
 export interface XmlRefs {
-  policy?: string;
-  carriers?: string[];
-  plmns?: string[];
-  mccs?: string[];
+	policy?: string;
+	carriers?: string[];
+	plmns?: string[];
+	mccs?: string[];
 }
 
 /** Policy name, carrier names, PLMNs and MCCs in the known XML shapes; comments ignored. */
 export function xmlRefs(xml: string): XmlRefs {
-  const x = xml.replace(/<!--[\s\S]*?-->/g, "");
-  const carriers: string[] = [], plmns = new Set<string>(), mccs = new Set<string>();
-  for (const [, list = "", carrier = ""] of x.matchAll(/<PLMN-ID>([\s\S]*?)<\/PLMN-ID>\s*<([\w-]+)>/g)) {
-    carriers.push(carrier);
-    for (const p of list.split(/\s+/)) if (p) plmns.add(p);
-  }
-  for (const [, name = ""] of x.matchAll(/carrier_name="([^"]+)"/g)) carriers.push(name); // mcfg_sel_db.xml SelRecord
-  for (const [, name = ""] of x.matchAll(/<carrier>([^<]+)<\/carrier>/g)) carriers.push(name.trim()); // data_3gpp_dynamic_config.xml
-  for (const [, list = ""] of x.matchAll(/<(?:imsi_3gpp_plmn_in|plmn_list)[^>]*>([^<]*)</g)) for (const p of list.split(/\s+/)) if (p) plmns.add(p);
-  for (const [, list, id = ""] of x.matchAll(/<mcc_list[^>]*>([^<]*)<|<mcc id="([^"]*)"/g)) for (const p of (list ?? id).split(/\s+/)) if (p) mccs.add(p);
-  const policy = /<policy(?:_list)?\b[^>]*\bname\s*=\s*"([^"]*)"/.exec(x)?.[1];
-  const out: XmlRefs = {};
-  if (policy !== undefined) out.policy = policy;
-  if (carriers.length) out.carriers = carriers;
-  if (plmns.size) out.plmns = [...plmns].sort();
-  if (mccs.size) out.mccs = [...mccs].sort((a, b) => a.length - b.length || a.localeCompare(b));
-  return out;
+	const x = xml.replace(/<!--[\s\S]*?-->/g, "");
+	const carriers: string[] = [],
+		plmns = new Set<string>(),
+		mccs = new Set<string>();
+	for (const [, list = "", carrier = ""] of x.matchAll(/<PLMN-ID>([\s\S]*?)<\/PLMN-ID>\s*<([\w-]+)>/g)) {
+		carriers.push(carrier);
+		for (const p of list.split(/\s+/)) if (p) plmns.add(p);
+	}
+	for (const [, name = ""] of x.matchAll(/carrier_name="([^"]+)"/g)) carriers.push(name); // mcfg_sel_db.xml SelRecord
+	for (const [, name = ""] of x.matchAll(/<carrier>([^<]+)<\/carrier>/g)) carriers.push(name.trim()); // data_3gpp_dynamic_config.xml
+	for (const [, list = ""] of x.matchAll(/<(?:imsi_3gpp_plmn_in|plmn_list)[^>]*>([^<]*)</g))
+		for (const p of list.split(/\s+/)) if (p) plmns.add(p);
+	for (const [, list, id = ""] of x.matchAll(/<mcc_list[^>]*>([^<]*)<|<mcc id="([^"]*)"/g))
+		for (const p of (list ?? id).split(/\s+/)) if (p) mccs.add(p);
+	const policy = /<policy(?:_list)?\b[^>]*\bname\s*=\s*"([^"]*)"/.exec(x)?.[1];
+	const out: XmlRefs = {};
+	if (policy !== undefined) out.policy = policy;
+	if (carriers.length) out.carriers = carriers;
+	if (plmns.size) out.plmns = [...plmns].toSorted();
+	if (mccs.size) out.mccs = [...mccs].toSorted((a, b) => a.length - b.length || a.localeCompare(b));
+	return out;
 }

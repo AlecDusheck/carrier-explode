@@ -1,5 +1,6 @@
 <script lang="ts">
   import { page } from "$app/state";
+  import { jsonLdScript } from "#lib/seo.ts";
   import Pane from "#lib/components/Pane.svelte";
 
   let { data } = $props();
@@ -10,7 +11,7 @@
     .toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" }));
 
   // Search engines and agents read this rather than guess from the markup.
-  const jsonLd = $derived(JSON.stringify([
+  const jsonLd = $derived(jsonLdScript([
     {
       "@context": "https://schema.org",
       "@type": "TechArticle",
@@ -29,15 +30,15 @@
         { name: "Wiki", item: `${page.url.origin}/wiki` },
         ...(section ? [{ name: section.title, item: `${page.url.origin}/wiki#${section.id}` }] : []),
         { name: data.article.title, item: page.url.origin + page.url.pathname },
-      ].map((crumb, i) => ({ "@type": "ListItem", position: i + 1, ...crumb })),
+      ].map(({ name, item }, i) => ({ "@type": "ListItem", position: i + 1, name, item })),
     },
-  ]).replace(/</g, "\\u003c"));
+  ]));
 </script>
 
 <svelte:head>
   <meta property="og:type" content="article" />
   <meta property="article:modified_time" content={data.article.updated} />
-  {@html `<script type="application/ld+json">${jsonLd}</script>`}
+  {@html jsonLd}
 </svelte:head>
 
 <h1>{data.article.title}</h1>

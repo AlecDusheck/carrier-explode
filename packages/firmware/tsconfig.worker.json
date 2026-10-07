@@ -1,0 +1,5 @@
+{
+	// The sources as a Worker runs them: Workers types only, so a Node or DOM-only API fails here.
+	"extends": "@carrier-explode/tsconfig/worker.json",
+	"include": ["src"]
+}

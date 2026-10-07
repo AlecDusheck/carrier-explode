@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { isPlistKind, type DecodedFile, type PlistKind } from "@carrier-explode/decode-ios";
+  import type { DecodedFile } from "@carrier-explode/decode-ios";
   import type { WithPhones } from "#lib/apple/phones.ts";
   import { hexDump } from "#lib/format.ts";
   import Tree, { type TreeCtx } from "../Tree.svelte";
@@ -25,23 +25,26 @@
 
   let showRaw = $state(false);
 
-  const isTree = (f: DecodedFile): f is Extract<DecodedFile, { kind: PlistKind }> => isPlistKind(f.kind);
+  const view = $derived(file.view);
+  const rawWord = $derived(file.raw !== null && "text" in file.raw ? "text" : "bytes");
 </script>
 
 {#snippet rawBody()}
-  {#if file.text}
-    <pre class="code">{file.text}</pre>
-  {:else if file.hex}
-    <pre class="code hex">{hexDump(file.hex, true)}</pre>
-  {:else}
+  {#if file.raw === null}
     <p class="dimtext">Not decodable.</p>
+  {:else if "text" in file.raw}
+    <pre class="code">{file.raw.text}</pre>
+  {:else}
+    <pre class="code hex">{hexDump(file.raw.hex, true)}</pre>
   {/if}
 {/snippet}
 
 <!-- Structured views keep the raw text or bytes one click away rather than dumping them underneath. -->
 {#snippet rawToggle()}
-  <button class="btn" onclick={() => (showRaw = !showRaw)}>{showRaw ? "Hide" : "Show"} {file.text ? "text" : "bytes"}</button>
-  {#if showRaw}{@render rawBody()}{/if}
+  {#if file.raw !== null}
+    <button class="btn" onclick={() => (showRaw = !showRaw)}>{showRaw ? "Hide" : "Show"} {rawWord}</button>
+    {#if showRaw}{@render rawBody()}{/if}
+  {/if}
 {/snippet}
 
 {#if devices}<FileDevices devices={file.devices} />{/if}
@@ -50,31 +53,31 @@
 {#if file.error}
   <div class="banner">
     {file.error.reason === "failed" ? "Could not decode" : "Not the format its name says"}{file.error.message ? `: ${file.error.message}` : ""}; showing the raw
-    {file.text ? "text" : "bytes"}.
+    {rawWord}.
   </div>
 {/if}
 
 <!-- A Qualcomm override file reads as its ModemConfig; its caller shows that instead. -->
-{#if file.kind === "pri-der"}
-  <IntelPriView pri={file.pri} {devices} />
-{:else if file.kind === "prl"}
-  {#if file.prl}<PrlView prl={file.prl} />{@render rawToggle()}{:else}{@render rawBody()}{/if}
-{:else if file.kind === "certificate"}
-  {#if file.certificates.length}<CertView certs={file.certificates} />{@render rawToggle()}{:else}{@render rawBody()}{/if}
-{:else if file.kind === "dmu"}
-  {#if file.dmu}<DmuView dmu={file.dmu} />{@render rawToggle()}{:else}{@render rawBody()}{/if}
-{:else if file.kind === "audio"}
-  {#if file.audio}<AudioView audio={file.audio} src={raw} />{:else}{@render rawBody()}{/if}
-{:else if file.kind === "image"}
-  {#if file.image}
-    <div class="banner">
-      PNG, {file.image.width} by {file.image.height} pixels{#if file.image.cgbi}; Apple CgBI form, converted to standard PNG when served{/if}
-    </div>
-  {/if}
+{#if view.type === "pri"}
+  <IntelPriView pri={view.pri} {devices} />
+{:else if view.type === "prl"}
+  <PrlView prl={view.prl} />{@render rawToggle()}
+{:else if view.type === "certificates"}
+  <CertView certs={view.certificates} />{@render rawToggle()}
+{:else if view.type === "dmu"}
+  <DmuView dmu={view.dmu} />{@render rawToggle()}
+{:else if view.type === "audio"}
+  <AudioView audio={view.audio} src={raw} />
+{:else if view.type === "image"}
+  <div class="banner">
+    PNG, {view.width} by {view.height} pixels{#if view.cgbi}; Apple CgBI form, converted to standard PNG when served{/if}
+  </div>
   <span class="checker frame"><img src={raw} alt={file.path} /></span>
-{:else if isTree(file)}
-  {#if file.signature}<SignatureView sig={file.signature} />{/if}
-  {#if file.plist !== undefined}<Tree value={file.plist} {ctx} />{:else}{@render rawBody()}{/if}
+{:else if file.kind === "image"}
+  <span class="checker frame"><img src={raw} alt={file.path} /></span>
+{:else if view.type === "tree"}
+  {#if view.signature}<SignatureView sig={view.signature} />{/if}
+  <Tree value={view.plist} {ctx} />
 {:else}
   {@render rawBody()}
 {/if}

@@ -1,9 +1,18 @@
-/** Argument schemas the remote queries share. Every argument arrives from the client, so each is checked here. */
+/** Argument schemas the remote queries share. */
 
 import * as v from "valibot";
 import { sha256Schema } from "@carrier-explode/schema/records";
-import { isSourceKey, isVersionSlug, PLATFORMS, SOURCE_KINDS, type SourceKey } from "@carrier-explode/schema/types";
-import { ISO_CODE, type Ver } from "#lib/types.ts";
+import {
+	DEVICE_CODE,
+	ISO_CODE,
+	isSourceKey,
+	isVersionSlug,
+	PLATFORMS,
+	RELEASE_ID,
+	SOURCE_KINDS,
+	type SourceKey,
+} from "@carrier-explode/schema/types";
+import type { Ver } from "#lib/types.ts";
 
 /** A source key: `ios:carrier:ATT_US`, as a URL spells it. */
 const source = v.pipe(v.string(), v.check(isSourceKey, "not a source key"));
@@ -14,8 +23,8 @@ export const key = v.custom<SourceKey>((x) => typeof x === "string" && isSourceK
 /** A version segment: `72.0`, `50.1@2022-04-12`. */
 export const slug = v.pipe(v.string(), v.check(isVersionSlug, "not a version"));
 
-/** A source's line: a Pixel codename, or a model-specific Apple bundle's product type. */
-export const line = v.pipe(v.string(), v.regex(/^[\w,]{1,40}$/));
+/** A source's line: a Pixel codename, a Galaxy model (SM-S931B), or a model-specific Apple bundle's product type. */
+const line = v.pipe(v.string(), v.regex(DEVICE_CODE));
 
 /** A version as a URL names it; without `slug`, the line's head. */
 export const ver = { source, line: v.exactOptional(line), slug: v.exactOptional(slug) };
@@ -30,7 +39,7 @@ export const kind = v.picklist(SOURCE_KINDS);
 export const iso = v.pipe(v.string(), v.regex(ISO_CODE));
 
 /** A release id: an iOS build (24A437) or an Android build id (CP3A.260905.009). */
-export const release = v.pipe(v.string(), v.regex(/^[\w.]{3,40}$/));
+export const release = v.pipe(v.string(), v.regex(RELEASE_ID));
 
 /** An image build: 24A437. */
 export const build = v.pipe(v.string(), v.regex(/^\w{3,16}$/));
@@ -49,5 +58,8 @@ export const index = v.pipe(v.number(), v.integer());
 /** A path inside a bundle, or a key path inside a file. */
 export const path = v.pipe(v.string(), v.maxLength(1024));
 
-/** A phone a page can be read for: an iPhone product type (iPhone18,1) or a Pixel codename (tokay). */
-export const phone = v.pipe(v.string(), v.regex(/^(?:[A-Za-z]+\d+,\d+|[a-z][a-z0-9_]{1,30})$/));
+/** A phone a page can be read for: an iPhone product type (iPhone18,1), a Pixel codename (tokay) or a Galaxy model (SM-S931B). */
+export const phone = v.pipe(
+	v.string(),
+	v.regex(/^(?:[A-Za-z]+\d+,\d+|[a-z][a-z0-9_]{1,30}|SM-[A-Z0-9]{2,12})$/),
+);

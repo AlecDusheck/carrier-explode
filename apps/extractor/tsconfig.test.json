@@ -1,0 +1,6 @@
+{
+	// The Worker's tests (Node 22, with Workers types for the bindings they run against locally).
+	"extends": "@carrier-explode/tsconfig/node.json",
+	"compilerOptions": { "types": ["node", "@cloudflare/workers-types"] },
+	"include": ["test", "vitest.config.ts", "src/galaxy/data-module.d.ts", "src/types"]
+}

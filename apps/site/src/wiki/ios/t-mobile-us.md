@@ -14,15 +14,15 @@ T-Mobile's main bundle in the US is <Bundle name="TMobile_US" version />. It is 
 
 ## Bundles
 
-| Bundle | |
-|--------|---|
-| <Bundle name="TMobile_US" /> | T-Mobile, Metro by T-Mobile ??? |
-| <Bundle name="TMobile_MVNO_US" />, <Bundle name="TMobile_Wholesale_US" /> | MVNOs without their own bundle |
-| <Bundle name="TMobile_Comcast_US" /> | Xfinity Mobile |
-| <Bundle name="TMobile_Charter_US" /> | Spectrum Mobile |
-| <Bundle name="TMobile_UltraMint_US" /> | Ultra Mobile / Mint ??? |
-| <Bundle name="TMobile_Boost_US" /> | Boost |
-| <Bundle name="TMobile_Vodafone_US" /> | ??? |
+| Bundle                                                                    |                                 |
+| ------------------------------------------------------------------------- | ------------------------------- |
+| <Bundle name="TMobile_US" />                                              | T-Mobile, Metro by T-Mobile ??? |
+| <Bundle name="TMobile_MVNO_US" />, <Bundle name="TMobile_Wholesale_US" /> | MVNOs without their own bundle  |
+| <Bundle name="TMobile_Comcast_US" />                                      | Xfinity Mobile                  |
+| <Bundle name="TMobile_Charter_US" />                                      | Spectrum Mobile                 |
+| <Bundle name="TMobile_UltraMint_US" />                                    | Ultra Mobile / Mint ???         |
+| <Bundle name="TMobile_Boost_US" />                                        | Boost                           |
+| <Bundle name="TMobile_Vodafone_US" />                                     | ???                             |
 
 Xfinity and Spectrum have one bundle on Verizon and one on T-Mobile each.
 
@@ -34,10 +34,10 @@ Xfinity and Spectrum have one bundle on Verizon and one on T-Mobile each.
 
 `TMobile_US` has three `MVNOOverrides`:
 
-| SIMs | Changes |
-|------|---------|
-| `311660` | attach APN `iot.t-mobile.com`, software updates opt-in, no carrier services menu, no My Account |
-| `311882` | the same |
+| SIMs     | Changes                                                                                                                                      |
+| -------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| `311660` | attach APN `iot.t-mobile.com`, software updates opt-in, no carrier services menu, no My Account                                              |
+| `311882` | the same                                                                                                                                     |
 | `310310` | Wi-Fi Calling without entitlement, ePDG `epdg.epc.mnc310.mcc310.pub.3gppnetwork.org`, entitlement server `https://eas3.msg.lab.t-mobile.com` |
 
 So SIMs on `311660` (MetroPCS's old range) and `311882` attach with an IoT APN, and SIMs on `310310` are sent to an entitlement server with `lab` in its name. Who uses those ranges today is ???.
@@ -73,11 +73,11 @@ and `CarrierEntitlements.SupportsQuickSwitchSetActiveIccid`. This looks like mov
 
 ## Other
 
-* `IMSConfig.EnableThumperByDefault` is true only here and in `Sprint_CSIM_LTE_US`. Thumper is ???.
-* `CarrierAppDiscoverability.AllowCarrierSpaceApp` is only in `TMobile_US` and `Free_fr`.
-* `PushSettings.PreferredNetworksTopic` is `com.t-mobile.msg.eas`.
+- `IMSConfig.EnableThumperByDefault` is true only here and in `Sprint_CSIM_LTE_US`. Thumper is ???.
+- `CarrierAppDiscoverability.AllowCarrierSpaceApp` is only in `TMobile_US` and `Free_fr`.
+- `PushSettings.PreferredNetworksTopic` is `com.t-mobile.msg.eas`.
 
 ## See also
 
-* [AT&T](/wiki/ios/att), [Verizon](/wiki/ios/verizon)
-* [.der.pri § MVNO files](/wiki/ios/der-pri#mvno-files)
+- [AT&T](/wiki/ios/att), [Verizon](/wiki/ios/verizon)
+- [.der.pri § MVNO files](/wiki/ios/der-pri#mvno-files)

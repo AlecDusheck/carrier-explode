@@ -1,282 +1,1323 @@
-// A publish into a local D1 (wrangler's simulator), migrated from ../migrations: what lands, what a second publish
-// changes and deletes, that an older publish cannot overwrite a newer one, and how labels reach the index.
+// The index in a local D1 (wrangler's simulator), migrated from ../migrations: each write the index step and the feeds
+// make, that rewriting the same rows writes nothing, and each read pages make, rarity and its plan included.
 
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
+import { SQLiteDialect } from "drizzle-orm/sqlite-core";
 import { getPlatformProxy } from "wrangler";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
-import { buildIndexes, indexProfile, PROFILE_SCHEMA, type Label, type Profile, type Release, type SourceRef } from "@carrier-explode/schema";
 import {
-  carrierOf, carriersAfter, changesAfter, codeNamed, countriesAfter, countryOf, currentPhones, deviceRecords, indexDb, listedSources, liveIndex, namesOf,
-  phoneOf, phonesAfter, releaseList, releaseOf, releasesAfter, sourceList, sourceOf, sourcesAfter, statesAfter, statesOn, syncDevices, syncLabels, unnamed,
-  writeLabels, type IndexDb,
-} from "../src/d1.ts";
-import { delta, indexRows, type ListedDevice, type Live, type Statement } from "../src/index.ts";
+	PROFILE_SCHEMA,
+	RARITY,
+	rarityFile,
+	releaseSortKey,
+	sourceTimeline,
+	type HeadRows,
+	type ProfileFacts,
+} from "@carrier-explode/schema";
+import type { SourceKey } from "@carrier-explode/schema/types";
+import {
+	carrierCountries,
+	carrierList,
+	carrierMembers,
+	carrierModemConfigs,
+	sourceModemConfigs,
+	statedDevices,
+	carrierOf,
+	changesOf,
+	copiesOf,
+	countryCarriers,
+	countryList,
+	countryOf,
+	deviceList,
+	entriesOf,
+	headIdentities,
+	indexDb,
+	linkRules,
+	missingProfiles,
+	modemConfigsOf,
+	modemsOf,
+	neighbours,
+	newestReleaseDevices,
+	putOtaFile,
+	putProfiles,
+	putRelease,
+	putSource,
+	routedBundles,
+	rareSettings,
+	releaseList,
+	releaseOf,
+	scanConcept,
+	putBaseRows,
+	scanSetting,
+	selectedBy,
+	setHas5g,
+	shippedIn,
+	sourceList,
+	sourceOf,
+	statesOn,
+	syncChanges,
+	syncCopies,
+	syncDevices,
+	syncEntries,
+	syncHeadRows,
+	syncLabels,
+	syncPhoneStates,
+	syncRoutes,
+	unnamed,
+	writeLabels,
+	writeLinked,
+	type IndexDb,
+} from "../src/index.ts";
+import { rarityQuery } from "../src/profiles.ts";
 
-const proxy = await getPlatformProxy<{ DB: D1Database; UPGRADE: D1Database }>({ configPath: join(import.meta.dirname, "wrangler.jsonc"), persist: false });
+const CONFIG = rarityFile("android");
+
+// A test makes up to hundreds of D1 queries in turn, each a round trip to workerd.
+vi.setConfig({ testTimeout: 30_000 });
+
+const proxy = await getPlatformProxy<{ DB: D1Database }>({
+	configPath: join(import.meta.dirname, "wrangler.jsonc"),
+	persist: false,
+});
 const d1 = proxy.env.DB;
 let db: IndexDb;
 
 const MIGRATIONS = join(import.meta.dirname, "..", "migrations");
-const migrations = readdirSync(MIGRATIONS).sort();
-
-async function migrate(into: D1Database, names: readonly string[]): Promise<void> {
-  for (const m of names) {
-    const statements = readFileSync(join(MIGRATIONS, m, "migration.sql"), "utf8").split("--> statement-breakpoint").map((s) => s.trim()).filter(Boolean);
-    await into.batch(statements.map((s) => into.prepare(s)));
-  }
-}
 
 beforeAll(async () => {
-  await migrate(d1, migrations);
-  db = indexDb(d1.withSession());
+	for (const m of readdirSync(MIGRATIONS).toSorted()) {
+		const statements = readFileSync(join(MIGRATIONS, m, "migration.sql"), "utf8")
+			.split("--> statement-breakpoint")
+			.map((s) => s.trim())
+			.filter(Boolean);
+		await d1.batch(statements.map((s) => d1.prepare(s)));
+	}
+	db = indexDb(d1.withSession());
 });
 
 afterAll(() => proxy.dispose());
 
-const run = async (statements: readonly Statement[]): Promise<void> => {
-  await d1.batch(statements.map((s) => d1.prepare(s.sql).bind(...s.params)));
+const ALL = { after: null, take: 1000 } as const;
+const ATT_IOS: SourceKey = "ios:carrier:ATT_US";
+const ATT_NR_IOS: SourceKey = "ios:carrier:ATT_NR_US";
+const ATT_PIXEL: SourceKey = "android:carrier:att_us";
+const TMO_PIXEL: SourceKey = "android:carrier:tmobile_us";
+const FRANCE: SourceKey = "ios:country:France";
+const VISIBLE: SourceKey = "ios:carrier:Verizon_Visible_LTE_US";
+
+const profile = (
+	sha: string,
+	display: string | null,
+	iso: readonly string[],
+	claimed: readonly string[],
+	kind: ProfileFacts["kind"] = "settings",
+): ProfileFacts => {
+	const facts = { sha, schema: PROFILE_SCHEMA, display, iso, sims: claimed } as const;
+	return kind === "settings" ? { ...facts, kind, radio: {} } : { ...facts, kind, radio: "nr" };
 };
 
-/** D1 as a publish starting at `readAt` reads it. */
-const liveAt = async (readAt: string): Promise<Live> => ({ ...(await liveIndex(db)), readAt });
-
-const ATT_IOS: SourceRef = { platform: "ios", kind: "carrier", name: "ATT_US" };
-const ATT_PIXEL: SourceRef = { platform: "android", kind: "carrier", name: "att_us" };
-
-const profile = (source: SourceRef, sha: string, volte: "on" | "no"): Profile => ({
-  schema: PROFILE_SCHEMA, source, sha, identity: { display: source.name, iso: ["us"], sims: [{ mccmnc: "310410" }] },
-  apns: [], concepts: { volte: { kind: "state", state: volte, because: [], fidelity: "exact" } }, raw: {}, variants: [],
+const headOf = (sha: string, volte: string): HeadRows => ({
+	settings: [
+		{ file: "carrier.plist", key: "apns[0].apn", path: "apns[*].apn", value: JSON.stringify(`${sha}.apn`) },
+		{ file: "carrier.plist", key: "SupportsVoLTE", path: "SupportsVoLTE", value: volte },
+	],
+	concepts: [{ concept: "volte", value: volte === "true" ? '"on"' : '"no"' }],
 });
 
-function index(iosVersion: string, withPixel: boolean, live: Pick<Live, "devices" | "labels">): ReturnType<typeof indexRows> {
-  const releases: Release[] = [
-    { platform: "ios", id: "24A1", version: "27.0", label: "27.0", prerelease: false, devices: ["iPhone18,1"], extractedAt: "x", released: "2026-09-15", modems: [],
-      sources: { "ios:carrier:ATT_US": { sha: `i${iosVersion}`, cid: "c", version: iosVersion, size: 1 } } },
-    ...(withPixel ? [{
-      platform: "android", id: "CP3A.1", version: "16", patch: "2026-09", released: "2026-09-02", devices: ["tokay"], extractedAt: "x", carrierList: "l", modems: [],
-      sources: { "android:carrier:att_us": [{ sha: "a9", version: "9", size: 1, devices: ["tokay"] }] },
-    } as const satisfies Release] : []),
-  ];
-  const profiles = new Map([[`i${iosVersion}`, indexProfile(profile(ATT_IOS, `i${iosVersion}`, "on"))], ["a9", indexProfile(profile(ATT_PIXEL, "a9", "no"))]]);
-  return indexRows(buildIndexes({
-    releases, otaFiles: [], devices: live.devices, labels: live.labels, profiles: (sha) => profiles.get(sha), manifestSims: {}, modemConfigs: () => undefined, carrierIds: {},
-  }));
+const bluejayName = (value: string, origin: "human" | "model") =>
+	({ subject: "device", code: "bluejay", field: "name", value, origin, evidence: null }) as const;
+
+const head = (key: SourceKey, headSha: string, updated: string | null) => {
+	const [platform, kind, name] = key.split(":");
+	return {
+		key,
+		platform: platform === "ios" ? "ios" : "android",
+		kind: kind === "country" ? "country" : "carrier",
+		name: name ?? "",
+		headSha,
+		baseSha: null,
+		updated,
+	} as const;
+};
+
+const mvno = (i: number): SourceKey => `android:carrier:mvno${String(i).padStart(2, "0")}_us`;
+
+describe("feeds", () => {
+	it("keep a device's earliest release day, and write only what changed", async () => {
+		const listed = [
+			{ code: "iPhone19,1", platform: "ios", released: "2026-09-19", boards: ["D57AP"] },
+			{ code: "tokay", platform: "android", released: "2024-08", boards: [] },
+			{ code: "bluejay", platform: "android", released: "2025-07", boards: [] },
+		] as const;
+		expect(await syncDevices(db, listed)).toBe(3);
+		expect(await syncDevices(db, listed)).toBe(0);
+		expect(await syncDevices(db, [{ ...listed[1], released: "2024-10" }])).toBe(0);
+		expect(await syncDevices(db, [{ ...listed[1], released: "2024-07" }])).toBe(1);
+		expect(await setHas5g(db, "tokay", true)).toBe(true);
+		expect(await setHas5g(db, "tokay", true)).toBe(false);
+	});
+
+	it("name devices by label, and let the seeded person's release day stand over the feed's", async () => {
+		expect(
+			await syncLabels(
+				db,
+				"device",
+				"name",
+				[{ code: "tokay", value: "Pixel 9" }],
+				"https://developers.google.com/android/ota",
+			),
+		).toBe(1);
+		expect(
+			await syncLabels(
+				db,
+				"device",
+				"name",
+				[{ code: "tokay", value: "Pixel 9" }],
+				"https://developers.google.com/android/ota",
+			),
+		).toBe(0);
+		expect(await deviceList(db, "android")).toEqual([
+			{ code: "tokay", name: "Pixel 9", platform: "android", released: "2024-07", boards: [], has5g: true },
+			{ code: "bluejay", name: "bluejay", platform: "android", released: "2022-04", boards: [], has5g: null },
+		]);
+		expect(await unnamed(db, "device")).toEqual(["bluejay", "iPhone19,1"]);
+	});
+
+	it("list one day's devices by code, highest first", async () => {
+		const day = "2026-09-19";
+		await syncDevices(db, [
+			{ code: "iPhone19,2", platform: "ios", released: day, boards: [] },
+			{ code: "iPhone19,3", platform: "ios", released: day, boards: [] },
+		]);
+		expect((await deviceList(db, "ios")).map((d) => d.code)).toEqual([
+			"iPhone19,3",
+			"iPhone19,2",
+			"iPhone19,1",
+		]);
+	});
+
+	it("write a label over the same or a less trusted origin only, and refuse one that does not fit its field", async () => {
+		await writeLabels(db, [bluejayName("Pixel 6a", "human")]);
+		await writeLabels(db, [bluejayName("Pixel 6 a?", "model")]);
+		expect((await deviceList(db, "android")).find((d) => d.code === "bluejay")?.name).toBe("Pixel 6a");
+		await expect(
+			writeLabels(db, [
+				{
+					subject: "device",
+					code: "tokay",
+					field: "released",
+					value: "August",
+					origin: "human",
+					evidence: null,
+				},
+			]),
+		).rejects.toThrow();
+	});
+});
+
+describe("the index step", () => {
+	const ios = {
+		platform: "ios",
+		id: "24A446",
+		version: "27.0",
+		label: "27.0",
+		prerelease: false,
+		released: "2026-09-15",
+		devices: ["iPhone19,1"],
+		sourceCount: 3,
+		sortKey: "27.0.0 24A446",
+	} as const;
+	const ios1 = {
+		...ios,
+		id: "24B5",
+		version: "27.1",
+		label: "27.1",
+		released: "2026-10-01",
+		sortKey: "27.1.0 24B5",
+	} as const;
+	const pixel = {
+		platform: "android",
+		id: "CP3A.260905.009",
+		version: "17",
+		patch: "2026-09",
+		released: "2026-09-02",
+		devices: ["tokay"],
+		sourceCount: 2,
+		sortKey: "2026-09 CP3A.260905.009",
+	} as const;
+	const pixel1 = {
+		...pixel,
+		id: "CP3A.261005.004",
+		patch: "2026-10",
+		released: "2026-10-02",
+		sortKey: "2026-10 CP3A.261005.004",
+	} as const;
+	const firmware = "g5400c-260604-260710-B-13742112";
+	const modem = {
+		name: firmware,
+		family: "shannon",
+		devices: ["tokay"],
+		package: null,
+		size: null,
+		kind: null,
+	};
+	const mav25 = {
+		name: "Mav25-2.10.04.Release.bbfw",
+		family: "Mav25",
+		devices: ["iPhone19,1"],
+		package: "b".repeat(64),
+		size: 137554454,
+		kind: "bbfw",
+	} as const;
+
+	it("writes a release, its modems and configurations once, and nothing when they are unchanged", async () => {
+		expect(await putRelease(db, ios, [mav25], [])).toBe(true);
+		expect(await putRelease(db, ios, [mav25], [])).toBe(false);
+		expect(await putRelease(db, ios1, [], [])).toBe(true);
+		const configs = [
+			{ device: "tokay", label: "us_tmo", sha: "m-tmo" },
+			{ device: "tokay", label: "us_att", sha: "m-att" },
+			{ device: "tokay", label: "us_plmn", sha: "m-plmn" },
+		];
+		expect(
+			await putRelease(db, pixel, [modem], [...configs, { device: "tokay", label: "gone", sha: "m-gone" }]),
+		).toBe(true);
+		expect(await putRelease(db, pixel, [modem], configs)).toBe(true);
+		expect(
+			await putRelease(
+				db,
+				pixel1,
+				[modem],
+				[
+					{ device: "tokay", label: "us_tmo", sha: "m-tmo2" },
+					{ device: "tokay", label: "us_plmn", sha: "m-plmn" },
+					{ device: "tokay", label: "us_att", sha: "m-att2" },
+				],
+			),
+		).toBe(true);
+		expect((await modemConfigsOf(db, "android", pixel.id, "tokay")).map((c) => c.label)).toEqual([
+			"us_att",
+			"us_plmn",
+			"us_tmo",
+		]);
+		expect(await modemsOf(db, "ios", ios.id)).toEqual([{ ...mav25, familyName: "Qualcomm X80 · Mav25" }]);
+	});
+
+	it("keeps one firmware's modems apart on devices carrying different configurations", async () => {
+		const shared = {
+			...pixel,
+			id: "CP3A.260805.001",
+			devices: ["caiman", "tokay"],
+			sortKey: "2026-08 CP3A.260805.001",
+		};
+		const on = (devices: string[]) => ({ ...modem, devices });
+		await putRelease(
+			db,
+			shared,
+			[on(["caiman"]), on(["tokay"])],
+			[
+				{ device: "caiman", label: "us_att", sha: "m-att-caiman" },
+				{ device: "tokay", label: "us_att", sha: "m-att" },
+			],
+		);
+		expect((await modemsOf(db, "android", shared.id)).map((m) => m.devices)).toEqual([["caiman"], ["tokay"]]);
+		expect((await modemConfigsOf(db, "android", shared.id, "caiman")).map((c) => c.sha)).toEqual([
+			"m-att-caiman",
+		]);
+		expect(await putRelease(db, shared, [], [])).toBe(true);
+	});
+
+	it("refuses an iOS modem without its package's size and kind", async () => {
+		await expect(
+			d1
+				.prepare(
+					"INSERT INTO modems (platform, release, name, family, devices, package) VALUES ('ios', 'x', 'm', 'Mav25', '[]', 'b')",
+				)
+				.run(),
+		).rejects.toThrow(/CHECK/);
+		await expect(
+			d1
+				.prepare(
+					"INSERT INTO modems (platform, release, name, family, devices, size) VALUES ('android', 'x', 'm', 'shannon', '[]', 1)",
+				)
+				.run(),
+		).rejects.toThrow(/CHECK/);
+	});
+
+	it("refuses a release header that does not fit its platform", async () => {
+		await expect(
+			d1
+				.prepare(
+					"INSERT INTO releases (platform, id, version, devices, source_count, sort_key) VALUES ('ios', 'x', '1', '[]', 0, 'x')",
+				)
+				.run(),
+		).rejects.toThrow(/CHECK/);
+	});
+
+	it("reads releases newest first, a page at a time, and the releases either side of one", async () => {
+		expect((await releaseList(db, "ios", ALL)).map((r) => [r.id, r.modemFamilies])).toEqual([
+			["24B5", []],
+			["24A446", [{ code: "Mav25", name: "Qualcomm X80 · Mav25", devices: ["iPhone19,1"] }]],
+		]);
+		expect((await releaseList(db, "ios", { after: "27.1.0 24B5", take: 5 })).map((r) => r.id)).toEqual([
+			"24A446",
+		]);
+		expect(await releaseOf(db, "android", pixel.id)).toEqual({
+			...pixel,
+			modemFamilies: [{ code: "shannon", name: "Samsung Shannon", devices: ["tokay"] }],
+		});
+		expect(await neighbours(db, "ios", ios.id)).toEqual({ previous: null, next: "24B5" });
+		expect(await neighbours(db, "ios", "24B5")).toEqual({ previous: ios.id, next: null });
+		expect(await newestReleaseDevices(db, "ios", ios.id)).toEqual([]);
+	});
+
+	it("lists releases by day, but pairs a release with its neighbours by version: 27.0.1 follows 27.0, not a 27.2 beta out before it", async () => {
+		const beta = {
+			...ios,
+			id: "24C5089g",
+			version: "27.2 beta 2",
+			label: "27.2 beta 2",
+			prerelease: true,
+			released: "2026-09-21",
+			sortKey: releaseSortKey({
+				...ios,
+				version: "27.2 beta 2",
+				released: "2026-09-21",
+				id: "24C5089g",
+				extractedAt: "x",
+			}),
+		} as const;
+		const point = {
+			...ios,
+			id: "24A460",
+			version: "27.0.1",
+			label: "27.0.1",
+			released: "2026-09-28",
+			sortKey: releaseSortKey({
+				...ios,
+				version: "27.0.1",
+				released: "2026-09-28",
+				id: "24A460",
+				extractedAt: "x",
+			}),
+		} as const;
+		// oxlint-disable-next-line oxc/no-map-spread -- ios and ios1 are read again below; assigning to them would change them.
+		const dated = [ios, ios1].map((r) => ({ ...r, sortKey: releaseSortKey({ ...r, extractedAt: "x" }) }));
+		for (const r of [...dated, beta, point]) await putRelease(db, r, [], []);
+		expect((await releaseList(db, "ios", ALL)).map((r) => r.version)).toEqual([
+			"27.1",
+			"27.0.1",
+			"27.2 beta 2",
+			"27.0",
+		]);
+		expect(await neighbours(db, "ios", point.id)).toEqual({ previous: ios.id, next: ios1.id });
+		expect(await neighbours(db, "ios", beta.id)).toEqual({ previous: ios1.id, next: null });
+		await d1.prepare("DELETE FROM releases WHERE id IN ('24C5089g', '24A460')").run();
+		for (const r of [ios, ios1]) await putRelease(db, r, r === ios ? [mav25] : [], []);
+		expect(await newestReleaseDevices(db, "ios", "24B5")).toEqual(["iPhone19,1"]);
+	});
+
+	it("writes copies per origin and names the sources they touched", async () => {
+		expect(
+			await syncCopies(db, {
+				kind: "release",
+				id: ios.id,
+				lines: [""],
+				copies: [
+					{ source: ATT_IOS, line: "", sha: "i1", version: "72.0" },
+					{ source: ATT_NR_IOS, line: "", sha: "n1", version: "1.0" },
+					{ source: FRANCE, line: "", sha: "f1", version: "60.0" },
+				],
+			}),
+		).toEqual([ATT_NR_IOS, ATT_IOS, FRANCE]);
+		// France's bytes ship again under a new version.
+		expect(
+			await syncCopies(db, {
+				kind: "release",
+				id: ios1.id,
+				lines: [""],
+				copies: [
+					{ source: ATT_IOS, line: "", sha: "i2", version: "72.0.1" },
+					{ source: ATT_NR_IOS, line: "", sha: "n1", version: "1.0" },
+					{ source: FRANCE, line: "", sha: "f1", version: "60.1" },
+				],
+			}),
+		).toEqual([ATT_NR_IOS, ATT_IOS, FRANCE]);
+		const pixelCopies = {
+			kind: "release",
+			id: pixel.id,
+			lines: ["tokay"],
+			copies: [
+				{ source: ATT_PIXEL, line: "tokay", sha: "a1", version: "9" },
+				{ source: TMO_PIXEL, line: "tokay", sha: "t1", version: "3" },
+			],
+		} as const;
+		expect(await syncCopies(db, pixelCopies)).toEqual([ATT_PIXEL, TMO_PIXEL]);
+		expect(await syncCopies(db, pixelCopies)).toEqual([]);
+		const url = "https://updates.cdn-apple.com/2026FallFCS/carrier/ATT_US-72.1.ipcc";
+		expect(
+			await putOtaFile(db, {
+				url,
+				sha: "i3",
+				version: "72.1",
+				published: "2026-10-03",
+				digests: { sha1: "c".repeat(40) },
+			}),
+		).toBe(true);
+		expect(
+			await putOtaFile(db, {
+				url,
+				sha: "i3",
+				version: "72.1",
+				published: "2026-10-03",
+				digests: { sha1: "c".repeat(40) },
+			}),
+		).toBe(false);
+		expect(
+			await syncCopies(db, {
+				kind: "ota",
+				url,
+				copies: [{ source: ATT_IOS, line: "", sha: "i3", version: "72.1", os: ["27.1"] }],
+			}),
+		).toEqual([ATT_IOS]);
+		// An older version published after the newest, and a file no feed dates.
+		const late = "https://updates.cdn-apple.com/2026FallFCS/carrier/ATT_US-71.9.ipcc";
+		await putOtaFile(db, {
+			url: late,
+			sha: "i0",
+			version: "71.9",
+			published: "2026-10-04",
+			digests: { sha1: "d".repeat(40) },
+		});
+		expect(
+			await syncCopies(db, {
+				kind: "ota",
+				url: late,
+				copies: [{ source: ATT_IOS, line: "", sha: "i0", version: "71.9", os: ["26.4"] }],
+			}),
+		).toEqual([ATT_IOS]);
+		const undated = "https://updates.cdn-apple.com/2026FallFCS/carrier/ATT_NR_US-0.9.ipcc";
+		await putOtaFile(db, {
+			url: undated,
+			sha: "n0",
+			version: "0.9",
+			published: null,
+			digests: { sha1: "e".repeat(40) },
+		});
+		expect(
+			await syncCopies(db, {
+				kind: "ota",
+				url: undated,
+				copies: [{ source: ATT_NR_IOS, line: "", sha: "n0", version: "0.9", os: ["26.4"] }],
+			}),
+		).toEqual([ATT_NR_IOS]);
+		await expect(
+			d1
+				.prepare(
+					"INSERT INTO copies (source, line, sha, version, origin_kind, origin, os) VALUES ('s', '', 'x', '1', 'release', 'r', '[]')",
+				)
+				.run(),
+		).rejects.toThrow(/CHECK/);
+		await expect(
+			d1
+				.prepare(
+					"INSERT INTO copies (source, line, sha, version, origin_kind, origin) VALUES ('s', '', 'x', '1', 'build', 'r')",
+				)
+				.run(),
+		).rejects.toThrow(/CHECK/);
+	});
+
+	it("reads a source's copies with what orders them", async () => {
+		const att = await copiesOf(db, ATT_IOS, "ios");
+		expect(
+			att.map((c) =>
+				c.kind === "release"
+					? [c.kind, c.version, c.release.id, c.release.label, c.release.sortKey]
+					: [c.kind, c.version, c.file.published, c.os],
+			),
+		).toEqual([
+			["ota", "71.9", "2026-10-04", ["26.4"]],
+			["ota", "72.1", "2026-10-03", ["27.1"]],
+			["release", "72.0", ios.id, "27.0", ios.sortKey],
+			["release", "72.0.1", ios1.id, "27.1", ios1.sortKey],
+		]);
+	});
+
+	it("writes each sha's rows once", async () => {
+		const facts = [
+			profile("i1", "AT&T", ["us"], ["310410"]),
+			profile("i2", "AT&T", ["us"], ["310410"]),
+			profile("i3", "AT&T", ["us"], ["310410", "310410|gid1=52"]),
+			profile("n1", "AT&T 5G", ["us"], ["310410|gid1=53"]),
+			profile("f1", null, ["fr"], []),
+			profile("a1", "AT&T", ["us"], []),
+			profile("t1", "T-Mobile", ["us"], []),
+			profile("m-tmo", "us_tmo", [], ["310260"], "modem"),
+			profile("m-tmo2", "us_tmo", [], ["310260"], "modem"),
+			profile("m-att", "us_att", [], ["310410|gid1=52"], "modem"),
+			profile("m-att2", "us_att", [], ["310410|gid1=52"], "modem"),
+			profile("m-plmn", "us_plmn", [], ["310410", "310260"], "modem"),
+		];
+		expect(
+			await missingProfiles(
+				db,
+				facts.map((f) => f.sha),
+			),
+		).toEqual(facts.map((f) => f.sha));
+		await putProfiles(db, facts);
+		await putProfiles(db, facts.slice(0, 1));
+		expect(await missingProfiles(db, ["i1", "zz"])).toEqual(["zz"]);
+	});
+
+	it("writes a sha's rows again when they were read under an older PROFILE_SCHEMA", async () => {
+		await d1.prepare("UPDATE profiles SET schema = schema - 1 WHERE sha = 'f1'").run();
+		expect(await missingProfiles(db, ["f1", "i1"])).toEqual(["f1"]);
+		await putProfiles(db, [profile("f1", "France", ["fr"], ["20801"])]);
+		expect(await missingProfiles(db, ["f1"])).toEqual([]);
+		expect(await selectedBy(db, "f1", FRANCE)).toEqual({ claimed: ["20801"], routed: [] });
+		// Restore f1 as the later tests read it.
+		await putProfiles(db, [profile("f1", null, ["fr"], [])]);
+	});
+
+	it("writes schema's timelines in its order, and only where they changed", async () => {
+		const timelineOf = async (source: SourceKey, platform: "ios" | "android") =>
+			sourceTimeline(await copiesOf(db, source, platform));
+		const att = await timelineOf(ATT_IOS, "ios");
+		expect(await syncEntries(db, ATT_IOS, att)).toBe(true);
+		expect(await syncEntries(db, ATT_IOS, att)).toBe(false);
+		// Lines are ordered by version: 71.9 shipped last but is oldest.
+		expect(await entriesOf(db, ATT_IOS)).toEqual(att);
+		expect(att.map((e) => [e.slug, e.day])).toEqual([
+			["72.1", "2026-10-03"],
+			["72.0.1", "2026-10-01"],
+			["72.0", "2026-09-15"],
+			["71.9", "2026-10-04"],
+		]);
+		expect(
+			await syncEntries(
+				db,
+				ATT_IOS,
+				att.map((e) => (e.slug === "72.0" ? { ...e, changed: false } : e)),
+			),
+		).toBe(true);
+		// A new newest entry moves every rank down.
+		const newer = {
+			line: "",
+			slug: "73.0",
+			version: "73.0",
+			sha: "i4",
+			beta: false,
+			changed: true,
+			day: "2026-10-05",
+		};
+		expect(await syncEntries(db, ATT_IOS, [newer, ...att])).toBe(true);
+		expect((await entriesOf(db, ATT_IOS)).map((e) => e.slug)).toEqual([
+			"73.0",
+			"72.1",
+			"72.0.1",
+			"72.0",
+			"71.9",
+		]);
+		expect(await syncEntries(db, ATT_IOS, att)).toBe(true);
+		for (const [source, platform] of [
+			[ATT_NR_IOS, "ios"],
+			[FRANCE, "ios"],
+			[ATT_PIXEL, "android"],
+			[TMO_PIXEL, "android"],
+		] as const) {
+			expect(await syncEntries(db, source, await timelineOf(source, platform))).toBe(true);
+		}
+		expect((await entriesOf(db, ATT_NR_IOS)).map((e) => [e.slug, e.day])).toEqual([
+			["1.0", "2026-09-15"],
+			["0.9", null],
+		]);
+		expect((await entriesOf(db, FRANCE)).map((e) => [e.slug, e.sha, e.changed])).toEqual([
+			["60.1", "f1", false],
+			["60.0", "f1", true],
+		]);
+	});
+
+	it("writes heads and phone states only where they changed", async () => {
+		expect(await putSource(db, head(ATT_IOS, "i3", "2026-10-03"))).toBe(true);
+		expect(await putSource(db, head(ATT_IOS, "i3", "2026-10-03"))).toBe(false);
+		for (const h of [
+			head(ATT_NR_IOS, "n1", "2026-09-15"),
+			head(FRANCE, "f1", null),
+			head(ATT_PIXEL, "a1", "2026-09-02"),
+			head(TMO_PIXEL, "t1", "2026-09-02"),
+		])
+			await putSource(db, h);
+		const heads = [
+			[ATT_IOS, "i3", "true"],
+			[ATT_NR_IOS, "n1", "true"],
+			[FRANCE, "f1", "false"],
+			[ATT_PIXEL, "a1", "true"],
+			[TMO_PIXEL, "t1", "false"],
+		] as const;
+		for (const [key, sha, volte] of heads) expect(await syncHeadRows(db, key, headOf(sha, volte))).toBe(true);
+		expect(await syncHeadRows(db, ATT_IOS, headOf("i3", "true"))).toBe(false);
+
+		expect(
+			await syncPhoneStates(db, ATT_PIXEL, [{ device: "tokay", states: { volte: "on" }, defaults: {} }]),
+		).toBe(true);
+		expect(
+			await syncPhoneStates(db, ATT_PIXEL, [{ device: "tokay", states: { volte: "on" }, defaults: {} }]),
+		).toBe(false);
+		expect(
+			await syncPhoneStates(db, ATT_PIXEL, [
+				{ device: "tokay", states: { volte: "on" }, defaults: { volte: { layer: "aosp", part: "all" } } },
+			]),
+		).toBe(true);
+		expect(
+			await syncPhoneStates(db, TMO_PIXEL, [{ device: "tokay", states: { volte: "no" }, defaults: {} }]),
+		).toBe(true);
+		expect(await statesOn(db, "tokay", ALL)).toEqual([
+			{ source: ATT_PIXEL, states: { volte: "on" }, defaults: { volte: { layer: "aosp", part: "all" } } },
+			{ source: TMO_PIXEL, states: { volte: "no" }, defaults: {} },
+		]);
+		expect(await statesOn(db, "tokay", { after: ATT_PIXEL, take: 1 })).toEqual([
+			{ source: TMO_PIXEL, states: { volte: "no" }, defaults: {} },
+		]);
+		// bluejay reads nothing yet, so the features pages leave it out.
+		expect((await statedDevices(db, "android")).map((d) => d.code)).toEqual(["tokay"]);
+		expect(await statedDevices(db, "ios")).toEqual([]);
+
+		expect(
+			await syncRoutes(db, ["ios", "ipados", "watchos"], { [ATT_IOS]: ["310410", "310410|gid1=52"] }),
+		).toEqual([ATT_IOS]);
+		expect(await syncRoutes(db, ["ios", "ipados", "watchos"], { [ATT_IOS]: ["310410"] })).toEqual([ATT_IOS]);
+		expect(
+			await syncRoutes(db, ["ios", "ipados", "watchos"], {
+				[ATT_IOS]: ["310410", "iccid:8901150", "carrierId:310ATT"],
+			}),
+		).toEqual([ATT_IOS]);
+		expect((await selectedBy(db, "i3", ATT_IOS)).routed).toEqual([
+			"310410",
+			"carrierId:310ATT",
+			"iccid:8901150",
+		]);
+		await expect(syncRoutes(db, ["ios"], { [ATT_IOS]: ["imei:1"] })).rejects.toThrow(/no ruleKey/);
+		await syncRoutes(db, ["ios", "ipados", "watchos"], { [ATT_IOS]: ["310410"] });
+		expect(await selectedBy(db, "i3", ATT_IOS)).toEqual({
+			claimed: ["310410", "310410|gid1=52"],
+			routed: ["310410"],
+		});
+	});
+
+	it("routes Pixel SIMs from a whole carrier list, leaving Apple's routes and unchanged sources alone", async () => {
+		const list = {
+			[ATT_PIXEL]: ["310410"],
+			[TMO_PIXEL]: ["310260|gid1=FF", "310260"],
+			"android:carrier:gone_us": ["310999"],
+		};
+		expect(await syncRoutes(db, ["android"], list)).toEqual([
+			ATT_PIXEL,
+			"android:carrier:gone_us",
+			TMO_PIXEL,
+		]);
+		expect(await syncRoutes(db, ["android"], list)).toEqual([]);
+		expect(
+			await syncRoutes(db, ["android"], { [ATT_PIXEL]: ["310410"], [TMO_PIXEL]: ["310260|gid1=FF"] }),
+		).toEqual(["android:carrier:gone_us", TMO_PIXEL]);
+		expect(await selectedBy(db, "t1", TMO_PIXEL)).toEqual({ claimed: [], routed: ["310260|gid1=FF"] });
+		expect((await selectedBy(db, "i3", ATT_IOS)).routed).toEqual(["310410"]);
+		await expect(syncRoutes(db, ["android"], { [ATT_IOS]: ["310410"] })).rejects.toThrow(
+			/not a source of android/,
+		);
+	});
+
+	it("reads the iPhone bundles Apple routes a group of PLMNs to, bare or by a qualifier", async () => {
+		const apple = ["ios", "ipados", "watchos"] as const;
+		await syncRoutes(db, apple, {
+			[ATT_IOS]: ["310410", "310150|gid1=53"],
+			"ios:carrier:ATT_aio_US": ["310150"],
+			"ios:carrier:ATT_RedPocket_US": ["310410|iccidPrefix=8901"],
+			"ios:carrier:Short_US": ["31041"],
+			"ipados:carrier:ATT_US": ["310410"],
+		});
+		expect(await routedBundles(db, { ATT: ["310150", "310410"], VZW: ["311480"] })).toEqual({
+			ATT: {
+				bundles: [ATT_IOS, "ios:carrier:ATT_aio_US"],
+				mvnoBundles: ["ios:carrier:ATT_RedPocket_US"],
+			},
+			VZW: { bundles: [], mvnoBundles: [] },
+		});
+		await syncRoutes(db, apple, { [ATT_IOS]: ["310410"] });
+	});
+
+	it("deletes and writes hundreds of rows within D1's 100 parameters", async () => {
+		const many = Array.from({ length: 250 }, (_, i) => ({
+			device: `device${String(i).padStart(3, "0")}`,
+			states: { volte: "on" as const },
+			defaults: {},
+		}));
+		expect(await syncPhoneStates(db, "android:carrier:bulk_us", many)).toBe(true);
+		expect(await syncPhoneStates(db, "android:carrier:bulk_us", many.slice(0, 10))).toBe(true);
+		expect(await statesOn(db, "device005", ALL)).toEqual([
+			{ source: "android:carrier:bulk_us", states: { volte: "on" }, defaults: {} },
+		]);
+		expect(await statesOn(db, "device200", ALL)).toEqual([]);
+		await syncPhoneStates(db, "android:carrier:bulk_us", []);
+	});
+
+	it("reads what a release ships, and writes and reads its changes with their versions", async () => {
+		// France's bytes are on two entries; the copy's version picks this release's.
+		expect(await shippedIn(db, "ios", ios1.id)).toEqual([
+			{ source: ATT_NR_IOS, line: "", slug: "1.0", sha: "n1", version: "1.0" },
+			{ source: ATT_IOS, line: "", slug: "72.0.1", sha: "i2", version: "72.0.1" },
+			{ source: FRANCE, line: "", slug: "60.1", sha: "f1", version: "60.1" },
+		]);
+		const changed = [
+			{
+				source: ATT_IOS,
+				kind: "changed",
+				from: { line: "", slug: "72.0" },
+				to: { line: "", slug: "72.0.1" },
+			},
+		] as const;
+		expect(await syncChanges(db, "ios", ios1.id, changed)).toBe(true);
+		expect(await syncChanges(db, "ios", ios1.id, changed)).toBe(false);
+		expect(
+			await syncChanges(db, "ios", ios.id, [
+				{ source: ATT_IOS, kind: "added", to: { line: "", slug: "72.0" } },
+			]),
+		).toBe(true);
+		expect(await changesOf(db, "ios", ios1.id, ALL)).toEqual([
+			{
+				source: ATT_IOS,
+				kind: "changed",
+				from: { line: "", slug: "72.0", version: "72.0" },
+				to: { line: "", slug: "72.0.1", version: "72.0.1" },
+			},
+		]);
+		await expect(
+			d1
+				.prepare(
+					"INSERT INTO changes (platform, release, source, kind, to_line, to_slug) VALUES ('ios', 'x', 's', 'removed', '', '1')",
+				)
+				.run(),
+		).rejects.toThrow(/CHECK/);
+	});
+});
+
+describe("the link step", () => {
+	it("reads every head's identity and people's rules, and writes only changed carriers", async () => {
+		const heads = await headIdentities(db);
+		expect(heads.find((h) => h.key === ATT_IOS)).toEqual({
+			key: ATT_IOS,
+			carrier: null,
+			display: "AT&T",
+			iso: ["us"],
+			sims: ["310410", "310410|gid1=52"],
+			routes: ["310410"],
+		});
+		expect(heads.find((h) => h.key === TMO_PIXEL)).toMatchObject({ sims: [], routes: ["310260|gid1=FF"] });
+		expect((await linkRules(db)).filter((l) => l.a === ATT_IOS)).toEqual([
+			{
+				a: ATT_IOS,
+				b: ATT_NR_IOS,
+				rule: "link",
+				why: "AT&T's 5G SIMs (GID1 52/53) get their own iOS bundle",
+			},
+		]);
+		const linked = {
+			carriers: [
+				{ id: "ATT_US", name: "AT&T", iso: "us" },
+				{ id: "tmobile_us", name: null, iso: "us" },
+			],
+			members: {
+				[ATT_IOS]: "ATT_US",
+				[ATT_NR_IOS]: "ATT_US",
+				[ATT_PIXEL]: "ATT_US",
+				[TMO_PIXEL]: "tmobile_us",
+			},
+		};
+		expect(await writeLinked(db, linked)).toEqual(["ATT_US", "tmobile_us"]);
+		expect(await writeLinked(db, linked)).toEqual([]);
+		expect(
+			await writeLinked(db, {
+				...linked,
+				carriers: [...linked.carriers, { id: "gone", name: "Gone", iso: null }],
+			}),
+		).toEqual(["gone"]);
+		expect(await writeLinked(db, linked)).toEqual(["gone"]);
+	});
+
+	it("names carriers: the data's name over a feed's or model's label, which name a carrier the data does not, else a source's name", async () => {
+		expect(await unnamed(db, "carrier")).toEqual(["tmobile_us"]);
+		expect((await carrierOf(db, "tmobile_us"))?.name).toBe("tmobile_us");
+		await writeLabels(db, [
+			{
+				subject: "carrier",
+				code: "tmobile_us",
+				field: "name",
+				value: "T-Mobile",
+				origin: "model",
+				evidence: "https://t-mobile.com",
+			},
+		]);
+		await writeLabels(db, [
+			{
+				subject: "carrier",
+				code: "ATT_US",
+				field: "name",
+				value: "AT and T",
+				origin: "model",
+				evidence: "https://att.com",
+			},
+		]);
+		expect(
+			await syncLabels(
+				db,
+				"carrier",
+				"name",
+				[{ code: "ATT_US", value: "AT&T Mobility" }],
+				"https://att.com",
+			),
+		).toBe(1);
+		expect(await unnamed(db, "carrier")).toEqual([]);
+		expect(await carrierList(db, ALL)).toEqual([
+			{ id: "ATT_US", name: "AT&T", iso: "us", platforms: ["android", "ios"], updated: "2026-10-03" },
+			{ id: "tmobile_us", name: "T-Mobile", iso: "us", platforms: ["android"], updated: "2026-09-02" },
+		]);
+		expect(await carrierOf(db, "ATT_US")).toMatchObject({ members: [ATT_PIXEL, ATT_NR_IOS, ATT_IOS] });
+		// Ranked as linking ranks them: Apple first, then the most SIM rules.
+		expect(await carrierMembers(db, "ATT_US")).toEqual([ATT_IOS, ATT_NR_IOS, ATT_PIXEL]);
+		expect((await sourceList(db, "android", "carrier", ALL)).map((s) => [s.key, s.carrierName])).toEqual([
+			[ATT_PIXEL, "AT&T"],
+			[TMO_PIXEL, "T-Mobile"],
+		]);
+		// A list row carries its carrier's country and members, and its own newest change.
+		expect((await sourceList(db, "android", "carrier", ALL))[0]).toMatchObject({
+			cc: "us",
+			updated: "2026-09-02",
+			members: [ATT_PIXEL, ATT_NR_IOS, ATT_IOS],
+		});
+		// A country bundle has no carrier: its head's country, and no members.
+		expect((await sourceList(db, "ios", "country", ALL))[0]).toMatchObject({
+			key: FRANCE,
+			cc: "fr",
+			members: [],
+		});
+		expect(await carrierCountries(db, "android")).toEqual(["us"]);
+		expect(await carrierCountries(db, "ipados")).toEqual([]);
+		// A source's country is its own, never its carrier's (one an iOS bundle elsewhere may give it).
+		await d1.prepare("UPDATE carriers SET iso = 'gb' WHERE id = 'tmobile_us'").run();
+		expect((await sourceList(db, "android", "carrier", ALL)).map((s) => s.cc)).toEqual(["us", "us"]);
+		expect(await carrierCountries(db, "android")).toEqual(["us"]);
+		await d1.prepare("UPDATE carriers SET iso = 'us' WHERE id = 'tmobile_us'").run();
+		expect(await sourceOf(db, FRANCE)).toMatchObject({
+			key: FRANCE,
+			carrier: null,
+			carrierName: null,
+			display: null,
+			iso: ["fr"],
+		});
+	});
+
+	it("groups countries from carriers and country bundles", async () => {
+		expect(await countryList(db, ALL)).toEqual([
+			{ iso: "fr", carriers: 0, sources: [FRANCE] },
+			{ iso: "us", carriers: 2, sources: [] },
+		]);
+		expect(await countryList(db, { after: "fr", take: 10 })).toEqual([
+			{ iso: "us", carriers: 2, sources: [] },
+		]);
+		expect((await countryCarriers(db, "us")).map((c) => c.name)).toEqual(["AT&T", "T-Mobile"]);
+		expect(await countryOf(db, "fr")).toEqual({ iso: "fr", carriers: 0, sources: [FRANCE] });
+		expect(await countryOf(db, "us")).toEqual({ iso: "us", carriers: 2, sources: [] });
+		expect(await countryOf(db, "de")).toBeUndefined();
+	});
+
+	it("finds the modem configurations a carrier's SIMs select, from each firmware's newest release, PLMN-wide only failing an exact rule", async () => {
+		const firmware = "g5400c-260604-260710-B-13742112";
+		const config = (label: string, sha: string) => ({
+			platform: "android",
+			release: "CP3A.261005.004",
+			firmware,
+			label,
+			sha,
+			family: "shannon",
+			familyName: "Samsung Shannon",
+			devices: ["tokay"],
+		});
+		// AT&T claims 310410 and its GID1 52 exactly; the older release's us_att (m-att) is not read.
+		expect(await carrierModemConfigs(db, "ATT_US")).toEqual([
+			config("us_att", "m-att2"),
+			config("us_plmn", "m-plmn"),
+		]);
+		// T-Mobile's carrier list routes only 310260 with a GID1 no configuration selects: every one selected by the whole of 310260.
+		expect(await carrierModemConfigs(db, "tmobile_us")).toEqual([
+			config("us_plmn", "m-plmn"),
+			config("us_tmo", "m-tmo2"),
+		]);
+		// A source's own rules select the same here: its carrier has no other members.
+		expect(await sourceModemConfigs(db, TMO_PIXEL)).toEqual(await carrierModemConfigs(db, "tmobile_us"));
+		// tokay moves to a new firmware: only that firmware's configurations are its.
+		const moved = {
+			platform: "android",
+			id: "CP4A.261105.001",
+			version: "17",
+			patch: "2026-11",
+			released: "2026-11-02",
+			devices: ["tokay"],
+			sourceCount: 2,
+			sortKey: "2026-11 CP4A.261105.001",
+		} as const;
+		await putProfiles(db, [profile("m-att3", "us_att", [], ["310410|gid1=52"], "modem")]);
+		await putRelease(
+			db,
+			moved,
+			[{ name: "g5400c-next", family: "shannon", devices: ["tokay"], package: null, size: null, kind: null }],
+			[{ device: "tokay", label: "us_att", sha: "m-att3" }],
+		);
+		expect(await carrierModemConfigs(db, "ATT_US")).toEqual([
+			{ ...config("us_att", "m-att3"), release: moved.id, firmware: "g5400c-next" },
+		]);
+	});
+
+	it("names a carrier by a person's label on one of its sources, whatever its id, over the data's name and a model's", async () => {
+		await putProfiles(db, [profile("v1", "Visible", ["us"], ["311480|gid2=1A"])]);
+		await putSource(db, {
+			key: VISIBLE,
+			platform: "ios",
+			kind: "carrier",
+			name: "Verizon_Visible_LTE_US",
+			headSha: "v1",
+			baseSha: null,
+			updated: null,
+		});
+		const linked = (id: string) => ({
+			carriers: [
+				{ id: "ATT_US", name: "AT&T", iso: "us" },
+				{ id: "tmobile_us", name: null, iso: "us" },
+				{ id, name: "Verizon Visible", iso: "us" },
+			],
+			members: {
+				[ATT_IOS]: "ATT_US",
+				[ATT_NR_IOS]: "ATT_US",
+				[ATT_PIXEL]: "ATT_US",
+				[TMO_PIXEL]: "tmobile_us",
+				[VISIBLE]: id,
+			},
+		});
+		await writeLinked(db, linked("visible_us"));
+		await writeLabels(db, [
+			{
+				subject: "carrier",
+				code: "visible_us",
+				field: "name",
+				value: "Visible Wireless",
+				origin: "model",
+				evidence: "https://visible.com",
+			},
+		]);
+		// The seed migration named Visible through its iOS source.
+		expect(await carrierOf(db, "visible_us")).toMatchObject({
+			name: "Visible",
+			updated: null,
+			members: [VISIBLE],
+		});
+		await writeLinked(db, linked("Visible_US"));
+		expect((await carrierOf(db, "Visible_US"))?.name).toBe("Visible");
+		await expect(
+			writeLabels(db, [
+				{
+					subject: "source",
+					code: VISIBLE,
+					field: "carrierName",
+					value: "Visible",
+					origin: "model",
+					evidence: null,
+				},
+			]),
+		).rejects.toThrow();
+	});
+});
+
+/** A session whose batches add up the rows D1 says they wrote, index entries included. */
+function counting(session: D1DatabaseSession): {
+	readonly db: IndexDb;
+	readonly written: () => number;
+	readonly statements: () => number;
+} {
+	let rows = 0;
+	let prepared = 0;
+	const batch = async (statements: D1PreparedStatement[]): Promise<D1Result[]> => {
+		const results = await session.batch(statements);
+		rows += results.reduce((n, r) => n + r.meta.rows_written, 0);
+		return results;
+	};
+	const prepare = (query: string): D1PreparedStatement => {
+		prepared++;
+		return session.prepare(query);
+	};
+	const counted = new Proxy(session, {
+		get: (target, p) => {
+			if (p === "batch") return batch;
+			if (p === "prepare") return prepare;
+			const value: unknown = Reflect.get(target, p);
+			return typeof value === "function" ? value.bind(target) : value;
+		},
+	});
+	return { db: indexDb(counted), written: () => rows, statements: () => prepared };
 }
 
-/** A publish of `index` as D1 holds it at `readAt`, applied. */
-async function publish(readAt: string, iosVersion: string, withPixel: boolean): Promise<Awaited<ReturnType<typeof delta>>> {
-  const live = await liveAt(readAt);
-  const out = await delta(index(iosVersion, withPixel, live), live);
-  await run(out.statements);
-  return out;
-}
-
-describe("publishing the index into D1", () => {
-  it("lands every table, and reads back through the site's queries", async () => {
-    const { changed } = await publish("2026-10-04T10:00:00.000Z", "72.0", true);
-    expect(changed).toEqual(["android:carrier:att_us", "ios:carrier:ATT_US"]);
-    expect((await releaseList(db)).map((r) => r.id)).toEqual(["24A1", "CP3A.1"]);
-    expect((await sourceList(db, "android", "carrier")).map((s) => [s.key, s.carrier.id, s.carrier.members])).toEqual([
-      ["android:carrier:att_us", "ATT_US", ["android:carrier:att_us", "ios:carrier:ATT_US"]],
-    ]);
-    const source = await sourceOf(db, "ios:carrier:ATT_US");
-    expect(source?.timeline.kind === "apple" && source.timeline.main.map((e) => e.slug)).toEqual(["72.0"]);
-    expect(await statesOn(db, "tokay")).toEqual([{ source: "android:carrier:att_us", states: { volte: "no" } }]);
-    expect(await currentPhones(db)).toEqual([
-      { code: "iPhone18,1", name: "iPhone18,1", platform: "ios", has5G: true }, { code: "tokay", name: "tokay", platform: "android", has5G: true },
-    ]);
-    expect((await liveIndex(db)).builtAt).toBe("2026-10-04T10:00:00.000Z");
-    expect((await liveIndex(db)).carriers).toEqual({ "android:carrier:att_us": "ATT_US", "ios:carrier:ATT_US": "ATT_US" });
-  });
-
-  it("writes only what changed, deletes what the new index lacks, and names the sources whose pages that changes", async () => {
-    const { changed } = await publish("2026-10-04T11:00:00.000Z", "72.1", false);
-    expect(changed).toEqual(["android:carrier:att_us", "ios:carrier:ATT_US"]);
-    expect((await releaseList(db)).map((r) => r.id)).toEqual(["24A1"]);
-    expect(await sourceOf(db, "android:carrier:att_us")).toBeUndefined();
-    expect(await statesOn(db, "tokay")).toEqual([]);
-    const source = await sourceOf(db, "ios:carrier:ATT_US");
-    expect(source?.timeline.kind === "apple" && source.timeline.main.map((e) => e.slug)).toEqual(["72.1"]);
-  });
-
-  it("writes nothing but its time when nothing changed", async () => {
-    const live = await liveAt("2026-10-04T12:00:00.000Z");
-    const { statements, changed } = await delta(index("72.1", false, live), live);
-    expect(statements).toHaveLength(1);
-    expect(changed).toEqual([]);
-    await run(statements);
-    expect((await liveIndex(db)).builtAt).toBe("2026-10-04T12:00:00.000Z");
-  });
-
-  it("deletes hundreds of rows within D1's 100 parameters and SQLite's expression depth, composite keys included", async () => {
-    const live = await liveAt("2026-10-04T12:30:00.000Z");
-    const stalePhones = Object.fromEntries(Array.from({ length: 250 }, (_, i) => [JSON.stringify([`device${i}`, "ios:carrier:Gone"]), "h"]));
-    const staleLegacy = Object.fromEntries(Array.from({ length: 250 }, (_, i) => [JSON.stringify([`/gone/${i}`]), "h"]));
-    const { statements } = await delta(index("72.1", false, live), { ...live, hashes: { ...live.hashes, phone_states: stalePhones, legacy: staleLegacy } });
-    expect(statements.length).toBeGreaterThan(5);
-    expect(Math.max(...statements.map((s) => s.params.length))).toBeLessThanOrEqual(100);
-    await run(statements);
-  });
-
-  it("never lets an older publish overwrite a newer one", async () => {
-    const live = await liveAt("2026-10-04T09:00:00.000Z");
-    await run((await delta(index("72.0", true, live), { ...live, hashes: { ...live.hashes, sources: {} } })).statements);
-    const source = await sourceOf(db, "ios:carrier:ATT_US");
-    expect(source?.timeline.kind === "apple" && source.timeline.main.map((e) => e.slug)).toEqual(["72.1"]);
-    expect((await liveIndex(db)).builtAt).toBe("2026-10-04T12:30:00.000Z");
-  });
-
-  it("reads D1 before anything else, so what a later write changes is in the next publish", async () => {
-    const before = new Date().toISOString();
-    const { readAt } = await liveIndex(db);
-    expect(readAt >= before && readAt <= new Date().toISOString()).toBe(true);
-  });
+/** A bundle a point release restamps: 300 leaves and 80 concepts, of which only the version changes. */
+const stamped = (version: string): HeadRows => ({
+	settings: [
+		...Array.from({ length: 300 }, (_, i) => ({
+			file: "carrier.plist",
+			key: `Key${i}`,
+			path: `Key${i}`,
+			value: String(i),
+		})),
+		{ file: "version.plist", key: "BundleVersion", path: "BundleVersion", value: JSON.stringify(version) },
+	],
+	concepts: Array.from({ length: 80 }, (_, i) => ({ concept: `c${i}`, value: '"on"' })),
 });
 
-describe("lookups by many keys", () => {
-  it("finds sources among more keys than D1 binds in one statement", async () => {
-    const keys = [...Array.from({ length: 250 }, (_, i) => `ios:carrier:Gone${i}` as const), "ios:carrier:ATT_US" as const];
-    expect((await listedSources(db, keys)).map((s) => s.key)).toEqual(["ios:carrier:ATT_US"]);
-  });
+describe("head rows", () => {
+	const RESTAMPED: SourceKey = "ios:carrier:Restamped_US";
+
+	it("move with their source's head, rewriting only the leaves that differ", async () => {
+		const { db: measured, written } = counting(d1.withSession());
+		expect(await syncHeadRows(measured, RESTAMPED, stamped("72.0"))).toBe(true);
+		const full = written();
+		expect(await syncHeadRows(measured, RESTAMPED, stamped("72.0"))).toBe(false);
+		expect(written()).toBe(full);
+		expect(await syncHeadRows(measured, RESTAMPED, stamped("72.0.1"))).toBe(true);
+		const moved = written() - full;
+		// The first head writes every row with its key entry (and a leaf its settings_by_path entry); the move, one leaf deleted and written again.
+		expect({ full, moved }).toEqual({ full: 301 * 3 + 80 * 2, moved: 4 });
+		const held = await d1
+			.prepare("SELECT value FROM settings WHERE source = ? AND file = 'version.plist'")
+			.bind(RESTAMPED)
+			.all<{ value: string }>();
+		expect(held.results).toEqual([{ value: '"72.0.1"' }]);
+		expect(await syncHeadRows(measured, RESTAMPED, { settings: [], concepts: [] })).toBe(true);
+		expect(
+			await d1.prepare("SELECT count(*) AS n FROM settings WHERE source = ?").bind(RESTAMPED).first("n"),
+		).toBe(0);
+	});
+	it("writes an iOS-sized head (9,075 leaves, as Verizon's) in a few statements, as D1 counts each toward 1,000 an invocation", async () => {
+		const { db: measured, statements } = counting(d1.withSession());
+		const big: HeadRows = {
+			settings: Array.from({ length: 9075 }, (_, i) => ({
+				file: `overrides_N${i % 40}.plist`,
+				key: `Apns[${i}].Name`,
+				path: "Apns[*].Name",
+				value: JSON.stringify(`apn ${"x".repeat(100)} ${i}`),
+			})),
+			concepts: Array.from({ length: 94 }, (_, i) => ({ concept: `c${i}`, value: "null" })),
+		};
+		expect(await syncHeadRows(measured, "ios:carrier:Big_US", big)).toBe(true);
+		expect(statements()).toBeLessThanOrEqual(8);
+		expect(
+			await d1
+				.prepare("SELECT count(*) AS n FROM settings WHERE source = ?")
+				.bind("ios:carrier:Big_US")
+				.first("n"),
+		).toBe(9075);
+		expect(await syncHeadRows(measured, "ios:carrier:Big_US", big)).toBe(false);
+		await syncHeadRows(db, "ios:carrier:Big_US", { settings: [], concepts: [] });
+	});
 });
 
-describe("labels", () => {
-  const name = (subject: Label["subject"], code: string, value: string, origin: Label["origin"]): Label =>
-    ({ subject, code, field: "name", value, origin, evidence: origin === "human" ? null : "https://example.com" });
+describe("scans over heads", () => {
+	it("read what each head of a group holds at a path or for a concept", async () => {
+		// Every head of the group with its version; Visible's head holds no carrier.plist leaf there, and has no entries.
+		expect(
+			await scanSetting(db, { platform: "ios", kind: "carrier" }, "carrier.plist", "SupportsVoLTE"),
+		).toEqual([
+			{ source: ATT_NR_IOS, version: "1.0", held: "own", leaves: [{ key: "SupportsVoLTE", value: "true" }] },
+			{ source: ATT_IOS, version: "72.1", held: "own", leaves: [{ key: "SupportsVoLTE", value: "true" }] },
+			{ source: VISIBLE, version: null, held: "absent", leaves: [] },
+		]);
+		expect(await scanConcept(db, { platform: "ios", kind: "country" }, "volte", "iPhone19,1")).toEqual([
+			{ source: FRANCE, value: '"no"', defaulted: null },
+		]);
+	});
 
-  it("are written over by the same or a more trusted origin only: for a name, a feed's, then a person's, then the model's", async () => {
-    expect(await unnamed(db, "carrier")).toEqual(["ATT_US"]);
-    await writeLabels(db, [name("carrier", "ATT_US", "AT and T", "model")], "t1");
-    await writeLabels(db, [name("carrier", "ATT_US", "AT&T", "human")], "t2");
-    await writeLabels(db, [name("carrier", "ATT_US", "ATT?", "model")], "t3");
-    expect((await liveIndex(db)).labels.filter((l) => l.code === "ATT_US").map((l) => [l.value, l.origin])).toEqual([["AT&T", "human"]]);
-    expect(await unnamed(db, "carrier")).toEqual([]);
-  });
+	it("read a key a head leaves unset from the default.pb its own build ships under it", async () => {
+		const base = (sha: string, rows: ReadonlyArray<readonly [key: string, value: string]>) =>
+			putBaseRows(
+				db,
+				sha,
+				rows.map(([key, value]) => ({ file: "carrier.plist", key, path: key, value })),
+			);
+		expect(
+			await base("d1", [
+				["MaxDataRate", "5"],
+				["SupportsVoLTE", "false"],
+			]),
+		).toBe(true);
+		expect(
+			await base("d1", [
+				["MaxDataRate", "5"],
+				["SupportsVoLTE", "false"],
+			]),
+		).toBe(false);
+		await base("d2", [["MaxDataRate", "7"]]);
+		await putSource(db, { ...head(ATT_PIXEL, "a1", "2026-09-02"), baseSha: "d1" });
+		await putSource(db, { ...head(TMO_PIXEL, "t1", "2026-09-02"), baseSha: "d2" });
+		const group = { platform: "android", kind: "carrier" } as const;
+		// Each reads its own build's default.pb, not one newest for all.
+		expect(
+			(await scanSetting(db, group, "carrier.plist", "MaxDataRate")).map((s) => [s.source, s.held, s.leaves]),
+		).toEqual([
+			[ATT_PIXEL, "default", [{ key: "MaxDataRate", value: "5" }]],
+			[TMO_PIXEL, "default", [{ key: "MaxDataRate", value: "7" }]],
+		]);
+		// A key the head sets is its own, whatever its default.pb says.
+		expect(
+			(await scanSetting(db, group, "carrier.plist", "SupportsVoLTE")).map((s) => [
+				s.source,
+				s.held,
+				s.leaves,
+			]),
+		).toEqual([
+			[ATT_PIXEL, "own", [{ key: "SupportsVoLTE", value: "true" }]],
+			[TMO_PIXEL, "own", [{ key: "SupportsVoLTE", value: "false" }]],
+		]);
+	});
 
-  it("refuse a value that does not fit its field, or an origin it does not take", async () => {
-    await expect(writeLabels(db, [{ subject: "device", code: "tokay", field: "released", value: "August", origin: "human", evidence: null }], "t")).rejects.toThrow();
-    await expect(writeLabels(db, [{ subject: "device", code: "tokay", field: "released", value: "2024-08", origin: "model", evidence: null }], "t")).rejects.toThrow();
-    await expect(writeLabels(db, [name("device", "tokay", " Pixel 9", "feed")], "t")).rejects.toThrow();
-  });
+	it("read a per-phone concept from the given phone's states, not the head, with the layer a default came from", async () => {
+		await syncPhoneStates(db, ATT_PIXEL, [
+			{
+				device: "tokay",
+				states: { volte: "available", "5g": "on" },
+				defaults: { "5g": { layer: "default.pb", part: "all" } },
+			},
+			{ device: "bluejay", states: { volte: "on", "5g": "no" }, defaults: {} },
+		]);
+		const group = { platform: "android", kind: "carrier" } as const;
+		// AT&T's head says VoLTE is on; on tokay it reads "available". T-Mobile's states name no 5G.
+		expect(await scanConcept(db, group, "volte", "tokay")).toEqual([
+			{ source: ATT_PIXEL, value: '"available"', defaulted: null },
+			{ source: TMO_PIXEL, value: '"no"', defaulted: null },
+		]);
+		expect(await scanConcept(db, group, "5g", "tokay")).toEqual([
+			{ source: ATT_PIXEL, value: '"on"', defaulted: '{"layer":"default.pb","part":"all"}' },
+			{ source: TMO_PIXEL, value: "null", defaulted: null },
+		]);
+		// T-Mobile ships nothing bluejay reads.
+		expect(await scanConcept(db, group, "5g", "bluejay")).toEqual([
+			{ source: ATT_PIXEL, value: '"no"', defaulted: null },
+		]);
+	});
 
-  it("let a person's release day stand over a feed's", async () => {
-    await writeLabels(db, [{ subject: "device", code: "bluejay", field: "released", value: "2022-04", origin: "human", evidence: null }], "t1");
-    await writeLabels(db, [{ subject: "device", code: "bluejay", field: "released", value: "2025-07", origin: "feed", evidence: "https://example.com" }], "t2");
-    expect((await liveIndex(db)).labels.filter((l) => l.code === "bluejay").map((l) => [l.field, l.value, l.origin])).toContainEqual(["released", "2022-04", "human"]);
-  });
+	it("finds a rare key and a rare value among 60 heads, ignoring older contents", async () => {
+		const heads = Array.from({ length: 60 }, (_, i): HeadRows => ({
+			concepts: [],
+			settings: [
+				{
+					file: "config",
+					key: "carrier_volte_available_bool",
+					path: "carrier_volte_available_bool",
+					value: "true",
+				},
+				{
+					file: "config",
+					key: "carrier_nr_availabilities_int_array",
+					path: "carrier_nr_availabilities_int_array",
+					value: i < 3 ? "[1]" : "[1,2]",
+				},
+				{ file: "config", key: "apns[0].apn", path: "apns[*].apn", value: JSON.stringify(`mvno${i}.apn`) },
+				...(i < 2
+					? [{ file: "config", key: "carrier_rare_key_bool", path: "carrier_rare_key_bool", value: "true" }]
+					: []),
+			],
+		}));
+		// An older head of mvno03 held the rare value too; only the current heads count.
+		await syncHeadRows(db, mvno(3), {
+			concepts: [],
+			settings: [
+				{
+					file: "config",
+					key: "carrier_nr_availabilities_int_array",
+					path: "carrier_nr_availabilities_int_array",
+					value: "[1]",
+				},
+			],
+		});
+		for (const [i, rows] of heads.entries()) {
+			await putSource(db, {
+				key: mvno(i),
+				platform: "android",
+				kind: "carrier",
+				name: `mvno${i}_us`,
+				headSha: `r${i}`,
+				baseSha: null,
+				updated: "2026-09-02",
+			});
+			await syncHeadRows(db, mvno(i), rows);
+		}
 
-  it("from a feed are written only where they changed", async () => {
-    const listed = [{ code: "iPhone18,1", value: "iPhone 17 Pro" }, { code: "tokay", value: "Pixel 9" }];
-    expect(await syncLabels(db, "device", "name", listed, "https://api.ipsw.me", "t4")).toBe(2);
-    expect(await syncLabels(db, "device", "name", listed, "https://api.ipsw.me", "t5")).toBe(0);
-    expect(await unnamed(db, "device")).toEqual([]);
-  });
+		const group = { platform: "android", kind: "carrier" } as const;
+		// ATT_PIXEL and TMO_PIXEL have no config file, so they are not in the group's 60.
+		expect(await rareSettings(db, mvno(0), group, CONFIG, RARITY)).toEqual([
+			{ rare: "key", path: "carrier_rare_key_bool", value: "true", holders: 2, of: 60, with: [mvno(1)] },
+			{
+				rare: "value",
+				path: "carrier_nr_availabilities_int_array",
+				value: "[1]",
+				holders: 3,
+				of: 60,
+				with: [mvno(1), mvno(2)],
+			},
+		]);
+		expect(await rareSettings(db, mvno(10), group, CONFIG, RARITY)).toEqual([]);
+		// A key that only identifies the source is never rare.
+		expect(
+			await rareSettings(db, mvno(0), group, { file: "config", identity: ["carrier_rare_key_bool"] }, RARITY),
+		).toEqual([
+			{
+				rare: "value",
+				path: "carrier_nr_availabilities_int_array",
+				value: "[1]",
+				holders: 3,
+				of: 60,
+				with: [mvno(1), mvno(2)],
+			},
+		]);
+		expect(await rareSettings(db, mvno(0), group, CONFIG, { ...RARITY, minGroupForRareKey: 61 })).toEqual([
+			{
+				rare: "value",
+				path: "carrier_nr_availabilities_int_array",
+				value: "[1]",
+				holders: 3,
+				of: 60,
+				with: [mvno(1), mvno(2)],
+			},
+		]);
+	});
 
-  it("reach pages only through a publish, which names carriers in their rows and codes in `names`, and changes every page when a name does", async () => {
-    expect((await sourceList(db, "ios", "carrier"))[0]?.carrier.name).toBe("ATT_US");
-    expect(await namesOf(db, "device", ["iPhone18,1"])).toEqual(new Map());
-    const { changed } = await publish("2026-10-04T13:00:00.000Z", "72.1", false);
-    expect(changed).toBe("everything");
-    expect((await sourceList(db, "ios", "carrier"))[0]?.carrier.name).toBe("AT&T");
-    expect(await namesOf(db, "device", ["iPhone18,1", "tokay", "nothing"])).toEqual(new Map([["iPhone18,1", "iPhone 17 Pro"], ["tokay", "Pixel 9"]]));
-    expect(await codeNamed(db, "device", "Pixel 9")).toBe("tokay");
-    expect(await currentPhones(db)).toEqual([{ code: "iPhone18,1", name: "iPhone 17 Pro", platform: "ios", has5G: true }]);
-  });
-
-  it("change only the carrier's pages when only a carrier's name changes", async () => {
-    await writeLabels(db, [name("carrier", "ATT_US", "AT&T Mobility", "human")], "t6");
-    const { changed } = await publish("2026-10-04T14:00:00.000Z", "72.1", false);
-    expect(changed).toEqual(["ios:carrier:ATT_US"]);
-  });
-});
-
-describe("devices", () => {
-  const tokay = (released: string, evidence = "https://example.com/feed"): ListedDevice => ({ code: "tokay", family: "android", released, boards: [], evidence });
-  const iphone: ListedDevice = { code: "iPhone18,1", family: "apple", released: "2025-09-19", boards: ["V53AP"], evidence: "https://example.com/appledb" };
-  const held = async (): Promise<Array<{ code: string; released: string; boards: readonly string[] }>> =>
-    (await deviceRecords(db)).map(({ code, released, boards }) => ({ code, released, boards })).sort((a, b) => a.code.localeCompare(b.code));
-  const evidence = async (code: string): Promise<unknown> => (await d1.prepare("SELECT evidence FROM devices WHERE code = ?").bind(code).first())?.["evidence"];
-
-  it("start empty: the feeds fill them", async () => {
-    expect(await held()).toEqual([]);
-  });
-
-  it("keep a device's earliest release and the page that gave it, and rewrite only what changed", async () => {
-    expect(await syncDevices(db, [tokay("2024-08"), iphone], "t1")).toBe(2);
-    expect(await syncDevices(db, [tokay("2025-01", "https://example.com/later"), iphone], "t2")).toBe(0);
-    expect(await syncDevices(db, [tokay("2024-07", "https://example.com/earlier"), { ...iphone, boards: ["V53AP", "V53DEV"] }], "t3")).toBe(2);
-    expect(await held()).toEqual([{ code: "iPhone18,1", released: "2025-09-19", boards: ["V53AP", "V53DEV"] }, { code: "tokay", released: "2024-07", boards: [] }]);
-    expect(await evidence("tokay")).toBe("https://example.com/earlier");
-    expect((await liveIndex(db)).devices.find((d) => d.code === "tokay")?.released).toBe("2024-07");
-  });
-});
-
-describe("migrations", () => {
-  it("carry the labels the earlier ones held over as names, and add the two Pixel release days", async () => {
-    const upgrade = proxy.env.UPGRADE;
-    const reshaped = migrations.findIndex((m) => m.endsWith("_labels_generic"));
-    await migrate(upgrade, migrations.slice(0, reshaped));
-    await upgrade.prepare("INSERT INTO labels (kind, code, text, origin, evidence, updated) VALUES (?, ?, ?, ?, ?, ?), (?, ?, ?, ?, ?, ?)")
-      .bind("device", "tokay", "Pixel 9", "feed", "https://developers.google.com/android/ota", "t", "carrier", "ATT_US", "AT&T", "model", "https://example.com", "t").run();
-    await migrate(upgrade, migrations.slice(reshaped));
-    const rows = await upgrade.prepare("SELECT subject, code, field, value, origin, evidence FROM labels ORDER BY subject, code, field").all();
-    expect(rows.results).toEqual([
-      { subject: "carrier", code: "ATT_US", field: "name", value: "AT&T", origin: "model", evidence: "https://example.com" },
-      { subject: "device", code: "bluejay", field: "released", value: "2022-04", origin: "human", evidence: expect.stringContaining("source.android.com") },
-      { subject: "device", code: "sunfish", field: "released", value: "2020-05", origin: "human", evidence: expect.stringContaining("source.android.com") },
-      { subject: "device", code: "tokay", field: "name", value: "Pixel 9", origin: "feed", evidence: "https://developers.google.com/android/ota" },
-      { subject: "modem", code: "Mav24", field: "name", value: "Qualcomm X71M", origin: "human", evidence: expect.stringContaining("TechInsights") },
-      { subject: "modem", code: "Mav25", field: "name", value: "Qualcomm X80", origin: "human", evidence: null },
-    ]);
-    const tables = await upgrade.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name IN ('phone_radios', 'phones', 'names') ORDER BY name").all();
-    expect(tables.results).toEqual([{ name: "names" }, { name: "phones" }]);
-  });
-});
-
-describe("pages", () => {
-  const carrier = (name: string, mccmnc: string, sha: string): Profile => ({ ...profile({ platform: "ios", kind: "carrier", name }, sha, "on"), identity: { iso: ["us"], sims: [{ mccmnc }] } });
-  const profiles = new Map([["p1", carrier("ATT_US", "310410", "p1")], ["p2", carrier("TMobile_US", "310260", "p2")], ["p3", carrier("Verizon_US", "311480", "p3")]]);
-  const releases: Release[] = [
-    { platform: "ios", id: "24B1", version: "27.1", label: "27.1", prerelease: false, devices: ["iPhone18,1"], extractedAt: "x", released: "2026-10-01", modems: [],
-      sources: { "ios:carrier:ATT_US": { sha: "p1", cid: "c1", version: "1", size: 1 }, "ios:carrier:TMobile_US": { sha: "p2", cid: "c2", version: "1", size: 1 }, "ios:carrier:Verizon_US": { sha: "p3", cid: "c3", version: "1", size: 1 } } },
-    { platform: "ios", id: "24A1", version: "27.0", label: "27.0", prerelease: false, devices: ["iPhone18,1"], extractedAt: "x", released: "2026-09-15", modems: [],
-      sources: { "ios:carrier:ATT_US": { sha: "p1", cid: "c1", version: "1", size: 1 } } },
-  ];
-
-  beforeAll(async () => {
-    const live = await liveAt("2026-10-04T13:00:00.000Z");
-    const index = buildIndexes({
-      releases, otaFiles: [], devices: live.devices, labels: live.labels, profiles: (s) => { const p = profiles.get(s); return p && indexProfile(p); }, manifestSims: {},
-      modemConfigs: () => undefined, carrierIds: {},
-    });
-    await run((await delta(indexRows(index), live)).statements);
-  });
-
-  it("resume each list after the last key read, in the index's order", async () => {
-    const names = async (after: string | null): Promise<string[]> => (await sourcesAfter(db, "ios", "carrier", { after, take: 2 })).map((s) => s.name);
-    expect(await names(null)).toEqual(["ATT_US", "TMobile_US"]);
-    expect(await names("TMobile_US")).toEqual(["Verizon_US"]);
-    expect((await carriersAfter(db, { after: "ATT_US", take: 5 })).map((c) => c.id)).toEqual(["TMobile_US", "Verizon_US"]);
-    expect((await countriesAfter(db, { after: null, take: 5 })).map((c) => c.iso)).toEqual(["us"]);
-    const [newest, ...older] = await releasesAfter(db, "ios", { after: null, take: 5 });
-    expect([newest?.summary.id, ...older.map((r) => r.summary.id)]).toEqual(["24B1", "24A1"]);
-    expect((await releasesAfter(db, "ios", { after: newest?.sort ?? -1, take: 5 })).map((r) => r.summary.id)).toEqual(["24A1"]);
-    expect((await changesAfter(db, "ios", "24B1", { after: "ios:carrier:ATT_US", take: 5 })).map((c) => [c.source, c.kind]))
-      .toEqual([["ios:carrier:TMobile_US", "added"], ["ios:carrier:Verizon_US", "added"]]);
-    expect((await statesAfter(db, "iPhone18,1", { after: null, take: 1 })).map((s) => s.source)).toEqual(["ios:carrier:ATT_US"]);
-    expect(await phonesAfter(db, "ios", { after: null, take: 5 })).toEqual([{ code: "iPhone18,1", name: "iPhone 17 Pro", platform: "ios", has5G: true }]);
-    expect(await phonesAfter(db, "android", { after: null, take: 5 })).toEqual([]);
-  });
-
-  it("look one up by its key", async () => {
-    expect((await carrierOf(db, "Verizon_US"))?.carrier.members).toEqual(["ios:carrier:Verizon_US"]);
-    expect(await carrierOf(db, "Nope")).toBeUndefined();
-    expect((await countryOf(db, "us"))?.carriers).toEqual(["ATT_US", "TMobile_US", "Verizon_US"]);
-    expect((await releaseOf(db, "ios", "24A1"))?.version).toBe("27.0");
-    expect(await releaseOf(db, "android", "24A1")).toBeUndefined();
-    expect((await phoneOf(db, "iPhone18,1"))?.platform).toBe("ios");
-  });
+	it("plans rarity on indexes", async () => {
+		const query = new SQLiteDialect().sqlToQuery(
+			rarityQuery(mvno(0), { platform: "android", kind: "carrier" }, CONFIG, RARITY),
+		);
+		const plan = await d1
+			.prepare(`EXPLAIN QUERY PLAN ${query.sql}`)
+			.bind(...query.params)
+			.all<{ detail: string }>();
+		const details = plan.results.map((r) => r.detail);
+		// Tables are only ever searched: the group by sources_by_list; the holders of a path by settings_by_path; one source's file by its key.
+		expect(details.filter((d) => /^SCAN (sources|s)\b/.test(d))).toEqual([]);
+		expect(
+			details
+				.filter((d) => d.startsWith("SEARCH sources USING"))
+				.every((d) => /sources_by_list|sqlite_autoindex_sources_1/.test(d)),
+		).toBe(true);
+		expect(details.filter((d) => d.startsWith("SEARCH s ")).toSorted()).toEqual([
+			"SEARCH s EXISTS USING COVERING INDEX sqlite_autoindex_settings_1 (source=? AND file=?)",
+			"SEARCH s USING COVERING INDEX settings_by_path (file=? AND path=?)",
+			"SEARCH s USING INDEX sqlite_autoindex_settings_1 (source=?)",
+			// A rare key's own values, by the source's key.
+			"SEARCH s USING INDEX sqlite_autoindex_settings_1 (source=?)",
+		]);
+	});
 });

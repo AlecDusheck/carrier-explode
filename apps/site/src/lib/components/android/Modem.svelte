@@ -15,8 +15,8 @@
   <p class="note">
     <b class="mono">{modem.label}</b>
     <span class="dimtext">
-      in the {modem.family.name} <a href={modemHref("android", modem.release, firmware)}>modem firmware</a> of {modem.release}{#if config.base}, on its
-        <a href={configHref(modem.release, firmware, config.base)}>base layers</a>{/if}.
+      in the {modem.familyName} <a href={modemHref("android", modem.release, firmware)}>modem firmware</a> of {modem.release}{#if config.base}, on its
+        <a href={configHref("android", modem.release, firmware, config.base)}>base layers</a>{/if}.
     </span>
   </p>
   <ModemConfigView {config} />

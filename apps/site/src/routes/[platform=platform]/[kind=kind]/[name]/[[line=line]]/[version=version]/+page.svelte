@@ -10,5 +10,5 @@
 </script>
 
 <div class="scroll pad">
-  <Pane><Overview {at} path="" /></Pane>
+  <Pane awaiting={{ kind: "decode", name: at.ref.name }}><Overview {at} path="" /></Pane>
 </div>

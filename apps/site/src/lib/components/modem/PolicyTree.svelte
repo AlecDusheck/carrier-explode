@@ -1,5 +1,6 @@
 <script lang="ts">
   import { parsePolicyXml, walkPolicy } from "@carrier-explode/decode-qualcomm";
+  import { treeKeys } from "#lib/keys.ts";
   import PolicyItem from "./PolicyItem.svelte";
 
   let { xml }: { xml: string } = $props();
@@ -16,8 +17,8 @@
     · <span class="underline-doc">underlined</span> names explain themselves
   </span>
 </div>
-<div class="tree box">
-  {#each nodes as n, i (i)}
+<div class="tree box" {@attach treeKeys}>
+  {#each nodes as n (n)}
     {#if comments || n.kind !== "comment"}<PolicyItem node={n} {comments} />{/if}
   {/each}
 </div>

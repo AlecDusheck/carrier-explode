@@ -18,7 +18,7 @@
 
       <Pane>
         {@const phones = await getFeaturePhones()}
-        {@const phone = await getFeaturePhone(page.url.searchParams.get("phone") ?? undefined)}
+        {@const phone = await getFeaturePhone({ phone: page.url.searchParams.get("phone") ?? undefined })}
         <FeaturePhonePicker {phones} {phone} />
 
         {@const summary = phone ? await getFeatureSummary(phone.code) : null}

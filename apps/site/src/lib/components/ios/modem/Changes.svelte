@@ -25,7 +25,7 @@
       <div class="filters">
         <BuildPicker label="Compare against" builds={others} current={against} href={(b) => withParams(page.url, { against: b.id === previous ? null : b.id })} />
       </div>
-      <Pane>
+      <Pane awaiting={{ kind: "diff", name: modem }}>
         {@const d = await getBasebandDiff({ a: against, b: build, family: modem })}
         <p class="dimtext note">{d.counts.changed} changed, {d.counts.added} added, {d.counts.removed} removed.</p>
         <BasebandDiff parts={d.parts} />

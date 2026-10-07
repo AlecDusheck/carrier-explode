@@ -6,38 +6,50 @@ import type { Ver } from "#lib/types.ts";
 import * as android from "./android/settings";
 import * as apple from "./apple/bundle";
 import * as cross from "./cross";
+import * as samsung from "./samsung/pack";
 
 /** A version, and the variant of it one phone sees: on Apple, that phone's override file. */
 export interface Side extends Ver {
-  readonly variant?: string;
+	readonly variant?: string;
 }
 
 interface Natives {
-  readonly apple: apple.NativeComparison;
-  readonly android: android.AndroidChanges;
+	readonly apple: apple.NativeComparison;
+	readonly android: android.AndroidChanges;
+	readonly samsung: samsung.SamsungChanges;
 }
 
-export type NativeComparison<F extends DecoderFamily = DecoderFamily> = { [K in F]: { readonly by: "native"; readonly family: K } & Natives[K] }[F];
+export type NativeComparison<F extends DecoderFamily = DecoderFamily> = {
+	[K in F]: { readonly by: "native"; readonly family: K } & Natives[K];
+}[F];
 
 export type Comparison = NativeComparison | ({ readonly by: "concepts" } & cross.CrossComparison);
 
 /** Each family's own diff; without `a`, `b` against the version before it. */
-const NATIVE: { readonly [F in DecoderFamily]: (a: Side | null, b: Side, path: string | undefined) => Promise<Natives[F]> } = {
-  apple: apple.getComparison,
-  android: (a, b) => (a === null ? android.getAndroidChanges(b) : android.getAndroidComparison(a, b)),
+const NATIVE: {
+	readonly [F in DecoderFamily]: (a: Side | null, b: Side, path: string | undefined) => Promise<Natives[F]>;
+} = {
+	apple: apple.getComparison,
+	android: (a, b) => (a === null ? android.getAndroidChanges(b) : android.getAndroidComparison(a, b)),
+	samsung: (a, b) => (a === null ? samsung.getSamsungChanges(b) : samsung.getSamsungComparison(a, b)),
 };
 
 function familyOf(s: Side): DecoderFamily {
-  const ref = parseSourceKey(s.source);
-  if (!ref) error(400, `Not a source key: ${s.source}`);
-  return decoderFamily(ref.platform);
+	const ref = parseSourceKey(s.source);
+	if (!ref) error(400, `Not a source key: ${s.source}`);
+	return decoderFamily(ref.platform);
 }
 
-const native = async <F extends DecoderFamily>(family: F, a: Side | null, b: Side, path: string | undefined): Promise<NativeComparison<F>> =>
-  ({ by: "native", family, ...(await NATIVE[family](a, b, path)) });
+const native = async <F extends DecoderFamily>(
+	family: F,
+	a: Side | null,
+	b: Side,
+	path: string | undefined,
+): Promise<NativeComparison<F>> => ({ by: "native", family, ...(await NATIVE[family](a, b, path)) });
 
 export async function getComparison(a: Side | null, b: Side, path?: string): Promise<Comparison> {
-  const family = familyOf(b);
-  if (a !== null && familyOf(a) !== family) return { by: "concepts", ...(await cross.getCrossComparison(a, b)) };
-  return native(family, a, b, path);
+	const family = familyOf(b);
+	if (a !== null && familyOf(a) !== family)
+		return { by: "concepts", ...(await cross.getCrossComparison(a, b)) };
+	return native(family, a, b, path);
 }

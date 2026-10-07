@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { DiffRow } from "@carrier-explode/values";
-  import { DIFF_CHIP, shortValue } from "#lib/format.ts";
+  import { shortValue } from "#lib/format.ts";
 
   let { rows, head = "Key path", left = "Before", right = "After", lines = false, anchor }: {
     rows: readonly DiffRow[];
@@ -17,6 +17,7 @@
   const MAX = 300;
   const at = (path: string) => (lines ? path.replace(/^\[(\d+)\]$/, (_, n) => `line ${Number(n) + 1}`) : path) || "(whole)";
   // Digests arrive as raw byte strings; printing them is noise, that they differ is the fact.
+  // oxlint-disable-next-line eslint/no-control-regex -- control characters are how a raw byte string is told apart.
   const binary = (v: unknown): v is string => typeof v === "string" && /[\u0000-\u0008\u000e-\u001f\u007f-\u009f]/.test(v);
   const full = (v: unknown) => (typeof v === "string" ? v : JSON.stringify(v, null, 2));
 </script>
@@ -47,7 +48,7 @@
         {@const id = anchor && `${anchor}--${r.path.replace(/[^\w.-]/g, "_")}`}
         <tr {id}>
           <td class="mono at">
-            <span class="chip {DIFF_CHIP[r.kind]}" title={r.kind}>{r.kind[0]}</span>{#if id}<a href="#{id}" class="row-link">{at(r.path)}</a>{:else}{at(r.path)}{/if}
+            {#if id}<a href="#{id}" class="row-link">{at(r.path)}</a>{:else}{at(r.path)}{/if}
           </td>
           <td class="mono">{@render value(r.a, r.kind !== "added")}</td>
           <td class="mono">{@render value(r.b, r.kind !== "removed")}</td>

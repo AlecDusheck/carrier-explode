@@ -1,86 +1,278 @@
 {
-  "$schema": "./node_modules/wrangler/config-schema.json",
-  // The extractor: a Workflow instance per unit of work, each job a Cloudflare Container that
-  // reads and writes R2 over its S3 API. The only writer of the v2 bucket.
-  "name": "carrier-explode-v2-extractor",
-  "main": "src/index.ts",
-  "compatibility_date": "2026-09-01",
-  "compatibility_flags": ["nodejs_compat"],
-  "observability": { "enabled": true },
-  // No public routes: /run, /runs and /jobs are bearer-authed on the workers.dev URL.
-  "workers_dev": true,
+	"$schema": "./node_modules/wrangler/config-schema.json",
+	// Two environments, dev and production, each declaring every binding, var and trigger it uses: wrangler does not inherit
+	// them. Worker and Workflow names are account-wide, so dev's end in `-dev` (test/tables.test.ts checks).
+	"name": "carrier-explode-extractor",
+	"main": "src/index.ts",
+	"compatibility_date": "2026-09-01",
+	// global_fetch_strictly_public: a purge reaches the readers, which are Workers on this account (or zone), only
+	// through the public front door.
+	"compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
+	"observability": { "enabled": true },
+	// FUS's auth tables (src/galaxy/auth-param.dat), imported as an ArrayBuffer; the dataset's README and LICENSE, as text.
+	"rules": [
+		{ "type": "Data", "globs": ["**/*.dat"] },
+		{ "type": "Text", "globs": ["**/*.md", "**/*.txt"] },
+	],
+	// Workers' maximum CPU: an extract step streams a firmware member, and an index message reads a build's profiles.
+	// Both count per invocation, which runs many Workflow steps: an Apple OTA unit's file steps make about seven
+	// subrequests each, past the default 10,000.
+	"limits": { "cpu_ms": 300000, "subrequests": 100000 },
+	// No public routes: /run and /runs are bearer-authed on the workers.dev URL.
+	"workers_dev": true,
+	// Declarative Durable Object classes, instead of `migrations`. Containers need SQLite storage.
+	"exports": {
+		"Extractor": { "type": "durable-object", "storage": "sqlite" },
+	},
 
-  "r2_buckets": [{ "binding": "BUCKET", "bucket_name": "carrier-explode-data" }],
-  // The index the site reads (packages/db), which publishes write. Its migrations are packages/db's, applied by hand.
-  "d1_databases": [{ "binding": "DB", "database_name": "carrier-explode-v2", "database_id": "a0c212c0-c6e0-4b54-af0e-9d454ea47d55" }],
+	"env": {
+		"dev": {
+			"name": "carrier-explode-extractor-dev",
+			"r2_buckets": [{ "binding": "BUCKET", "bucket_name": "carrier-explode-ingest-dev" }],
+			"d1_databases": [
+				{
+					"binding": "DB",
+					"database_name": "carrier-explode-index-dev",
+					"database_id": "ae71cafc-0b64-4b70-9dce-a4c0c6eaa12f",
+					"migrations_dir": "../../packages/db/migrations",
+					"migrations_pattern": "../../packages/db/migrations/*/migration.sql",
+				},
+			],
+			"containers": [
+				{
+					"class_name": "Extractor",
+					"image": "./container/Dockerfile",
+					"image_build_context": "../..",
+					"instance_type": { "vcpu": 1, "memory_mib": 3072, "disk_mb": 20000 },
+					// One past the sum of CONTAINER_SHARE, as in production.
+					"max_instances": 3,
+				},
+			],
+			"durable_objects": { "bindings": [{ "name": "EXTRACTOR", "class_name": "Extractor" }] },
+			"queues": {
+				"producers": [
+					{ "binding": "INDEX_QUEUE", "queue": "carrier-explode-index-dev" },
+					{ "binding": "PURGE_QUEUE", "queue": "carrier-explode-purge-dev" },
+				],
+				"consumers": [
+					// One message at a time: indexing reads and writes rows other units share. A message is tried 10 times, 5 minutes
+					// apart, so a D1 hiccup or a norm/ object a running reindex has yet to write passes; then it waits in the
+					// dead-letter queue, its error in the Workers Logs.
+					{
+						"queue": "carrier-explode-index-dev",
+						"max_batch_size": 1,
+						"max_concurrency": 1,
+						"max_retries": 10,
+						"retry_delay": 300,
+						"dead_letter_queue": "carrier-explode-index-dlq-dev",
+					},
+					// A batch (100 messages or 30 s) is one purge per reader, one batch at a time: the readers' cache purges share the
+					// account's bucket of 25, refilled 5 a minute. A refused purge retries the batch a minute later; one refused 10
+					// times waits in the dead-letter queue.
+					{
+						"queue": "carrier-explode-purge-dev",
+						"max_batch_size": 100,
+						"max_batch_timeout": 30,
+						"max_concurrency": 1,
+						"max_retries": 10,
+						"retry_delay": 60,
+						"dead_letter_queue": "carrier-explode-purge-dlq-dev",
+					},
+				],
+			},
+			"workflows": [
+				{ "binding": "IOS_BUILD", "name": "carrier-explode-ios-build-dev", "class_name": "IosBuildWorkflow" },
+				{ "binding": "APPLE_OTA", "name": "carrier-explode-apple-ota-dev", "class_name": "AppleOtaWorkflow" },
+				{
+					"binding": "PIXEL_DEVICE",
+					"name": "carrier-explode-pixel-device-dev",
+					"class_name": "PixelDeviceWorkflow",
+				},
+				{ "binding": "PIXEL_OTA", "name": "carrier-explode-pixel-ota-dev", "class_name": "PixelOtaWorkflow" },
+				{
+					"binding": "GALAXY_BUILD",
+					"name": "carrier-explode-galaxy-build-dev",
+					"class_name": "GalaxyBuildWorkflow",
+				},
+				// A reindex of all normalizes every held artifact, a step per 100 settings files or 10 modem configurations:
+				// production's backfill is up to about 5,300 steps.
+				{
+					"binding": "REINDEX",
+					"name": "carrier-explode-reindex-dev",
+					"class_name": "ReindexWorkflow",
+					"limits": { "steps": 25000 },
+				},
+				{ "binding": "DATASET", "name": "carrier-explode-dataset-dev", "class_name": "DatasetWorkflow" },
+			],
+			"services": [{ "binding": "API", "service": "carrier-explode-api-dev" }],
+			// No AI binding, so no labels Workflow and no LABELLER: Workers AI has no local simulator.
+			// Checks run only by hand: POST /run, or /__scheduled with --test-scheduled.
+			"triggers": { "crons": [] },
+			"vars": {
+				// A rehearsal of production's order at medium scope: two phones a family, every build since a recent day, and
+				// Apple OTA files for its own phones only.
+				"SCOPE": {
+					"ios": {
+						"devices": { "codes": ["iPhone18,1", "iPhone17,1"] },
+						"everythingSince": "2026-09-28",
+						"backfill": "newest",
+						"minMajor": 18,
+					},
+					"android": {
+						"devices": { "codes": ["frankel", "komodo"] },
+						"everythingSince": "2026-08-01",
+						"backfill": "newest",
+					},
+					"samsung": {
+						"families": ["Galaxy S"],
+						"exclude": [" FE", " Ultra"],
+						"releasedSince": "2026-01",
+						"majors": 1,
+						"builds": 2,
+					},
+					"appleOta": {
+						"ios": { "majors": 1, "phones": ["iPhone18,1", "iPhone17,1"] },
+						"ipados": "none",
+						"watchos": "none",
+					},
+				},
+				"CONTAINER_SHARE": { "ios-build": 1, "galaxy-build": 1 },
+				"PURGE_ORIGINS": [
+					"https://carrier-explode-site-dev.simplyalec.workers.dev",
+					"https://carrier-explode-api-dev.simplyalec.workers.dev",
+				],
+			},
+			"secrets": { "required": ["RUN_TOKEN", "PURGE_TOKEN"] },
+		},
 
-  // One image, two sizes. A start past max_instances fails, and its Workflow step retries it.
-  "containers": [
-    {
-      "class_name": "HeavyExtractor",
-      "image": "./container/Dockerfile",
-      "image_build_context": "../..",
-      "instance_type": "standard-4",
-      // An iOS build is about 25 IPSWs, one container each: 40 lets four builds run at once (160 of the account's 1,500 vCPU).
-      "max_instances": 40
-    },
-    {
-      "class_name": "LightExtractor",
-      "image": "./container/Dockerfile",
-      "image_build_context": "../..",
-      "instance_type": "standard-1",
-      "max_instances": 32
-    }
-  ],
-  "durable_objects": {
-    "bindings": [
-      { "name": "HEAVY", "class_name": "HeavyExtractor" },
-      { "name": "LIGHT", "class_name": "LightExtractor" }
-    ]
-  },
-  // Declarative Durable Object classes, instead of `migrations`. Containers need SQLite storage.
-  "exports": {
-    "HeavyExtractor": { "type": "durable-object", "storage": "sqlite" },
-    "LightExtractor": { "type": "durable-object", "storage": "sqlite" },
-    "JobLock": { "type": "durable-object", "state": "deleted" }
-  },
-
-  // One Workflow per pipeline (src/worker/pipelines.ts); an instance per build, manifest, reindex or publish.
-  "workflows": [
-    { "binding": "IOS_BUILD", "name": "ios-build", "class_name": "IosBuildWorkflow" },
-    { "binding": "ANDROID_BUILD", "name": "android-build", "class_name": "AndroidBuildWorkflow" },
-    { "binding": "IOS_OTA", "name": "ios-ota", "class_name": "IosOtaWorkflow" },
-    { "binding": "REINDEX", "name": "reindex", "class_name": "ReindexWorkflow" },
-    { "binding": "PUBLISH", "name": "publish", "class_name": "PublishWorkflow" },
-    { "binding": "LABELS", "name": "labels", "class_name": "LabelsWorkflow" }
-  ],
-
-  // Workers AI and the Web Search API, for the labels Workflow.
-  "ai": { "binding": "AI" },
-
-  // Exactly the FEEDS[...].cron values and LABELS_CRON in src/worker/pipelines.ts (test/tables.test.ts checks).
-  "triggers": { "crons": ["*/10 * * * *", "5 * * * *", "17 4 * * 1"] },
-
-  "vars": {
-    // The readers whose caches a publish purges, each at PURGE_PATH (packages/storage). PURGE_TOKEN (a secret, the value
-    // both readers hold) must be set too, or the purge step fails; drop this var to deploy without purging.
-    "PURGE_ORIGINS": ["https://carrierexplode.com", "https://api.carrierexplode.com"],
-    // The bucket over R2's S3 API, passed to each container with the secrets below.
-    "R2_ENDPOINT": "https://9ab285e18346f1da40ea714445264fbe.r2.cloudflarestorage.com",
-    "R2_BUCKET": "carrier-explode-data",
-    // Tuning, in the shape src/worker/tuning.ts gives it.
-    "FEED_WINDOWS": { "ios-images": 4, "ios-ota": 1, "android": 2 },
-    "JOB_ATTEMPTS": 3,
-    // Half a day: a backfill can hold every container of a class for hours.
-    "START_RETRY_MINUTES": 720,
-    // A few minutes of downloads each.
-    "OTA_FILES_PER_JOB": 200,
-    // Bounds one normalize job, and what a failed one redoes.
-    "NORMALIZE_CHUNK": 500,
-    "REINDEX_SHARDS": 16,
-    "LABELLER": { "gateway": "default", "provider": "exa", "model": "@cf/deepseek-ai/deepseek-v4-pro-0813", "perKind": 25 }
-  },
-  // RUN_TOKEN: bearer for /run, /runs, /jobs. R2_*: an R2 API token's S3 key, scoped to the bucket.
-  // PURGE_TOKEN: required while PURGE_ORIGINS is set, see vars.
-  "secrets": { "required": ["RUN_TOKEN", "R2_ACCESS_KEY_ID", "R2_SECRET_ACCESS_KEY"] }
+		"production": {
+			"name": "carrier-explode-extractor",
+			"r2_buckets": [{ "binding": "BUCKET", "bucket_name": "carrier-explode-ingest" }],
+			// packages/db's index; its migrations are packages/db's, applied by hand.
+			"d1_databases": [
+				{
+					"binding": "DB",
+					"database_name": "carrier-explode-index",
+					"database_id": "02fef939-84a4-4509-9727-deaa7fc8cbf7",
+				},
+			],
+			// The two jobs a Worker step cannot do, an IPSW's root filesystem and a Galaxy AP member, on the smallest custom
+			// type (1 vCPU, 3 GiB) with the disk the AP's `system` partition needs (the 20 GB maximum).
+			"containers": [
+				{
+					"class_name": "Extractor",
+					"image": "./container/Dockerfile",
+					"image_build_context": "../..",
+					"instance_type": { "vcpu": 1, "memory_mib": 3072, "disk_mb": 20000 },
+					// One past the sum of CONTAINER_SHARE (each iOS or Galaxy build holds one container at a time): a destroyed
+					// container's slot can be released minutes after it answers, while its build's next step already asks for one.
+					"max_instances": 5,
+				},
+			],
+			"durable_objects": { "bindings": [{ "name": "EXTRACTOR", "class_name": "Extractor" }] },
+			"queues": {
+				"producers": [
+					{ "binding": "INDEX_QUEUE", "queue": "carrier-explode-index" },
+					{ "binding": "PURGE_QUEUE", "queue": "carrier-explode-purge" },
+				],
+				"consumers": [
+					// One message at a time: indexing reads and writes rows other units share. A message is tried 10 times, 5 minutes
+					// apart, so a D1 hiccup or a norm/ object a running reindex has yet to write passes; then it waits in the
+					// dead-letter queue, its error in the Workers Logs.
+					{
+						"queue": "carrier-explode-index",
+						"max_batch_size": 1,
+						"max_concurrency": 1,
+						"max_retries": 10,
+						"retry_delay": 300,
+						"dead_letter_queue": "carrier-explode-index-dlq",
+					},
+					// A batch (100 messages or 30 s) is one purge per reader, one batch at a time: the readers' cache purges share the
+					// account's bucket of 25, refilled 5 a minute. A refused purge retries the batch a minute later; one refused 10
+					// times waits in the dead-letter queue.
+					{
+						"queue": "carrier-explode-purge",
+						"max_batch_size": 100,
+						"max_batch_timeout": 30,
+						"max_concurrency": 1,
+						"max_retries": 10,
+						"retry_delay": 60,
+						"dead_letter_queue": "carrier-explode-purge-dlq",
+					},
+				],
+			},
+			// One Workflow per pipeline (src/pipelines.ts), an instance per unit.
+			"workflows": [
+				{ "binding": "IOS_BUILD", "name": "carrier-explode-ios-build", "class_name": "IosBuildWorkflow" },
+				{ "binding": "APPLE_OTA", "name": "carrier-explode-apple-ota", "class_name": "AppleOtaWorkflow" },
+				{
+					"binding": "PIXEL_DEVICE",
+					"name": "carrier-explode-pixel-device",
+					"class_name": "PixelDeviceWorkflow",
+				},
+				{ "binding": "PIXEL_OTA", "name": "carrier-explode-pixel-ota", "class_name": "PixelOtaWorkflow" },
+				{
+					"binding": "GALAXY_BUILD",
+					"name": "carrier-explode-galaxy-build",
+					"class_name": "GalaxyBuildWorkflow",
+				},
+				{ "binding": "LABELS", "name": "carrier-explode-labels", "class_name": "LabelsWorkflow" },
+				// A reindex of all normalizes every held artifact, a step per 100 settings files or 10 modem configurations:
+				// production's backfill is up to about 5,300 steps.
+				{
+					"binding": "REINDEX",
+					"name": "carrier-explode-reindex",
+					"class_name": "ReindexWorkflow",
+					"limits": { "steps": 25000 },
+				},
+				{ "binding": "DATASET", "name": "carrier-explode-dataset", "class_name": "DatasetWorkflow" },
+			],
+			"services": [{ "binding": "API", "service": "carrier-explode-api" }],
+			// Workers AI and the Web Search API, for the labels Workflow.
+			"ai": { "binding": "AI" },
+			// The crons of PIPELINES in src/pipelines.ts (test/tables.test.ts checks): the container builds' only during the
+			// backfill, so no other feed's check starts units while it runs; and the daily dataset.
+			"triggers": { "crons": ["*/20 * * * *", "10,30,50 * * * *", "50 3 * * *"] },
+			"vars": {
+				// What ingest scans (src/scope.ts): the newest `majors` OS majors, each on each family's newest generation
+				// that has a build on it. Changing the families needs a cost estimate and approval.
+				"SCOPE": {
+					// Phones by the feeds' release days. everythingSince is the cutover: every build from then on; before it, iOS takes
+					// each release and the newest major's betas, a Pixel its newest build of each train.
+					"ios": {
+						"devices": { "releasedSince": "2023-09" },
+						"everythingSince": "2026-10-05",
+						"backfill": "releases",
+						"minMajor": 18,
+					},
+					"android": {
+						"devices": { "releasedSince": "2020-10" },
+						"everythingSince": "2026-10-05",
+						"backfill": "quarterly",
+					},
+					// US models (U and U1) Google Play lists, by name.
+					"samsung": {
+						"families": ["Galaxy S", "Galaxy Z Fold", "Galaxy Z Flip"],
+						"exclude": [" FE"],
+						"releasedSince": "2025-01",
+						"majors": 3,
+						"builds": "all",
+					},
+					// iPadOS and watchOS come only from here: each source's file for the newest OS it is listed for.
+					"appleOta": { "ios": "all", "ipados": "current", "watchos": "current" },
+				},
+				"CONTAINER_SHARE": { "ios-build": 3, "galaxy-build": 1 },
+				// The readers' origins, each purged at PURGE_PATH with the PURGE_TOKEN secret both readers hold.
+				"PURGE_ORIGINS": ["https://carrierexplode.com", "https://api.carrierexplode.com"],
+				"LABELLER": {
+					"gateway": "default",
+					"provider": "exa",
+					"model": "@cf/deepseek-ai/deepseek-v4-pro-0813",
+					"perKind": 25,
+				},
+			},
+			// RUN_TOKEN: bearer for /run and /runs. PURGE_TOKEN: the readers' purge bearer.
+			"secrets": { "required": ["RUN_TOKEN", "PURGE_TOKEN"] },
+		},
+	},
 }

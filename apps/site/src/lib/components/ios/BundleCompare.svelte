@@ -140,7 +140,8 @@
       </div>
     </fieldset>
   {:else}
-    <p class="dimtext">{q ? "Nothing matches the filter." : folded.length ? "Only routine changes." : "Nothing to show."}</p>
+    <!-- With routine files folded above, their summary already says what changed. -->
+    {#if q}<p class="dimtext">Nothing matches the filter.</p>{:else if !folded.length}<p class="dimtext">Nothing to show.</p>{/if}
   {/each}
 {:else}
   <p class="dimtext">Identical.</p>

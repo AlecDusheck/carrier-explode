@@ -1,0 +1,12 @@
+{
+	"$schema": "./node_modules/oxfmt/configuration_schema.json",
+	"useTabs": true,
+	"printWidth": 110,
+	"ignorePatterns": [
+		"worker-configuration.d.ts",
+		"node_modules",
+		"pnpm-lock.yaml",
+		"packages/db/migrations",
+		"packages/decode-android/src/fields.ts"
+	]
+}

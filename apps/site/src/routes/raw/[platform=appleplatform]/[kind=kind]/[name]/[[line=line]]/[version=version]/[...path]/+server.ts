@@ -8,9 +8,11 @@ import { getRaw } from "#lib/server/apple/bundle.ts";
  * Carrier logos are Apple CgBI PNGs, which no browser renders, so those are converted.
  */
 export async function GET({ params }) {
-  const type = contentTypeOf(params.path);
-  if (!type.startsWith("image/") && !type.startsWith("audio/")) error(404, "Not found");
-  const bytes = await getRaw(verOf(params), params.path);
-  // A copy: Response takes only ArrayBuffer-backed bytes.
-  return new Response((normalizeApplePng(bytes) ?? bytes).slice(), { headers: { "content-type": type, "x-content-type-options": "nosniff" } });
+	const type = contentTypeOf(params.path);
+	if (!type.startsWith("image/") && !type.startsWith("audio/")) error(404, "Not found");
+	const bytes = await getRaw(verOf(params), params.path);
+	// A copy: Response takes only ArrayBuffer-backed bytes.
+	return new Response((normalizeApplePng(bytes) ?? bytes).slice(), {
+		headers: { "content-type": type, "x-content-type-options": "nosniff" },
+	});
 }

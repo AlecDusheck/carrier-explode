@@ -11,5 +11,5 @@
 </script>
 
 <div class="scroll pad">
-  {#if Body}<Pane><Body {at} path={params.path} /></Pane>{/if}
+  {#if Body}<Pane awaiting={{ kind: "decode", name: params.path.split("/").pop() || at.ref.name }}><Body {at} path={params.path} /></Pane>{/if}
 </div>

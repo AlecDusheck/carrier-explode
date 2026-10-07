@@ -1,9 +1,9 @@
 <script lang="ts">
-  import { RELEASE_VIEWS } from "#lib/components/views.ts";
+  import { modemView } from "#lib/components/views.ts";
 
   let { params, data } = $props();
 
-  const Overview = $derived(RELEASE_VIEWS[data.platform].modem.Overview);
+  const Overview = $derived(modemView(data.platform).Overview);
 </script>
 
-<Overview build={params.build} modem={params.modem} />
+<Overview platform={data.platform} build={params.build} modem={params.modem} />

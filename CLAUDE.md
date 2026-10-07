@@ -11,7 +11,7 @@ Headers in `packages/*/src` describe each package; `scripts/check-deps.ts` enfor
 ## Code
 
 - Idiomatic, strict TypeScript: `strict`, `noUncheckedIndexedAccess`, `exactOptionalPropertyTypes`.
-- No `any`. No `as` except at a validated boundary. No `!`.
+- No `any`. No `as` except `as const`: narrow with valibot output, type guards or `satisfies`. No `!`.
 - Validate external input (`unknown` + valibot or narrowing) once, at the boundary.
 - Model states as discriminated unions, not optional-field soup. Make public types `readonly`. Check tables with `satisfies`.
 - Give every export an explicit return type. Use `import type` for type-only imports.
@@ -34,10 +34,12 @@ Headers in `packages/*/src` describe each package; `scripts/check-deps.ts` enfor
 
 ## Comments and docs
 
-- Concise. A comment says *why*, in a line or two. It never says *what* the code already says.
+- Concise. A comment says _why_, in a line or two. It never says _what_ the code already says.
 - **If code or a type needs a paragraph to explain, it is wrong: redesign it.**
 - Evidence, measurements and history go in commit messages, not in code.
 - No section-divider banners. Keep names precise enough that most comments are unnecessary.
+- Never mention plans, chunks, agents, tasks or who implements what. Don't restate common knowledge (what a retry is, that writes are idempotent); comment only what a competent reader couldn't infer.
+- If a comment has to justify something, the code is probably wrong or unnecessary: fix or delete the code, not the comment.
 
 ## Claims
 

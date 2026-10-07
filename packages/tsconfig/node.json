@@ -1,9 +1,9 @@
 {
-  "$schema": "https://json.schemastore.org/tsconfig",
-  // Code that runs in Node 22: containers, dev tools, tests.
-  "extends": "./base.json",
-  "compilerOptions": {
-    "lib": ["ES2024"],
-    "types": ["node"]
-  }
+	"$schema": "https://json.schemastore.org/tsconfig",
+	// Code that runs in Node 22: containers, dev tools, tests.
+	"extends": "./base.json",
+	"compilerOptions": {
+		"lib": ["ES2024"],
+		"types": ["node"]
+	}
 }

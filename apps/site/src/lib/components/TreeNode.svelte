@@ -55,11 +55,7 @@
     const hit = (s: string) => terms.some((t) => s.toLowerCase().includes(t));
     if (hit(name)) return true;
     if (labels?.some((l) => hit(l.label))) return true;
-    try {
-      return hit(JSON.stringify(value));
-    } catch {
-      return false;
-    }
+    return hit(JSON.stringify(value));
   });
 
   function valueText(): string {

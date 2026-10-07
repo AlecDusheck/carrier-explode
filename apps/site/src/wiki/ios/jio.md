@@ -27,7 +27,7 @@ The first means Wi-Fi Calling only registers when the phone can also see Jio's c
 
 An incoming call ending with SIP `500` and the reason `Emergency calls over WiFi not allowed in this location` is mapped to `NoEmergencyCallLocation`. No other bundle has this text.
 
-`EmergencyCallBackModeExpirationSeconds` is 1. The median is <Setting path="IMSConfig.Signaling.EmergencyCallBackModeExpirationSeconds" show="median" /> (*live*), and South Korea's country bundle sets 1800.
+`EmergencyCallBackModeExpirationSeconds` is 1. The median is <Setting path="IMSConfig.Signaling.EmergencyCallBackModeExpirationSeconds" show="median" /> (_live_), and South Korea's country bundle sets 1800.
 
 ## Typo
 
@@ -45,10 +45,10 @@ Supplementary services (call forwarding, call waiting) go over XCAP on ports 707
 
 ## eSIM and RCS
 
-* `RemoteCardProvisioningSettings.RequireLiveIDCheck` is true only for Jio, `ChinaTelecom_USIM_cn` and `Unicom_cn`.
-* `RCS.VendorID` is 2, shared only with the `China` and `SouthKorea` country bundles.
-* `IMSConfig.Signaling.EnableVideoCallWaiting` is only in this bundle.
+- `RemoteCardProvisioningSettings.RequireLiveIDCheck` is true only for Jio, `ChinaTelecom_USIM_cn` and `Unicom_cn`.
+- `RCS.VendorID` is 2, shared only with the `China` and `SouthKorea` country bundles.
+- `IMSConfig.Signaling.EnableVideoCallWaiting` is only in this bundle.
 
 ## See also
 
-* [Carrier.plist](/wiki/ios/carrier-plist)
+- [Carrier.plist](/wiki/ios/carrier-plist)

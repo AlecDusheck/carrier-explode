@@ -32,7 +32,7 @@
   <a href={compareHref({ source: at.ref, slug: chosen || undefined, line: at.line }, { source: at.ref, slug: at.version, line: at.line }, file)}>Compare with another bundle…</a>
 </div>
 
-<Pane>
+<Pane awaiting={{ kind: "diff", name: at.version }}>
   {@const cmp = await getComparison({
     a: against ? { ...verArgs(at), slug: against } : null,
     b: verArgs(at),

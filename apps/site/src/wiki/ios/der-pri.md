@@ -43,14 +43,14 @@ Settings come in name/value pairs, and a pair never crosses a record. The tags a
 
 Used for phones with a Qualcomm modem: in `ATT_US` 72.1, the iPhone 12 to 16 families and the iPhone 17, 17 Pro and 17 Pro Max.
 
-| Tag | What |
-|-----|------|
-| `9fa70c` / `9fa70d` | EFS path / file contents |
-| `9fa711` / `9fa712` | setting name / value (older files) |
-| `9fa708` | list of legacy NV item numbers in the file, uint16 little-endian |
-| `9fa709` | index of every NV path the format knows about, zlib-compressed behind a `MAVZ` header (4 bytes, then the uncompressed length as uint32 LE) |
-| `9fa710` | 2 bytes before the NV list, always `00 b2` (333 files) ??? |
-| `9f8xxx` ... | a legacy NV item: the tag number is the NV item number. `9f8732` is tag 946, NV 946 |
+| Tag                 | What                                                                                                                                       |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| `9fa70c` / `9fa70d` | EFS path / file contents                                                                                                                   |
+| `9fa711` / `9fa712` | setting name / value (older files)                                                                                                         |
+| `9fa708`            | list of legacy NV item numbers in the file, uint16 little-endian                                                                           |
+| `9fa709`            | index of every NV path the format knows about, zlib-compressed behind a `MAVZ` header (4 bytes, then the uncompressed length as uint32 LE) |
+| `9fa710`            | 2 bytes before the NV list, always `00 b2` (333 files) ???                                                                                 |
+| `9f8xxx` ...        | a legacy NV item: the tag number is the NV item number. `9f8732` is tag 946, NV 946                                                        |
 
 The header gives `PRI Revision` and sometimes `Carrier ID` and `PRI Name`.
 
@@ -75,10 +75,10 @@ The `MAVZ` index under `9fa709` lists 339 NV paths in this file. It is a list of
 
 Used for phones with an Intel modem (in `ATT_US` 72.1: the iPhone 11 family and the iPhone SE 2nd generation) and for Apple's own modems (iPhone 16e, iPhone Air, iPhone 17e). Apple kept Intel's format when it took over Intel's modem business.
 
-| Tag | What |
-|-----|------|
+| Tag                 | What                 |
+| ------------------- | -------------------- |
 | `9fae70` / `9fae71` | setting name / value |
-| `9fae72` / `9fae73` | NVM key / value |
+| `9fae72` / `9fae73` | NVM key / value      |
 
 Keys start with a type and end with a dotted path:
 
@@ -105,8 +105,8 @@ For a Qualcomm modem, CommCenter copies the file over with a QMI file transfer (
 
 ## See also
 
-* [PRI](/wiki/ios/pri)
-* [.der.gri](/wiki/ios/der-gri)
-* [Carrier Bundle](/wiki/ios/carrier-bundle)
-* [Bundle Selection](/wiki/ios/bundle-selection)
-* [Self-registration](/wiki/ios/china-self-registration)
+- [PRI](/wiki/ios/pri)
+- [.der.gri](/wiki/ios/der-gri)
+- [Carrier Bundle](/wiki/ios/carrier-bundle)
+- [Bundle Selection](/wiki/ios/bundle-selection)
+- [Self-registration](/wiki/ios/china-self-registration)

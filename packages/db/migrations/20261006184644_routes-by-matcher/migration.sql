@@ -1,0 +1,1 @@
+CREATE INDEX `routes_by_matcher` ON `routes` (`matcher`);

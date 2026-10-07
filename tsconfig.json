@@ -1,5 +1,5 @@
 {
-  // The workspace scripts (scripts/). Each package and app has its own tsconfig.
-  "extends": "@carrier-explode/tsconfig/node.json",
-  "include": ["scripts"]
+	// The workspace scripts (scripts/). Each package and app has its own tsconfig.
+	"extends": "@carrier-explode/tsconfig/node.json",
+	"include": ["scripts"]
 }

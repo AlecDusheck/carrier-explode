@@ -4,10 +4,10 @@ import type { ConfigReading } from "@carrier-explode/decode-android";
 import type { FieldDoc, ValueLabel } from "@carrier-explode/decode-ios";
 
 export interface TreeDocs {
-  field(key: string, path: string): FieldDoc | undefined;
-  value(key: string, value: unknown, path: string): ValueLabel[] | undefined;
-  /** A value with a format of its own, or a key nothing documents; null for a plain one. */
-  read(key: string, path: string, value: unknown): ConfigReading | null;
+	field(key: string, path: string): FieldDoc | undefined;
+	value(key: string, value: unknown, path: string): ValueLabel[] | undefined;
+	/** A value with a format of its own, or a key nothing documents; null for a plain one. */
+	read(key: string, path: string, value: unknown): ConfigReading | null;
 }
 
 /** For a tree whose keys nothing documents. */

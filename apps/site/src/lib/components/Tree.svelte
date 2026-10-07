@@ -20,6 +20,7 @@
 
 <script lang="ts">
   import { isJsonDict } from "@carrier-explode/decode-ios";
+  import { treeKeys } from "#lib/keys.ts";
   import { TreeState } from "#lib/ui-state.svelte.ts";
   import TreeNode from "./TreeNode.svelte";
   import TreeToolbar from "./TreeToolbar.svelte";
@@ -47,7 +48,7 @@
   <p class="dimtext">Nothing to show.</p>
 {:else}
   {#if !state}<TreeToolbar state={own} />{/if}
-  <div class="tree">
+  <div class="tree" {@attach treeKeys}>
     {#if entries}
       {#each entries as [k, v] (k)}
         <TreeNode name={k} value={v} path={root === undefined ? k : `${root}.${k}`} filter={st.filter} {ctx} {onfilter} badges={badges?.[k]} />

@@ -69,7 +69,7 @@
 {:else}
   {@const eff = effective(carrier, phoneDict)}
   {@const shown = Object.fromEntries(Object.entries(eff.merged).filter(([k]) => show === "all" || eff.fromPhone.has(k)))}
-  {@const badges = badgesFor(Object.keys(shown), eff.fromPhone, rare.indexed ? rareBadges(rare.rows) : {}, new Set(Object.keys(homeDict ?? {})))}
+  {@const badges = badgesFor(Object.keys(shown), eff.fromPhone, rare.head ? rareBadges(rare.rows) : {}, new Set(Object.keys(homeDict ?? {})))}
 
   {#if phoneDict}
     <p class="dimtext note">carrier.plist + <span class="mono">{over?.path}</span></p>

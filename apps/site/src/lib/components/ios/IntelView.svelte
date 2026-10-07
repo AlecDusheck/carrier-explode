@@ -2,6 +2,7 @@
   import type { Snippet } from "svelte";
   import { filterIntel, type IntelTree } from "@carrier-explode/decode-ios";
   import { bandList } from "@carrier-explode/decode-qualcomm";
+  import { treeKeys } from "#lib/keys.ts";
   import { TreeState } from "#lib/ui-state.svelte.ts";
   import IntelNode from "./IntelNode.svelte";
   import TreeToolbar from "../TreeToolbar.svelte";
@@ -73,7 +74,7 @@
     </details>
   {/if}
 
-  <div class="tree">
+  <div class="tree" {@attach treeKeys}>
     {#each nodes as n (n.path)}
       <IntelNode node={n} {raw} filtering={!!f} />
     {:else}

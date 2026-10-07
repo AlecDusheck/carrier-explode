@@ -8,7 +8,7 @@
   let query = $state("");
   let type = $state<ComboType | "all">("all");
 
-  const typed = $derived(rows.map((r, n) => ({ ...r, n, type: comboType(r) })));
+  const typed = $derived(rows.map((row, n) => ({ row, n, type: comboType(row) })));
 
   // "n77" and "b66" match a band of that RAT, a bare number any band, anything else the string.
   const matches = (r: ComboRow, tok: string) => {
@@ -19,7 +19,7 @@
   };
   const shown = $derived.by(() => {
     const toks = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
-    return typed.filter((r) => (type === "all" || r.type === type) && toks.every((t) => matches(r, t)));
+    return typed.filter((r) => (type === "all" || r.type === type) && toks.every((t) => matches(r.row, t)));
   });
   const parts = (xs: readonly ComboCell[]) => xs.map((x) => x.text).join(" ");
 </script>
@@ -36,10 +36,10 @@
   <table class="grid">
     <thead><tr><th>Combo</th><th>Type</th><th>LTE</th><th>NR</th><th class="num">CCs</th><th></th></tr></thead>
     <tbody>
-      {#each shown as r (r.n)}
+      {#each shown as { row: r, n, type: rowType } (n)}
         <tr>
           <td class="mono">{r.text}</td>
-          <td>{r.type ? TYPES[r.type] : ""}</td>
+          <td>{rowType ? TYPES[rowType] : ""}</td>
           <td class="mono">{parts(r.lte)}</td>
           <td class="mono">{parts(r.nr)}</td>
           <td class="num">{r.lte.length + r.nr.length}</td>

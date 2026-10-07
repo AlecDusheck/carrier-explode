@@ -1,20 +1,20 @@
 {
-  "name": "@carrier-explode/values",
-  "private": true,
-  "version": "0.0.0",
-  "type": "module",
-  "sideEffects": false,
-  "exports": {
-    ".": "./src/index.ts"
-  },
-  "scripts": {
-    "test": "vitest run",
-    "check": "tsc -p tsconfig.json && tsc -p tsconfig.test.json"
-  },
-  "devDependencies": {
-    "@carrier-explode/tsconfig": "workspace:*",
-    "@types/node": "^22.20.3",
-    "typescript": "^6.0.0",
-    "vitest": "^5.0.3"
-  }
+	"name": "@carrier-explode/values",
+	"version": "0.0.0",
+	"private": true,
+	"type": "module",
+	"sideEffects": false,
+	"exports": {
+		".": "./src/index.ts"
+	},
+	"scripts": {
+		"test": "vitest run",
+		"check": "tsc -p tsconfig.json && tsc -p tsconfig.test.json"
+	},
+	"devDependencies": {
+		"@carrier-explode/tsconfig": "workspace:*",
+		"@types/node": "^22.20.3",
+		"typescript": "^6.0.0",
+		"vitest": "^5.0.3"
+	}
 }

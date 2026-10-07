@@ -7,10 +7,10 @@
 
   let { node, depth = 0, comments }: { node: PolicyNode; depth?: number; comments: boolean } = $props();
 
-  const WORD: Record<string, string> = {
-    if: "IF", then: "THEN", else: "ELSE", select: "SELECT", case: "CASE", actions: "ACTIONS",
-    initial: "DEFINE", any_of: "ANY OF", all_of: "ALL OF", not: "NOT",
-  };
+  const WORD = new Map([
+    ["if", "IF"], ["then", "THEN"], ["else", "ELSE"], ["select", "SELECT"], ["case", "CASE"], ["actions", "ACTIONS"],
+    ["initial", "DEFINE"], ["any_of", "ANY OF"], ["all_of", "ALL OF"], ["not", "NOT"],
+  ]);
   // These already read as prose; a note would only repeat the word.
   const PLAIN = new Set(["if", "then", "else", "actions", "case", "rule", "cond", "conditions", "all_of", "any_of", "not", "true"]);
 
@@ -64,12 +64,12 @@
 {:else if inline}
   <div class="row"><span class="w logic">NOT</span> {@render name(inline.tag, "t " + inline.kind)}{@render rest(inline)}</div>
   {@render explain()}
-{:else if !kids.length && !WORD[node.tag]}
+{:else if !kids.length && !WORD.has(node.tag)}
   <div class="row">{@render name(node.tag, "t " + node.kind)}{@render rest(node)}</div>
   {@render explain()}
 {:else}
-  {@const label = WORD[node.tag] ?? node.tag}
-  {@const cls = WORD[node.tag] ? "w " + node.kind : "t " + node.kind}
+  {@const label = WORD.get(node.tag) ?? node.tag}
+  {@const cls = WORD.has(node.tag) ? "w " + node.kind : "t " + node.kind}
   <div class="row head">
     <button type="button" class="fold" aria-expanded={open} aria-label={doc ? (open ? "Fold " : "Unfold ") + label : undefined}
       onclick={() => (flipped = !flipped)}>
@@ -82,7 +82,7 @@
   {@render explain()}
   {#if open}
     <div class="children">
-      {#each kids as k, i (i)}<PolicyItem node={k} depth={depth + 1} {comments} />{/each}
+      {#each kids as k (k)}<PolicyItem node={k} depth={depth + 1} {comments} />{/each}
     </div>
   {/if}
 {/if}

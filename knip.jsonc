@@ -1,0 +1,12 @@
+{
+	"$schema": "https://unpkg.com/knip@6/schema-jsonc.json",
+	// `cloudflare:workers` is a Workers runtime module, not a package.
+	"ignoreDependencies": ["cloudflare"],
+	"workspaces": {
+		// Claude Code runs the hooks .claude/settings.json names.
+		".": { "entry": ["tools/version-marks/generate.ts", ".claude/hooks/*.cjs"] },
+		"apps/extractor": { "entry": ["container/src/main.ts"] },
+		// Wiki components are imported by mdsvex articles, which knip doesn't parse.
+		"apps/site": { "entry": ["src/lib/components/wiki/*.svelte", "src/params.ts"] },
+	},
+}

@@ -1,5 +1,7 @@
 {
-  // The Worker (workerd). The container, dev tools and tests: tsconfig.node.json.
-  "extends": "@carrier-explode/tsconfig/worker.json",
-  "include": ["src"]
+	// The Worker (workerd). The container, dev tools and tests: tsconfig.node.json.
+	// Node's types too, for the node: modules nodejs_compat provides (crypto, stream, zlib), which firmware members stream through.
+	"extends": "@carrier-explode/tsconfig/worker.json",
+	"compilerOptions": { "types": ["@cloudflare/workers-types", "node"] },
+	"include": ["src"]
 }

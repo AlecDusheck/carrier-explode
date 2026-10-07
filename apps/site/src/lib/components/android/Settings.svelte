@@ -23,7 +23,7 @@
 
   /** Status first, then rarity. */
   const badges = $derived.by(() => {
-    const out: Record<string, KeyBadge[]> = rare.indexed ? rareBadges(rare.rows) : {};
+    const out: Record<string, KeyBadge[]> = rare.head ? rareBadges(rare.rows) : {};
     for (const [key, doc] of Object.entries(settings.docs)) {
       const status: KeyBadge[] = [
         ...(doc.deprecated ? [{ text: "deprecated" }] : []),

@@ -7,10 +7,11 @@
 <script lang="ts">
   import { untrack } from "svelte";
   import { MediaQuery } from "svelte/reactivity";
-  import { page, navigating } from "$app/state";
+  import { page } from "$app/state";
   import type { Attachment } from "svelte/attachments";
   import { getList, getListPlatforms, guessCarrier, guessCountry } from "#lib/api/sources.remote.ts";
   import { link } from "#lib/format.ts";
+  import { listKeys } from "#lib/keys.ts";
   import { menuTrigger, copyText, type MenuItem } from "#lib/ui-state.svelte.ts";
   import { fold, repeated } from "#lib/names.ts";
   import { PLATFORM_NAMES, PLATFORM_ORDER } from "#lib/platforms.ts";
@@ -19,11 +20,12 @@
   import Pane from "#lib/components/Pane.svelte";
   import PlatformPicker from "#lib/components/PlatformPicker.svelte";
   import SourceIcon from "#lib/components/SourceIcon.svelte";
+  import SourceName from "#lib/components/SourceName.svelte";
 
   let { params, children } = $props();
 
-  /** What the right pane shows: a source, or a country of a platform's carriers. */
-  const selected = $derived(params.name ?? params.iso);
+  /** What the right pane shows: a source, a country of a platform's carriers, or the sources named only by a SIM rule. */
+  const selected = $derived(params.name ?? params.iso ?? (page.route.id?.endsWith("/others.pb") ? "others.pb" : undefined));
 
   const matches = (c: ListRow, q: string): boolean => {
     const f = fold(q);
@@ -38,15 +40,17 @@
     defaults: async () => null,
   } as const satisfies Record<KindSegment, () => Promise<string | null>>;
 
+  // Plain values, so moving between sources leaves the list's awaits alone.
   const platform = $derived(params.platform);
+  const kind = $derived(params.kind);
 
-  const listOf = async (kind: KindSegment): Promise<readonly ListRow[]> => getList({ platform, kind: SEGMENT_KIND[kind] });
+  const listOf = async (of: KindSegment): Promise<readonly ListRow[]> => getList({ platform, kind: SEGMENT_KIND[of] });
 
-  async function guessFor(kind: KindSegment): Promise<string> {
-    if (guessShown[kind]) return "";
-    const guess = await GUESSES[kind]();
+  async function guessFor(of: KindSegment): Promise<string> {
+    if (guessShown[of]) return "";
+    const guess = await GUESSES[of]();
     if (!guess) return "";
-    const list = await listOf(kind);
+    const list = await listOf(of);
     return list.some((c) => matches(c, guess.toLowerCase())) ? guess : "";
   }
 
@@ -54,13 +58,15 @@
   // server's page reads no visitor (the edge can keep it) and hydration sees the list the server drew.
   let guess = $state("");
   $effect(() => {
-    const kind = params.kind;
+    // Each navigation starts the guess over, as `params` is new on every one.
+    const listed = params.kind;
     guess = "";
     if (untrack(() => selected)) return;
     let current = true;
-    void guessFor(kind).then((g) => {
+    void (async () => {
+      const g = await guessFor(listed);
       if (current) guess = g;
-    });
+    })();
     return () => {
       current = false;
     };
@@ -70,24 +76,20 @@
   const fromIp = $derived(!!guess && query === guess);
   /** Once a guess has been on screen, that list is not guessed again. */
   const spend: Attachment = () => {
-    if (fromIp) guessShown[params.kind] = true;
+    if (fromIp) guessShown[kind] = true;
   };
 
-  let drawerOpen = $state(false);
-  // With nothing selected the list is the page. With a bundle open it is navigation (in a closed
-  // drawer on a phone), so its links are not rendered until something wants them.
+  // With nothing selected the list is the page. With a bundle open it is navigation, which a phone reaches by the menu bar instead.
   const wide = new MediaQuery("min-width: 761px", false);
-  let drawerUsed = $state(false);
-  const showList = $derived(!selected || wide.current || drawerUsed);
+  const showList = $derived(!selected || wide.current);
 
   // Carrier lists can put the most recently changed first; countries stay A-Z.
   let byUpdated = $state(true);
-  const sortable = $derived(params.kind !== "countries");
-  const newestFirst = (a: ListRow, b: ListRow): number => (b.updated ?? "").localeCompare(a.updated ?? "") || a.name.localeCompare(b.name);
-  const label = $derived(params.kind[0]?.toUpperCase() + params.kind.slice(1));
+  const sortable = $derived(kind !== "countries");
+  const newestFirst = (a: ListRow, b: ListRow): number => (b.updated ?? "").localeCompare(a.updated ?? "") || a.brand.localeCompare(b.brand) || a.name.localeCompare(b.name);
 
-  // The row lights up on click, before the bundle behind it has loaded.
-  const here = $derived(navigating.to?.url.pathname ?? page.url.pathname);
+  // Only the URL: `navigating` changes in a batch of its own, and a row reading both kept a stale highlight.
+  const here = $derived(page.url.pathname);
   const isOpen = (c: ListRow): boolean => here === link(c.path) || here.startsWith(link(c.path) + "/");
 
   const twinKey = (c: ListRow): string => `${c.brand} ${c.cc}`;
@@ -97,26 +99,25 @@
   const rowMenu = (c: ListRow) => (): { title: string; items: MenuItem[] } => ({ title: c.name, items: [{ kind: "action", label: "Copy name", run: () => copyText(c.name) }] });
 </script>
 
-<!-- With nothing selected, a phone shows the list as the page instead of hiding it in the drawer. -->
+<!-- With nothing selected, a phone shows the list as the page; with something selected, only that. -->
 <div class="split" class:browsing={!selected}>
-  <div class="pane-left" class:open={drawerOpen}>
+  <div class="pane-left" {@attach listKeys(".find input, .list a")}>
     <Pane quiet>
       {@const listed = new Set((await getListPlatforms()).flatMap(([, ps]) => ps))}
       {@const platforms = PLATFORM_ORDER.filter((p) => listed.has(p))}
       {#if platforms.length > 1}
         <div class="family">
-          <PlatformPicker {platforms} selected={platform} href={(p) => link(listPath(p, SEGMENT_KIND[params.kind]))} />
+          <PlatformPicker {platforms} selected={platform} href={(p) => link(listPath(p, SEGMENT_KIND[kind]))} />
         </div>
       {/if}
     </Pane>
     <div class="find">
-      <input class="grow" type="search" name="find" placeholder="find" aria-label="find in {params.kind}" bind:value={query} {@attach spend} />
+      <input class="grow" type="search" name="find" placeholder="find" aria-label="find in {kind}" bind:value={query} {@attach spend} />
       {#if fromIp}<span class="dimtext from-ip" title="Guessed from your IP address">from IP</span>{/if}
-      <button class="btn drawer-btn" onclick={() => (drawerOpen = false)}>Close</button>
     </div>
     {#if showList}
     <Pane>
-      {@const all = await listOf(params.kind)}
+      {@const all = await listOf(kind)}
       {@const q = query.trim().toLowerCase()}
       {@const matched = q ? all.filter((c) => matches(c, q)) : all}
       {@const dated = sortable && byUpdated}
@@ -124,49 +125,45 @@
       <!-- Several files of one brand in a country (att_us, att5g_us; Verizon_LTE_US, Verizon_MVNO_US) each also say their file name. -->
       {@const twins = repeated(all, twinKey)}
       <div class="scroll list-box">
-        <ul class="list" aria-label={params.kind}>
+        <ul class="list" aria-label={kind}>
           {#each shown as c (c.path)}
             <li>
               <a
                 href={link(c.path)}
                 title={c.name}
                 aria-current={isOpen(c) ? "page" : undefined}
-                onclick={() => (drawerOpen = false)}
                 {@attach menuTrigger(rowMenu(c))}
                 {@attach isOpen(c) && reveal}
               >
                 <SourceIcon picture={c.picture} />
-                <span class="name">{c.brand}{#if twins.has(twinKey(c))}<span class="dimtext file">{c.name}</span>{/if}</span>
-                <span class="dim">{params.kind === "countries" ? "" : (c.cc?.toUpperCase() ?? "")}{#if dated && c.updated}&nbsp; {c.updated}{/if}</span>
+                <span class="name"><SourceName brand={c.brand} code={c.name} withCode={twins.has(twinKey(c))} /></span>
+                <span class="dim">{kind === "countries" ? "" : (c.cc?.toUpperCase() ?? "")}{#if dated && c.updated}&nbsp; {c.updated}{/if}</span>
               </a>
             </li>
           {:else}
-            {#if !shipsKind(platform, SEGMENT_KIND[params.kind])}
+            {#if !shipsKind(platform, SEGMENT_KIND[kind])}
               <li class="dimtext">{PLATFORM_NAMES[platform]} does not have this concept: its settings are per carrier. <a href={link(listPath(platform, "carrier"))}>Go to carriers</a>.</li>
-            {:else}
+            {:else if q}
               <li class="dimtext">No match</li>
             {/if}
           {/each}
         </ul>
       </div>
-      <div class="statusbar list-status">
-        <span class="cell grow">{q ? `${shown.length} of ${all.length}` : all.length}</span>
-        {#if sortable}
-          <button class="cell sort" title="Sort by when the carrier last changed, or by name" onclick={() => (byUpdated = !byUpdated)}>
-            {byUpdated ? "Newest" : "A–Z"}
-          </button>
-        {/if}
-      </div>
+      {#if all.length}
+        <div class="statusbar list-status">
+          <span class="cell grow">{q ? `${shown.length} of ${all.length}` : all.length}</span>
+          {#if sortable}
+            <button class="cell sort" title="Sort by when the carrier last changed, or by name" onclick={() => (byUpdated = !byUpdated)}>
+              {byUpdated ? "Newest" : "A–Z"}
+            </button>
+          {/if}
+        </div>
+      {/if}
     </Pane>
     {/if}
   </div>
 
-  <div class="backdrop" class:open={drawerOpen} onclick={() => (drawerOpen = false)} role="presentation"></div>
-
   <div class="pane-right">
-    <div class="toolbar drawer-bar">
-      <button class="btn drawer-btn drawer-open" onclick={() => ((drawerOpen = true), (drawerUsed = true))}>{label}</button>
-    </div>
     {@render children()}
   </div>
 </div>
@@ -179,5 +176,4 @@
   .list-box { margin: 0 6px 6px; }
   .list-status { padding: 2px 6px 6px; }
   .sort { font: inherit; cursor: pointer; }
-  .file { margin-left: 0.5em; }
 </style>

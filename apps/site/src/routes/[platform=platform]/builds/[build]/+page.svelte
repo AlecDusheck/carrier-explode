@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { getRelease } from "#lib/api/builds.remote.ts";
+  import { getRelease, getShipped } from "#lib/api/builds.remote.ts";
   import { buildHref, link } from "#lib/format.ts";
   import { releaseLabel } from "#lib/naming.ts";
   import { sourceOf, type SourceKind } from "@carrier-explode/schema/types";
@@ -7,6 +7,7 @@
   import Pane from "#lib/components/Pane.svelte";
   import ReleaseModems from "#lib/components/ReleaseModems.svelte";
   import SourceIcon from "#lib/components/SourceIcon.svelte";
+  import SourceName from "#lib/components/SourceName.svelte";
   import VersionMark from "#lib/components/VersionMark.svelte";
   import { RELEASE_VIEWS } from "#lib/components/views.ts";
 
@@ -18,9 +19,9 @@
 {#snippet named(c: SourceChange, at: ReleasedVersion | null, cls: string)}
   {@const name = sourceOf(c.source).name}
   {#if at?.path}
-    <a class={cls} href={link(at.path)}>{#if c.picture}<SourceIcon picture={c.picture} />{/if}{name}</a>
+    <a class={cls} href={link(at.path)}>{#if c.picture}<SourceIcon picture={c.picture} />{/if}<SourceName brand={c.brand ?? name} code={name} withCode /></a>
   {:else}
-    <span class={cls}>{#if c.picture}<SourceIcon picture={c.picture} />{/if}{name}</span>
+    <span class={cls}>{#if c.picture}<SourceIcon picture={c.picture} />{/if}<SourceName brand={c.brand ?? name} code={name} withCode /></span>
   {/if}
 {/snippet}
 
@@ -33,17 +34,36 @@
         <view.Name release={r.release} />
         {#if r.previous}
           <span class="dimtext">since</span>
-          <a class="picker-opt" href={buildHref(r.previous.platform, r.previous.id)}><VersionMark platform={r.previous.platform} version={r.previous.version} />{releaseLabel(r.previous)} ({r.previous.id})</a>
-        {:else}
-          <span class="dimtext">{view.oldest}</span>
+          <a class="picker-opt" href={buildHref(r.previous.platform, r.previous.id)}><VersionMark platform={r.previous.platform} version={r.previous.version} />{releaseLabel(r.previous)} <span class="mono dimtext">{r.previous.id}</span></a>
         {/if}
       </div>
 
       <ReleaseModems release={r.release} />
 
-      {#if !r.added.length && !r.removed.length && !r.changed.length}
+      {#if view.shipped !== null}
+        {@const shipped = await getShipped({ platform: r.release.platform, build: r.release.id })}
+        <fieldset class="hgroup">
+          <legend>{view.shipped} ({shipped.length})</legend>
+          <table class="grid">
+            <thead><tr><th>{view.column}</th><th class="num">Version</th></tr></thead>
+            <tbody>
+              {#each shipped as s (s.source + s.line)}
+                <tr>
+                  <td class="k">
+                    <a class="picker-opt" href={link(s.at.path)}>{#if s.picture}<SourceIcon picture={s.picture} />{/if}<SourceName brand={s.brand ?? sourceOf(s.source).name} code={sourceOf(s.source).name} withCode /></a>
+                  </td>
+                  <td class="num mono">{s.at.version}</td>
+                </tr>
+              {/each}
+            </tbody>
+          </table>
+        </fieldset>
+      {/if}
+
+      <!-- The oldest build held has nothing to be compared against. -->
+      {#if r.previous !== null && !r.added.length && !r.removed.length && !r.changed.length}
         <p class="note">{view.unchanged}</p>
-      {:else}
+      {:else if r.previous !== null}
         {#each view.kinds as { kind, title, unchanged } (kind)}
           {@const [added, removed, changed] = [ofKind(r.added, kind), ofKind(r.removed, kind), ofKind(r.changed, kind)]}
           {#if !added.length && !removed.length && !changed.length}

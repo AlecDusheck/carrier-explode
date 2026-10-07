@@ -3,27 +3,28 @@
   import { page } from "$app/state";
   import { withParams } from "#lib/format.ts";
   import { PLATFORM_NAMES } from "#lib/platforms.ts";
-  import type { Phone } from "@carrier-explode/schema/types";
+  import type { FeaturePhone } from "#lib/server/features.ts";
   import { visitorDevice, visitorPhone } from "#lib/visitor.ts";
   import PhoneImage from "#lib/components/PhoneImage.svelte";
   import Picker from "#lib/components/Picker.svelte";
 
   /** Every phone in one list, iPhones then Pixels, each platform under its heading. */
-  let { phones, phone }: { phones: readonly Phone[]; phone: Phone | null } = $props();
+  let { phones, phone }: { phones: readonly FeaturePhone[]; phone: FeaturePhone | null } = $props();
 
-  // A URL naming no phone shows the newest; the visitor's own is a better default.
+  // A URL naming no phone shows the newest covered one; the visitor's own is a better default.
   $effect(() => {
     if (page.url.searchParams.has("phone")) return;
     const shown = phone?.code;
     const from = page.url.href;
-    void visitorDevice().then(async (device) => {
+    void (async () => {
+      const device = await visitorDevice();
       const mine = visitorPhone(phones, device);
       if (mine && mine.code !== shown && page.url.href === from) await goto(withParams(page.url, { phone: mine.code }), { replace: true });
-    });
+    })();
   });
 </script>
 
-{#snippet option(p: Phone)}
+{#snippet option(p: FeaturePhone)}
   <span class="picker-opt"><PhoneImage platform={p.platform} id={p.code} name={p.name} /><span class="text">{p.name}</span></span>
 {/snippet}
 
