@@ -133,7 +133,7 @@ function apnAttrs(apn: Apn): XmlAttrs {
 		["roaming_protocol", apn.roamingProtocol?.toUpperCase()],
 		["authtype", apn.auth === undefined ? undefined : AUTH_TYPE[apn.auth]],
 		["user", apn.user],
-		["password", "password" in apn && typeof apn.password === "string" ? apn.password : undefined],
+		["password", apn.password],
 		["proxy", apn.proxy],
 		["port", apn.port],
 		["mmsc", apn.mmsc],

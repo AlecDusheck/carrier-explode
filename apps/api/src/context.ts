@@ -22,7 +22,6 @@ const ERROR_CODES = {
 	400: "bad_request",
 	401: "unauthorized",
 	404: "not_found",
-	429: "rate_limited",
 	500: "internal",
 	502: "bad_gateway",
 } as const satisfies Partial<Record<ContentfulStatusCode, string>>;

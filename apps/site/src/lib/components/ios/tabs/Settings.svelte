@@ -31,7 +31,7 @@
   const carrier = $derived(asDict(bundle.quick["carrier.plist"]));
   const rows = $derived(await tabPhoneRows(at, "settings"));
   const picked = $derived(pickPhoneRow(rows, sp.get("file")));
-  const over = $derived(picked.row ? await getOverridePlist({ ...args, path: picked.row.path }) : null);
+  const over = $derived(picked.row?.kind === "file" ? await getOverridePlist({ ...args, path: picked.row.path }) : null);
   const phoneDict = $derived(asDict(over?.plist));
   const rare = $derived(await getRare(args));
   const home = $derived(bundle.home ? await getAppleBundle({ source: bundle.home }) : null);
@@ -69,7 +69,7 @@
 {:else}
   {@const eff = effective(carrier, phoneDict)}
   {@const shown = Object.fromEntries(Object.entries(eff.merged).filter(([k]) => show === "all" || eff.fromPhone.has(k)))}
-  {@const badges = badgesFor(Object.keys(shown), eff.fromPhone, rare.head ? rareBadges(rare.rows) : {}, new Set(Object.keys(homeDict ?? {})))}
+  {@const badges = badgesFor(Object.keys(shown), eff.fromPhone, rare.state === "judged" ? rareBadges(rare.rows) : {}, new Set(Object.keys(homeDict ?? {})))}
 
   {#if phoneDict}
     <p class="dimtext note">carrier.plist + <span class="mono">{over?.path}</span></p>

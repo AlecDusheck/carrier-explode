@@ -16,6 +16,7 @@ import {
 } from "@carrier-explode/schema/types";
 import { keys, putJson } from "@carrier-explode/storage";
 import { type IndexMessage, indexUnit } from "../src/indexing.ts";
+import { productionTuning } from "./wrangler.ts";
 
 const MIGRATIONS = join(import.meta.dirname, "..", "..", "..", "packages", "db", "migrations");
 const SOURCES = 900;
@@ -101,11 +102,11 @@ describe("a first-time iOS build of 900 sources", () => {
 			),
 			modems: [],
 		};
-		for (let i = 0; i < SOURCES; i++) await putJson(bucket, keys.norm(`sha${i}`), profileOf(i));
+		for (let i = 0; i < SOURCES; i++) await putJson(bucket, keys.profile(`sha${i}`), profileOf(i));
 		await putJson(bucket, keys.release("ios", release.id), release);
 
 		const counted = counting(d1);
-		const ctx = { db: indexDb(counted.db), bucket };
+		const ctx = { db: indexDb(counted.db), bucket, batch: productionTuning.INDEX_BATCH };
 		const perMessage: Array<readonly [string, number]> = [];
 		for (
 			let m: IndexMessage | null = { kind: "release", release: { platform: "ios", id: [release.id] } };

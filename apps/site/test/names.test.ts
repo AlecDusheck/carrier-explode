@@ -31,31 +31,13 @@ describe("slugs and labels", () => {
 });
 
 describe("carrier logos and flags", () => {
-	it("picks the longest, then rightmost, rule an Apple bundle name holds", async () => {
-		const { carrierLogo } = await import("../src/lib/carrierlogos.ts");
-		const of = (name: string) => carrierLogo([`ios:carrier:${name}`]);
-		expect(of("ATT_US")).toBe("att");
-		expect(of("ATT_RedPocket_US")).toBe("red-pocket");
-		expect(of("TMobile_MetroPCS_US")).toBe("metro-by-t-mobile");
-		expect(of("Cellcom_il")).not.toBe(of("CellcomWI_LTE_US"));
-		expect(of("Nonexistent_Carrier")).toBeUndefined();
-	});
-
-	it("gives every source of a carrier its Apple bundle's logo, and none from an Android name", async () => {
-		const { carrierLogo } = await import("../src/lib/carrierlogos.ts");
-		expect(carrierLogo(["android:carrier:att_us", "ios:carrier:ATT_US"])).toBe("att");
-		expect(carrierLogo(["android:carrier:ATT"])).toBeUndefined();
-	});
-
 	it("names a brand's logo by its longest, then rightmost, run of words", async () => {
-		const { brandLogo, brandNames } = await import("../src/lib/carrierlogos.ts");
+		const { brandLogo } = await import("../src/lib/carrierlogos.ts");
 		expect(brandLogo("Odido")).toBe("odido");
 		expect(brandLogo("Orange BF")).toBe("orange");
 		expect(brandLogo("AT&T FirstNet")).toBe("firstnet");
 		expect(brandLogo("T-Mobile")).toBe("t-mobile");
 		expect(brandLogo("No Such Carrier")).toBeUndefined();
-		expect(brandNames("AT&T FirstNet", "firstnet")).toBe(true);
-		expect(brandNames("Odido", "orange")).toBe(false);
 	});
 
 	it("turns an ISO code into its flag", async () => {

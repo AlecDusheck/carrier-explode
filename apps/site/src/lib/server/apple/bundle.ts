@@ -3,15 +3,13 @@
 import { error } from "@sveltejs/kit";
 import {
 	compareBundles,
-	contentId,
-	decodeFile,
 	deviceStem,
 	type BundleDiff,
 	type BundleInfo,
 	MemberError,
 	type DecodedFile,
 } from "@carrier-explode/decode-ios";
-import { errorMessage, sha1Hex, sha256Hex, sha384Hex } from "@carrier-explode/binary";
+import { errorMessage } from "@carrier-explode/binary";
 import { countryName, iosModemConfig, type TimelineEntry } from "@carrier-explode/schema";
 import {
 	sourceKey,
@@ -23,25 +21,16 @@ import {
 import type { PhoneFile, WithPhones } from "#lib/apple/phones.ts";
 import type { Ver, Version } from "#lib/types.ts";
 import { cached } from "../cache";
-import {
-	copiesOfEntry,
-	copiesOfSource,
-	countryOf,
-	isIndexed,
-	resolve,
-	verAt,
-	versionOf,
-	type Resolved,
-} from "../catalog";
+import { copiesOfEntry, countryOf, isIndexed, resolve, verAt, versionOf, type Resolved } from "../catalog";
 import type { Side } from "../compare";
 import { cbsRow, type CbsRow } from "./cbs";
 import { withPhones } from "./boards";
-import { open, plistOf, upstream, verify, type Digested } from "./bytes";
+import { decodedMember, describe, open, upstream, verify, type BundleFacts, type Digested } from "./bytes";
 
 /** A carrier bundle's home country bundle, by HomeBundleIdentifier ("com.apple.UnitedStates"), when the index has it. */
 async function homeCountry(
 	platform: Platform,
-	carrier: Record<string, unknown> | undefined,
+	carrier: Readonly<Record<string, unknown>> | undefined,
 ): Promise<SourceKey | null> {
 	const home = carrier?.HomeBundleIdentifier;
 	if (typeof home !== "string") return null;
@@ -66,75 +55,63 @@ export interface IosBundle {
 	readonly download: string | undefined;
 	/** Whether the bytes are what the index or Apple says they are; null when nothing says. */
 	readonly verified: boolean | null;
-	/** carrier.plist, Info.plist and version.plist, decoded: what the Overview and Settings read. */
-	readonly quick: Readonly<Record<string, unknown>>;
+	readonly quick: BundleFacts["quick"];
 	/** The home country bundle's source key, for a carrier bundle that names one. */
 	readonly home: SourceKey | null;
 }
 
 export async function getBundle(v: Ver): Promise<IosBundle> {
-	const o = await open(v);
-	const { entry, opened, bytes, files } = o;
-	const [id, sha256, sha384, current, previous, held, cc] = await Promise.all([
-		contentId(opened),
-		sha256Hex(bytes),
-		sha384Hex(bytes),
-		versionOf(o, entry),
-		o.previous ? versionOf(o, o.previous) : null,
-		copiesOfSource(o.key, o.ref.platform),
-		countryOf(o.key),
+	const d = await describe(v);
+	const { entry, facts } = d;
+	const [current, previous, cc, home] = await Promise.all([
+		versionOf(d, entry),
+		d.previous ? versionOf(d, d.previous) : null,
+		countryOf(d.key),
+		d.ref.kind === "carrier" ? homeCountry(d.ref.platform, facts.quick["carrier.plist"]) : null,
 	]);
-	const digests = { sha256, sha384, sha1: sha1Hex(bytes) };
-	const quick: Record<string, unknown> = {};
-	for (const f of ["carrier.plist", "Info.plist", "version.plist"]) {
-		const p = plistOf(opened, f);
-		if (p) quick[f] = p;
-	}
-	const copies = copiesOfEntry(held, entry);
-
+	const copies = copiesOfEntry(d.copies, entry);
 	return {
-		source: o.key,
-		ref: o.ref,
+		source: d.key,
+		ref: d.ref,
 		cc: cc ?? undefined,
 		countryName: cc === null ? undefined : countryName(cc),
-		line: o.line,
+		line: d.line,
 		entry: current,
 		previous,
-		info: { ...opened.info, files },
-		downloadSize: bytes.length,
-		contentId: id,
-		digests,
+		info: { ...facts.info, files: d.files },
+		downloadSize: facts.size,
+		contentId: facts.contentId,
+		digests: facts.digests,
 		download: upstream(copies),
-		verified: verify(copies, digests),
-		quick,
-		home:
-			o.ref.kind === "carrier" ? await homeCountry(o.ref.platform, plistOf(opened, "carrier.plist")) : null,
+		verified: verify(copies, facts.digests),
+		quick: facts.quick,
+		home,
 	};
 }
 
 export async function getFile(v: Ver, path: string): Promise<WithPhones<DecodedFile>> {
-	const { opened } = await open(v);
-	const decoded = (): DecodedFile => {
-		try {
-			return decodeFile(opened, path);
-		} catch (e) {
-			if (e instanceof MemberError) error(404, e.message);
-			throw e;
-		}
-	};
-	const [file] = await withPhones([decoded()]);
+	const decoded = await decodedMember(v, path).catch((e: unknown) => {
+		if (e instanceof MemberError) error(404, e.message);
+		throw e;
+	});
+	const [file] = await withPhones([decoded]);
 	if (file === undefined) error(500, `${path}: decoded to nothing`);
 	return file;
 }
 
-/** A modem override file as the neutral modem model has it; null for an Intel / Apple C1 file. */
+/** A modem override file as the neutral modem model has it; null for an Intel-dialect file. */
 export async function getModemConfig(v: Ver, path: string): Promise<ModemConfig | null> {
-	const { opened, entry } = await open(v);
-	try {
-		return iosModemConfig(opened, path, entry.sha);
-	} catch (e) {
-		error(404, errorMessage(e));
-	}
+	const { entry } = await resolve(v);
+	// Wrapped, as the cache keeps no null.
+	const read = await cached(`ipcc-modem:v2:${entry.sha}:${path}`, async () => {
+		const { opened } = await open(v);
+		try {
+			return { config: iosModemConfig(opened, path, entry.sha) };
+		} catch (e) {
+			error(404, errorMessage(e));
+		}
+	});
+	return read.config;
 }
 
 export async function getRaw(v: Ver, path: string): Promise<Uint8Array> {
@@ -146,9 +123,9 @@ export async function getRaw(v: Ver, path: string): Promise<Uint8Array> {
 
 /** A country bundle's emergency alert settings at this version. */
 export async function getAlerts(v: Ver): Promise<CbsRow | null> {
-	const { opened } = await open(v);
-	const plist = plistOf(opened, "carrier.plist");
-	const locales = opened.info.files
+	const { facts } = await describe(v);
+	const plist = facts.quick["carrier.plist"];
+	const locales = facts.info.files
 		.filter((f) => f.path.endsWith("CBMessage.strings"))
 		.flatMap((f) => f.locale ?? []);
 	return plist ? cbsRow(plist, locales) : null;

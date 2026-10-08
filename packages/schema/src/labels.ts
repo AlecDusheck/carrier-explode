@@ -5,11 +5,8 @@
 
 import * as v from "valibot";
 
-/**
- * What labels are about: a phone (product type or Pixel codename), a carrier (its id), a modem (iOS generation or
- * Android vendor), a source (its key), whose labels hold for the carrier it is linked into, whatever that carrier's id.
- */
-export const LABEL_SUBJECTS = ["device", "carrier", "modem", "source"] as const;
+/** What labels are about: a phone (product type or Pixel codename), a carrier (its id), a modem (iOS generation, Android vendor, or a configuration's label: `SBP 20`). */
+export const LABEL_SUBJECTS = ["device", "carrier", "modem"] as const;
 export type LabelSubject = (typeof LABEL_SUBJECTS)[number];
 
 /** Who wrote a label. The data a value is derived from ranks just above `feed`: more trusted origins override it, the rest fill its gaps. */
@@ -36,20 +33,22 @@ const NAME = {
 /** A person's name for a carrier beats the data's, which hides brands behind hosts (Verizon_Comcast_LTE_US) and former names. */
 const CARRIER_NAME = { ...NAME, trust: ["human", "feed", "model"] } as const satisfies LabelField;
 
-/** Only people name a carrier through one of its sources. */
-const SOURCE_CARRIER_NAME = { ...NAME, trust: ["human"] } as const satisfies LabelField;
-
 /** A person's correction beats a feed's date: a feed can lose a phone's first builds (Google drops a Pixel's history). */
 const RELEASED = {
 	value: v.pipe(v.string(), v.regex(/^\d{4}-\d{2}(-\d{2})?$/)),
 	trust: ["human", "feed"],
 } as const satisfies LabelField;
 
+/** A carrier's icon by its slug, the name of the site's icon file, where the carrier's name names none or the wrong one. */
+const LOGO = {
+	value: v.pipe(v.string(), v.regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/)),
+	trust: ["human"],
+} as const satisfies LabelField;
+
 export const LABEL_FIELDS = {
 	device: { name: NAME, released: RELEASED },
-	carrier: { name: CARRIER_NAME },
+	carrier: { name: CARRIER_NAME, logo: LOGO },
 	modem: { name: NAME },
-	source: { carrierName: SOURCE_CARRIER_NAME },
 } as const satisfies { readonly [S in LabelSubject]: Readonly<Record<string, LabelField>> };
 
 export type LabelFieldName<S extends LabelSubject> = keyof (typeof LABEL_FIELDS)[S] & string;
@@ -68,12 +67,7 @@ const rowOf = <S extends LabelSubject>(subject: S) =>
 		evidence: v.nullable(v.string()),
 	});
 
-const labelRowSchema = v.variant("subject", [
-	rowOf("device"),
-	rowOf("carrier"),
-	rowOf("modem"),
-	rowOf("source"),
-]);
+const labelRowSchema = v.variant("subject", [rowOf("device"), rowOf("carrier"), rowOf("modem")]);
 type LabelRow = v.InferOutput<typeof labelRowSchema>;
 
 /** The field a label sets. */

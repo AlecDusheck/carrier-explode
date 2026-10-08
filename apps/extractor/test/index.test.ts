@@ -32,6 +32,7 @@ import { devicesSynced, queue, type QueueEnv } from "../src/queues.ts";
 import { reindexArtifacts } from "../src/reindex.ts";
 import { permanent } from "../src/errors.ts";
 import { batchOf, MemQueue } from "./queues.ts";
+import { productionTuning } from "./wrangler.ts";
 
 // A test makes hundreds of D1 queries in turn, each a round trip to workerd.
 vi.setConfig({ testTimeout: 30_000 });
@@ -214,7 +215,7 @@ beforeAll(async () => {
 		await d1.batch(statements.map((s) => d1.prepare(s)));
 	}
 	db = indexDb(d1);
-	ctx = { db, bucket };
+	ctx = { db, bucket, batch: productionTuning.INDEX_BATCH };
 	await syncDevices(db, [
 		{ code: "iPhone18,1", platform: "ios", released: "2025-09-19", boards: ["V53AP"] },
 		{ code: "iPhone12,8", platform: "ios", released: "2020-04-24", boards: ["D79AP"] },
@@ -226,7 +227,7 @@ beforeAll(async () => {
 		"overrides_D79.plist:ShowCallForwarded": true,
 	});
 	for (const p of [att1, att2, profile(TMO, "tmo1", "T-Mobile", "310260", "on")]) {
-		await putJson(bucket, keys.norm(p.sha), p);
+		await putJson(bucket, keys.profile(p.sha), p);
 	}
 	for (const r of [OLDER, NEWER]) await putJson(bucket, keys.release("ios", r.id), r);
 
@@ -240,7 +241,7 @@ beforeAll(async () => {
 		pixelProfile(PIXEL_TMO, "ptmo1", "T-Mobile", "on"),
 		pixelDefault,
 	]) {
-		await putJson(bucket, keys.norm(p.sha), p);
+		await putJson(bucket, keys.profile(p.sha), p);
 	}
 	await bucket.put(keys.obj(CARRIER_LIST.sha), CARRIER_LIST.bytes);
 	for (const r of PIXEL_RECORDS) await putJson(bucket, keys.release("android", r.id, r.devices[0] ?? ""), r);
@@ -436,6 +437,8 @@ describe("the index queue's consumer", () => {
 		PURGE_QUEUE: new MemQueue(),
 		PURGE_ORIGINS: undefined,
 		PURGE_TOKEN: undefined,
+		INDEX_BATCH: productionTuning.INDEX_BATCH,
+		SETTLE_DELAY_S: productionTuning.SETTLE_DELAY_S,
 	});
 
 	it("queues only the chain a message hands on, never a record again", async () => {
@@ -504,7 +507,7 @@ describe("the index queue's consumer", () => {
 			"overrides_V53.plist:Show5GSwitch": true,
 			"overrides_D79.plist:ShowCallForwarded": true,
 		});
-		await bucket.put(keys.norm("att2"), JSON.stringify(att2));
+		await bucket.put(keys.profile("att2"), JSON.stringify(att2));
 		expect(await index(ios(NEWER.id))).toEqual({ wrote: true });
 		const d = delta(before, await dump());
 		expect(Object.keys(d).toSorted()).toEqual(["concepts", "phone_states", "settings"]);
@@ -525,7 +528,7 @@ describe("a feed's devices", () => {
 			pixelProfile(VZW, "pvzw1", "Verizon", "on"),
 			pixelProfile(VZW, "pvzw2", "Verizon", "no"),
 		])
-			await putJson(bucket, keys.norm(p.sha), p);
+			await putJson(bucket, keys.profile(p.sha), p);
 		for (const [device, sha] of [
 			["caiman", "pvzw1"],
 			["komodo", "pvzw2"],
@@ -540,7 +543,11 @@ describe("a feed's devices", () => {
 		// The newest phone's line heads the source.
 		expect((await sourceOf(db, VZW))?.headSha).toBe("pvzw1");
 
-		const queues = { INDEX_QUEUE: new MemQueue<IndexMessage>(), PURGE_QUEUE: new MemQueue<object>() };
+		const queues = {
+			INDEX_QUEUE: new MemQueue<IndexMessage>(),
+			PURGE_QUEUE: new MemQueue<object>(),
+			SETTLE_DELAY_S: productionTuning.SETTLE_DELAY_S,
+		};
 		const devices = await syncDevices(db, [
 			{ code: "caiman", platform: "android", released: "2024-06-01", boards: [] },
 		]);
@@ -552,7 +559,11 @@ describe("a feed's devices", () => {
 	});
 
 	it("purge pages, and derive nothing, when only names change", async () => {
-		const queues = { INDEX_QUEUE: new MemQueue<IndexMessage>(), PURGE_QUEUE: new MemQueue<object>() };
+		const queues = {
+			INDEX_QUEUE: new MemQueue<IndexMessage>(),
+			PURGE_QUEUE: new MemQueue<object>(),
+			SETTLE_DELAY_S: productionTuning.SETTLE_DELAY_S,
+		};
 		await devicesSynced(queues, "ios", { devices: 0, names: 1 });
 		expect(queues.INDEX_QUEUE.take()).toEqual([]);
 		expect(queues.PURGE_QUEUE.take()).toEqual([{}]);
@@ -579,8 +590,8 @@ describe("reindexing", () => {
 	it("normalizes each held record's artifacts that lack a norm object for a reindex of all, each sha once, by kind", async () => {
 		expect(await reindexArtifacts(bucket, { kind: "all", platform: "ios" })).toEqual([]);
 		const unheld = ["tmo1", "att1"];
-		const held = await Promise.all(unheld.map(async (sha) => (await bucket.get(keys.norm(sha)))?.text()));
-		await Promise.all(unheld.map((sha) => bucket.delete(keys.norm(sha))));
+		const held = await Promise.all(unheld.map(async (sha) => (await bucket.get(keys.profile(sha)))?.text()));
+		await Promise.all(unheld.map((sha) => bucket.delete(keys.profile(sha))));
 		expect(await reindexArtifacts(bucket, { kind: "all", platform: "ios" })).toEqual([
 			{ kind: "apple.ipcc", sha: "att1", source: ATT },
 			{ kind: "apple.ipcc", sha: "tmo1", source: TMO },
@@ -589,7 +600,7 @@ describe("reindexing", () => {
 			unheld.map((sha, i) => {
 				const json = held[i];
 				if (json === undefined) throw new Error(`${sha} was not held`);
-				return bucket.put(keys.norm(sha), json);
+				return bucket.put(keys.profile(sha), json);
 			}),
 		);
 	});
@@ -598,10 +609,10 @@ describe("reindexing", () => {
 		for (const id of [OLDER.id, NEWER.id]) await index(ios(id));
 		// As a PROFILE_SCHEMA bump leaves the index, and NEWER's own att2 not normalized again yet.
 		await d1.prepare("UPDATE profiles SET schema = schema - 1 WHERE sha IN ('att1', 'att2', 'tmo1')").run();
-		const att2 = await bucket.get(keys.norm("att2"));
+		const att2 = await bucket.get(keys.profile("att2"));
 		const att2Json = await att2?.text();
 		if (att2Json === undefined) throw new Error("att2 is not held");
-		await bucket.delete(keys.norm("att2"));
+		await bucket.delete(keys.profile("att2"));
 		// A record indexed as its unit would derives ATT, whose head is NEWER's att2.
 		await expect(index(ios(OLDER.id))).rejects.toThrow(/missing/);
 
@@ -614,7 +625,7 @@ describe("reindexing", () => {
 		expect(first.next).toEqual({ kind: "reindex", platform: "ios", after: keys.release("ios", OLDER.id) });
 		expect(await derived()).toEqual(before);
 
-		await bucket.put(keys.norm("att2"), att2Json);
+		await bucket.put(keys.profile("att2"), att2Json);
 		const second = await indexUnit(ctx, first.next ?? ios(""));
 		expect(second.next).toEqual({ kind: "reindex", platform: "ios", after: keys.release("ios", NEWER.id) });
 		expect(await derived()).toEqual(before);

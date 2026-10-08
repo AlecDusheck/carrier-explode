@@ -1,8 +1,8 @@
 ---
 title: Galaxy modem configuration
 searchTitle: "Galaxy modem configs: Qualcomm MCFG in the CP image"
-description: "The Qualcomm MCFG configurations in a US Galaxy firmware's CP member, why none is tied to a carrier, and why only Snapdragon models are read."
-updated: 2026-10-06
+description: "The Qualcomm MCFG configurations in a Snapdragon Galaxy firmware's CP member, why none is tied to a carrier, and why an Exynos model's are not read."
+updated: 2026-10-07
 ---
 
 A [carrier pack](/wiki/samsung/carrier-pack) configures Android. The modem has per-carrier configurations of its own, in the firmware's `CP` member.
@@ -21,9 +21,9 @@ A Qualcomm Pixel's hardware configurations carry `mcfg_sel_db.xml`, the rules th
 
 So this site shows a Galaxy's modem configurations by firmware, not by carrier: a carrier pack's page has no Modem tab.
 
-## Snapdragon only
+## Exynos
 
-Only US models are read. In the Exynos Galaxy S26 (`SM-S942B`), `modem.bin`'s sections each start with a `BiEn` header and share one wrapped key, and the `MAIN` section's payload looks random (8.000 bits of entropy per byte), so the image appears to be encrypted.
+An Exynos model's firmware is read for its carrier packs, without modem configurations. In the Exynos Galaxy S26 (`SM-S942B`), `modem.bin`'s sections each start with a `BiEn` header and share one wrapped key, and the `MAIN` section's payload looks random (8.000 bits of entropy per byte), so the image appears to be encrypted.
 
 ## See also
 

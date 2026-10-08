@@ -2,26 +2,114 @@
 
 import * as v from "valibot";
 
-import type { LabelSubject } from "@carrier-explode/schema/records";
+import type { LabelCandidate, LabelCandidateKind } from "@carrier-explode/db";
+import { countryName } from "@carrier-explode/schema";
 
-/** What the labels Workflow names: a source's carrier name is a person's alone. */
-export type NamedSubject = Exclude<LabelSubject, "source">;
+/** A search for a code's name, what the code is (for the model), and how a result writes the code, which the name must stand near. */
+interface Search {
+	readonly query: string;
+	readonly what: string;
+	readonly mark: RegExp;
+}
 
-/** What to search for each subject's code. */
-const QUERIES = {
-	device: (code) => `"${code}" phone model name`,
-	carrier: (code) => `"${code}" mobile carrier brand name`,
-	modem: (code) => `iPhone modem "${code}" baseband chip model`,
-} as const satisfies Record<NamedSubject, (code: string) => string>;
+const literal = (s: string): RegExp => new RegExp(s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "gi");
+/** `202 10`, `202-10`, `MCC 202 MNC 10`. */
+const network = (mcc: string, mnc: string): RegExp => new RegExp(`(?<!\\d)${mcc}\\D{0,12}${mnc}(?!\\d)`, "g");
 
-/** What each subject's code is, for the model. */
-const WHAT = {
-	device:
-		'an Apple product type or a Google Pixel codename; answer with the phone\'s marketing name, such as "iPhone 17 Pro" or "Pixel 9"',
-	carrier:
-		'the name of an Apple carrier bundle; answer with the brand the carrier sells under, such as "Cricket Wireless"',
-	modem: 'an Apple modem firmware family; answer with the modem chip as sold, such as "Qualcomm X80"',
-} as const satisfies Record<NamedSubject, string>;
+const inCountry = (iso: string | null): string => {
+	const country = iso === null ? undefined : countryName(iso);
+	return country === undefined ? "" : ` in ${country}`;
+};
+
+/** Android's carrier list names a carrier it has no name for by the SIM rule that selects it: `311140SPN=SPROCKET`. */
+const SIM_RULE = /^(\d{3})(\d{2,3})(?:(SPN|IMSI|GID1|ICCID)=(.+))?$/;
+
+function carrierSearch({ code, platform, iso }: LabelCandidate): Search {
+	const where = inCountry(iso);
+	switch (platform) {
+		case "samsung":
+			return {
+				query: `Samsung CSC "${code}" sales code carrier`,
+				what: `a Samsung CSC (sales code) of Galaxy firmware${where}; answer with the carrier or market it is for`,
+				mark: literal(code),
+			};
+		case "android": {
+			const rule = SIM_RULE.exec(code);
+			if (rule === null) {
+				const name = code.replace(/_[a-z]{2}$/, "");
+				return {
+					query: `"${name}" mobile carrier${where}`,
+					what: `Android's carrier id for a carrier${where}; answer with the brand the carrier sells under, such as "Cricket Wireless"`,
+					mark: literal(name),
+				};
+			}
+			const [, mcc = "", mnc = "", selector, value] = rule;
+			const plmn = `MCC ${mcc} MNC ${mnc}`;
+			return selector === undefined || value === undefined
+				? {
+						query: `${plmn} mobile network operator`,
+						what: `the mobile network ${plmn}${where}; answer with the operator's brand`,
+						mark: network(mcc, mnc),
+					}
+				: {
+						query:
+							selector === "SPN" ? `"${value}" mobile carrier ${plmn}` : `${plmn} ${selector} ${value} MVNO`,
+						what: `the carrier on mobile network ${plmn}${where} whose SIMs have ${selector} ${value}; answer with that carrier's brand`,
+						mark: selector === "SPN" ? literal(value) : network(mcc, mnc),
+					};
+		}
+		case "ios":
+		case "ipados":
+		case "watchos":
+			return {
+				query: `"${code}" mobile carrier brand name`,
+				what: `the name of an Apple carrier bundle${where}; answer with the brand the carrier sells under, such as "Cricket Wireless"`,
+				mark: literal(code),
+			};
+	}
+}
+
+const SEARCHES = {
+	device: ({ code, platform }) =>
+		platform === "android"
+			? {
+					query: `"${code}" Pixel codename`,
+					what: 'a Google Pixel codename; answer with the phone\'s marketing name, such as "Pixel 9"',
+					mark: literal(code),
+				}
+			: {
+					query: `"${code}" model name`,
+					what: `${platform === "samsung" ? "a Samsung model number" : "an Apple model identifier"}; answer with the product's marketing name, such as "iPhone 17 Pro"`,
+					mark: literal(code),
+				},
+	carrier: carrierSearch,
+	modemFamily: ({ code, platform }) =>
+		platform === "ios"
+			? {
+					query: `iPhone baseband modem "${code}"`,
+					what: 'the name of an Apple modem firmware family; answer with the modem chip as sold, such as "Qualcomm X80"',
+					mark: literal(code),
+				}
+			: {
+					query: `"${code}" chipset codename modem`,
+					what: 'the codename a Galaxy phone\'s modem firmware gives its chipset; answer with the modem chip as sold, such as "Qualcomm X80"',
+					mark: literal(code),
+				},
+	modemConfig: ({ code, platform }) => {
+		const sbp = /^SBP (\d+)$/.exec(code)?.[1];
+		return sbp === undefined
+			? {
+					query: `"${code}" modem configuration carrier`,
+					what: `a ${platform === "samsung" ? "Galaxy" : "Pixel"} modem configuration that names no network; answer with the one carrier it is for, or null if it is for none or several`,
+					mark: literal(code),
+				}
+			: {
+					query: `MediaTek SBP ID ${sbp} operator`,
+					what: `MediaTek's SBP id ${sbp}, its modems' number for a mobile operator; answer with that operator`,
+					mark: new RegExp(`(?<!\\d)${sbp}(?!\\d)`, "g"),
+				};
+	},
+} as const satisfies Record<LabelCandidateKind, (c: LabelCandidate) => Search>;
 
 const searchSchema = v.object({
 	items: v.array(
@@ -61,12 +149,12 @@ const replySchema = v.object({
 	),
 });
 
-function prompt(subject: NamedSubject, code: string, results: readonly SearchResult[]): string {
+function prompt(code: string, what: string, results: readonly SearchResult[]): string {
 	const pages = results.map((r, i) => `[${i + 1}] ${r.url}\n${r.title}\n${r.description}`).join("\n\n");
 	return [
-		`"${code}" is ${WHAT[subject]}.`,
-		"Name it only if one of these search results says so plainly. Reply with that name and the URL of the result that says it;",
-		"if none does, reply with null for both. Never guess.",
+		`"${code}" is ${what}.`,
+		`Name it only if one of these search results gives that name to "${code}" plainly. Reply with the name spelled the way that result spells it,`,
+		"and its URL; if none does, reply with null for both. Never guess.",
 		"",
 		pages,
 	].join("\n");
@@ -78,18 +166,41 @@ export interface Labeller {
 	readonly ask: (prompt: string) => Promise<unknown>;
 }
 
-/** The name the search and the model agree on, and the page that gives it; null when no result names the code. Only a URL the search returned counts. */
+/** Lower case, spaces run together; lines kept, since a list of codes gives each its own. */
+const folded = (s: string): string => s.toLowerCase().replace(/[^\S\n]+/g, " ");
+
+/** How far apart a result may write the code and its name, on one line. */
+const NEAR = 60;
+
+const nearby = (text: string, mark: RegExp, name: string): boolean => {
+	const names = [...text.matchAll(literal(name))].map((m) => m.index);
+	return [...text.matchAll(mark)].some((m) =>
+		names.some((i) => {
+			const between = text.slice(Math.min(i, m.index), Math.max(i, m.index));
+			return between.length <= NEAR && !between.includes("\n");
+		}),
+	);
+};
+
+/**
+ * The name a search result gives the code, and that result's URL; null when none does. Only a result the search returned
+ * counts, only if its title or text writes the name beside the code, and only a name that is not the code itself.
+ */
 export async function nameCode(
 	labeller: Labeller,
-	subject: NamedSubject,
-	code: string,
+	candidate: LabelCandidate,
 ): Promise<{ readonly value: string; readonly evidence: string } | null> {
-	const { items } = v.parse(searchSchema, await labeller.search(QUERIES[subject](code)));
+	const { query, what, mark } = SEARCHES[candidate.kind](candidate);
+	const { items } = v.parse(searchSchema, await labeller.search(query));
 	if (!items.length) return null;
 	const answer = v.parse(
 		answerSchema,
-		v.parse(replySchema, await labeller.ask(prompt(subject, code, items))).choices[0]?.message.content,
+		v.parse(replySchema, await labeller.ask(prompt(candidate.code, what, items))).choices[0]?.message.content,
 	);
-	if (answer.name === null || answer.url === null || !items.some((r) => r.url === answer.url)) return null;
-	return { value: answer.name, evidence: answer.url };
+	const { name, url } = answer;
+	if (name === null || url === null || folded(name) === folded(candidate.code)) return null;
+	const cited = items.find((r) => r.url === url);
+	if (cited === undefined) return null;
+	if (!nearby(folded(`${cited.title}\n${cited.description}`), mark, folded(name))) return null;
+	return { value: name, evidence: url };
 }

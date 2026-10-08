@@ -17,7 +17,7 @@ import {
 import { keys, readRecord, type OtaFeed, type ReleaseKey } from "@carrier-explode/storage";
 import { DataError } from "./errors.ts";
 
-/** A normalized object the unit refers to: a Profile or a ModemConfig, stored at keys.norm(sha). */
+/** A normalized object the unit refers to: a Profile (keys.profile) or a ModemConfig (keys.modemConfig). */
 export interface NormRef {
 	readonly sha: string;
 	readonly kind: "profile" | "modem";

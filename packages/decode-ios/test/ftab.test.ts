@@ -70,7 +70,7 @@ describe("ftabSummary", () => {
 		expect(s).toMatchObject({
 			schema: MODEM_SUMMARY_SCHEMA,
 			kind: "ftab",
-			package: { name: "c4000v59/Release/patched/ftab.bin", family: "C1", version: "3.01.03", bver: BVER },
+			package: { name: "c4000v59/Release/patched/ftab.bin", family: "c4000", version: "3.01.03", bver: BVER },
 		});
 		expect(s.entries.map((e) => e.tag)).toEqual(["illb", "bver", "CR11"]);
 	});
@@ -81,18 +81,18 @@ describe("modemGeneration", () => {
 		expect(modemGeneration("Mav25-2.10.01.Release.bbfw")).toBe("Mav25");
 		expect(modemGeneration("Mav30-7.00.01.Release.bbfw")).toBe("Mav30");
 		expect(modemGeneration("ICE19-8.00.00.Release.bbfw")).toBe("ICE19");
-		expect(modemGeneration("c4000v59/Release/patched/ftab.bin")).toBe("C1");
+		expect(modemGeneration("c4000v59/Release/patched/ftab.bin")).toBe("c4000");
 		expect(modemChip("c4000v59/Release/patched/ftab.bin")).toBe("c4000");
 	});
 
-	it("keeps an unnamed Apple chip's id, and has none for other firmware", () => {
+	it("reads an Apple chip as its id, and has none for other firmware", () => {
 		expect(modemGeneration("c4020iphone/Release/patched/ftab.bin")).toBe("c4020");
 		expect(modemGeneration("Rose/r2p1/ftab.bin")).toBeUndefined();
 		expect(modemGeneration("t2026phoneG1/Release/ftab.bin")).toBeUndefined();
 	});
 
 	it("knows each family's vendor", () => {
-		expect(["Mav24", "ICE19", "C1", "c4020", "Rose"].map(modemVendor)).toEqual([
+		expect(["Mav24", "ICE19", "c4000", "c4020", "Rose"].map(modemVendor)).toEqual([
 			"qualcomm",
 			"intel",
 			"apple",
@@ -106,7 +106,7 @@ describe("modem capabilities", () => {
 	it("says what each family's package holds", () => {
 		expect(modemCapabilities("Mav25")).toEqual({ plaintextDefaults: true, carrierConfigIn: "package" });
 		expect(modemCapabilities("ICE19")).toEqual({ plaintextDefaults: false, carrierConfigIn: "package" });
-		expect(modemCapabilities("C1")).toEqual({ plaintextDefaults: false, carrierConfigIn: "bundle" });
+		expect(modemCapabilities("c4000")).toEqual({ plaintextDefaults: false, carrierConfigIn: "bundle" });
 		expect(modemCapabilities("Zed9")).toBeUndefined();
 	});
 

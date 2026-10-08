@@ -8,8 +8,6 @@ export const SUPPORTED_DEVICES = "https://storage.googleapis.com/play_public/sup
 
 const HEADER = "Retail Branding,Marketing Name,Device,Model";
 const ROW = /^"((?:[^"]|"")*)","((?:[^"]|"")*)","((?:[^"]|"")*)","((?:[^"]|"")*)"$/;
-/** US models: a carrier's `U` and the unlocked `U1`. */
-const US_MODEL = /^SM-[SFGN]\d{3,4}U1?$/;
 
 /** A phone's family and generation, as its name gives them: `Galaxy Z Fold8 Ultra` is `Galaxy Z Fold` 8. */
 interface Line {
@@ -31,7 +29,7 @@ function lineOf(name: string, { families, exclude }: Scope["samsung"]): Line | u
 		: { family, generation: Number.parseInt(generation, 10) };
 }
 
-/** The US Samsung models in `csv` (decoded) on one of the scope's lines. */
+/** Every Samsung model in `csv` (decoded) on one of the scope's lines, each region's variant its own. */
 export function galaxyPhones(csv: string, scope: Scope["samsung"]): GalaxyPhone[] {
 	const [header, ...rows] = csv.split(/\r?\n/);
 	if (header !== HEADER) throw new DataError(`${SUPPORTED_DEVICES}: header ${header ?? "missing"}`);
@@ -43,7 +41,7 @@ export function galaxyPhones(csv: string, scope: Scope["samsung"]): GalaxyPhone[
 			.map((f) => f.replaceAll('""', '"'));
 		if (fields === undefined) throw new DataError(`${SUPPORTED_DEVICES}: not four quoted fields: ${row}`);
 		const [brand = "", name = "", , model = ""] = fields;
-		if (brand !== "Samsung" || !US_MODEL.test(model)) continue;
+		if (brand !== "Samsung") continue;
 		const line = lineOf(name.replace(/ 5G$/, ""), scope);
 		if (line !== undefined) phones.set(model, { model, line });
 	}

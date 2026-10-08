@@ -1,4 +1,4 @@
-/** Every request: per-IP budgets, then old URLs repaired and the cache policy on the way out. */
+/** Every request: old URLs repaired, and the cache policy on the way out. */
 
 import { env } from "cloudflare:workers";
 import type { Handle } from "@sveltejs/kit/hooks";
@@ -7,7 +7,6 @@ import { responsePolicy } from "#lib/server/cache-policy.ts";
 import { isIndexed } from "#lib/server/catalog.ts";
 import { getCountryCarriers, getList } from "#lib/server/lists.ts";
 import { repair, type Held } from "#lib/server/legacy.ts";
-import { overBudget, rateClass, remoteQuery } from "#lib/server/rate.ts";
 import { releaseNamed } from "#lib/server/releases.ts";
 import { article } from "#lib/wiki.ts";
 import { sourceKey } from "@carrier-explode/schema/types";
@@ -29,8 +28,7 @@ const missingFile = ({ pathname }: URL): boolean =>
 export const handle: Handle = async ({ event, resolve }) => {
 	const response = missingFile(event.url)
 		? new Response("Not found\n", { status: 404, headers: { "content-type": "text/plain; charset=utf-8" } })
-		: ((await overBudget(event, rateClass(event, remoteQuery(event)))) ??
-			(await repair(event.request, env.LEGACY_REPAIR, held, () => resolve(event))));
+		: await repair(event.request, env.LEGACY_REPAIR, held, () => resolve(event));
 	const policy = await responsePolicy(event, response, env.CACHE_TTL);
 	if (policy) applyPolicy(response.headers, policy);
 	return response;

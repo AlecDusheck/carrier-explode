@@ -24,7 +24,14 @@ export const QUEUES = {
 /** What the consumers reach. */
 export type QueueEnv = Pick<
 	Env,
-	"DB" | "BUCKET" | "INDEX_QUEUE" | "PURGE_QUEUE" | "PURGE_ORIGINS" | "PURGE_TOKEN"
+	| "DB"
+	| "BUCKET"
+	| "INDEX_QUEUE"
+	| "PURGE_QUEUE"
+	| "PURGE_ORIGINS"
+	| "PURGE_TOKEN"
+	| "INDEX_BATCH"
+	| "SETTLE_DELAY_S"
 >;
 
 /** sendBatch takes at most 100 messages, and 256 KB of them together: measured as JSON, with room for the encoding's overhead. */
@@ -51,11 +58,13 @@ export function sendBatches<T>(messages: readonly T[]): T[][] {
 }
 
 export async function queueIndex(
-	env: Pick<Env, "INDEX_QUEUE">,
+	env: Pick<Env, "INDEX_QUEUE" | "SETTLE_DELAY_S">,
 	messages: readonly IndexMessage[],
 ): Promise<void> {
 	for (const batch of sendBatches(messages))
-		await env.INDEX_QUEUE.sendBatch(batch.map((body) => ({ body, delaySeconds: delayOf(body) })));
+		await env.INDEX_QUEUE.sendBatch(
+			batch.map((body) => ({ body, delaySeconds: delayOf(body, env.SETTLE_DELAY_S) })),
+		);
 }
 
 /** A purge names nothing: the readers tag every response alike, so each purge drops them all. */
@@ -70,7 +79,7 @@ export async function queuePurge(env: Pick<Env, "PURGE_QUEUE">): Promise<void> {
  * phone states, so the platform is derived again; either shows on pages, which are purged.
  */
 export async function devicesSynced(
-	env: Pick<Env, "INDEX_QUEUE" | "PURGE_QUEUE">,
+	env: Pick<Env, "INDEX_QUEUE" | "PURGE_QUEUE" | "SETTLE_DELAY_S">,
 	platform: ReleasePlatform,
 	changed: { readonly devices: number; readonly names: number },
 ): Promise<void> {
@@ -126,7 +135,7 @@ async function purgeReaders(env: PurgeVars): Promise<void> {
 
 /** Each message indexed in turn; what it hands on and what it changed are queued before it is acknowledged. */
 async function consumeIndex(batch: MessageBatch, env: QueueEnv): Promise<void> {
-	const ctx = { db: indexDb(env.DB), bucket: env.BUCKET };
+	const ctx = { db: indexDb(env.DB), bucket: env.BUCKET, batch: env.INDEX_BATCH };
 	for (const message of batch.messages) {
 		const done = await indexUnit(ctx, v.parse(indexMessageSchema, message.body));
 		if (done.next !== null) await queueIndex(env, [done.next]);

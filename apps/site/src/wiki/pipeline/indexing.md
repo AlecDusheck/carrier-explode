@@ -90,7 +90,7 @@ People correct the result in the `links` table, each with its reason: `link` joi
 
 ## Reindexing
 
-After a decoder or `PROFILE_SCHEMA` change, a reindex reads every held artifact from `obj/` into the new `norm/` prefix, then writes every held record's facts again, one record a message in key order, and ends with each platform's rederive.
+After a decoder change and a `PROFILE_SCHEMA` or `MODEM_SCHEMA` bump, a reindex reads every held artifact from `obj/` into the new `norm/` prefix, then writes every held record's facts again, one record a message in key order, and ends with each platform's rederive.
 
 ## See also
 

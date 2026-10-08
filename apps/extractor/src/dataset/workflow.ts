@@ -7,7 +7,7 @@ import { datasetMetadataSchema, keys, type DatasetMetadata } from "@carrier-expl
 import type { Env } from "../env.ts";
 import { PIPELINES } from "../pipelines.ts";
 import { queuePurge } from "../queues.ts";
-import { doStep, STEP } from "../unit.ts";
+import { doStep } from "../unit.ts";
 import { buildDataset } from "./build.ts";
 
 const hex = (digest: ArrayBuffer): string =>
@@ -44,8 +44,8 @@ export class DatasetWorkflow extends WorkflowEntrypoint<Env, unknown> {
 		step: WorkflowStep,
 	): Promise<DatasetMetadata & { readonly changed: boolean }> {
 		const { day } = v.parse(PIPELINES.dataset.params, event.payload);
-		const published = await doStep(step, "build", STEP, () => publishDataset(this.env, day));
-		if (published.changed) await doStep(step, "purge", STEP, () => queuePurge(this.env));
+		const published = await doStep(step, "build", this.env, () => publishDataset(this.env, day));
+		if (published.changed) await doStep(step, "purge", this.env, () => queuePurge(this.env));
 		return published;
 	}
 }

@@ -7,7 +7,6 @@ import { parse } from "valibot";
 import { describe, expect, it } from "vitest";
 
 import { crc32, packFiles } from "@carrier-explode/binary";
-import { sbpOperator } from "@carrier-explode/decode-mediatek";
 import { decodeManifest, decodeUeCap } from "@carrier-explode/decode-shannon";
 import { FsNotFoundError, type DirEntry, type Filesystem } from "@carrier-explode/firmware";
 import { modemConfig, type NormalizedModem } from "@carrier-explode/schema";
@@ -403,18 +402,16 @@ describe("mediatek", () => {
 				[`images/${LABEL}/md/modem-bundle.img.gz`]: modemBundle(),
 			}),
 		);
-		const operator = sbpOperator(108)?.name;
 		expect([got.family, got.firmware, got.archives.map((a) => a.label)]).toEqual([
 			"mediatek",
 			LABEL,
-			[`SBP 108 (${operator})`, "SBP 9999"],
+			["SBP 108", "SBP 9999"],
 		]);
 		const [twn, unknown] = got.archives;
 		expect(await members(twn)).toEqual(["items.json", "nw.mcfnwota", "op.mcfopota", "sbp.json"]);
 		expect(await members(unknown)).toEqual(["items.json", "op.mcfopota", "sbp.json"]);
 		expect(JSON.parse(text((await twn?.files())?.get("sbp.json")))).toEqual({
 			id: 108,
-			operator,
 			plmns: [
 				{ mcc: "466", mnc: "97" },
 				{ mcc: "466", mnc: "99" },
@@ -429,7 +426,7 @@ describe("mediatek", () => {
 		const c = (await config(twn)).config;
 		expect([c.family, c.label, c.selection]).toEqual([
 			"mediatek",
-			`SBP 108 (${operator})`,
+			"SBP 108",
 			[{ mccmnc: "46697" }, { mccmnc: "46699" }],
 		]);
 		expect(c.items.find((i) => i.id === `lid:0x3c1/${0x7130}`)).toMatchObject({

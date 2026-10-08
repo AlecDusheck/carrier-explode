@@ -48,7 +48,7 @@ const rules: SimRule[] = [
 ];
 
 describe("AOSP XML", () => {
-	it("writes a Pixel APN once per rule apns-conf.xml can state", () => {
+	it("writes a Pixel APN once per rule apns-conf.xml can state, with its password", () => {
 		const xml = apnElements(rules, pixelApns(cs, "test_us"));
 		expect(xml.split("\n").filter(Boolean)).toEqual([
 			'  <apn carrier="Internet &amp; MMS" mcc="310" mnc="260" apn="fast.example" type="default,mms,*" bearer_bitmask="14|20" infrastructure_bitmask="cellular|satellite" protocol="NON-IP" password="secret" skip_464xlat="0"/>',
@@ -83,8 +83,10 @@ describe("AOSP XML", () => {
 	it("names a decoded APN by its label, else its source", () => {
 		const xml = apnElements(
 			rules.slice(0, 1),
-			profileApns([{ apn: "a", types: ["ims"], hasPassword: true, auth: "chap", path: "p" }], "TMB"),
+			profileApns([{ apn: "a", types: ["ims"], password: "p", auth: "chap", path: "p" }], "TMB"),
 		);
-		expect(xml).toBe('  <apn carrier="TMB" mcc="310" mnc="260" apn="a" type="ims" authtype="2"/>\n');
+		expect(xml).toBe(
+			'  <apn carrier="TMB" mcc="310" mnc="260" apn="a" type="ims" authtype="2" password="p"/>\n',
+		);
 	});
 });

@@ -479,7 +479,13 @@ const shippedModemsSchema = v.variant("platform", [
 	/** A Pixel's or Galaxy's modem firmware and the carrier configurations it carries. */
 	v.object({
 		platform: v.picklist(DEVICE_RELEASE_PLATFORMS),
-		modems: list(v.object({ ...modem, configs: list(v.object({ label: str, sha: sha256Schema })) })),
+		modems: list(
+			v.object({
+				...modem,
+				/** `name`: a person's name for a configuration whose selection names no carrier (`Sprint` for `SBP 20`). */
+				configs: list(v.object({ label: str, name: nullable(str), sha: sha256Schema })),
+			}),
+		),
 	}),
 ]);
 export type ShippedModems = v.InferOutput<typeof shippedModemsSchema>;

@@ -41,6 +41,7 @@ export {
 	type ProfileComparison,
 } from "./compare.ts";
 export {
+	FACTS_SCHEMA,
 	headRows,
 	mainFile,
 	modemFacts,
@@ -95,7 +96,7 @@ export {
 	type LinkRule,
 	type SourceIdentity,
 } from "./identity.ts";
-export { newestFirst, newestOf, type DeviceOrder } from "./devices.ts";
+export { newestFirst, newestOf, type DeviceOrder, type NamedDevice } from "./devices.ts";
 export { boardProducts, boardRefs, productOf, type BoardProducts, type BoardRef } from "./ios/boards.ts";
 export { countryName, isoForMcc } from "./countries.ts";
 export * from "./records.ts";

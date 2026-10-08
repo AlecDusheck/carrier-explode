@@ -10,7 +10,6 @@ import { indexDb } from "@carrier-explode/db";
 import { caching } from "./cache.ts";
 import { errorBody, errorStatus, type ApiEnv } from "./context.ts";
 import { canonical } from "./page.ts";
-import { budget } from "./rate.ts";
 import { builds } from "./routes/builds.ts";
 import { carriers } from "./routes/carriers.ts";
 import { catalog } from "./routes/catalog.ts";
@@ -29,7 +28,7 @@ const DESCRIPTION = `Every carrier settings file Apple, Google and Samsung ship,
 - Lists come a page at a time: follow \`next.url\`, or pass \`next.cursor\` as \`cursor\`. A query has one spelling; any other redirects to it.
 - Errors are \`{ error: { status, code, message } }\`.
 - Answers are cached at the edge until the index changes them. \`latest\` follows a line's newest version; a version slug never changes.
-- No key. Each IP has a budget per minute, shared with carrierexplode.com; past it, a 429 says when to retry.`;
+- No key. Each IP may make 300 uncached requests in 10 seconds, counted with carrierexplode.com's; past that, Cloudflare answers 429 for 10 seconds.`;
 
 /** One D1 session per request: reads go to the nearest replica and stay in order within the request. */
 const session = createMiddleware<ApiEnv>(async (c, next) => {
@@ -43,8 +42,7 @@ export const api: OpenAPIHono<ApiEnv> = new OpenAPIHono<ApiEnv>();
 
 api.use("*", caching, etag(), canonical, session);
 api.use("/v1/*", READ_ONLY);
-api.use("/openapi.json", READ_ONLY, budget("base"));
-api.use("/", budget("base"));
+api.use("/openapi.json", READ_ONLY);
 
 // Static segments before the parameters that would also match them: /v1/carriers is not a platform, /v1/ios/builds not a kind.
 for (const routes of [catalog, carriers, features, devices, sims, compare, modems, builds, sources])

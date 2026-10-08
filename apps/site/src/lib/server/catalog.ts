@@ -40,9 +40,8 @@ import {
 import { trainVersions } from "#lib/android/naming.ts";
 import { NAMING } from "#lib/naming.ts";
 import type { Ver, Version, VersionCopy } from "#lib/types.ts";
-import { perRequest } from "./cache";
-import { db, everyPage } from "./db";
-import type { PicturedCarrier } from "./pictures";
+import { cached, perRequest } from "./cache";
+import { db, everyPage, indexVersion } from "./db";
 
 /** Whose devices a family's lines are: Apple's models are iPhones, as its images are. */
 const LINE_DEVICES = { apple: "ios", android: "android", samsung: "samsung" } as const satisfies Record<
@@ -61,7 +60,7 @@ export const PHONE_IMAGES = {
 
 /** A platform's phones, newest first. */
 export const devicesOf = perRequest(async (platform: ReleasePlatform): Promise<ShownDevice[]> =>
-	deviceList(await db(), platform),
+	cached(`devices:v1:${platform}:${await indexVersion()}`, async () => deviceList(await db(), platform)),
 );
 
 /** Each device's name, by code. */
@@ -79,13 +78,15 @@ export const deviceOrder = async (platform: Platform): Promise<DeviceOrder> =>
 	newestFirst(await devicesOf(LINE_DEVICES[decoderFamily(platform)]));
 
 /** A platform's releases, newest first. */
-export const releasesOf = perRequest(async (platform: ReleasePlatform): Promise<ListedRelease[]> => {
-	const d = await db();
-	return everyPage(
-		(page: Page<string>) => releaseList(d, platform, page),
-		(r) => r.sortKey,
-	);
-});
+export const releasesOf = perRequest(async (platform: ReleasePlatform): Promise<ListedRelease[]> =>
+	cached(`releases:v1:${platform}:${await indexVersion()}`, async () => {
+		const d = await db();
+		return everyPage(
+			(page: Page<string>) => releaseList(d, platform, page),
+			(r) => r.sortKey,
+		);
+	}),
+);
 
 /** A release's modems as the index has them, each family named. */
 export type ShippedModem = ModemRow & { readonly familyName: string };
@@ -95,19 +96,12 @@ export const shippedModems = perRequest(
 		modemsOf(await db(), platform, build),
 );
 
-const sourceRow = perRequest(async (key: SourceKey) => sourceOf(await db(), key));
+/** A source as its header shows it; undefined when the index lacks it. */
+export const sourceRow = perRequest(async (key: SourceKey) => sourceOf(await db(), key));
 
 type SourceHeader = NonNullable<Awaited<ReturnType<typeof sourceRow>>>;
 
 export const isIndexed = async (key: SourceKey): Promise<boolean> => (await sourceRow(key)) !== undefined;
-
-/** A source's carrier with its members; null until the link step has linked it, and for a country bundle. */
-export const carrierOfSource = async (key: SourceKey): Promise<PicturedCarrier | null> => {
-	const s = await sourceRow(key);
-	return s === undefined || s.carrier === null || s.carrierName === null
-		? null
-		: { id: s.carrier, name: s.carrierName, members: s.members };
-};
 
 /** Every source of a source's carrier, each platform's primary first; none until linked, and for a country bundle. */
 export const carrierMembers = async (key: SourceKey): Promise<readonly SourceKey[]> => {
@@ -125,6 +119,8 @@ export interface Located {
 	readonly source: SourceHeader;
 	readonly timeline: readonly TimelineEntry[];
 	readonly order: DeviceOrder;
+	/** Every copy of it: what names its versions, and a version page's "Shipped in". */
+	readonly copies: readonly OrderedCopy[];
 }
 
 /** `key` is untrusted: it comes from a URL or a query argument. */
@@ -132,13 +128,14 @@ export const locate = perRequest(async (key: string): Promise<Located> => {
 	const ref = parseSourceKey(key);
 	if (!ref) error(400, `Not a source key: ${key}`);
 	const typed = sourceKey(ref);
-	const [source, timeline, order] = await Promise.all([
+	const [source, timeline, order, copies] = await Promise.all([
 		sourceRow(typed),
 		db().then((d) => entriesOf(d, typed)),
 		deviceOrder(ref.platform),
+		db().then((d) => copiesOf(d, typed, ref.platform)),
 	]);
 	if (!source) error(404, `No ${ref.name} on ${ref.platform}.`);
-	return { key: typed, ref, source, timeline, order };
+	return { key: typed, ref, source, timeline, order, copies };
 });
 
 /** A Ver from the strings a per-request cache keys by, where "" is a missing line or version. */
@@ -192,11 +189,6 @@ export const canonicalPath = (r: Resolved): string =>
 		canonicalLine(r.ref, r.timeline, r.entry.sha, r.order) ?? { line: r.line, slug: r.entry.slug },
 	);
 
-/** Every copy of a source: what names its versions, and a version page's "Shipped in". */
-export const copiesOfSource = perRequest(async (key: SourceKey, platform: Platform): Promise<OrderedCopy[]> =>
-	copiesOf(await db(), key, platform),
-);
-
 type OrderedRelease = Extract<OrderedCopy, { readonly kind: "release" }>["release"];
 
 /** The copies of one entry. */
@@ -209,7 +201,7 @@ const imageOs = (r: OrderedRelease): string => r.label ?? r.version;
 /** Entries named by their copies' releases, as pages show them. */
 export async function versionsOf(r: Located, entries: readonly TimelineEntry[]): Promise<Version[]> {
 	const { platform } = r.ref;
-	const copies = await copiesOfSource(r.key, platform);
+	const { copies } = r;
 	const naming = NAMING[platform];
 	// Apple lists an OTA file under OS versions already; a Pixel under build trains.
 	const otaOs =

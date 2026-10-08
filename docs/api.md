@@ -1,6 +1,6 @@
 # Public API (`/v1`)
 
-`apps/api`: read-only JSON over the D1 index and the decoded records in R2. No key; per-IP budgets shared with the site. Everything a response states comes from `packages/db` reads (labels joined in SQL) and the stored records; the API derives nothing.
+`apps/api`: read-only JSON over the D1 index and the decoded records in R2. No key; the zone's per-IP rate limit covers it and the site. Everything a response states comes from `packages/db` reads (labels joined in SQL) and the stored records; the API derives nothing.
 
 Two layers:
 
@@ -130,9 +130,9 @@ Every rule the SIM satisfies, most specific first: a GID or IMSI/ICCID prefix ru
 - **Pages**: `limit` (100, at most 500) and an opaque `cursor`; `next` is `{ cursor, url }` or null. Keyset, so a page costs its size.
 - **One spelling**: parameters sorted, the default limit left out; any other spelling is a 308 to it, an unknown parameter a 400. One URL, one cache entry.
 - **Field selection**: `fields=apns,concepts` on a version and on a carrier's profiles; `settings` is its own resource, so a version never carries every native key.
-- **Errors**: `{ "error": { "status": 404, "code": "not_found", "message": "No carrier Nope." } }`; codes `bad_request`, `not_found`, `rate_limited`, `internal`.
+- **Errors**: `{ "error": { "status": 404, "code": "not_found", "message": "No carrier Nope." } }`; codes `bad_request`, `not_found`, `internal`.
 - **Caching**: everything is edge-cached until the next index purge (one tag, `index`). A version by slug, a modem config, and a comparison of two named versions are pinned (30 days); `latest` and lists 1 day, stale-while-revalidate. Every answer has an ETag; `If-None-Match` gets a 304.
-- **Budgets**: per IP per minute, shared with the site: 300 index reads; 120 record reads (versions, settings, profiles, comparisons, modem configs). A cache hit costs nothing; past it, 429 with `Retry-After`.
+- **Rate limit**: a zone WAF rule against floods, 300 requests per IP per 10 seconds across the site and the API (the site's static files excepted: `/_app/immutable/`, its SVGs outside `/raw/`, and `/cdn-cgi/`), counted per Cloudflare location; cache hits do not count (`requests_to_origin`). Past it, Cloudflare's own `429` page with `Retry-After` for 10 seconds, not the JSON error shape.
 - **Discovery**: `/v1` lists every collection; `/openapi.json` (3.1) has every route, parameter, example and response schema; the site's `/llms.txt` and wiki article point here.
 
 ## Changed from the first `/v1`

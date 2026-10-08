@@ -6,7 +6,7 @@ import * as v from "valibot";
 import { NOT_CACHED, REVALIDATE, revalidating, type CachePolicy } from "@carrier-explode/storage";
 
 /** A bundle member as-is. */
-export const RAW: RouteId =
+const RAW: RouteId =
 	"/raw/[platform=appleplatform]/[kind=kind]/[name]/[[line=line]]/[version=version]/[...path]";
 
 /** Seconds per kind of response: wrangler.jsonc vars.CACHE_TTL. */

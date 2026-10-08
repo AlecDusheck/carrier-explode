@@ -1,5 +1,5 @@
 /**
- * MediaTek modem configuration (MCF) files, SBP operator ids, and md1rom's item table, which types and names their
+ * MediaTek modem configuration (MCF) files, and md1rom's item table, which types and names their
  * values. No public format exists; the layout was read from Pixel 11 files and firmware.
  */
 
@@ -19,7 +19,6 @@ export {
 	type ItemWidth,
 	type LidGroup,
 } from "./layout.ts";
-export { sbpOperator } from "./sbp.ts";
 export { ITEM_UNITS, nameOf, shapeOf, shapesFor, type ItemShape, type ItemShapes } from "./shapes.ts";
 export { readValue, type McfValue } from "./values.ts";
 

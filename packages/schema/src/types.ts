@@ -1,7 +1,8 @@
 /** The platform-neutral model. Each platform's mapper turns one decoded artifact into a Profile. */
 
-/** Bump when a stored shape changes: norm/v<N>/ is keyed by it and rebuilt by `reindex`. */
-export const PROFILE_SCHEMA = 7;
+/** Bump when a stored shape changes: its objects are keyed under norm/v<N>/ and rebuilt by `reindex`. */
+export const PROFILE_SCHEMA = 8;
+export const MODEM_SCHEMA = 7;
 
 /** The OS that ships the settings. iPad and Watch bundles are separate files with their own versions; Pixel is `android`. */
 export const PLATFORMS = ["ios", "ipados", "watchos", "android", "samsung"] as const;
@@ -263,8 +264,7 @@ export interface Apn {
 	readonly roamingProtocol?: IpProtocol;
 	readonly auth?: ApnAuth;
 	readonly user?: string;
-	/** Passwords are never republished. */
-	readonly hasPassword: boolean;
+	readonly password?: string;
 	readonly proxy?: string;
 	readonly port?: string;
 	readonly mmsc?: string;
@@ -559,7 +559,7 @@ export interface BandComponent {
 
 export type BandCombination = readonly BandComponent[];
 
-/** One list of band combinations, stored apart at keys.combos(key) so a config stays small. */
+/** One list of band combinations, stored apart at keys.combos(key) so a config stays small; shaped by MODEM_SCHEMA. */
 export interface ComboSet {
 	/** sha256 of the stored list: configs that carry the same list share it. */
 	readonly key: string;
@@ -572,17 +572,17 @@ export interface ComboSet {
 export const MODEM_SCOPES = ["carrier", "firmware"] as const;
 export type ModemScope = (typeof MODEM_SCOPES)[number];
 
-/** A configuration in one modem family, normalised. Stored at norm/v<PROFILE_SCHEMA>/<sha>.json like a Profile. */
+/** A configuration in one modem family, normalised. Stored at norm/v<MODEM_SCHEMA>/<sha>.json. */
 export interface ModemConfig {
-	readonly schema: typeof PROFILE_SCHEMA;
+	readonly schema: typeof MODEM_SCHEMA;
 	readonly family: ModemVendor;
 	readonly sha: string;
-	/** The family's own name for it: `Commercial-TMO`, `us_tmo`, `SBP 12 (Verizon)`. */
+	/** The family's own name for it: `Commercial-TMO`, `us_tmo`, `SBP 12`. */
 	readonly label: string;
 	readonly scope: ModemScope;
 	/** SIM rules that select it that a SimMatcher can state. */
 	readonly selection: readonly SimMatcher[];
-	/** Header facts the native file states: `Written for: Qualcomm modem`, `PRI revision: 0.1.172`. */
+	/** Header facts the native file states: `Dialect: Qualcomm`, `PRI revision: 0.1.172`. */
 	readonly facts: readonly { readonly label: string; readonly value: string }[];
 	/** What this configuration sets; values its base sets alone are the base's. */
 	readonly items: readonly ModemItem[];

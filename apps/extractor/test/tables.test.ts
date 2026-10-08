@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 
 import { type NormArtifact, normBatches } from "../src/normalize.ts";
 import { instanceId, iosRun, pipelineOfInstance, reindexRun, runOf } from "../src/runs.ts";
-import { FEED_NAMES, PIPELINE_NAMES, type PipelineParams, PIPELINES } from "../src/pipelines.ts";
+import { PIPELINE_NAMES, type PipelineParams, PIPELINES } from "../src/pipelines.ts";
 import { QUEUES } from "../src/queues.ts";
 import { tuningSchema } from "../src/env.ts";
 import { readers, wrangler } from "./wrangler.ts";
@@ -90,12 +90,9 @@ describe.each(["dev", "production"] as const)("wrangler.jsonc's %s environment",
 		);
 	});
 
-	it("binds one Workflow per pipeline (labels only with the AI binding and LABELLER), and the container's Durable Object", () => {
-		const labelling = env.ai !== undefined;
-		expect(tuning.LABELLER !== undefined).toBe(labelling);
-		const bound = PIPELINE_NAMES.filter((p) => labelling || p !== "labels");
+	it("binds one Workflow per pipeline, and the container's Durable Object", () => {
 		expect(env.workflows.map((w) => w.binding).toSorted()).toEqual(
-			bound.map((p) => PIPELINES[p].binding).toSorted(),
+			PIPELINE_NAMES.map((p) => PIPELINES[p].binding).toSorted(),
 		);
 		expect(env.durable_objects.bindings.map((b) => b.name).toSorted()).toEqual(["EXTRACTOR"]);
 	});
@@ -110,6 +107,10 @@ describe.each(["dev", "production"] as const)("wrangler.jsonc's %s environment",
 		const index = consumers.find((c) => role(c.queue) === "index");
 		const purge = consumers.find((c) => role(c.queue) === "purge");
 		expect([index?.max_batch_size, index?.max_concurrency, purge?.max_concurrency]).toEqual([1, 1, 1]);
+	});
+
+	it("schedules exactly the crons PIPELINE_CRONS checks feeds at", () => {
+		expect(new Set(Object.values(tuning.PIPELINE_CRONS))).toEqual(new Set(env.triggers.crons));
 	});
 
 	it("shares all but one of the container class's max_instances among the pipelines that hold one", () => {
@@ -135,9 +136,7 @@ describe("wrangler.jsonc's environments", () => {
 		}
 	});
 
-	it("schedules only the feeds' crons in production, and none in dev", () => {
-		const feedCrons = new Set<string>(FEED_NAMES.map((f) => PIPELINES[f].cron));
-		expect(wrangler.env.production.triggers.crons.filter((c) => !feedCrons.has(c))).toEqual([]);
+	it("schedules no feed in dev", () => {
 		expect(wrangler.env.dev.triggers.crons).toEqual([]);
 	});
 });

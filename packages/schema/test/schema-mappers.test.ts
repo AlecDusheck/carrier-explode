@@ -132,7 +132,7 @@ describe("iosProfile", () => {
 			mmsc: "http://mmsc.example",
 			mmsProxy: "proxy.example",
 			mmsPort: "8080",
-			hasPassword: true,
+			password: "pw",
 			path: "carrier.plist:apns[0].configuration[0]",
 		});
 		expect(p.apns[1]).toMatchObject({ apn: "ims", types: ["ia"], protocol: "ipv6" });
@@ -172,12 +172,13 @@ describe("iosProfile", () => {
 		]);
 	});
 
-	it("flattens every member into raw but credentials", () => {
+	it("flattens every member into raw, credentials included", () => {
 		expect(p.raw["carrier.plist:CarrierName"]).toBe("Test");
 		expect(p.raw["overrides_D93_D94_D47_D48.plist:Enable5GAutoByDefault"]).toBe(true);
 		expect(p.raw["carrier.plist:CDMA.Enable Password Encryption"]).toBe(true);
-		expect(Object.keys(p.raw).filter((k) => /(password|secret)$/i.test(k))).toEqual([]);
-		expect(JSON.stringify([p.apns, p.variants])).not.toMatch(/"pw"|766E6574/);
+		expect(p.raw["carrier.plist:CDMA.SIP Password"]).toBe("766E6574");
+		expect(p.raw["carrier.plist:CDMA.MIP MN-HA Shared Secret"]).toBe("Default:00");
+		expect(p.raw["carrier.plist:apns[0].configuration[0].password"]).toBe("pw");
 	});
 });
 
@@ -279,7 +280,7 @@ describe("androidProfile", () => {
 			auth: "none",
 			mtu: 1440,
 			bearers: ["lte", "nr"],
-			hasPassword: true,
+			password: "secret",
 			path: "apns[0]",
 		});
 		// Unset keys without a known default stay unset rather than guessed.
@@ -307,8 +308,7 @@ describe("androidProfile", () => {
 			],
 		).toEqual([104]);
 		expect(p.raw["apns[0].value"]).toBe("Fast.Example");
-		expect(Object.keys(p.raw).some((k) => k.includes("password"))).toBe(false);
-		expect(JSON.stringify(p)).not.toContain("secret");
+		expect(p.raw["apns[0].password"]).toBe("secret");
 		expect(p.raw["vendor:client"]).toBe("AAE=");
 		expect(p.raw["unknown:#99"]).toBe("1");
 		expect(p.variants).toEqual([]);

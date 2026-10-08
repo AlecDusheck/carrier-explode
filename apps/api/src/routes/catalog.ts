@@ -11,7 +11,6 @@ import {
 	PLATFORMS,
 } from "@carrier-explode/schema";
 import { router, type ApiEnv } from "../context.ts";
-import { budget } from "../rate.ts";
 import {
 	conceptsSchema,
 	indexSchema,
@@ -87,7 +86,6 @@ catalog.openapi(
 		operationId: "getIndex",
 		tags: ["Catalog"],
 		summary: "Every collection, with an example request",
-		middleware: [budget("base")],
 		request: { query: NO_QUERY },
 		responses: { ...json(indexSchema, "The index."), ...ERRORS },
 	}),
@@ -115,7 +113,6 @@ catalog.openapi(
 		operationId: "listPlatforms",
 		tags: ["Catalog"],
 		summary: "Every platform, the kinds of source it ships, and whether it has builds",
-		middleware: [budget("base")],
 		request: { query: NO_QUERY },
 		responses: { ...json(platformsSchema, "The platforms."), ...ERRORS },
 	}),
@@ -129,7 +126,6 @@ catalog.openapi(
 		operationId: "listConcepts",
 		tags: ["Catalog"],
 		summary: "Every concept a profile reads: its group, type and unit; the `state` ones are features",
-		middleware: [budget("base")],
 		request: { query: NO_QUERY },
 		responses: { ...json(conceptsSchema, "The concepts, in display order."), ...ERRORS },
 	}),

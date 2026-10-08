@@ -21,13 +21,12 @@ function configLeaves(
 	}
 }
 
-/** Every native leaf but passwords: configs, APN fields by proto name, vendor blobs (base64), fields the decoder could not name. */
+/** Every native leaf: configs, APN fields by proto name, vendor blobs (base64), fields the decoder could not name. */
 function rawOf(cs: CarrierSettings): Record<string, Json> {
 	const out: Record<string, Json> = {};
 	configLeaves(cs.configs, CONFIG_PREFIX, out);
 	cs.apns.forEach((item, i) => {
 		for (const [field, v] of Object.entries(item)) {
-			if (field === "password") continue;
 			const j = toJson(v);
 			if (j !== undefined) out[`apns[${i}].${field}`] = j;
 		}

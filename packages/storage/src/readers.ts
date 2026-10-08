@@ -1,4 +1,4 @@
-/** What every reader of the store shares: validated record reads, cache headers a purge can reach, the purge endpoint's checks, rate limits. */
+/** What every reader of the store shares: validated record reads, cache headers a purge can reach, the purge endpoint's checks. */
 
 import * as v from "valibot";
 
@@ -74,12 +74,4 @@ interface PurgeableCache {
 export async function purgeCache(cache: PurgeableCache): Promise<string | null> {
 	const result = await cache.purge({ tags: [INDEX_TAG] });
 	return result.success ? null : result.errors.map((e) => e.message).join("; ") || "purge failed";
-}
-
-/** What a client over its per-IP budget is told. */
-export const RATE_LIMITED = "Too many requests... please wait a bit.";
-
-/** Whether `ip` is over `limiter`'s budget; a request without an IP fails open. */
-export async function overLimit(limiter: RateLimit, ip: string | null | undefined): Promise<boolean> {
-	return ip ? !(await limiter.limit({ key: ip })).success : false;
 }

@@ -1,5 +1,5 @@
 /**
- * Intel-dialect (Intel modem, kept by Apple C1) `.der.pri` / `.der.gri` settings: `%u:dyn_cps.apf.sat.plmn[0].mcc`
+ * Intel-dialect `.der.pri` / `.der.gri` settings: `%u:dyn_cps.apf.sat.plmn[0].mcc`
  * keys as a tree of groups, record tables and lists, with band bitmaps, PLMNs and band-combo strings decoded.
  */
 // Key grammar: `%u:` uint, `%qu[N]:` N-byte "label:value" string, `%s[N]:` N-byte string, then a dotted path.
@@ -33,13 +33,13 @@ export interface IntelKey {
 	segs: [IntelSeg, ...IntelSeg[]];
 }
 
-// "%u:" values are uint32, "%qu[N]:" NUL-padded N-byte strings; C1's rkos resolves them against NVM structures.
+// "%u:" values are uint32, "%qu[N]:" NUL-padded N-byte strings; the modem's rkos resolves them against NVM structures.
 const NVM_KEY_FAMILIES = [
 	{ family: "cps_u", test: /^%u:dyn_/, type: "uint32", what: "unsigned" },
 	{ family: "cps_qu", test: /^%qu\[\d+\]:dyn_/, type: "string", what: "N-byte string" },
 ] as const satisfies readonly { family: string; test: RegExp; type: NvType; what: string }[];
 
-/** What an Intel / Apple C1 NVM key is, by its key family; the Qualcomm EFS lookup (describeNv) covers the rest. */
+/** What an Intel-dialect NVM key is, by its key family; the Qualcomm EFS lookup (describeNv) covers the rest. */
 export function describeIntelKey(key: string): NvInfo | undefined {
 	const f = NVM_KEY_FAMILIES.find((x) => x.test.test(key));
 	if (!f) return undefined;
@@ -50,10 +50,10 @@ export function describeIntelKey(key: string): NvInfo | undefined {
 				.replace(/^%q?u(\[\d+\])?:/, "")
 				.split("/")
 				.pop() || key,
-		meaning: `Modem NVM setting: Intel / Apple C1 modem NVM field (${f.what})`,
+		meaning: `Modem NVM setting: Intel-dialect NVM field (${f.what})`,
 		type: f.type,
 		confidence: "med",
-		source: "C1 ftab rkos",
+		source: "ftab rkos",
 		family: f.family,
 	};
 }

@@ -86,11 +86,34 @@ describe("linkCarriers", () => {
 	it("joins a second SIM profile of one carrier to its best match when most of its rules are shared", () => {
 		expect(
 			groups([
-				m("ios", "ATT_NR_US", [...gid("53"), ...gid("52"), { mccmnc: "310950", gid1: "53" }]),
-				m("android", "att5g_us", [...gid("53"), { mccmnc: "310950", gid1: "53" }]),
+				m("ios", "ATT_NR_US", [...gid("53"), ...gid("52")]),
+				m("android", "att5g_us", gid("53")),
 				m("android", "att5gsa_us", gid("52")),
 			]),
 		).toEqual([["ATT_NR_US", "att5g_us", "att5gsa_us"]]);
+	});
+
+	it("links no operator to a Galaxy pack that lists several, even its best match", () => {
+		const cspire = plain("311230", "310920");
+		expect(
+			groups([
+				m("samsung", "ACG", [...cspire, ...plain("310130", "311530", "312170")]),
+				m("ios", "CellularSouth_LTE_US", cspire),
+				m("android", "cspire_us", cspire),
+				m("ios", "CarolinaWest_LTE_US", plain("310130")),
+				m("android", "carolinawest_us", plain("310130")),
+				m("ios", "NexTech_LTE_US", plain("311530")),
+				m("android", "nextech_us", plain("311530")),
+				m("ios", "StrataNetwork_LTE_US", plain("312170")),
+				m("android", "strata_us", plain("312170")),
+			]),
+		).toEqual([
+			["ACG"],
+			["CarolinaWest_LTE_US", "carolinawest_us"],
+			["CellularSouth_LTE_US", "cspire_us"],
+			["NexTech_LTE_US", "nextech_us"],
+			["StrataNetwork_LTE_US", "strata_us"],
+		]);
 	});
 
 	it("links by the SIM rules Apple's OTA manifest routes to a bundle as well as its own", () => {

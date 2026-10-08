@@ -7,7 +7,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { BoundsError } from "@carrier-explode/binary";
 import { describe, expect, it } from "vitest";
-import { decodeNwOta, decodeOpOta, McfError, sbpOperator } from "../src/index.ts";
+import { decodeNwOta, decodeOpOta, McfError } from "../src/index.ts";
 
 const fixture = (name: string): Uint8Array =>
 	new Uint8Array(readFileSync(join(import.meta.dirname, "fixtures", name)));
@@ -157,13 +157,5 @@ describe("malformed input", () => {
 				}
 			}
 		}
-	});
-});
-
-describe("SBP operators", () => {
-	it("names ids from MediaTek's own table first", () => {
-		expect(sbpOperator(7)).toEqual({ sbpId: 7, name: "AT&T", source: "usp" });
-		expect(sbpOperator(154)).toEqual({ sbpId: 154, name: "Telia", source: "wod" });
-		expect(sbpOperator(4)).toBeUndefined();
 	});
 });

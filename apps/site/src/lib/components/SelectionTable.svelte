@@ -12,7 +12,7 @@
   <thead><tr>{#if mixed}<th>By</th>{/if}<th>Which SIMs</th><th>{mixed ? "Values" : rows[0]?.via}</th></tr></thead>
   <tbody>
     {#each rows as r, i (i)}
-      <tr>{#if mixed}<td>{r.via}</td>{/if}<td>{r.match ?? ""}</td><td class="mono keys">{r.keys.join(", ")}</td></tr>
+      <tr>{#if mixed}<td>{r.via}</td>{/if}<td>{r.match}</td><td class="mono keys">{r.keys.join(", ")}</td></tr>
     {/each}
   </tbody>
 </table>

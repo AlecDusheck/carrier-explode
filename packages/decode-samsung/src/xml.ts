@@ -113,17 +113,14 @@ export const childrenNamed = (e: XmlElement, name: string): XmlElement[] =>
 /** An XML element as a value tree: a leaf is its text, an element its children by name, a repeated name a list. */
 export type XmlValue = string | readonly XmlValue[] | { readonly [name: string]: XmlValue };
 
-export function xmlValue(e: XmlElement, omit: (name: string) => boolean = () => false): XmlValue {
+export function xmlValue(e: XmlElement): XmlValue {
 	if (e.children.length === 0) return e.text;
 	const byName = new Map<string, XmlElement[]>();
-	for (const c of e.children) if (!omit(c.name)) byName.set(c.name, [...(byName.get(c.name) ?? []), c]);
+	for (const c of e.children) byName.set(c.name, [...(byName.get(c.name) ?? []), c]);
 	return Object.fromEntries(
 		[...byName].map(([name, cs]) => {
 			const [only, ...more] = cs;
-			return [
-				name,
-				only !== undefined && more.length === 0 ? xmlValue(only, omit) : cs.map((c) => xmlValue(c, omit)),
-			];
+			return [name, only !== undefined && more.length === 0 ? xmlValue(only) : cs.map((c) => xmlValue(c))];
 		}),
 	);
 }

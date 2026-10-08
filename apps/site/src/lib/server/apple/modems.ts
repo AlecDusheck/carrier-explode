@@ -11,7 +11,7 @@ import { deviceNames, shippedModems, type ShippedModem } from "../catalog";
 export const summaryKey = (id: string): string => keys.basebandSummary(MODEM_SUMMARY_SCHEMA, id);
 
 export interface ModemView {
-	/** The package's generation: `Mav25`, `C1`. */
+	/** The package's generation: `Mav25`, `c4000`. */
 	readonly family: Named;
 	readonly package: {
 		readonly id: string;

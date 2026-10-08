@@ -32,7 +32,8 @@ export const devices = sqliteTable(
 		/** Null until the index step has read the device's newest release. */
 		has5g: integer("has_5g", { mode: "boolean" }),
 	},
-	(t) => [index("devices_by_platform").on(t.platform, t.released)],
+	// Covering: a platform's devices are read from the index alone.
+	(t) => [index("devices_list").on(t.platform, t.code, t.released, t.boards, t.has5g)],
 );
 
 export const labels = sqliteTable(
@@ -45,6 +46,19 @@ export const labels = sqliteTable(
 		origin: text().$type<LabelOrigin>().notNull(),
 		/** The page the value was read from; a person's may cite none. */
 		evidence: text(),
+	},
+	(t) => [primaryKey({ columns: [t.subject, t.code, t.field] })],
+);
+
+/** The day the labels Workflow last searched for a code's field and found no page that gives it. */
+export const labelMisses = sqliteTable(
+	"label_misses",
+	{
+		subject: text().$type<LabelSubject>().notNull(),
+		code: text().notNull(),
+		field: text().notNull(),
+		/** YYYY-MM-DD. */
+		searched: text().notNull(),
 	},
 	(t) => [primaryKey({ columns: [t.subject, t.code, t.field] })],
 );
@@ -83,7 +97,19 @@ export const releases = sqliteTable(
 	},
 	(t) => [
 		primaryKey({ columns: [t.platform, t.id] }),
-		index("releases_by_sort").on(t.platform, t.sortKey),
+		// Covering: a list page is read from the index alone, newest first.
+		index("releases_list").on(
+			t.platform,
+			t.sortKey,
+			t.id,
+			t.version,
+			t.label,
+			t.released,
+			t.prerelease,
+			t.patch,
+			t.devices,
+			t.sourceCount,
+		),
 		check(
 			"releases_header",
 			sql`(${t.platform} = 'ios') = (${t.label} IS NOT NULL) AND (${t.platform} = 'ios') = (${t.prerelease} IS NOT NULL)
@@ -115,6 +141,8 @@ export const modems = sqliteTable(
 	},
 	(t) => [
 		primaryKey({ columns: [t.platform, t.release, t.name, t.devices] }),
+		// Covering: a release's modems and their families are read from the index alone.
+		index("modems_families").on(t.platform, t.release, t.name, t.devices, t.family),
 		check(
 			"modems_package",
 			sql`(${t.platform} = 'ios') = (${t.package} IS NOT NULL)
@@ -133,7 +161,11 @@ export const modemConfigs = sqliteTable(
 		label: text().notNull(),
 		sha: text().notNull(),
 	},
-	(t) => [primaryKey({ columns: [t.platform, t.release, t.device, t.label] })],
+	(t) => [
+		primaryKey({ columns: [t.platform, t.release, t.device, t.label] }),
+		// Covering: a device's configurations in a release are read from the index alone.
+		index("modem_configs_by_device").on(t.platform, t.release, t.device, t.label, t.sha),
+	],
 );
 
 export const otaFiles = sqliteTable("ota_files", {
@@ -209,7 +241,11 @@ export const sources = sqliteTable(
 		/** Null until the link step has run, and for a country bundle. */
 		carrier: text(),
 	},
-	(t) => [index("sources_by_list").on(t.platform, t.kind, t.name), index("sources_by_carrier").on(t.carrier)],
+	// Covering: a list page and a carrier's members are read from the index alone, in its order.
+	(t) => [
+		index("sources_list_page").on(t.platform, t.kind, t.name, t.key, t.headSha, t.updated, t.carrier),
+		index("sources_carrier_members").on(t.carrier, t.key, t.name),
+	],
 );
 
 export const carriers = sqliteTable(
@@ -263,7 +299,7 @@ export const phoneStates = sqliteTable(
 /** A normalized object's identity, written once per sha with its sims. */
 export const profiles = sqliteTable("profiles", {
 	sha: text().primaryKey(),
-	/** The PROFILE_SCHEMA its rows were read under. */
+	/** The schema (its kind's FACTS_SCHEMA) its rows were read under. */
 	schema: integer().notNull(),
 	kind: text().$type<ProfileFacts["kind"]>().notNull(),
 	display: text(),

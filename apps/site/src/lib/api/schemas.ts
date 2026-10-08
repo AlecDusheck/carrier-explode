@@ -47,7 +47,7 @@ export const build = v.pipe(v.string(), v.regex(/^\w{3,16}$/));
 /** A modem package, by the SHA-256 it is stored under. */
 export const packageId = sha256Schema;
 
-/** A modem family: Mav25, C1. */
+/** A modem family: Mav25, c4000. */
 export const family = v.pipe(v.string(), v.regex(/^\w{1,16}$/));
 
 /** A product type: iPhone18,1. */

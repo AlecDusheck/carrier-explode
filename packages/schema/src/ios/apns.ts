@@ -93,6 +93,7 @@ function apnFrom(
 	const roaming = protocol(d.AllowedProtocolMaskInRoaming ?? d.AllowedProtocolMaskInRoamingLTE);
 	const au = auth(d.auth_type);
 	const user = text(d.username);
+	const password = text(d.password);
 	const rats = bearers(num(d["technology-mask"]) ?? extra.techMask);
 	return {
 		apn,
@@ -101,7 +102,7 @@ function apnFrom(
 		...(roaming !== undefined ? { roamingProtocol: roaming } : {}),
 		...(au !== undefined ? { auth: au } : {}),
 		...(user !== undefined ? { user } : {}),
-		hasPassword: typeof d.password === "string" && d.password !== "",
+		...(password !== undefined ? { password } : {}),
 		...(t.includes("mms") ? mms : {}),
 		...(rats !== undefined ? { bearers: rats } : {}),
 		path,

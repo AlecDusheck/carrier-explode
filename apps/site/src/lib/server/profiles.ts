@@ -13,14 +13,14 @@ import { readJson } from "./store";
 /** The id the index files an entry's profile rows under. */
 const profileId = (e: Pick<TimelineEntry, "sha">): string => e.sha;
 
-const profileOf = perRequest((id: string) => readJson(keys.norm(id), profileSchema));
+const profileOf = perRequest((id: string) => readJson(keys.profile(id), profileSchema));
 
 /** An entry's profile; null when it has not been normalized yet. */
 export const profileAt = (e: Pick<TimelineEntry, "sha">): Promise<Profile | null> => profileOf(profileId(e));
 
 export async function mustProfile(e: Pick<TimelineEntry, "sha">): Promise<Profile> {
 	const p = await profileAt(e);
-	if (!p) error(500, `${keys.norm(profileId(e))} is not in the bucket.`);
+	if (!p) error(500, `${keys.profile(profileId(e))} is not in the bucket.`);
 	return p;
 }
 

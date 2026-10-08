@@ -23,7 +23,6 @@ import {
 } from "@carrier-explode/schema/types";
 import { fail, router, type ApiContext, type ApiEnv } from "../context.ts";
 import { pageQuery, paged, STRING_KEY, windowOf } from "../page.ts";
-import { budget } from "../rate.ts";
 import {
 	settingsSchema,
 	sourcePageSchema,
@@ -132,7 +131,6 @@ sources.openapi(
 		operationId: "listSources",
 		tags: ["Sources"],
 		summary: "One platform's sources of one kind, by native name",
-		middleware: [budget("base")],
 		request: {
 			params: onList,
 			query: z
@@ -176,7 +174,6 @@ sources.openapi(
 		tags: ["Sources"],
 		summary:
 			"A source: its carrier, lines of versions, the SIM rules that select it, and the layer it is read over",
-		middleware: [budget("base")],
 		request: { params: ofSource, query: NO_QUERY },
 		responses: { ...json(sourceSchema, "The source."), ...ERRORS },
 	}),
@@ -201,7 +198,6 @@ sources.openapi(
 		operationId: "listVersions",
 		tags: ["Sources"],
 		summary: "The versions on one of a source's lines, newest first",
-		middleware: [budget("base")],
 		request: { params: ofSource, query: z.object({ ...pageQuery, line: lineParam.optional() }).strict() },
 		responses: { ...json(versionPageSchema, "A page of versions."), ...ERRORS },
 	}),
@@ -233,7 +229,6 @@ sources.openapi(
 		tags: ["Sources"],
 		summary:
 			"A version, decoded into the platform-neutral model (identity, APNs, concepts, variants), with every build and download that shipped it",
-		middleware: [budget("bundle")],
 		request: {
 			params: ofVersion,
 			query: z.object({ line: lineParam.optional(), fields: fieldsParam }).strict(),
@@ -272,7 +267,6 @@ sources.openapi(
 		operationId: "getVersionSettings",
 		tags: ["Sources"],
 		summary: "A version's native settings, every one decoded",
-		middleware: [budget("bundle")],
 		request: {
 			params: ofVersion,
 			query: z

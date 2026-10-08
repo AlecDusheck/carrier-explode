@@ -20,7 +20,7 @@
         {/if}
         <td>
           {#each selectionRows(s.rules) as r, i (i)}
-            <div><span class="mono">{r.keys.join(", ")}</span> <span class="dimtext">{r.match ?? r.via}</span></div>
+            <div><span class="mono">{r.keys.join(", ")}</span> <span class="dimtext">{r.match}</span></div>
           {/each}
         </td>
       </tr>

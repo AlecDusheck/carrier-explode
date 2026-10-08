@@ -9,3 +9,5 @@
   Cache-Control: public, max-age=604800, stale-while-revalidate=604800
 /files/*
   Cache-Control: public, max-age=604800, stale-while-revalidate=604800
+/favicon.svg
+  Cache-Control: public, max-age=604800, stale-while-revalidate=604800

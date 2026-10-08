@@ -57,10 +57,6 @@ function plainConfig(v: CarrierConfigValue): Json {
 const plainConfigs = (s: CarrierSettings): Record<string, Json> =>
 	Object.fromEntries(Object.entries(s.configs).map(([k, v]) => [k, plainConfig(v)]));
 
-/** An APN as shown: the password is never republished, only whether there is one. */
-type ShownApn = Omit<ApnItem, "password"> & { readonly hasPassword: boolean };
-const shownApn = ({ password, ...rest }: ApnItem): ShownApn => ({ ...rest, hasPassword: !!password });
-
 export interface AndroidVersion {
 	readonly source: string;
 	readonly ref: SourceRef;
@@ -147,7 +143,7 @@ export async function getAndroidApns(v: Ver): Promise<ApnView[]> {
 		apn: a.value ?? null,
 		roles: [...new Set(a.type)],
 		root: `apns[${i}]`,
-		fields: shownApn(a),
+		fields: a,
 	}));
 }
 
@@ -168,7 +164,7 @@ export type AndroidFile =
 			readonly version: string | null;
 			readonly configs: Readonly<Record<string, Json>>;
 			readonly docs: Readonly<Record<string, ConfigDoc>>;
-			readonly apns: readonly ShownApn[];
+			readonly apns: readonly ApnItem[];
 			/** Each opens as a file of its own. */
 			readonly vendor: readonly AndroidFileRow[];
 	  }
@@ -213,7 +209,7 @@ export async function getAndroidFile(v: Ver, path: string): Promise<AndroidFile>
 			version: d.settings.version ?? null,
 			configs: plainConfigs(d.settings),
 			docs,
-			apns: d.settings.apns.map(shownApn),
+			apns: d.settings.apns,
 			vendor: vendorRows(d.settings),
 		};
 	}
@@ -261,6 +257,6 @@ export async function getAndroidComparison(av: Ver | null, bv: Ver): Promise<And
 		a: va,
 		b: vb,
 		configs: diff(a ? plainConfigs(a.settings) : {}, plainConfigs(b.settings)),
-		apns: diff(a?.settings.apns.map(shownApn) ?? [], b.settings.apns.map(shownApn)),
+		apns: diff(a?.settings.apns ?? [], b.settings.apns),
 	};
 }

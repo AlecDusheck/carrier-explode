@@ -26,7 +26,7 @@
     label="Compare against"
     timeline={head.timeline.filter((t) => t.slug !== at.version)}
     current={chosen}
-    head={head.head}
+    shipping={head.current}
     href={(slug) => withParams(page.url, { against: slug === head.previous?.slug ? null : slug })}
   />
   <a href={compareHref({ source: at.ref, slug: chosen || undefined, line: at.line }, { source: at.ref, slug: at.version, line: at.line }, file)}>Compare with another bundle…</a>

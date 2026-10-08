@@ -346,6 +346,29 @@ describe("Galaxy", () => {
 		);
 	});
 
+	it("reads and plans each multi-CSC package of a model apart", () => {
+		const regional = [
+			{
+				model: "SM-S942B",
+				region: "EUX",
+				line: s26,
+				versions: [fusOf("S942BOXM4BZIG"), fusOf("S942BOXM4AZG5")],
+			},
+			{ model: "SM-S942B", region: "ZTO", line: s26, versions: [fusOf("S942BOWO4BZIF")] },
+		];
+		const read = candidates(regional, TODAY).map((c) =>
+			Object.assign(c, { major: c.build.at(-4) === "B" ? 17 : 16, released: "2026-09-01" }),
+		);
+		expect(read.map((c) => [c.build, c.region])).toEqual([
+			["S942BOXM4BZIG", "EUX"],
+			["S942BOXM4AZG5", "EUX"],
+			["S942BOWO4BZIF", "ZTO"],
+		]);
+		expect(
+			planGalaxy({ ...SCOPE, samsung: { ...SCOPE.samsung, majors: 1 } }, read, new Set()).map((p) => p.build),
+		).toEqual(["S942BOWO4BZIF", "S942BOXM4BZIG"]);
+	});
+
 	it("dates a build by its year letter, which cycles every 26 years", () => {
 		// SM-S938U's version.xml on 2026-10-06: S938USQU1AYA1 (2025-01) … S938USQUCDZIF (2026-09).
 		expect(buildMonth("S938UOYN1AYA1", TODAY)).toBe("2025-011");
@@ -403,7 +426,7 @@ describe("Galaxy", () => {
 				build: "S942UOYN4AZH5",
 				major: 16,
 				released: "2026-08-11",
-				name: "Galaxy S26",
+				name: "Galaxy S26 (SM-S942U)",
 			},
 			{
 				model: "SM-S931U",
@@ -421,7 +444,7 @@ describe("Galaxy", () => {
 				{ code: "SM-S942U", platform: "samsung", released: "2026-08-11", boards: [] },
 				{ code: "SM-S931U", platform: "samsung", released: "2026-06-30", boards: [] },
 			],
-			names: [{ code: "SM-S942U", value: "Galaxy S26" }],
+			names: [{ code: "SM-S942U", value: "Galaxy S26 (SM-S942U)" }],
 		});
 	});
 });

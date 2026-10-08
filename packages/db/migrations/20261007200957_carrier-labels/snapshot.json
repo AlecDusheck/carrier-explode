@@ -1,0 +1,1740 @@
+{
+  "id": "d355f676-642d-47d8-ae15-becb115d511f",
+  "prevIds": [
+    "c3c87915-761c-448e-83ff-8fedd5df155d"
+  ],
+  "version": "7",
+  "dialect": "sqlite",
+  "ddl": [
+    {
+      "name": "base_settings",
+      "entityType": "tables"
+    },
+    {
+      "name": "carriers",
+      "entityType": "tables"
+    },
+    {
+      "name": "changes",
+      "entityType": "tables"
+    },
+    {
+      "name": "concepts",
+      "entityType": "tables"
+    },
+    {
+      "name": "copies",
+      "entityType": "tables"
+    },
+    {
+      "name": "devices",
+      "entityType": "tables"
+    },
+    {
+      "name": "entries",
+      "entityType": "tables"
+    },
+    {
+      "name": "facts_written",
+      "entityType": "tables"
+    },
+    {
+      "name": "labels",
+      "entityType": "tables"
+    },
+    {
+      "name": "links",
+      "entityType": "tables"
+    },
+    {
+      "name": "modem_configs",
+      "entityType": "tables"
+    },
+    {
+      "name": "modems",
+      "entityType": "tables"
+    },
+    {
+      "name": "ota_files",
+      "entityType": "tables"
+    },
+    {
+      "name": "phone_states",
+      "entityType": "tables"
+    },
+    {
+      "name": "profiles",
+      "entityType": "tables"
+    },
+    {
+      "name": "releases",
+      "entityType": "tables"
+    },
+    {
+      "name": "routes",
+      "entityType": "tables"
+    },
+    {
+      "name": "settings",
+      "entityType": "tables"
+    },
+    {
+      "name": "sims",
+      "entityType": "tables"
+    },
+    {
+      "name": "sources",
+      "entityType": "tables"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "sha",
+      "entityType": "columns",
+      "table": "base_settings"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "file",
+      "entityType": "columns",
+      "table": "base_settings"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "key",
+      "entityType": "columns",
+      "table": "base_settings"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "path",
+      "entityType": "columns",
+      "table": "base_settings"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "value",
+      "entityType": "columns",
+      "table": "base_settings"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "id",
+      "entityType": "columns",
+      "table": "carriers"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "name",
+      "entityType": "columns",
+      "table": "carriers"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "iso",
+      "entityType": "columns",
+      "table": "carriers"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "platform",
+      "entityType": "columns",
+      "table": "changes"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "release",
+      "entityType": "columns",
+      "table": "changes"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "source",
+      "entityType": "columns",
+      "table": "changes"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "kind",
+      "entityType": "columns",
+      "table": "changes"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "from_line",
+      "entityType": "columns",
+      "table": "changes"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "from_slug",
+      "entityType": "columns",
+      "table": "changes"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "to_line",
+      "entityType": "columns",
+      "table": "changes"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "to_slug",
+      "entityType": "columns",
+      "table": "changes"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "source",
+      "entityType": "columns",
+      "table": "concepts"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "concept",
+      "entityType": "columns",
+      "table": "concepts"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "value",
+      "entityType": "columns",
+      "table": "concepts"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "source",
+      "entityType": "columns",
+      "table": "copies"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "line",
+      "entityType": "columns",
+      "table": "copies"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "sha",
+      "entityType": "columns",
+      "table": "copies"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "version",
+      "entityType": "columns",
+      "table": "copies"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "origin_kind",
+      "entityType": "columns",
+      "table": "copies"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "origin",
+      "entityType": "columns",
+      "table": "copies"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "os",
+      "entityType": "columns",
+      "table": "copies"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "code",
+      "entityType": "columns",
+      "table": "devices"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "platform",
+      "entityType": "columns",
+      "table": "devices"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "released",
+      "entityType": "columns",
+      "table": "devices"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "boards",
+      "entityType": "columns",
+      "table": "devices"
+    },
+    {
+      "type": "integer",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "has_5g",
+      "entityType": "columns",
+      "table": "devices"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "source",
+      "entityType": "columns",
+      "table": "entries"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "line",
+      "entityType": "columns",
+      "table": "entries"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "rank",
+      "entityType": "columns",
+      "table": "entries"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "slug",
+      "entityType": "columns",
+      "table": "entries"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "version",
+      "entityType": "columns",
+      "table": "entries"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "sha",
+      "entityType": "columns",
+      "table": "entries"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "beta",
+      "entityType": "columns",
+      "table": "entries"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "changed",
+      "entityType": "columns",
+      "table": "entries"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "day",
+      "entityType": "columns",
+      "table": "entries"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "platform",
+      "entityType": "columns",
+      "table": "facts_written"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "messages",
+      "entityType": "columns",
+      "table": "facts_written"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "subject",
+      "entityType": "columns",
+      "table": "labels"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "code",
+      "entityType": "columns",
+      "table": "labels"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "field",
+      "entityType": "columns",
+      "table": "labels"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "value",
+      "entityType": "columns",
+      "table": "labels"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "origin",
+      "entityType": "columns",
+      "table": "labels"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "evidence",
+      "entityType": "columns",
+      "table": "labels"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "a",
+      "entityType": "columns",
+      "table": "links"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "b",
+      "entityType": "columns",
+      "table": "links"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "rule",
+      "entityType": "columns",
+      "table": "links"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "why",
+      "entityType": "columns",
+      "table": "links"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "platform",
+      "entityType": "columns",
+      "table": "modem_configs"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "release",
+      "entityType": "columns",
+      "table": "modem_configs"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "device",
+      "entityType": "columns",
+      "table": "modem_configs"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "label",
+      "entityType": "columns",
+      "table": "modem_configs"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "sha",
+      "entityType": "columns",
+      "table": "modem_configs"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "platform",
+      "entityType": "columns",
+      "table": "modems"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "release",
+      "entityType": "columns",
+      "table": "modems"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "name",
+      "entityType": "columns",
+      "table": "modems"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "family",
+      "entityType": "columns",
+      "table": "modems"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "devices",
+      "entityType": "columns",
+      "table": "modems"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "package",
+      "entityType": "columns",
+      "table": "modems"
+    },
+    {
+      "type": "integer",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "size",
+      "entityType": "columns",
+      "table": "modems"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "kind",
+      "entityType": "columns",
+      "table": "modems"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "url",
+      "entityType": "columns",
+      "table": "ota_files"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "sha",
+      "entityType": "columns",
+      "table": "ota_files"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "version",
+      "entityType": "columns",
+      "table": "ota_files"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "published",
+      "entityType": "columns",
+      "table": "ota_files"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "digests",
+      "entityType": "columns",
+      "table": "ota_files"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "device",
+      "entityType": "columns",
+      "table": "phone_states"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "source",
+      "entityType": "columns",
+      "table": "phone_states"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "states",
+      "entityType": "columns",
+      "table": "phone_states"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "defaults",
+      "entityType": "columns",
+      "table": "phone_states"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "sha",
+      "entityType": "columns",
+      "table": "profiles"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "schema",
+      "entityType": "columns",
+      "table": "profiles"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "kind",
+      "entityType": "columns",
+      "table": "profiles"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "display",
+      "entityType": "columns",
+      "table": "profiles"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "iso",
+      "entityType": "columns",
+      "table": "profiles"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "radio",
+      "entityType": "columns",
+      "table": "profiles"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "platform",
+      "entityType": "columns",
+      "table": "releases"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "id",
+      "entityType": "columns",
+      "table": "releases"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "version",
+      "entityType": "columns",
+      "table": "releases"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "label",
+      "entityType": "columns",
+      "table": "releases"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "released",
+      "entityType": "columns",
+      "table": "releases"
+    },
+    {
+      "type": "integer",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "prerelease",
+      "entityType": "columns",
+      "table": "releases"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "patch",
+      "entityType": "columns",
+      "table": "releases"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "devices",
+      "entityType": "columns",
+      "table": "releases"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "source_count",
+      "entityType": "columns",
+      "table": "releases"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "sort_key",
+      "entityType": "columns",
+      "table": "releases"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "source",
+      "entityType": "columns",
+      "table": "routes"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "matcher",
+      "entityType": "columns",
+      "table": "routes"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "source",
+      "entityType": "columns",
+      "table": "settings"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "file",
+      "entityType": "columns",
+      "table": "settings"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "key",
+      "entityType": "columns",
+      "table": "settings"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "path",
+      "entityType": "columns",
+      "table": "settings"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "value",
+      "entityType": "columns",
+      "table": "settings"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "sha",
+      "entityType": "columns",
+      "table": "sims"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "matcher",
+      "entityType": "columns",
+      "table": "sims"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "key",
+      "entityType": "columns",
+      "table": "sources"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "platform",
+      "entityType": "columns",
+      "table": "sources"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "kind",
+      "entityType": "columns",
+      "table": "sources"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "name",
+      "entityType": "columns",
+      "table": "sources"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "head_sha",
+      "entityType": "columns",
+      "table": "sources"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "base_sha",
+      "entityType": "columns",
+      "table": "sources"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "updated",
+      "entityType": "columns",
+      "table": "sources"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "carrier",
+      "entityType": "columns",
+      "table": "sources"
+    },
+    {
+      "columns": [
+        "sha",
+        "file",
+        "key"
+      ],
+      "nameExplicit": false,
+      "name": "base_settings_pk",
+      "entityType": "pks",
+      "table": "base_settings"
+    },
+    {
+      "columns": [
+        "platform",
+        "release",
+        "source"
+      ],
+      "nameExplicit": false,
+      "name": "changes_pk",
+      "entityType": "pks",
+      "table": "changes"
+    },
+    {
+      "columns": [
+        "source",
+        "concept"
+      ],
+      "nameExplicit": false,
+      "name": "concepts_pk",
+      "entityType": "pks",
+      "table": "concepts"
+    },
+    {
+      "columns": [
+        "source",
+        "line",
+        "sha",
+        "version",
+        "origin_kind",
+        "origin"
+      ],
+      "nameExplicit": false,
+      "name": "copies_pk",
+      "entityType": "pks",
+      "table": "copies"
+    },
+    {
+      "columns": [
+        "source",
+        "line",
+        "slug"
+      ],
+      "nameExplicit": false,
+      "name": "entries_pk",
+      "entityType": "pks",
+      "table": "entries"
+    },
+    {
+      "columns": [
+        "subject",
+        "code",
+        "field"
+      ],
+      "nameExplicit": false,
+      "name": "labels_pk",
+      "entityType": "pks",
+      "table": "labels"
+    },
+    {
+      "columns": [
+        "a",
+        "b"
+      ],
+      "nameExplicit": false,
+      "name": "links_pk",
+      "entityType": "pks",
+      "table": "links"
+    },
+    {
+      "columns": [
+        "platform",
+        "release",
+        "device",
+        "label"
+      ],
+      "nameExplicit": false,
+      "name": "modem_configs_pk",
+      "entityType": "pks",
+      "table": "modem_configs"
+    },
+    {
+      "columns": [
+        "platform",
+        "release",
+        "name",
+        "devices"
+      ],
+      "nameExplicit": false,
+      "name": "modems_pk",
+      "entityType": "pks",
+      "table": "modems"
+    },
+    {
+      "columns": [
+        "device",
+        "source"
+      ],
+      "nameExplicit": false,
+      "name": "phone_states_pk",
+      "entityType": "pks",
+      "table": "phone_states"
+    },
+    {
+      "columns": [
+        "platform",
+        "id"
+      ],
+      "nameExplicit": false,
+      "name": "releases_pk",
+      "entityType": "pks",
+      "table": "releases"
+    },
+    {
+      "columns": [
+        "source",
+        "matcher"
+      ],
+      "nameExplicit": false,
+      "name": "routes_pk",
+      "entityType": "pks",
+      "table": "routes"
+    },
+    {
+      "columns": [
+        "source",
+        "file",
+        "key"
+      ],
+      "nameExplicit": false,
+      "name": "settings_pk",
+      "entityType": "pks",
+      "table": "settings"
+    },
+    {
+      "columns": [
+        "sha",
+        "matcher"
+      ],
+      "nameExplicit": false,
+      "name": "sims_pk",
+      "entityType": "pks",
+      "table": "sims"
+    },
+    {
+      "columns": [
+        "id"
+      ],
+      "nameExplicit": false,
+      "name": "carriers_pk",
+      "table": "carriers",
+      "entityType": "pks"
+    },
+    {
+      "columns": [
+        "code"
+      ],
+      "nameExplicit": false,
+      "name": "devices_pk",
+      "table": "devices",
+      "entityType": "pks"
+    },
+    {
+      "columns": [
+        "platform"
+      ],
+      "nameExplicit": false,
+      "name": "facts_written_pk",
+      "table": "facts_written",
+      "entityType": "pks"
+    },
+    {
+      "columns": [
+        "url"
+      ],
+      "nameExplicit": false,
+      "name": "ota_files_pk",
+      "table": "ota_files",
+      "entityType": "pks"
+    },
+    {
+      "columns": [
+        "sha"
+      ],
+      "nameExplicit": false,
+      "name": "profiles_pk",
+      "table": "profiles",
+      "entityType": "pks"
+    },
+    {
+      "columns": [
+        "key"
+      ],
+      "nameExplicit": false,
+      "name": "sources_pk",
+      "table": "sources",
+      "entityType": "pks"
+    },
+    {
+      "columns": [
+        {
+          "value": "file",
+          "isExpression": false
+        },
+        {
+          "value": "path",
+          "isExpression": false
+        },
+        {
+          "value": "sha",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "base_settings_by_path",
+      "entityType": "indexes",
+      "table": "base_settings"
+    },
+    {
+      "columns": [
+        {
+          "value": "iso",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "carriers_by_iso",
+      "entityType": "indexes",
+      "table": "carriers"
+    },
+    {
+      "columns": [
+        {
+          "value": "origin_kind",
+          "isExpression": false
+        },
+        {
+          "value": "origin",
+          "isExpression": false
+        },
+        {
+          "value": "source",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "copies_by_origin",
+      "entityType": "indexes",
+      "table": "copies"
+    },
+    {
+      "columns": [
+        {
+          "value": "platform",
+          "isExpression": false
+        },
+        {
+          "value": "code",
+          "isExpression": false
+        },
+        {
+          "value": "released",
+          "isExpression": false
+        },
+        {
+          "value": "boards",
+          "isExpression": false
+        },
+        {
+          "value": "has_5g",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "devices_list",
+      "entityType": "indexes",
+      "table": "devices"
+    },
+    {
+      "columns": [
+        {
+          "value": "source",
+          "isExpression": false
+        },
+        {
+          "value": "line",
+          "isExpression": false
+        },
+        {
+          "value": "rank",
+          "isExpression": false
+        }
+      ],
+      "isUnique": true,
+      "where": null,
+      "origin": "manual",
+      "name": "entries_by_rank",
+      "entityType": "indexes",
+      "table": "entries"
+    },
+    {
+      "columns": [
+        {
+          "value": "platform",
+          "isExpression": false
+        },
+        {
+          "value": "release",
+          "isExpression": false
+        },
+        {
+          "value": "device",
+          "isExpression": false
+        },
+        {
+          "value": "label",
+          "isExpression": false
+        },
+        {
+          "value": "sha",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "modem_configs_by_device",
+      "entityType": "indexes",
+      "table": "modem_configs"
+    },
+    {
+      "columns": [
+        {
+          "value": "platform",
+          "isExpression": false
+        },
+        {
+          "value": "release",
+          "isExpression": false
+        },
+        {
+          "value": "name",
+          "isExpression": false
+        },
+        {
+          "value": "devices",
+          "isExpression": false
+        },
+        {
+          "value": "family",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "modems_families",
+      "entityType": "indexes",
+      "table": "modems"
+    },
+    {
+      "columns": [
+        {
+          "value": "source",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "phone_states_by_source",
+      "entityType": "indexes",
+      "table": "phone_states"
+    },
+    {
+      "columns": [
+        {
+          "value": "platform",
+          "isExpression": false
+        },
+        {
+          "value": "sort_key",
+          "isExpression": false
+        },
+        {
+          "value": "id",
+          "isExpression": false
+        },
+        {
+          "value": "version",
+          "isExpression": false
+        },
+        {
+          "value": "label",
+          "isExpression": false
+        },
+        {
+          "value": "released",
+          "isExpression": false
+        },
+        {
+          "value": "prerelease",
+          "isExpression": false
+        },
+        {
+          "value": "patch",
+          "isExpression": false
+        },
+        {
+          "value": "devices",
+          "isExpression": false
+        },
+        {
+          "value": "source_count",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "releases_list",
+      "entityType": "indexes",
+      "table": "releases"
+    },
+    {
+      "columns": [
+        {
+          "value": "matcher",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "routes_by_matcher",
+      "entityType": "indexes",
+      "table": "routes"
+    },
+    {
+      "columns": [
+        {
+          "value": "file",
+          "isExpression": false
+        },
+        {
+          "value": "path",
+          "isExpression": false
+        },
+        {
+          "value": "value",
+          "isExpression": false
+        },
+        {
+          "value": "source",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "settings_by_path",
+      "entityType": "indexes",
+      "table": "settings"
+    },
+    {
+      "columns": [
+        {
+          "value": "matcher",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "sims_by_matcher",
+      "entityType": "indexes",
+      "table": "sims"
+    },
+    {
+      "columns": [
+        {
+          "value": "platform",
+          "isExpression": false
+        },
+        {
+          "value": "kind",
+          "isExpression": false
+        },
+        {
+          "value": "name",
+          "isExpression": false
+        },
+        {
+          "value": "key",
+          "isExpression": false
+        },
+        {
+          "value": "head_sha",
+          "isExpression": false
+        },
+        {
+          "value": "updated",
+          "isExpression": false
+        },
+        {
+          "value": "carrier",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "sources_list_page",
+      "entityType": "indexes",
+      "table": "sources"
+    },
+    {
+      "columns": [
+        {
+          "value": "carrier",
+          "isExpression": false
+        },
+        {
+          "value": "key",
+          "isExpression": false
+        },
+        {
+          "value": "name",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "sources_carrier_members",
+      "entityType": "indexes",
+      "table": "sources"
+    },
+    {
+      "value": "(\"kind\" = 'added') = (\"from_slug\" IS NULL) AND (\"kind\" = 'removed') = (\"to_slug\" IS NULL)\n    AND (\"from_line\" IS NULL) = (\"from_slug\" IS NULL) AND (\"to_line\" IS NULL) = (\"to_slug\" IS NULL)",
+      "name": "changes_ends",
+      "entityType": "checks",
+      "table": "changes"
+    },
+    {
+      "value": "\"origin_kind\" IN ('release', 'ota') AND (\"origin_kind\" = 'ota' OR \"os\" IS NULL)",
+      "name": "copies_origin",
+      "entityType": "checks",
+      "table": "copies"
+    },
+    {
+      "value": "(\"platform\" = 'ios') = (\"package\" IS NOT NULL)\n    AND (\"package\" IS NULL) = (\"size\" IS NULL) AND (\"package\" IS NULL) = (\"kind\" IS NULL)",
+      "name": "modems_package",
+      "entityType": "checks",
+      "table": "modems"
+    },
+    {
+      "value": "(\"platform\" = 'ios') = (\"label\" IS NOT NULL) AND (\"platform\" = 'ios') = (\"prerelease\" IS NOT NULL)\n    AND (\"platform\" = 'android') = (\"patch\" IS NOT NULL)",
+      "name": "releases_header",
+      "entityType": "checks",
+      "table": "releases"
+    }
+  ],
+  "renames": []
+}

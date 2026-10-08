@@ -667,7 +667,6 @@ describe("mediatekConfig", () => {
 			"sbp.json",
 			json({
 				id: 108,
-				operator: null,
 				plmns: [
 					{ mcc: "466", mnc: "97" },
 					{ mcc: "466", mnc: null },
@@ -715,8 +714,7 @@ describe("mediatekConfig", () => {
 
 	it("is the firmware's own for SBP 0, no operator's", () => {
 		expect(
-			mediatekConfig(new Map([...files, ["sbp.json", json({ id: 0, operator: null, plmns: [] })]]), "s3")
-				.config.scope,
+			mediatekConfig(new Map([...files, ["sbp.json", json({ id: 0, plmns: [] })]]), "s3").config.scope,
 		).toBe("firmware");
 	});
 
@@ -890,7 +888,7 @@ describe("iosModemConfig: everything the decoded PRI holds", () => {
 
 		expect(c.errors).toEqual(pri.errors);
 		expect(c.facts).toEqual([
-			{ label: "Written for", value: `${dialectLabel(pri.dialect)} modem` },
+			{ label: "Dialect", value: dialectLabel(pri.dialect) },
 			...Object.entries(pri.header)
 				.filter(([, value]) => value !== "")
 				.map(([label, value]) => ({ label, value })),
@@ -1000,7 +998,7 @@ describe("modemFamilyName", () => {
 	it("names an iOS generation with its vendor and code, and an Android vendor by its label alone", () => {
 		expect(modemFamilyName("ios", "Mav25", "Qualcomm X80")).toBe("Qualcomm X80 · Mav25");
 		expect(modemFamilyName("ios", "c4020", "Apple C2")).toBe("Apple C2 · c4020");
-		expect(modemFamilyName("ios", "C1", null)).toBe("Apple C1");
+		expect(modemFamilyName("ios", "c4000", null)).toBe("Apple · c4000");
 		expect(modemFamilyName("android", "shannon", "Samsung Shannon")).toBe("Samsung Shannon");
 		expect(modemFamilyName("samsung", "qualcomm", null)).toBe("qualcomm");
 	});

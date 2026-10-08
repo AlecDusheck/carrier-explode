@@ -4,24 +4,28 @@ import { WorkflowEntrypoint, type WorkflowEvent, type WorkflowStep } from "cloud
 import { NonRetryableError } from "cloudflare:workflows";
 import * as v from "valibot";
 
-import { indexDb, unnamed, writeLabels } from "@carrier-explode/db";
-import { LABEL_SUBJECTS } from "@carrier-explode/schema/records";
+import {
+	CANDIDATE_SUBJECT,
+	indexDb,
+	LABEL_CANDIDATE_KINDS,
+	labelCandidates,
+	writeLabelMiss,
+	writeLabels,
+} from "@carrier-explode/db";
 import { keys } from "@carrier-explode/storage";
 import type { Env } from "./env.ts";
 import { describe } from "./errors.ts";
 import type { IndexMessage } from "./indexing.ts";
-import { ANSWER_FORMAT, nameCode, type Labeller, type NamedSubject } from "./labels.ts";
+import { ANSWER_FORMAT, nameCode, type Labeller } from "./labels.ts";
 import { pend } from "./normalize.ts";
 import { PIPELINES } from "./pipelines.ts";
 import { queuePurge } from "./queues.ts";
 import { reindexArtifacts, reindexPlatforms } from "./reindex.ts";
-import { doStep, finish, normalizeSteps, STEP, UnitWorkflow, type UnitRun } from "./unit.ts";
+import { doStep, finish, normalizeSteps, UnitWorkflow, type UnitRun } from "./unit.ts";
 
-/** Search and model through the AI binding, both through the configured AI Gateway; an environment without them fails the instance once. */
+/** Search and model through the AI binding, both through the configured AI Gateway. */
 function labellerOf(env: Env): { readonly labeller: Labeller; readonly perKind: number } {
 	const { AI: ai, LABELLER: config } = env;
-	if (ai === undefined || config === undefined)
-		throw new NonRetryableError("labels: this environment has no AI binding or no LABELLER");
 	const { gateway, provider, model, perKind } = config;
 	const labeller: Labeller = {
 		search: async (query) => {
@@ -34,61 +38,70 @@ function labellerOf(env: Env): { readonly labeller: Labeller; readonly perKind: 
 		ask: (content) =>
 			ai.run(
 				model,
-				{ messages: [{ role: "user", content }], response_format: ANSWER_FORMAT },
+				{ messages: [{ role: "user", content }], response_format: ANSWER_FORMAT, reasoning_effort: "low" },
 				{ gateway: { id: gateway } },
 			),
 	};
 	return { labeller, perKind };
 }
 
-const NAMED = LABEL_SUBJECTS.filter((s): s is NamedSubject => s !== "source");
-
-/** Once a week: each code the index uses that nothing names, up to LABELLER.perKind of a subject, named where a search finds its name. */
+/**
+ * Once a week: up to LABELLER.perKind codes of each kind that nothing names, each named where a search finds a page
+ * giving its name, else noted as missed.
+ */
 export class LabelsWorkflow extends WorkflowEntrypoint<Env, unknown> {
 	override async run(
 		event: Readonly<WorkflowEvent<unknown>>,
 		step: WorkflowStep,
-	): Promise<{ readonly named: readonly string[] }> {
-		v.parse(PIPELINES.labels.params, event.payload);
+	): Promise<{ readonly named: readonly string[]; readonly missed: readonly string[] }> {
+		const { week: today } = v.parse(PIPELINES.labels.params, event.payload);
 		const { labeller, perKind } = labellerOf(this.env);
 		const named: string[] = [];
+		const missed: string[] = [];
 		const failed: string[] = [];
-		for (const subject of NAMED) {
-			const codes = await doStep(step, `unnamed ${subject}`, STEP, () =>
-				unnamed(indexDb(this.env.DB), subject),
+		for (const kind of LABEL_CANDIDATE_KINDS) {
+			const subject = CANDIDATE_SUBJECT[kind];
+			const candidates = await doStep(step, `unnamed ${kind}`, this.env, () =>
+				labelCandidates(indexDb(this.env.DB), kind, perKind, today),
 			);
-			for (const code of codes.slice(0, perKind)) {
+			for (const candidate of candidates) {
+				const { code } = candidate;
 				try {
-					const value = await doStep(step, `name ${subject} ${code}`, STEP, async () => {
-						const name = await nameCode(labeller, subject, code);
-						if (name === null) return null;
-						await writeLabels(indexDb(this.env.DB), [
+					const value = await doStep(step, `name ${subject} ${code}`, this.env, async () => {
+						const db = indexDb(this.env.DB);
+						const name = await nameCode(labeller, candidate);
+						if (name === null) {
+							await writeLabelMiss(db, subject, code, today);
+							return null;
+						}
+						await writeLabels(db, [
 							{ subject, code, field: "name", value: name.value, origin: "model", evidence: name.evidence },
 						]);
-						return name.value;
+						return `${name.value} (${name.evidence})`;
 					});
-					if (value !== null) named.push(`${subject} ${code}: ${value}`);
+					if (value === null) missed.push(`${subject} ${code}`);
+					else named.push(`${subject} ${code}: ${value}`);
 				} catch (e) {
 					// One code's failure leaves the others to name; the instance still ends in error below.
 					failed.push(`${subject} ${code}: ${describe(e)}`);
 				}
 			}
 		}
-		if (named.length > 0) await doStep(step, "purge", STEP, () => queuePurge(this.env));
+		if (named.length > 0) await doStep(step, "purge", this.env, () => queuePurge(this.env));
 		if (failed.length > 0) throw new Error(`${failed.length} code(s) failed: ${failed.join(" | ")}`);
-		return { named };
+		return { named, missed };
 	}
 }
 
 /**
- * Records' missing norm/ objects normalized, by hand after a PROFILE_SCHEMA bump or a lost index, then queued: one record to index as its unit
+ * Records' missing norm/ objects normalized, by hand after a schema bump or a lost index, then queued: one record to index as its unit
  * would; all of them only once every one is normalized, as each platform's `reindex` chain, since a source derives from
  * every record's copies of it.
  */
 export class ReindexWorkflow extends UnitWorkflow {
 	protected async extract(payload: unknown, r: UnitRun): Promise<readonly IndexMessage[]> {
 		const { target } = v.parse(PIPELINES.reindex.params, payload);
-		const pending = await doStep(r.step, "artifacts", STEP, async () =>
+		const pending = await doStep(r.step, "artifacts", r.env, async () =>
 			pend(
 				r.unit.bucket,
 				keys.tmp(r.unit.instance, "artifacts.json"),

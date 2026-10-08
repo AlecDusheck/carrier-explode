@@ -1,10 +1,11 @@
 /** Normalized objects' identity rows, once per sha; each source head's settings and concepts; and the scans over them. */
 
-import { and, asc, eq, gte, sql, type SQL } from "drizzle-orm";
+import { and, asc, eq, gte, lt, or, sql, type SQL, type SQLWrapper } from "drizzle-orm";
 import * as v from "valibot";
 
 import {
 	CONFIG_RADIOS,
+	FACTS_SCHEMA,
 	perPhone,
 	type BoardRadios,
 	type ConfigRadio,
@@ -14,12 +15,7 @@ import {
 	type RarityThresholds,
 } from "@carrier-explode/schema";
 import { sourceKeySchema } from "@carrier-explode/schema/records";
-import {
-	PROFILE_SCHEMA,
-	type Platform,
-	type SourceKey,
-	type SourceKind,
-} from "@carrier-explode/schema/types";
+import { type Platform, type SourceKey, type SourceKind } from "@carrier-explode/schema/types";
 import { every, jsonOf, qualified, run, type IndexDb } from "./db.ts";
 import {
 	baseSettings,
@@ -37,14 +33,22 @@ import { inserts, syncScope } from "./sync.ts";
 const among = (shas: readonly string[]): SQL =>
 	sql`${profiles.sha} IN (SELECT value FROM json_each(${JSON.stringify(shas)}))`;
 
-/** The shas of `shas` the index has no rows for, or rows read under an older PROFILE_SCHEMA. */
+/** The shas of `shas` the index has no rows for, or rows read under an older schema than their kind's. */
 export async function missingProfiles(db: IndexDb, shas: readonly string[]): Promise<string[]> {
 	const wanted = [...new Set(shas)];
 	if (wanted.length === 0) return [];
 	const held = await db
 		.select({ sha: profiles.sha })
 		.from(profiles)
-		.where(and(among(wanted), gte(profiles.schema, PROFILE_SCHEMA)));
+		.where(
+			and(
+				among(wanted),
+				or(
+					and(eq(profiles.kind, "settings"), gte(profiles.schema, FACTS_SCHEMA.settings)),
+					and(eq(profiles.kind, "modem"), gte(profiles.schema, FACTS_SCHEMA.modem)),
+				),
+			),
+		);
 	const have = new Set(held.map((p) => p.sha));
 	return wanted.filter((s) => !have.has(s));
 }
@@ -137,6 +141,10 @@ export interface Group {
 	readonly platform: Platform;
 	readonly kind: SourceKind;
 }
+
+/** Whether a source key is of `group`: its sources' keys are a range, `ios:carrier:` up to `ios:carrier;`. */
+const keyInGroup = (key: SQLWrapper, group: Group): SQL =>
+	every(gte(key, `${group.platform}:${group.kind}:`), lt(key, `${group.platform}:${group.kind};`));
 
 /** Where a scanned source's leaves at a path come from: its head, the base profile it is read over, or nowhere. */
 export const SCAN_HELD = ["own", "default", "absent"] as const;
@@ -296,28 +304,48 @@ export async function rareSettings(
 	return v.parse(v.array(rareSchema), await db.all(rarityQuery(source, group, judged, t)));
 }
 
-/** The rarity query, apart so its plan can be checked. */
+/**
+ * The rarity query, apart so its plan can be checked. A group's heads are its sources' key range, which settings_by_path
+ * ends in, so counting a (path, value)'s holders stops past maxSharers; only a rare value's path is counted in full.
+ */
 export function rarityQuery(
 	source: SourceKey,
 	group: Group,
 	{ file, identity }: RarityFile,
 	t: RarityThresholds,
 ): SQL {
+	const over = t.maxSharers + 1;
 	return sql`
-    WITH heads AS (
-      SELECT ${sources.key} AS source FROM ${sources} WHERE ${sources.platform} = ${group.platform} AND ${sources.kind} = ${group.kind}
+    WITH size AS (
+      SELECT count(*) AS of FROM ${sources} WHERE ${keyInGroup(sources.key, group)}
+        AND EXISTS (SELECT 1 FROM ${settings} s WHERE s.source = ${sources.key} AND s.file = ${file})
+    ),
+    -- No path held by the group has more distinct values and still counts as a setting.
+    cap AS (
+      SELECT max(${t.maxDistinctFloor}, of * 1.0 / ${t.holdersPerDistinct}) AS values_at_most FROM size
     ),
     own AS (
-      -- The unary + keeps SQLite off settings_by_path, whose covering (file) prefix would read every source's file.
-      SELECT DISTINCT s.path, s.value FROM ${settings} s WHERE s.source = ${source} AND +s.file = ${file} AND s.source IN (SELECT source FROM heads)
+      -- The unary + keeps SQLite off settings_by_path, whose (file) prefix would read every source's file.
+      SELECT DISTINCT s.path, s.value FROM ${settings} s WHERE s.source = ${source} AND +s.file = ${file}
         AND substr(s.path, 1, min(instr(s.path || '.', '.'), instr(s.path || '[', '[')) - 1) NOT IN (SELECT value FROM json_each(${JSON.stringify(identity)}))
     ),
-    held AS (
-      SELECT DISTINCT h.source, s.path, s.value FROM heads h JOIN ${settings} s ON s.source = h.source AND s.file = ${file}
-      WHERE s.path IN (SELECT path FROM own)
+    rare_keys AS MATERIALIZED (
+      SELECT o.path FROM (SELECT DISTINCT path FROM own) o, size WHERE size.of >= ${t.minGroupForRareKey}
+        AND (SELECT count(*) FROM (SELECT DISTINCT s.source FROM ${settings} s WHERE s.file = ${file} AND s.path = o.path AND ${keyInGroup(sql`s.source`, group)} LIMIT ${over})) <= ${t.maxSharers}
     ),
-    size AS (
-      SELECT count(*) AS of FROM heads h WHERE EXISTS (SELECT 1 FROM ${settings} s WHERE s.source = h.source AND s.file = ${file})
+    few AS MATERIALIZED (
+      SELECT o.path, o.value FROM own o WHERE o.path NOT IN (SELECT path FROM rare_keys)
+        AND (SELECT count(*) FROM (SELECT DISTINCT s.source FROM ${settings} s WHERE s.file = ${file} AND s.path = o.path AND s.value = o.value AND ${keyInGroup(sql`s.source`, group)} LIMIT ${over})) <= ${t.maxSharers}
+    ),
+    held AS (
+      SELECT DISTINCT s.source, s.path, s.value FROM ${settings} s
+      WHERE s.file = ${file} AND s.path IN (
+        SELECT path FROM rare_keys
+        UNION
+        SELECT f.path FROM (SELECT DISTINCT path FROM few) f, cap
+        WHERE (SELECT count(*) FROM (SELECT DISTINCT s.value FROM ${settings} s WHERE s.file = ${file} AND s.path = f.path AND ${keyInGroup(sql`s.source`, group)}
+          LIMIT (SELECT cast(values_at_most AS integer) + 1 FROM cap))) <= cap.values_at_most
+      ) AND ${keyInGroup(sql`s.source`, group)}
     ),
     paths AS (
       SELECT path, count(DISTINCT source) AS present, count(DISTINCT value) AS distinct_values,
@@ -327,16 +355,15 @@ export function rarityQuery(
     found AS (
       SELECT 'key' AS rare, p.path,
         (SELECT CASE count(*) WHEN 1 THEN max(v.value) ELSE json_group_array(json(v.value)) END FROM (
-          SELECT s.value FROM ${settings} s WHERE s.source = ${source} AND +s.file = ${file} AND s.path = p.path ORDER BY s.key
+          SELECT s.value FROM ${settings} s WHERE s.source = ${source} AND s.file = ${file} AND s.path = p.path ORDER BY s.key
         ) v) AS value,
         p.present AS holders, p.sharers AS sharers
-      FROM paths p, size WHERE p.present <= ${t.maxSharers} AND size.of >= ${t.minGroupForRareKey}
+      FROM paths p WHERE p.path IN (SELECT path FROM rare_keys)
       UNION ALL
-      SELECT 'value', o.path, o.value, count(*), json_group_array(h.source) FILTER (WHERE h.source <> ${source})
-      FROM own o JOIN paths p ON p.path = o.path JOIN held h ON h.path = o.path AND h.value = o.value, size
-      WHERE NOT (p.present <= ${t.maxSharers} AND size.of >= ${t.minGroupForRareKey})
-        AND p.present >= ${t.minHolders} AND p.distinct_values <= max(${t.maxDistinctFloor}, p.present * 1.0 / ${t.holdersPerDistinct})
-      GROUP BY o.path, o.value HAVING count(*) <= ${t.maxSharers}
+      SELECT 'value', f.path, f.value, count(*), json_group_array(h.source) FILTER (WHERE h.source <> ${source})
+      FROM few f JOIN paths p ON p.path = f.path JOIN held h ON h.path = f.path AND h.value = f.value
+      WHERE p.present >= ${t.minHolders} AND p.distinct_values <= max(${t.maxDistinctFloor}, p.present * 1.0 / ${t.holdersPerDistinct})
+      GROUP BY f.path, f.value
     ),
     ranked AS (
       SELECT *, row_number() OVER (

@@ -20,7 +20,8 @@ import {
 	type ArtifactKind,
 } from "@carrier-explode/storage";
 import { DataError } from "./errors.ts";
-import { readBytes, readJson } from "./store.ts";
+import { chunks } from "./fan-out.ts";
+import { CONNECTIONS, readBytes, readJson } from "./store.ts";
 
 /** Writes norm/ objects for one step, each shared key once: a firmware's configs name the same bases and combinations. */
 export interface NormWriter {
@@ -43,35 +44,44 @@ const profiled =
 	(read: (bytes: Uint8Array, source: SourceRef, sha: string) => Profile): Normalize =>
 	async (w, bytes, sha, source) => {
 		if (source === null) throw new DataError(`${sha}: a source's settings, named for no source`);
-		await once(w, keys.norm(sha), read(bytes, sourceOf(source), sha));
+		await once(w, keys.profile(sha), read(bytes, sourceOf(source), sha));
 	};
 
 const modemConfigOf: Normalize = async (w, bytes, sha) => {
 	const { config, base, combos } = await modemConfig(bytes, sha);
 	for (const [key, list] of combos) await once(w, keys.combos(key), list);
-	if (base !== null) await once(w, keys.norm(base.sha), base);
-	await once(w, keys.norm(config.sha), config);
+	if (base !== null) await once(w, keys.modemConfig(base.sha), base);
+	await once(w, keys.modemConfig(config.sha), config);
 };
 
-/** Each kind's normalizer, and how many one step normalizes: a modem configuration's decode is heavy, a settings file's light. */
+/**
+ * Each kind's normalizer, how many one step normalizes, and how many at once: a modem configuration's decode is heavy, a
+ * settings file's light, so its R2 round trips overlap.
+ */
 const NORMALIZE = {
 	"apple.ipcc": {
 		run: profiled((bytes, source, sha) => iosProfile(openIpcc(bytes), source, sha)),
 		perStep: 100,
+		atOnce: CONNECTIONS,
 	},
 	"android.carrier-settings": {
 		run: profiled((bytes, source, sha) => androidProfile(decodeCarrierSettings(bytes), source, sha)),
 		perStep: 100,
+		atOnce: CONNECTIONS,
 	},
 	"samsung.omc": {
 		run: profiled((bytes, source, sha) => samsungProfile(openOmc(bytes), source, sha)),
 		perStep: 100,
+		atOnce: CONNECTIONS,
 	},
-	"android.modem-config": { run: modemConfigOf, perStep: 10 },
+	"android.modem-config": { run: modemConfigOf, perStep: 10, atOnce: 1 },
 	"apple.bbfw": null,
 	"apple.ftab": null,
 	"android.carrier-list": null,
-} as const satisfies Record<ArtifactKind, { readonly run: Normalize; readonly perStep: number } | null>;
+} as const satisfies Record<
+	ArtifactKind,
+	{ readonly run: Normalize; readonly perStep: number; readonly atOnce: number } | null
+>;
 
 type NormalizedKind = {
 	readonly [K in ArtifactKind]: (typeof NORMALIZE)[K] extends null ? never : K;
@@ -135,6 +145,10 @@ export async function normalizeRun(
 	[start, end]: readonly [number, number],
 ): Promise<void> {
 	const listed = v.parse(v.array(normArtifactSchema), await readJson(bucket, key));
+	const run = listed.slice(start, end);
+	const [first] = run;
+	if (first === undefined) return;
 	const w = normWriter(bucket);
-	for (const a of listed.slice(start, end)) await normalize(w, a, await readBytes(bucket, keys.obj(a.sha)));
+	for (const group of chunks(run, NORMALIZE[first.kind].atOnce))
+		await Promise.all(group.map(async (a) => normalize(w, a, await readBytes(bucket, keys.obj(a.sha)))));
 }

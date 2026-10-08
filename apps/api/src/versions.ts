@@ -66,7 +66,7 @@ export type StoredProfile = v.InferOutput<typeof profileSchema>;
 
 /** The Profile a version's sha holds. */
 export async function profileOf(c: ApiContext, key: SourceKey, sha: string): Promise<StoredProfile> {
-	const profile = await readRecord(c.env.BUCKET, keys.norm(sha), profileSchema);
+	const profile = await readRecord(c.env.BUCKET, keys.profile(sha), profileSchema);
 	if (!profile) throw fail(404, `${key} ${sha} is not decoded yet.`);
 	return profile;
 }

@@ -19,7 +19,7 @@
     <table class="grid fit">
       <tbody>
         {#each groups as g (g.platform)}
-          <tr><td class="k">{PLATFORM_NAMES[g.platform]}</td><td>{#each g.keys as k (k)}<SourceChip source={k} />{/each}</td></tr>
+          <tr><td class="k">{PLATFORM_NAMES[g.platform]}</td><td>{#each g.members as m (m.key)}<SourceChip source={m} />{/each}</td></tr>
         {/each}
       </tbody>
     </table>

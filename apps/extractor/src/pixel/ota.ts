@@ -25,9 +25,6 @@ import {
 	type UpdateAnswer,
 } from "./update-service.ts";
 
-/** Requests in flight at once: a Worker keeps six connections open. */
-const ASKING = 6;
-
 /**
  * Null while no Pixel release is held (the service is asked per held Pixel and train) or the answers are the ones last
  * indexed. The service answers a POST, so there is no ETag to ask with.
@@ -39,7 +36,7 @@ export async function checkPixelOta(env: Env): Promise<PipelineParams<"pixel-ota
 	if (!wanted.length) return null;
 	const answers = allOrThrow(
 		"update service",
-		await fanOut(wanted, ASKING, (a) => askUpdates(a.device, a.train)),
+		await fanOut(wanted, env.FEED_CONCURRENCY.pixelOta, (a) => askUpdates(a.device, a.train)),
 	);
 	const snapshot = new TextEncoder().encode(JSON.stringify({ answers } satisfies PixelOtaSnapshot));
 	const sha1 = sha1Hex(snapshot);

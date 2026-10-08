@@ -39,9 +39,6 @@ const decodedOnce = perRequest(async (source: string, line: string, slug: string
 });
 const decoded = (v: Ver): Promise<Decoded> => decodedOnce(v.source, v.line ?? "", v.slug ?? "");
 
-/** Passwords are never republished. */
-const notPassword = (name: string): boolean => name === "Password";
-
 /** The operator's entries and the defaults under them, one value tree per IMS service file, keyed as profiles' raw leaves are. */
 function imsFiles(ims: ImsOperator): Record<string, Json> {
 	return {
@@ -54,7 +51,7 @@ function imsFiles(ims: ImsOperator): Record<string, Json> {
 /** The pack as value trees, one per file: what the Settings tab shows and the Changes tab diffs. */
 function settingsOf(pack: Pack): Record<string, Json> {
 	const out: Record<string, Json> = {};
-	if (pack.customer) out[PACK_FILES.customer] = xmlValue(pack.customer.root, notPassword);
+	if (pack.customer) out[PACK_FILES.customer] = xmlValue(pack.customer.root);
 	if (pack.cscFeature) out[PACK_FILES.cscFeature] = pack.cscFeature.features;
 	if (pack.carrierFeature) {
 		out[PACK_FILES.carrierFeature] = {
@@ -104,11 +101,7 @@ const imsGroup = (ims: ImsOperator): SamsungSettingGroup => ({
 function settingGroups(pack: Pack): SamsungSettingGroup[] {
 	const all = settingsOf(pack);
 	return [
-		...group(
-			"Settings",
-			PACK_FILES.customer,
-			pack.customer && xmlValue(pruned(pack.customer.root), notPassword),
-		),
+		...group("Settings", PACK_FILES.customer, pack.customer && xmlValue(pruned(pack.customer.root))),
 		...group("Features", PACK_FILES.cscFeature, all[PACK_FILES.cscFeature]),
 		...group("Carrier features", PACK_FILES.carrierFeature, all[PACK_FILES.carrierFeature]),
 		...(pack.ims ? [imsGroup(pack.ims)] : []),
@@ -145,7 +138,7 @@ function apnsOf(customer: Customer | undefined): ApnView[] {
 				apn: p.apn,
 				roles: rolesOf(customer, p.name, p.networkName),
 				root,
-				fields: xmlValue(e, notPassword),
+				fields: xmlValue(e),
 			},
 		];
 	});
@@ -220,12 +213,7 @@ export async function getSamsungFile(v: Ver, path: string): Promise<SamsungFile>
 	const bytes = d.pack.files.get(path);
 	if (!bytes) error(404, `${d.ref.name} ${d.entry.slug} has no file ${path}.`);
 	const text = decodeOmcText(bytes);
-	// customer.xml carries APN passwords: the file is shown without them.
-	const shown =
-		path === PACK_FILES.customer
-			? text.replace(/<Password>[^<]*<\/Password>/g, "<Password>(withheld)</Password>")
-			: text;
-	return { path, text: path.endsWith(".json") ? JSON.stringify(JSON.parse(shown), null, 2) : shown };
+	return { path, text: path.endsWith(".json") ? JSON.stringify(JSON.parse(text), null, 2) : text };
 }
 
 export interface SamsungChanges {

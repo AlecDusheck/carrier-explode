@@ -10,12 +10,12 @@ import {
 	countryCarriers,
 	countryList,
 	countryOf,
+	shippedModemConfigs,
 } from "@carrier-explode/db";
 import { FEATURE_SLUGS } from "@carrier-explode/schema";
 import { PLATFORMS } from "@carrier-explode/schema/types";
 import { fail, router, type ApiContext, type ApiEnv } from "../context.ts";
 import { pageQuery, paged, STRING_KEY } from "../page.ts";
-import { budget } from "../rate.ts";
 import {
 	carrierFeaturesSchema,
 	carrierModemsSchema,
@@ -59,7 +59,6 @@ carriers.openapi(
 		operationId: "listCarriers",
 		tags: ["Carriers"],
 		summary: "Carriers across platforms, by id",
-		middleware: [budget("base")],
 		request: {
 			query: z
 				.object({
@@ -103,7 +102,6 @@ carriers.openapi(
 		operationId: "getCarrier",
 		tags: ["Carriers"],
 		summary: "A carrier: its sources on every platform, each with its head version",
-		middleware: [budget("base")],
 		request: { params: ofCarrier, query: NO_QUERY },
 		responses: { ...json(carrierSchema, "The carrier."), ...ERRORS },
 	}),
@@ -139,7 +137,6 @@ carriers.openapi(
 		operationId: "getCarrierFeatures",
 		tags: ["Carriers"],
 		summary: "Each of its sources' feature states on each platform's newest phone, or on the phone named",
-		middleware: [budget("base")],
 		request: {
 			params: ofCarrier,
 			query: z
@@ -194,7 +191,6 @@ carriers.openapi(
 		operationId: "getCarrierProfiles",
 		tags: ["Carriers"],
 		summary: "Each of its sources' head version, decoded: identity, APNs, concepts and variants",
-		middleware: [budget("bundle")],
 		request: { params: ofCarrier, query: z.object({ fields: fieldsParam }).strict() },
 		responses: { ...json(carrierProfilesSchema, "One per source, by key."), ...ERRORS },
 	}),
@@ -229,7 +225,6 @@ carriers.openapi(
 		tags: ["Carriers"],
 		summary:
 			"Pixel and Galaxy modem configurations its SIMs select, per firmware of each device's newest build that ships a modem",
-		middleware: [budget("base")],
 		request: { params: ofCarrier, query: NO_QUERY },
 		responses: {
 			...json(carrierModemsSchema, "The configurations, by platform, firmware and label."),
@@ -238,7 +233,10 @@ carriers.openapi(
 	}),
 	async (c) => {
 		const { id } = c.req.valid("param");
-		const [, items] = await Promise.all([mustCarrier(c, id), carrierModemConfigs(c.var.db, id)]);
+		const [, items] = await Promise.all([
+			mustCarrier(c, id),
+			shippedModemConfigs(c.var.db).then((shipped) => carrierModemConfigs(c.var.db, id, shipped)),
+		]);
 		return c.json({ items }, 200);
 	},
 );
@@ -250,7 +248,6 @@ carriers.openapi(
 		operationId: "listCountries",
 		tags: ["Carriers"],
 		summary: "Countries, each with its country bundles and how many carriers it has",
-		middleware: [budget("base")],
 		request: { query: z.object(pageQuery).strict() },
 		responses: { ...json(countryPageSchema, "A page of countries, by ISO code."), ...ERRORS },
 	}),
@@ -275,7 +272,6 @@ carriers.openapi(
 		operationId: "getCountry",
 		tags: ["Carriers"],
 		summary: "A country: its country bundles and carriers",
-		middleware: [budget("base")],
 		request: { params: z.object({ iso: isoParam }), query: NO_QUERY },
 		responses: { ...json(countrySchema, "The country."), ...ERRORS },
 	}),

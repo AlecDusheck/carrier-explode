@@ -76,7 +76,7 @@ async function indexed(shas: readonly string[]): Promise<void> {
 		db,
 		await Promise.all(
 			shas.map(async (sha) => {
-				const o = await r2.get(keys.norm(sha));
+				const o = await r2.get(keys.profile(sha));
 				if (o === null) throw new Error(`${sha}: not stored`);
 				return profileFacts(v.parse(profileSchema, await o.json()));
 			}),

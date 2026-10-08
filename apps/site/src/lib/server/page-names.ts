@@ -7,7 +7,8 @@ import { refOf } from "#lib/at.ts";
 import { releaseLabel } from "#lib/naming.ts";
 import type { PageNames } from "#lib/types.ts";
 import { getBuildModems } from "./builds";
-import { listEntries } from "./lists";
+import { sourceRow } from "./catalog";
+import { brandOf } from "./pictures";
 import { hasPrevious, releaseNamed } from "./releases";
 
 interface NamedParams {
@@ -21,11 +22,14 @@ interface NamedParams {
 async function sourceNames(p: NamedParams): Promise<PageNames["source"]> {
 	if (p.kind === undefined || p.platform === undefined || !isPlatform(p.platform) || p.name === undefined)
 		return null;
-	const key = sourceKey(refOf({ kind: p.kind, platform: p.platform, name: p.name }));
-	const entry = (await listEntries([key])).get(key);
-	return entry === undefined
+	const ref = refOf({ kind: p.kind, platform: p.platform, name: p.name });
+	const s = await sourceRow(sourceKey(ref));
+	return s === undefined
 		? null
-		: { brand: entry.brand, country: entry.cc === undefined ? null : (countryName(entry.cc) ?? null) };
+		: {
+				brand: brandOf(ref, s.carrierName, s.cc),
+				country: s.cc === null ? null : (countryName(s.cc) ?? null),
+			};
 }
 
 async function modemNames(

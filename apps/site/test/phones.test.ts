@@ -12,7 +12,9 @@ import {
 	overridesFor,
 	phoneList,
 	phoneRows,
+	pickPhoneRow,
 	readAgainst,
+	rowKey,
 	sharedPri,
 	sortPhones,
 	type PhoneFile,
@@ -45,7 +47,7 @@ const phones = (...codes: string[]) => codes.map((code) => ({ code, name: NAMES[
 // 24A437, in the order the index lists them.
 const MODEMS = [
 	{ family: "Mav24", devices: phones("iPhone17,1", "iPhone17,2", "iPhone17,3", "iPhone17,4") },
-	{ family: "C1", devices: phones("iPhone17,5", "iPhone18,4", "iPhone18,5") },
+	{ family: "c4000", devices: phones("iPhone17,5", "iPhone18,4", "iPhone18,5") },
 	{ family: "Mav25", devices: phones("iPhone18,1", "iPhone18,2", "iPhone18,3", "iPhone19,3") },
 	{ family: "c4020", devices: phones("iPhone19,2", "iPhone19,7") },
 	{ family: "ICE19", devices: phones("iPhone12,1", "iPhone12,3", "iPhone12,5", "iPhone12,8") },
@@ -59,7 +61,7 @@ describe("modem names", () => {
 	it("uses a family's label where it has one, else its vendor", () => {
 		expect(modemLabel("Mav25", "Qualcomm X80")).toBe("Qualcomm X80 · Mav25");
 		expect(modemLabel("Mav21", undefined)).toBe("Qualcomm · Mav21");
-		expect(modemLabel("C1", undefined)).toBe("Apple C1");
+		expect(modemLabel("c4000", "Apple C1")).toBe("Apple C1 · c4000");
 		expect(modemLabel("c4020", undefined)).toBe("Apple · c4020");
 		expect(modemLabel("ICE19", undefined)).toBe("Intel · ICE19");
 		expect(modemLabel("Zed9", undefined)).toBe("Zed9");
@@ -74,7 +76,7 @@ describe("phones", () => {
 	});
 
 	it("puts the family serving the newest phone first", () => {
-		expect(byNewest(MODEMS).map((m) => m.family)).toEqual(["c4020", "Mav25", "C1", "Mav24", "ICE19"]);
+		expect(byNewest(MODEMS).map((m) => m.family)).toEqual(["c4020", "Mav25", "c4000", "Mav24", "ICE19"]);
 	});
 
 	it("lists phones compactly, unnamed ones last", () => {
@@ -122,13 +124,20 @@ describe("override files", () => {
 		expect(sharedPri(files).map((f) => f.path)).toEqual(["global_setting_G.der.gri"]);
 	});
 
-	it("keeps files for phones the release lacks, after the ones it reads", () => {
+	it("lists every phone newest first, those the release lacks too, then files named for none", () => {
 		// TMobile_US 72.1, an OTA version, read against a release holding only iPhone18,1.
-		const read = [{ slug: "72.1", path: "overrides_V53_V54_V57.der.pri", phones: phones("iPhone18,1") }];
-		const rows = phoneRows("72.1", files, { files: read });
-		expect(rows.map((r) => r.path)).toEqual([
-			"overrides_V53_V54_V57.der.pri",
+		const read = [
+			{
+				kind: "file" as const,
+				slug: "72.1",
+				path: "overrides_V53_V54_V57.der.pri",
+				phones: phones("iPhone18,1"),
+			},
+		];
+		const rows = phoneRows("72.1", files, { files: read, defaults: [] });
+		expect(rows.map(rowKey)).toEqual([
 			"overrides_V64.der.tri",
+			"overrides_V53_V54_V57.der.pri",
 			"overrides_D93_D94_D47_D48.der.pri",
 			"overrides_D52g_D53g.pri",
 			"global_setting_G.der.gri",
@@ -141,6 +150,20 @@ describe("override files", () => {
 		]);
 		// With no release to read against, every file still has its row.
 		expect(phoneRows("72.1", files, null)).toHaveLength(5);
+	});
+
+	it("gives the release's phones without a file of their own one carrier.plist row, in phone order", () => {
+		const rows = phoneRows("72.0", [file("overrides_V53_V54_V57.der.pri")], {
+			files: [
+				{ kind: "file", slug: "72.0", path: "overrides_V53_V54_V57.der.pri", phones: phones("iPhone18,1") },
+			],
+			defaults: phones("iPhone19,2", "iPhone19,7"),
+		});
+		expect(rows.map(rowKey)).toEqual(["carrier.plist", "overrides_V53_V54_V57.der.pri"]);
+		expect(fileChoices(rows, (key) => key)[0]?.label).toBe("iPhone 18 Pro, 18 Pro Max · carrier.plist only");
+		// Unnamed, a page opens on the newest phone with a file of its own.
+		expect(pickPhoneRow(rows, null).row).toBe(rows[1]);
+		expect(pickPhoneRow(rows, "carrier.plist").row).toBe(rows[0]);
 	});
 });
 
@@ -155,7 +178,12 @@ describe("an MVNO set's override files", () => {
 	});
 
 	it("label their phone choice apart from the carrier's own file", () => {
-		const read = [own, mvno].map((path) => ({ slug: "72.1", path, phones: phones("iPhone18,1") }));
+		const read = [own, mvno].map((path) => ({
+			kind: "file" as const,
+			slug: "72.1",
+			path,
+			phones: phones("iPhone18,1"),
+		}));
 		expect(fileChoices(read, (path) => path).map((c) => c.label)).toEqual([
 			"iPhone 17 Pro",
 			"iPhone 17 Pro · MVNO set 1",

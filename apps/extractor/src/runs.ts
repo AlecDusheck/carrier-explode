@@ -9,7 +9,6 @@ import { keys } from "@carrier-explode/storage";
 import { checkIos } from "./apple/check.ts";
 import { checkAppleOta } from "./apple/ota.ts";
 import type { Env } from "./env.ts";
-import { RequestError } from "./errors.ts";
 import { checkGalaxy } from "./galaxy/check.ts";
 import { checkPixel } from "./pixel/check.ts";
 import { checkPixelOta } from "./pixel/ota.ts";
@@ -123,11 +122,7 @@ const LIVE: ReadonlySet<Status> = new Set<Status>([
 ]);
 const FAILED: ReadonlySet<Status> = new Set<Status>(["errored", "terminated"]);
 
-export function workflowOf(env: Env, pipeline: PipelineName): Workflow {
-	const workflow = env[PIPELINES[pipeline].binding];
-	if (workflow === undefined) throw new RequestError(404, `${pipeline}: not bound in this environment`);
-	return workflow;
-}
+export const workflowOf = (env: Env, pipeline: PipelineName): Workflow => env[PIPELINES[pipeline].binding];
 
 /** An instance's status; null when there is none. */
 async function statusOf(env: Env, pipeline: PipelineName, id: string): Promise<Status | null> {
@@ -243,7 +238,7 @@ export async function checkFeed(
 
 /** Checks the feeds due now (a scheduled run has 15 minutes). */
 export async function scheduled(controller: ScheduledController, env: Env): Promise<void> {
-	const due = FEED_NAMES.filter((f) => PIPELINES[f].cron === controller.cron);
+	const due = FEED_NAMES.filter((f) => env.PIPELINE_CRONS[f] === controller.cron);
 	if (!due.length) throw new Error(`no feed is checked at "${controller.cron}"`);
 	const checked = await Promise.allSettled(due.map((feed) => checkFeed(env, feed, false)));
 	const failed = checked.flatMap((r) => (r.status === "rejected" ? [r.reason] : []));

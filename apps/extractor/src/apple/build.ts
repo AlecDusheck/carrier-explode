@@ -19,12 +19,9 @@ export async function storeBundle(
 	sha: string,
 	bytes: () => Promise<Uint8Array>,
 ): Promise<void> {
-	if ((await w.bucket.head(keys.norm(sha))) !== null) return;
+	if ((await w.bucket.head(keys.profile(sha))) !== null) return;
 	await storeNormalized(w, { kind: "apple.ipcc", sha, source }, await bytes());
 }
-
-/** R2 calls in flight. */
-const CONCURRENCY = 8;
 
 type Copy = IpswOutput["bundles"][number];
 
@@ -67,7 +64,12 @@ function mergeModems(parts: readonly IpswOutput[]): ImageModem[] {
 }
 
 /** The IPSW jobs' outputs (JSON text, in `build.ipsws` order) merged and normalized to norm/; releases/ios/<build>.json written last. */
-export async function merge(build: IosBuild, outputs: readonly string[], u: UnitContext): Promise<void> {
+export async function merge(
+	build: IosBuild,
+	outputs: readonly string[],
+	u: UnitContext,
+	concurrency: number,
+): Promise<void> {
 	const parts = outputs.map((o) => v.parse(ipswOutputSchema, parseRecord(`${build.build} IPSW output`, o)));
 	const bySource = Map.groupBy(
 		parts.flatMap((p) => p.bundles),
@@ -78,7 +80,7 @@ export async function merge(build: IosBuild, outputs: readonly string[], u: Unit
 		"bundles",
 		await fanOut(
 			[...bySource].toSorted(([a], [b]) => a.localeCompare(b)),
-			CONCURRENCY,
+			concurrency,
 			async ([source, copies]) => [source, await storeSource(u, w, source, copies)] as const,
 		),
 	);

@@ -15,6 +15,7 @@ export const SCOPE: Scope = {
 	samsung: {
 		families: ["Galaxy S", "Galaxy Z Flip"],
 		exclude: [" FE"],
+		salesCodes: ["EUX", "ZTO", "ATT"],
 		releasedSince: "2025-01",
 		majors: 3,
 		builds: "all",

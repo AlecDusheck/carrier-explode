@@ -110,14 +110,13 @@ describe("samsungProfile", () => {
 				types: ["default", "dun"],
 				protocol: "ip",
 				auth: "chap",
-				hasPassword: true,
+				password: "p",
 				path: "customer.xml:Settings.Connections.Profile[0]",
 			},
 			{
 				apn: "mms.example",
 				label: "MMS",
 				types: ["mms"],
-				hasPassword: false,
 				mmsProxy: "10.0.0.1",
 				mmsPort: "8080",
 				mmsc: "http://mms.example",
@@ -174,12 +173,12 @@ describe("samsungProfile", () => {
 		expect(p.concepts["country-iso"]).toMatchObject({ value: "fr" });
 	});
 
-	it("reads the Mobile networks menu's switches, and keeps every leaf but passwords", () => {
+	it("reads the Mobile networks menu's switches, and keeps every leaf", () => {
 		expect(p.concepts["volte-switch"]).toMatchObject({ kind: "value", value: false });
 		expect(p.concepts["vonr-switch"]).toMatchObject({ kind: "value", value: true });
 		expect(p.concepts["apn-internet"]).toMatchObject({ value: "web.example" });
 		expect(p.raw["customer.xml:Settings.Connections.Profile[0].PSparam.APN"]).toBe("web.example");
-		expect(Object.keys(p.raw).some((k) => k.endsWith("Password"))).toBe(false);
+		expect(p.raw["customer.xml:Settings.Connections.Profile[0].PSparam.Password"]).toBe("p");
 	});
 });
 

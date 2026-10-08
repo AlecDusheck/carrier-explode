@@ -12,8 +12,19 @@ import {
 	type LabelFieldName,
 	type LabelSubject,
 } from "@carrier-explode/schema/records";
-import { chunks, run, type IndexDb } from "./db.ts";
-import { carriers, devices, labels, modems, sources } from "./schema.ts";
+import type { Platform } from "@carrier-explode/schema/types";
+import { chunks, qualified, run, type IndexDb } from "./db.ts";
+import {
+	carriers,
+	devices,
+	labelMisses,
+	labels,
+	modemConfigs,
+	modems,
+	releases,
+	sims,
+	sources,
+} from "./schema.ts";
 
 const inList = (values: readonly string[]): SQL => sql.raw(values.map((x) => `'${x}'`).join(", "));
 
@@ -36,13 +47,6 @@ export function labelled<S extends LabelSubject>(
 	const outranking = of.trust.filter((o) => trustRank(of, o) < trustRank(of, "feed"));
 	return sql<string | null>`coalesce(${label(inList(outranking))}, ${derived}, ${label(undefined)})`;
 }
-
-/** The name a person gave carrier `id` through one of its member sources: it holds whatever id linking assigns. */
-export const sourceCarrierName = (id: SQLWrapper): SQL<string | null> => sql<
-	string | null
->`(SELECT ${labels.value} FROM ${labels}
-  JOIN ${sources} ON ${sources.key} = ${labels.code} WHERE ${labels.subject} = 'source' AND ${labels.field} = 'carrierName' AND ${sources.carrier} = ${id}
-  ORDER BY ${sources.key} LIMIT 1)`;
 
 /** Labels, each replacing what its subject's field holds unless that came from an origin the field trusts more. */
 export async function writeLabels(db: IndexDb, rows: readonly Label[]): Promise<void> {
@@ -103,25 +107,120 @@ export async function syncLabels<S extends LabelSubject>(
 	return changed.length;
 }
 
-/** Codes the index uses that nothing names: devices, carriers whose members display no name, modem families. */
-export async function unnamed(db: IndexDb, subject: Exclude<LabelSubject, "source">): Promise<string[]> {
-	const nameless = (code: SQLWrapper): SQL => sql`${labelled(subject, "name", code)} IS NULL`;
-	const rows = await {
-		device: () => db.select({ code: devices.code }).from(devices).where(nameless(devices.code)),
-		// One named for a SIM selector (20404GID1=2801) has nothing a search can find.
-		carrier: () =>
+/**
+ * Where codes nothing names come from: `device`, a phone an indexed release lists; `modemConfig`, a modem configuration
+ * whose selection names no PLMN, so no carrier's name stands for it (MediaTek's `SBP 141`).
+ */
+export const LABEL_CANDIDATE_KINDS = ["device", "carrier", "modemFamily", "modemConfig"] as const;
+export type LabelCandidateKind = (typeof LABEL_CANDIDATE_KINDS)[number];
+
+/** The subject each kind's codes are labelled under. */
+export const CANDIDATE_SUBJECT = {
+	device: "device",
+	carrier: "carrier",
+	modemFamily: "modem",
+	modemConfig: "modem",
+} as const satisfies Record<LabelCandidateKind, LabelSubject>;
+
+/** A code nothing names, with the platform it ships on (a carrier's first member's) and a carrier's country. */
+export interface LabelCandidate {
+	readonly kind: LabelCandidateKind;
+	readonly code: string;
+	readonly platform: Platform;
+	readonly iso: string | null;
+}
+
+/** A code no search named is searched again a quarter later, when new pages may name it. */
+const SEARCH_AGAIN_AFTER_DAYS = 91;
+
+/** Up to `take` codes of a kind that nothing names, those never searched first, then those longest since a search missed. */
+export async function labelCandidates(
+	db: IndexDb,
+	kind: LabelCandidateKind,
+	take: number,
+	today: string,
+): Promise<LabelCandidate[]> {
+	const subject = CANDIDATE_SUBJECT[kind];
+	const code = {
+		device: qualified(devices, devices.code),
+		carrier: qualified(carriers, carriers.id),
+		modemFamily: qualified(modems, modems.family),
+		modemConfig: qualified(modemConfigs, modemConfigs.label),
+	}[kind];
+	const missed = sql`(SELECT ${labelMisses.searched} FROM ${labelMisses}
+    WHERE ${labelMisses.subject} = ${subject} AND ${labelMisses.code} = ${code} AND ${labelMisses.field} = 'name')`;
+	const due = sql`coalesce(${missed} <= date(${today}, ${`-${SEARCH_AGAIN_AFTER_DAYS} days`}), 1)`;
+	const wanted = sql`${labelled(subject, "name", code)} IS NULL AND ${due}`;
+	const order = [sql`${missed} IS NOT NULL`, missed, code] as const;
+	const none = sql<string | null>`NULL`;
+	const of = sql<LabelCandidateKind>`${kind}`;
+	return {
+		device: () =>
 			db
-				.select({ code: carriers.id })
-				.from(carriers)
+				.select({ kind: of, code: devices.code, platform: devices.platform, iso: none })
+				.from(devices)
 				.where(
 					and(
-						sql`${carriers.name} IS NULL`,
-						sql`${carriers.id} NOT LIKE '%=%'`,
-						nameless(carriers.id),
-						sql`${sourceCarrierName(carriers.id)} IS NULL`,
+						wanted,
+						sql`EXISTS (SELECT 1 FROM ${releases} r, json_each(r.devices) j WHERE j.value = ${code})`,
 					),
-				),
-		modem: () => db.selectDistinct({ code: modems.family }).from(modems).where(nameless(modems.family)),
-	}[subject]();
-	return rows.map((r) => r.code).toSorted();
+				)
+				.orderBy(...order)
+				.limit(take),
+		carrier: () =>
+			db
+				.select({
+					kind: of,
+					code: carriers.id,
+					platform: sql<Platform>`min(${sources.platform})`,
+					iso: carriers.iso,
+				})
+				.from(carriers)
+				.innerJoin(sources, eq(sources.carrier, carriers.id))
+				.where(and(sql`${carriers.name} IS NULL`, wanted))
+				.groupBy(carriers.id)
+				.orderBy(...order)
+				.limit(take),
+		modemFamily: () =>
+			db
+				.selectDistinct({ kind: of, code: modems.family, platform: modems.platform, iso: none })
+				.from(modems)
+				.where(wanted)
+				.orderBy(...order)
+				.limit(take),
+		modemConfig: () =>
+			db
+				.select({
+					kind: of,
+					code: modemConfigs.label,
+					platform: sql<Platform>`min(${modemConfigs.platform})`,
+					iso: none,
+				})
+				.from(modemConfigs)
+				.where(
+					and(
+						wanted,
+						sql`${code} NOT IN (SELECT c.label FROM ${modemConfigs} c JOIN ${sims} ON ${sims.sha} = c.sha)`,
+					),
+				)
+				.groupBy(modemConfigs.label)
+				.orderBy(...order)
+				.limit(take),
+	}[kind]();
+}
+
+/** That a search on `today` found no page giving `code`'s name. */
+export async function writeLabelMiss(
+	db: IndexDb,
+	subject: LabelSubject,
+	code: string,
+	today: string,
+): Promise<void> {
+	await db
+		.insert(labelMisses)
+		.values({ subject, code, field: "name", searched: today })
+		.onConflictDoUpdate({
+			target: [labelMisses.subject, labelMisses.code, labelMisses.field],
+			set: { searched: today },
+		});
 }

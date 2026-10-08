@@ -1,6 +1,6 @@
 /** Every key of the carrier-explode-ingest bucket. Nothing else spells a key out. */
 
-import { PROFILE_SCHEMA, type ReleasePlatform } from "@carrier-explode/schema/types";
+import { MODEM_SCHEMA, PROFILE_SCHEMA, type ReleasePlatform } from "@carrier-explode/schema/types";
 
 /** What a release record is keyed by: a Pixel build is stored per device, so each device step writes its own. */
 export type ReleaseId = {
@@ -17,7 +17,8 @@ export const OTA_FEEDS = ["apple", "pixel"] as const;
 export type OtaFeed = (typeof OTA_FEEDS)[number];
 
 const OBJ = "obj/";
-const NORM = `norm/v${PROFILE_SCHEMA}/`;
+const PROFILES = `norm/v${PROFILE_SCHEMA}/`;
+const MODEMS = `norm/v${MODEM_SCHEMA}/`;
 const RELEASES = "releases/";
 const TMP = "tmp/";
 const JSON_EXT = ".json";
@@ -31,12 +32,13 @@ export const keys = {
 	/** The sha256 an obj/ key names; undefined for any other key. */
 	shaOfObj: (key: string): string | undefined =>
 		key.startsWith(OBJ) && key.length > OBJ.length ? key.slice(OBJ.length) : undefined,
-	/** Listed by reindex. */
-	normPrefix: (): string => NORM,
-	/** A Profile or ModemConfig, read from its artifact's bytes alone. */
-	norm: (sha: string): string => `${NORM}${sha}${JSON_EXT}`,
+	/** Listed by reindex: the prefixes Profiles and ModemConfigs are under, once each. */
+	normPrefixes: (): readonly string[] => [...new Set([PROFILES, MODEMS])],
+	/** Read from its artifact's bytes alone, as are a ModemConfig and its combos. */
+	profile: (sha: string): string => `${PROFILES}${sha}${JSON_EXT}`,
+	modemConfig: (sha: string): string => `${MODEMS}${sha}${JSON_EXT}`,
 	/** A band-combination list, named by its ComboSet.key. */
-	combos: (key: string): string => `${NORM}combos/${key}${JSON_EXT}`,
+	combos: (key: string): string => `${MODEMS}combos/${key}${JSON_EXT}`,
 	/** `schema` is decode-ios's MODEM_SUMMARY_SCHEMA, which storage may not import. */
 	basebandSummary: (schema: number, sha: string): string => `decoded/baseband/v${schema}/${sha}${JSON_EXT}`,
 	/** Listed by planning: a unit is held once its release record is. */
@@ -55,6 +57,8 @@ export const keys = {
 		`ota/${feed}/files/${await urlHash(url)}${JSON_EXT}`,
 	/** What FUS and its AP member said of a Galaxy firmware a check read: fixed once built, so FUS is asked once. */
 	galaxyFirmware: (build: string): string => `firmware/samsung/${build}${JSON_EXT}`,
+	/** What version.xml answered for a Galaxy model under each sales code a check asked. */
+	galaxySalesCodes: (model: string): string => `firmware/samsung/sales-codes/${model}${JSON_EXT}`,
 	/** The daily archive of everything the API answers; the site serves it at this same path. */
 	dataset: (): string => "datasets/carrier-explode.zip",
 	/** Swept by the bucket's lifecycle rule (lifecycle.json). */

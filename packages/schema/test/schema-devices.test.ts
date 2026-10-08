@@ -14,6 +14,7 @@ import {
 	productOf,
 	type Device,
 	type ModemItem,
+	type NamedDevice,
 } from "../src/index.ts";
 
 const apple = (code: string, released: string, boards: string[]): Device => ({
@@ -23,6 +24,15 @@ const apple = (code: string, released: string, boards: string[]): Device => ({
 	boards,
 });
 const pixel = (code: string, released: string): Device => ({ code, family: "android", released, boards: [] });
+
+/** A device no label names, which the index names by its code. */
+const unnamed = (d: Device): NamedDevice => ({ ...d, name: d.code });
+/** A Galaxy as Samsung names it. */
+const galaxy = (code: string, name: string, released: string): NamedDevice => ({
+	code,
+	name: `${name} (${code})`,
+	released,
+});
 
 const item = (id: string, name: string | null): ModemItem => ({
 	id,
@@ -34,12 +44,14 @@ const item = (id: string, name: string | null): ModemItem => ({
 });
 
 describe("newestFirst", () => {
-	const order = newestFirst([
-		pixel("cubs", "2026-08"),
-		pixel("kodiak", "2026-08"),
-		pixel("stallion", "2026-03"),
-		pixel("sailfish", "2016-10"),
-	]);
+	const order = newestFirst(
+		[
+			pixel("cubs", "2026-08"),
+			pixel("kodiak", "2026-08"),
+			pixel("stallion", "2026-03"),
+			pixel("sailfish", "2016-10"),
+		].map(unnamed),
+	);
 
 	it("lists by release, newest first, a launch's devices by code, and devices no record lists last", () => {
 		expect(["sailfish", "unlisted", "stallion", "cubs", "kodiak", "another"].toSorted(order)).toEqual([
@@ -55,16 +67,32 @@ describe("newestFirst", () => {
 	});
 
 	it("orders product types numerically within a launch", () => {
-		const iphones = newestFirst([
-			apple("iPhone17,1", "2024-09-20", []),
-			apple("iPhone17,10", "2024-09-20", []),
-			apple("iPhone17,2", "2024-09-20", []),
-		]);
+		const iphones = newestFirst(
+			[
+				apple("iPhone17,1", "2024-09-20", []),
+				apple("iPhone17,10", "2024-09-20", []),
+				apple("iPhone17,2", "2024-09-20", []),
+			].map(unnamed),
+		);
 		expect(["iPhone17,1", "iPhone17,10", "iPhone17,2"].toSorted(iphones)).toEqual([
 			"iPhone17,10",
 			"iPhone17,2",
 			"iPhone17,1",
 		]);
+	});
+
+	it("keeps a Galaxy's models together on the newest of their days, U before U1", () => {
+		const galaxies = newestFirst([
+			galaxy("SM-S948U", "Galaxy S26 Ultra", "2026-02-20"),
+			galaxy("SM-S948U1", "Galaxy S26 Ultra", "2026-03-02"),
+			galaxy("SM-S947U", "Galaxy S26+", "2026-02-25"),
+			galaxy("SM-S947U1", "Galaxy S26+", "2026-02-27"),
+			galaxy("SM-S942U", "Galaxy S26", "2026-03-02"),
+			galaxy("SM-S942U1", "Galaxy S26", "2026-02-21"),
+		]);
+		expect(
+			["SM-S947U", "SM-S942U1", "SM-S948U1", "SM-S947U1", "SM-S942U", "SM-S948U"].toSorted(galaxies),
+		).toEqual(["SM-S948U", "SM-S948U1", "SM-S942U", "SM-S942U1", "SM-S947U", "SM-S947U1"]);
 	});
 });
 

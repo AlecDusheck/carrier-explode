@@ -26,7 +26,7 @@ export const getListEntry = query.batch(key, async (keys) => {
 	return (k) => entries.get(k) ?? null;
 });
 /** Every source of a source's carrier, on every platform, its primary bundle first. */
-export const getCarrierMembers = query(key, carrierMembers);
+export const getCarrierMembers = query(key, async (k) => lists.chipEntries(await carrierMembers(k)));
 /** The Pixel a phone's reported model names (`Pixel 9 Pro`), or null. */
 export const getPixelOfModel = query(
 	v.pipe(v.string(), v.maxLength(64)),

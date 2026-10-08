@@ -28,6 +28,8 @@ export const ipswParamsSchema = v.object({
 	url: v.pipe(v.string(), v.url()),
 	/** Names the tmp/<instance>/ its bundle copies go to. */
 	instance: str,
+	/** Bundles packed and uploaded at once. */
+	concurrency: v.pipe(v.number(), v.integer(), v.minValue(1)),
 });
 export type IpswParams = v.InferOutput<typeof ipswParamsSchema>;
 
@@ -54,13 +56,19 @@ export const ipswOutputSchema = v.object({
 export type IpswOutput = v.InferOutput<typeof ipswOutputSchema>;
 
 /** The job for one IPSW: its bundle copies to tmp/<instance>/, its modem packages to obj/ and their summaries to decoded/. */
-export const ipswJob = (build: IosBuild, ipsw: IosBuild["ipsws"][number], u: UnitContext): ContainerJob => ({
+export const ipswJob = (
+	build: IosBuild,
+	ipsw: IosBuild["ipsws"][number],
+	u: UnitContext,
+	concurrency: number,
+): ContainerJob => ({
 	job: "ios.ipsw",
 	params: {
 		build: build.build,
 		device: ipsw.device,
 		url: ipsw.url,
 		instance: u.instance,
+		concurrency,
 	} satisfies IpswParams,
 });
 

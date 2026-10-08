@@ -83,10 +83,10 @@ export const modemHref = (platform: ReleasePlatform, build: string, modem: strin
 /** A version's tag in a version list: a beta is only ever a beta, even when its line has no release to call current. */
 export function versionTag(
 	e: Pick<Version, "slug" | "beta">,
-	head: string,
+	shipping: string | null,
 ): "current release" | "beta" | null {
 	if (e.beta) return "beta";
-	return e.slug === head ? "current release" : null;
+	return e.slug === shipping ? "current release" : null;
 }
 
 export function versionHref(at: At, tab?: string, path?: string): string {
@@ -131,7 +131,11 @@ export const rawHref = (at: At, path: string): string =>
 const field = (v: unknown, key: string): unknown =>
 	typeof v === "object" && v !== null && key in v ? Reflect.get(v, key) : undefined;
 
+/** The zone's rate limit answers with Cloudflare's own page, which has nothing a pane can show. */
+const RATE_LIMITED = "Too many requests... please wait a bit.";
+
 export function errorMessage(e: unknown): string {
+	if (field(e, "status") === 429) return RATE_LIMITED;
 	const said = [field(field(e, "body"), "message"), field(e, "message")].find(
 		(m): m is string => typeof m === "string",
 	);

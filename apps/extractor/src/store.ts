@@ -99,7 +99,7 @@ export interface Hashed {
 
 export const hashed = async (bytes: Uint8Array): Promise<Hashed> => ({ bytes, sha: await sha256Hex(bytes) });
 
-/** The shas of `shas` whose objects are written, as the index's profile rows under the current PROFILE_SCHEMA say. One query. */
+/** The shas of `shas` whose objects are written, as the index's profile rows under their kind's current schema say. One query. */
 export async function heldShas(db: IndexDb, shas: readonly string[]): Promise<ReadonlySet<string>> {
 	const missing = new Set(await missingProfiles(db, shas));
 	return new Set(shas.filter((s) => !missing.has(s)));

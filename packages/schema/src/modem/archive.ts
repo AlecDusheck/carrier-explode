@@ -4,7 +4,7 @@ import * as v from "valibot";
 
 import { errorMessage } from "@carrier-explode/binary";
 
-import { PROFILE_SCHEMA, type ModemConfig } from "../types.ts";
+import { MODEM_SCHEMA, type ModemConfig } from "../types.ts";
 import type { ComboSource } from "./combos.ts";
 
 export type ArchiveFiles = ReadonlyMap<string, Uint8Array>;
@@ -24,7 +24,7 @@ export function jsonMember<S extends v.GenericSchema>(
 }
 
 export const modemConfigOf = (fields: Omit<ModemConfig, "schema">): ModemConfig => ({
-	schema: PROFILE_SCHEMA,
+	schema: MODEM_SCHEMA,
 	...fields,
 });
 

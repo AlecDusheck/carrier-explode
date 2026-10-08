@@ -58,18 +58,23 @@ const shippedCopies = (copies: readonly SourceCopy[]): ReleaseCopy[] =>
 	copies.filter((c): c is ReleaseCopy => c.kind === "release");
 const shippedOn = (c: ReleaseCopy): string => `${c.release.id}\n${c.line}`;
 
-/** A Pixel reads the file the newest build carrying the source ships it, over that build's default.pb; an OTA update is not every phone's. */
+/**
+ * A Pixel reads the file its own newest build ships it, over that build's default.pb; Pixels run separate build
+ * trains, and an OTA update is not every phone's. Nothing when its newest build does not carry the source.
+ */
 function pixelHeads({ copies, base }: SourceHistory): Map<string, PhoneHead> {
 	const shipped = shippedCopies(copies);
-	const newest = shipped
-		.map((c) => c.release.sortKey)
-		.toSorted()
-		.at(-1);
-	const bases = new Map(shippedCopies(base).map((c) => [shippedOn(c), c.sha]));
+	const bases = shippedCopies(base);
+	const newestBuild = new Map<string, string>();
+	for (const c of [...shipped, ...bases]) {
+		const known = newestBuild.get(c.line);
+		if (known === undefined || c.release.sortKey > known) newestBuild.set(c.line, c.release.sortKey);
+	}
+	const baseOn = new Map(bases.map((c) => [shippedOn(c), c.sha]));
 	return new Map(
 		shipped
-			.filter((c) => c.release.sortKey === newest)
-			.map((c) => [c.line, { sha: c.sha, base: bases.get(shippedOn(c)) ?? null }]),
+			.filter((c) => c.release.sortKey === newestBuild.get(c.line))
+			.map((c) => [c.line, { sha: c.sha, base: baseOn.get(shippedOn(c)) ?? null }]),
 	);
 }
 

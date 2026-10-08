@@ -86,20 +86,26 @@ async function allArtifacts(
 /** Every norm/ object's key, the band-combination lists' left out by the delimiter. */
 async function heldNorms(bucket: R2Bucket): Promise<ReadonlySet<string>> {
 	const held = new Set<string>();
-	for await (const { key } of listing(bucket, { prefix: keys.normPrefix(), delimiter: "/" })) held.add(key);
+	for (const prefix of keys.normPrefixes())
+		for await (const { key } of listing(bucket, { prefix, delimiter: "/" })) held.add(key);
 	return held;
 }
+
+const normKey = (a: NormArtifact): string =>
+	a.kind === "android.modem-config" ? keys.modemConfig(a.sha) : keys.profile(a.sha);
 
 /**
  * The target's artifacts not yet normalized. A norm/ object is never rewritten, so normalizing a held one again would
  * write nothing; a modem configuration's is written after its base and combinations.
  */
 export async function reindexArtifacts(bucket: R2Bucket, target: ReindexTarget): Promise<NormArtifact[]> {
-	const [artifacts, held] = await Promise.all([
-		target.kind === "all" ? allArtifacts(bucket, target.platform) : recordArtifacts(bucket, target),
-		heldNorms(bucket),
-	]);
-	return artifacts.filter((a) => !held.has(keys.norm(a.sha)));
+	const artifacts =
+		target.kind === "all"
+			? await allArtifacts(bucket, target.platform)
+			: await recordArtifacts(bucket, target);
+	// Listed only once the reads succeed, so a failed read leaves no listing running.
+	const held = await heldNorms(bucket);
+	return artifacts.filter((a) => !held.has(normKey(a)));
 }
 
 /** The platforms a reindex of all covers. */

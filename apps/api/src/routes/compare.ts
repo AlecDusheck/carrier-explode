@@ -4,7 +4,6 @@ import { createRoute, z, type OpenAPIHono } from "@hono/zod-openapi";
 import { compareProfiles } from "@carrier-explode/schema";
 import { parseSourceKey, type SourceKey } from "@carrier-explode/schema/types";
 import { router, type ApiContext, type ApiEnv } from "../context.ts";
-import { budget } from "../rate.ts";
 import { comparisonSchema, type Comparison } from "../shapes.ts";
 import { locate, profileOf, versionAt, type AtVersion, type StoredProfile } from "../versions.ts";
 import { ERRORS, json, lineParam, slugOf, sourceKeyParam, versionParam } from "./common.ts";
@@ -36,7 +35,6 @@ export const compare: OpenAPIHono<ApiEnv> = router().openapi(
 		tags: ["Compare"],
 		summary:
 			"Two versions of any two sources: concepts and APNs on any platforms, and native settings when both are of one decoder family",
-		middleware: [budget("bundle")],
 		request: {
 			query: z
 				.object({

@@ -6,7 +6,7 @@
   import DecodeNotes from "../modem/DecodeNotes.svelte";
   import Facts from "../modem/Facts.svelte";
 
-  /** An Intel / Apple C1 override file: no Qualcomm items, so no ModemConfig; its keys read as the Intel tree. */
+  /** An Intel-dialect override file: no Qualcomm items, so no ModemConfig; its keys read as the Intel tree. */
   let { pri, devices = true }: {
     pri: PriDecoded;
     /** Off where a phone picker already names the modem. */
@@ -24,7 +24,7 @@
   const modem = $derived(devices ? dialectLabel(pri.dialect) : undefined);
   // Empty header fields ("Carrier ID" on most files) say nothing.
   const facts = $derived([
-    ...(modem ? [{ label: "Written for", value: `${modem} modem` }] : []),
+    ...(modem ? [{ label: "Dialect", value: modem }] : []),
     ...Object.entries(pri.header).filter(([, v]) => v !== "").map(([label, value]) => ({ label, value })),
   ]);
 </script>

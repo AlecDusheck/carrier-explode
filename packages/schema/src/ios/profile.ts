@@ -99,16 +99,11 @@ function variant(
 	return { id, when, concepts, apns: other.apns };
 }
 
-/** Credentials are never republished: APN passwords, and CDMA's SIP and AN passwords and Mobile IP shared secrets. */
-const isSecret = (path: string): boolean => /(password|secret)(\[\d+\])*$/i.test(path);
-
-/** Every leaf of every decodable member but secrets, keyed `<file>:<path>`. */
+/** Every leaf of every decodable member, keyed `<file>:<path>`. */
 function rawOf(b: OpenedBundle): Record<string, Json> {
 	return Object.fromEntries(
 		Object.entries(flattenBundle(b)).flatMap(([file, flat]) =>
-			Object.entries(flat).flatMap(([path, v]): Array<[string, Json]> =>
-				isSecret(path) ? [] : [[`${file}:${path}`, toJson(v) ?? null]],
-			),
+			Object.entries(flat).map(([path, v]): [string, Json] => [`${file}:${path}`, toJson(v) ?? null]),
 		),
 	);
 }

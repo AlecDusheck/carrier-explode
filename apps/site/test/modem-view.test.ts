@@ -63,7 +63,7 @@ describe("simRule", () => {
 		expect(keyRules(["carrierId:310VZW", "iccid:8901150", matcherKey(m), "310260"])).toEqual([
 			simRule(m),
 			simRule({ mccmnc: "310260" }),
-			{ via: "ICCID", key: "8901150…", match: null },
+			{ via: "ICCID", key: "8901150…", match: "by SIM card number" },
 			{ via: "Carrier ID", key: "310VZW", match: "CDMA carrier ID" },
 		]);
 		expect(() => keyRules(["310260|carrierId=1"])).toThrow("no SIM rule");

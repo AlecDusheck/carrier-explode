@@ -4,7 +4,21 @@ import { env } from "cloudflare:workers";
 import { indexDb, type IndexDb, type Page } from "@carrier-explode/db";
 import { perRequest } from "./cache";
 
-export const db = perRequest(async (): Promise<IndexDb> => indexDb(env.DB.withSession()));
+const session = perRequest(async (): Promise<D1DatabaseSession> => env.DB.withSession());
+
+export const db = perRequest(async (): Promise<IndexDb> => indexDb(await session()));
+
+/**
+ * The index's version as this request reads it: D1's bookmark, which every write moves. What is derived from the index
+ * under it stays true; the request's later reads are at least as new.
+ */
+export const indexVersion = perRequest(async (): Promise<string> => {
+	const s = await session();
+	await s.prepare("SELECT 1").run();
+	const bookmark = s.getBookmark();
+	if (bookmark === null) throw new Error("D1 gave no bookmark after a query");
+	return bookmark;
+});
 
 /** Rows a page of a list holds. */
 const TAKE = 1000;

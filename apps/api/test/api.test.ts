@@ -6,7 +6,7 @@ import { join } from "node:path";
 
 import * as v from "valibot";
 import { getPlatformProxy } from "wrangler";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
 import {
 	copiesOf,
@@ -43,6 +43,7 @@ import {
 	releaseChanges,
 	sourceBase,
 	sourceTimeline,
+	MODEM_SCHEMA,
 	PROFILE_SCHEMA,
 	type ConceptValue,
 	type Profile,
@@ -50,8 +51,6 @@ import {
 } from "@carrier-explode/schema";
 import { isReleasePlatform, parseSourceKey, type SourceKey } from "@carrier-explode/schema/types";
 import { keys } from "@carrier-explode/storage";
-import { api } from "../src/api.ts";
-import { DEFAULT_LIMIT, encodeCursor } from "../src/page.ts";
 
 const proxy = await getPlatformProxy<Env>({
 	configPath: join(import.meta.dirname, "..", "wrangler.jsonc"),
@@ -59,6 +58,10 @@ const proxy = await getPlatformProxy<Env>({
 	persist: false,
 });
 const env = { ...proxy.env, PURGE_TOKEN: "t" };
+
+vi.doMock("cloudflare:workers", () => ({ env }));
+const { api } = await import("../src/api.ts");
+const { encodeCursor } = await import("../src/page.ts");
 
 const sha = (n: number): string => n.toString(16).padStart(64, "0");
 
@@ -203,7 +206,7 @@ function profile(key: SourceKey, n: number): Profile {
 			iso: iso === "" ? [] : [iso],
 			sims: source.platform === "android" || mccmnc === "" ? [] : [{ mccmnc }],
 		},
-		apns: [{ apn: "phone", types: ["default"], hasPassword: false, path: "carrier.plist:apns[0]" }],
+		apns: [{ apn: "phone", types: ["default"], path: "carrier.plist:apns[0]" }],
 		concepts: MORE[n]?.concepts ?? { volte: on() },
 		raw: MORE[n]?.raw ?? { "carrier.plist:apns[0].apn": "phone", "carrier.plist:SupportsVoLTE": true },
 		variants: [],
@@ -243,14 +246,14 @@ async function index(db: IndexDb): Promise<void> {
 		...PROFILES.map(profileFacts),
 		{
 			sha: sha(8),
-			schema: PROFILE_SCHEMA,
+			schema: MODEM_SCHEMA,
 			kind: "modem",
 			display: null,
 			iso: [],
 			sims: ["310410"],
 			radio: "nr",
 		},
-		{ sha: sha(11), schema: PROFILE_SCHEMA, kind: "modem", display: null, iso: [], sims: [], radio: "nr" },
+		{ sha: sha(11), schema: MODEM_SCHEMA, kind: "modem", display: null, iso: [], sims: [], radio: "nr" },
 	]);
 	for (const key of new Set(
 		Object.values(COPIES)
@@ -286,7 +289,7 @@ async function index(db: IndexDb): Promise<void> {
 			phoneStates(heads, (s) => PROFILES.find((p) => p.sha === s), phones),
 		);
 	}
-	const order = newestFirst(DEVICES);
+	const order = newestFirst(DEVICES.map(({ code, released }) => ({ code, released, name: code })));
 	await syncChanges(
 		db,
 		"ios",
@@ -311,7 +314,7 @@ beforeAll(async () => {
 		await d1.batch(statements.map((s) => d1.prepare(s)));
 	}
 	await index(indexDb(d1));
-	for (const p of PROFILES) await env.BUCKET.put(keys.norm(p.sha), JSON.stringify(p));
+	for (const p of PROFILES) await env.BUCKET.put(keys.profile(p.sha), JSON.stringify(p));
 });
 
 afterAll(() => proxy.dispose());
@@ -373,7 +376,7 @@ describe("URLs", () => {
 		const reordered = await get("/v1/ios/carriers?limit=2&cursor=abc");
 		expect(reordered.status).toBe(308);
 		expect(reordered.headers.get("location")).toBe("http://localhost/v1/ios/carriers?cursor=abc&limit=2");
-		expect((await get(`/v1/ios/carriers?limit=${DEFAULT_LIMIT}`)).headers.get("location")).toBe(
+		expect((await get(`/v1/ios/carriers?limit=${env.API_PAGE_LIMITS.default}`)).headers.get("location")).toBe(
 			"http://localhost/v1/ios/carriers",
 		);
 		const encoded = await get("/v1/compare?a=ios%3Acarrier%3AATT_US&b=samsung%3Acarrier%3AATT");
@@ -605,7 +608,7 @@ describe("devices", () => {
 					family: "qualcomm",
 					familyName: expect.any(String),
 					devices: ["SM-S948U"],
-					configs: [{ label: "Commercial-Test", sha: sha(11) }],
+					configs: [{ label: "Commercial-Test", name: null, sha: sha(11) }],
 				},
 			],
 		});
@@ -743,7 +746,7 @@ describe("versions", () => {
 	it("are a 500 in the error shape when a stored record breaks its contract", async () => {
 		const verizon = PROFILES.find((p) => p.source.name === "Verizon_US");
 		if (verizon === undefined) throw new Error("no Verizon profile");
-		await env.BUCKET.put(keys.norm(verizon.sha), JSON.stringify({ schema: PROFILE_SCHEMA }));
+		await env.BUCKET.put(keys.profile(verizon.sha), JSON.stringify({ schema: PROFILE_SCHEMA }));
 		const res = await get("/v1/ios/carriers/Verizon_US/versions/60.0");
 		expect(res.status).toBe(500);
 		expect(await res.json()).toMatchObject({
@@ -753,7 +756,7 @@ describe("versions", () => {
 				message: expect.stringContaining("does not match its contract"),
 			},
 		});
-		await env.BUCKET.put(keys.norm(verizon.sha), JSON.stringify(verizon));
+		await env.BUCKET.put(keys.profile(verizon.sha), JSON.stringify(verizon));
 	});
 });
 

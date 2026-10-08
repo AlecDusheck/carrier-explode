@@ -1,6 +1,5 @@
 /** How each platform, the device its settings are for, and its sources are named and pictured on a page. */
 
-import type { AssetPath } from "$app/types";
 import { RARITY } from "@carrier-explode/schema";
 import type { DecoderFamily, Platform } from "@carrier-explode/schema/types";
 
@@ -19,6 +18,13 @@ export const PLATFORM_DEVICES = {
 	android: "Pixel",
 	samsung: "Galaxy",
 } as const satisfies Record<Platform, string>;
+
+/** How a device's own line reads beside its platform's main line: an Apple model's line is an old iPhone's OTA bundle, which the main line has replaced. */
+export const DEVICE_LINE_LABELS = {
+	apple: (name: string) => `${name} (Legacy)`,
+	android: (name: string) => name,
+	samsung: (name: string) => name,
+} as const satisfies Record<DecoderFamily, (name: string) => string>;
 
 /** Each platform's device as a plain outline in static/phones. */
 export const PLATFORM_DRAWINGS = {
@@ -53,29 +59,34 @@ export const PLATFORM_ORDER = [
 /** A version's major release, as the site writes versions: "27" of "27.2 beta 2", "16" of "16 QPR2". */
 const major = (version: string | undefined): string | undefined => version?.split(/[ .]/)[0];
 
-/** The releases with a mark in static/ios and static/android, drawn after the vendor's version icons; others get the plain tile. */
-const IOS_MARKS = ["13", "14", "15", "16", "17", "18", "26", "27"] as const;
-const ANDROID_MARKS = ["7", "8", "9", "10", "11", "12", "13", "14", "15", "16", "17"] as const;
+/** Each release's mark, drawn after the vendor's version icons, by `./marks/<dir>/<major>.svg`; `<dir>.svg` is the plain tile. */
+const MARKS = import.meta.glob<string>("./marks/*/*.svg", {
+	eager: true,
+	query: "?url&no-inline",
+	import: "default",
+});
+
+/** The mark for a version's major in `dir`, else the plain tile. */
+const markIn =
+	(dir: "ios" | "android") =>
+	(version: string | undefined): string => {
+		const plain = MARKS[`./marks/${dir}/${dir}.svg`];
+		if (plain === undefined) throw new Error(`marks/${dir}/${dir}.svg is missing`);
+		return MARKS[`./marks/${dir}/${major(version) ?? dir}.svg`] ?? plain;
+	};
 
 /** A Galaxy's version is its Android release, so it takes Android's marks. */
-const androidMark = (version: string | undefined): AssetPath => {
-	const m = ANDROID_MARKS.find((x) => x === major(version));
-	return m === undefined ? "android/android.svg" : `android/${m}.svg`;
-};
+const androidMark = markIn("android");
+const appleMark = markIn("ios");
 
-const appleMark = (version: string | undefined): AssetPath => {
-	const m = IOS_MARKS.find((x) => x === major(version));
-	return m === undefined ? "ios/ios.svg" : `ios/${m}.svg`;
-};
-
-/** The mark beside a version of each platform. */
+/** The mark beside a version of each platform, as a URL. */
 export const VERSION_MARKS = {
 	ios: appleMark,
 	ipados: appleMark,
 	watchos: appleMark,
 	android: androidMark,
 	samsung: androidMark,
-} as const satisfies Record<Platform, (version: string | undefined) => AssetPath>;
+} as const satisfies Record<Platform, (version: string | undefined) => string>;
 
 /** What a family calls one of its sources, and the file a source's settings are read from. */
 export const SOURCE_NOUNS = {

@@ -4,14 +4,14 @@
  */
 
 import { z } from "@hono/zod-openapi";
+import { env } from "cloudflare:workers";
 import type { MiddlewareHandler } from "hono";
 import { createMiddleware } from "hono/factory";
 import type { Page as Window } from "@carrier-explode/db";
 import { isSourceKey, type SourceKey } from "@carrier-explode/schema/types";
 import { fail, type ApiContext, type ApiEnv } from "./context.ts";
 
-export const DEFAULT_LIMIT = 100;
-const MAX_LIMIT = 500;
+const { default: DEFAULT_LIMIT, max: MAX_LIMIT } = env.API_PAGE_LIMITS;
 
 export const pageQuery = {
 	cursor: z

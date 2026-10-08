@@ -1,7 +1,7 @@
 <script lang="ts">
   import { page } from "$app/state";
   import { withParams } from "#lib/format.ts";
-  import { fileChoices, pickPhoneRow } from "#lib/apple/phones.ts";
+  import { fileChoices, pickPhoneRow, rowKey } from "#lib/apple/phones.ts";
   import type { At } from "#lib/types.ts";
   import type { Tab } from "../../../params.ts";
   import PhonePicker from "../PhonePicker.svelte";
@@ -17,5 +17,5 @@
 <PhonePicker
   platform={at.ref.platform}
   choices={fileChoices(rows, (file) => withParams(page.url, { file, pri: null, efs: null, base: null }))}
-  selected={picked.row?.path}
+  selected={picked.row && rowKey(picked.row)}
 />

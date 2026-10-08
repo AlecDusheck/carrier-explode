@@ -15,7 +15,7 @@ import { modemConfigOf } from "../modem/archive.ts";
 import { lastPerId, modemValue, qualcommItem } from "../modem/qualcomm/items.ts";
 import type { ModemConfig, ModemItem, ModemValue } from "../types.ts";
 
-/** The Intel / Apple C1 key tag: not a Qualcomm EFS path. */
+/** The Intel-dialect key tag: not a Qualcomm EFS path. */
 const INTEL_KEY = "9fae72";
 
 /** A CCM group as qualcommItem reads it, labelled `<index>: <note>` per line with what the bundles show of its flags. */
@@ -101,7 +101,7 @@ function priFacts(pri: PriDecoded): ModemConfig["facts"][number][] {
 	const header = Object.entries(pri.header)
 		.filter(([, value]) => value !== "")
 		.map(([label, value]) => ({ label, value }));
-	return [...(modem === undefined ? [] : [{ label: "Written for", value: `${modem} modem` }]), ...header];
+	return [...(modem === undefined ? [] : [{ label: "Dialect", value: modem }]), ...header];
 }
 
 const CERTAINTY = { high: "high", med: "medium", low: "low" } as const satisfies Record<
@@ -192,7 +192,7 @@ const failed = (label: string, sha: string, error: string): ModemConfig =>
 	});
 
 /**
- * One override file, labelled by its path; the bundle, not a SIM rule, selects it. Null for an Intel / Apple C1 file
+ * One override file, labelled by its path; the bundle, not a SIM rule, selects it. Null for an Intel-dialect file
  * (Apple-modem .der.tri included), which has no Qualcomm items; one that does not decode holds only why.
  */
 export function iosModemConfig(bundle: OpenedBundle, path: string, sha: string): ModemConfig | null {
@@ -217,6 +217,6 @@ export function iosModemConfig(bundle: OpenedBundle, path: string, sha: string):
 		items: priItems(pri),
 		base: null,
 		combos: [],
-		errors: [...pri.errors, ...(intel ? [`${intel} Intel / Apple C1 keys not shown`] : [])],
+		errors: [...pri.errors, ...(intel ? [`${intel} Intel-dialect keys not shown`] : [])],
 	});
 }

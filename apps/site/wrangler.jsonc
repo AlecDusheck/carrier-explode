@@ -21,12 +21,6 @@
 				},
 			],
 			"cache": { "enabled": true },
-			"ratelimits": [
-				{ "name": "RL_SCAN", "namespace_id": "7010", "simple": { "limit": 10, "period": 60 } },
-				{ "name": "RL_DIFF", "namespace_id": "7020", "simple": { "limit": 20, "period": 60 } },
-				{ "name": "RL_BUNDLE", "namespace_id": "7030", "simple": { "limit": 120, "period": 60 } },
-				{ "name": "RL_BASE", "namespace_id": "7040", "simple": { "limit": 300, "period": 60 } },
-			],
 			"vars": {
 				"CACHE_TTL": {
 					"pinned": 2592000,
@@ -44,6 +38,7 @@
 		},
 		"production": {
 			"name": "carrier-explode-site",
+			"observability": { "enabled": true, "traces": { "enabled": true, "head_sampling_rate": 0.1 } },
 			// www is a zone Redirect Rule to the apex, so it never reaches this worker.
 			"routes": [{ "pattern": "carrierexplode.com", "custom_domain": true }],
 			"workers_dev": false,
@@ -60,14 +55,6 @@
 			// Cloudflare checks this worker's own cache before running it, and honours the Cache-Control that
 			// src/hooks.server.ts puts on every response. Zone cache settings never apply to what a worker returns.
 			"cache": { "enabled": true },
-			// Per-IP budgets enforced in src/hooks.server.ts. Limits are per Cloudflare location, and a period may only be
-			// 10 or 60 seconds.
-			"ratelimits": [
-				{ "name": "RL_SCAN", "namespace_id": "7010", "simple": { "limit": 10, "period": 60 } },
-				{ "name": "RL_DIFF", "namespace_id": "7020", "simple": { "limit": 20, "period": 60 } },
-				{ "name": "RL_BUNDLE", "namespace_id": "7030", "simple": { "limit": 120, "period": 60 } },
-				{ "name": "RL_BASE", "namespace_id": "7040", "simple": { "limit": 300, "period": 60 } },
-			],
 			"vars": {
 				// Seconds, by what a response holds (src/lib/server/cache-policy.ts). A publish purges the pages and data it changes.
 				"CACHE_TTL": {
@@ -90,7 +77,6 @@
 			},
 			// For /internal/purge; set with `wrangler secret put PURGE_TOKEN --env production`.
 			"secrets": { "required": ["PURGE_TOKEN"] },
-			"placement": { "mode": "smart" },
 		},
 	},
 }

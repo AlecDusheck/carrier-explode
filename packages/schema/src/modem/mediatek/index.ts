@@ -38,7 +38,6 @@ const NW_OTA = /^[^/]+\.mcfnwota$/;
 
 const sbpSchema = v.object({
 	id: v.number(),
-	operator: v.nullable(v.string()),
 	plmns: v.array(
 		v.object({ mcc: v.string(), mnc: v.nullable(v.string()) }) satisfies v.GenericSchema<
 			unknown,
@@ -174,7 +173,7 @@ export function mediatekConfig(files: ArchiveFiles, sha: string): MappedConfig {
 		.toSorted(([a], [b]) => compareUtf8(a, b))
 		.flatMap(([name, b]) => readOr(errors, name, [], () => decodeNwOta(b).records));
 	const records = [...op.records, ...nw].map((r) => typed(r, shapes));
-	const id = sbp.operator === null ? String(sbp.id) : `${sbp.id} (${sbp.operator})`;
+	const id = String(sbp.id);
 	const config: ConfigDraft = {
 		family: "mediatek",
 		sha,

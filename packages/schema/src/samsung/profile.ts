@@ -16,9 +16,7 @@ function xmlLeaves(e: XmlElement, path = ""): Array<[string, Json]> {
 		const i = seen.get(c.name) ?? 0;
 		seen.set(c.name, i + 1);
 		const at = `${path ? `${path}.` : ""}${c.name}${(counts.get(c.name) ?? 0) > 1 ? `[${i}]` : ""}`;
-		if (c.children.length) return xmlLeaves(c, at);
-		// Passwords are never republished.
-		return c.name === "Password" ? [] : [[at, c.text]];
+		return c.children.length ? xmlLeaves(c, at) : [[at, c.text]];
 	});
 }
 

@@ -6,7 +6,6 @@ import { FEATURE_SLUGS } from "@carrier-explode/schema";
 import { RELEASE_PLATFORMS } from "@carrier-explode/schema/types";
 import { fail, router, type ApiContext, type ApiEnv } from "../context.ts";
 import { pageQuery, paged, SOURCE_KEY } from "../page.ts";
-import { budget } from "../rate.ts";
 import { featureStatesSchema } from "../shapes.ts";
 import { carrierRef } from "../versions.ts";
 import { deviceParam, ERRORS, isoParam, json, releasePlatformParam } from "./common.ts";
@@ -38,7 +37,6 @@ export const features: OpenAPIHono<ApiEnv> = router().openapi(
 		tags: ["Features"],
 		summary:
 			"Every carrier source's state of one feature, on each platform's newest phone or on the phone named",
-		middleware: [budget("base")],
 		request: {
 			params: z.object({
 				feature: z

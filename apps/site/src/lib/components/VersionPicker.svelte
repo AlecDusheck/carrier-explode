@@ -8,18 +8,18 @@
     label?: string | undefined;
     timeline: readonly Version[];
     current: string;
-    /** The version a device on a release runs now. */
-    head: string;
+    /** The version a device on the newest OS runs; null when none of these is. */
+    shipping: string | null;
     href: (slug: string) => string;
   }
 
-  let { label, timeline, current, head, href }: Props = $props();
+  let { label, timeline, current, shipping, href }: Props = $props();
 
   const active = $derived(timeline.find((e) => e.slug === current));
 </script>
 
 {#snippet option(e: Version)}
-  {@const tag = versionTag(e, head)}
+  {@const tag = versionTag(e, shipping)}
   <span class="picker-opt">
     <VersionMark platform={e.platform} version={e.icon} />
     <span class="text">{e.label}</span>

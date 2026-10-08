@@ -4,7 +4,7 @@ import * as v from "valibot";
 
 import type { IndexMessage } from "../indexing.ts";
 import { PIPELINES } from "../pipelines.ts";
-import { doStep, finish, normalizeSteps, otaSnapshot, STEP, UnitWorkflow, type UnitRun } from "../unit.ts";
+import { doStep, finish, normalizeSteps, otaSnapshot, UnitWorkflow, type UnitRun } from "../unit.ts";
 import { items, modem, plan, release, settings } from "./device.ts";
 import { otaFile, otaPlan } from "./ota.ts";
 
@@ -15,12 +15,12 @@ import { otaFile, otaPlan } from "./ota.ts";
 export class PixelDeviceWorkflow extends UnitWorkflow {
 	protected async extract(payload: unknown, r: UnitRun): Promise<readonly IndexMessage[]> {
 		const d = v.parse(PIPELINES["pixel-device"].params, payload);
-		const family = await doStep(r.step, "plan", STEP, () => plan(d));
-		const pending = await doStep(r.step, "settings", STEP, () => settings(d, r.unit));
+		const family = await doStep(r.step, "plan", r.env, () => plan(d));
+		const pending = await doStep(r.step, "settings", r.env, () => settings(d, r.unit));
 		if (family !== null) {
 			if (family.family === "shannon")
-				await doStep(r.step, "modem items", STEP, () => items(d, family.label, r.unit));
-			const configs = await doStep(r.step, "modem", STEP, () => modem(d, family, r.unit));
+				await doStep(r.step, "modem items", r.env, () => items(d, family.label, r.unit));
+			const configs = await doStep(r.step, "modem", r.env, () => modem(d, family, r.unit));
 			await normalizeSteps(r, "normalize modem", configs);
 		}
 		await normalizeSteps(r, "normalize settings", pending);

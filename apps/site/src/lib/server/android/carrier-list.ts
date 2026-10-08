@@ -7,7 +7,7 @@ import { releaseSchema } from "@carrier-explode/schema/records";
 import { keys } from "@carrier-explode/storage";
 import { ruleRows, type SelectionRule } from "#lib/settings.ts";
 import { cached } from "../cache";
-import { copiesOfEntry, copiesOfSource, releasesOf, type Resolved } from "../catalog";
+import { copiesOfEntry, releasesOf, type Resolved } from "../catalog";
 import { readBytes, readJson } from "../store";
 
 export const CARRIER_LIST = "carrier_list.pb";
@@ -23,7 +23,7 @@ export interface CarrierListView {
 
 /** The build the version was read with on its device: the newest shipping it there, else (an update file) the device's newest. */
 async function buildOf(r: Resolved): Promise<string> {
-	const shipping = copiesOfEntry(await copiesOfSource(r.key, r.ref.platform), r.entry)
+	const shipping = copiesOfEntry(r.copies, r.entry)
 		.flatMap((c) => (c.kind === "release" ? [c.release] : []))
 		.toSorted((a, b) => b.sortKey.localeCompare(a.sortKey));
 	const build = shipping[0]?.id ?? (await releasesOf("android")).find((x) => x.devices.includes(r.line))?.id;

@@ -78,55 +78,72 @@ const unrecognisedPri = <F extends FileRef>(files: readonly F[]): F[] =>
 /** A phone with the modem generation it runs, where the release says. */
 export type GroupPhone = Named & { readonly family?: Named };
 
-/** One phone group's modem override file in a bundle version. */
-export interface PhoneRow {
-	/** The version the file is read from. */
-	readonly slug: string;
-	readonly path: string;
-	readonly phones: readonly GroupPhone[];
-}
+/** One phone group in a bundle version: the modem override file it reads, or carrier.plist alone. */
+export type PhoneRow =
+	| {
+			readonly kind: "file";
+			/** The version the file is read from. */
+			readonly slug: string;
+			readonly path: string;
+			readonly phones: readonly GroupPhone[];
+	  }
+	| { readonly kind: "defaults"; readonly phones: readonly GroupPhone[] };
+
+export type FileRow = Extract<PhoneRow, { readonly kind: "file" }>;
+
+/** What `?file=` names a row by: its override file, or carrier.plist for the phones that read only that. */
+export const rowKey = (r: PhoneRow): string => (r.kind === "file" ? r.path : "carrier.plist");
 
 /** The phones a file's boards name, where the device records list them. */
 const namedPhones = (f: Pick<PhoneFile, "devices">): GroupPhone[] =>
 	(f.devices ?? []).flatMap((d) => (d.product === undefined ? [] : [{ code: d.product, name: d.name }]));
 
 const newestIn = (f: PhoneRow): string => newestProduct(f.phones.map((p) => p.code)) ?? "";
-const newestFirst = (rows: readonly PhoneRow[]): PhoneRow[] =>
-	rows.toSorted((x, y) => compareProducts(newestIn(y), newestIn(x)));
+/** The carrier's own file (0) before its MVNO sets'. */
+const mvnoSetOf = (r: PhoneRow): number => (r.kind === "file" ? (overrideMvnoSet(r.path) ?? 0) : 0);
 
 /**
- * Newest phone first: files the release's phones read, then files for phones it lacks (an OTA version's
- * older or newer phones), then files named for none (global_setting_*, MVNO sets).
+ * Phones newest first, those the release lacks too (an OTA version's files for older phones), with the release's
+ * phones that read carrier.plist alone; then files for boards the device records lack, then files named for none
+ * (global_setting_*, MVNO sets).
  */
 export function phoneRows(
 	slug: string,
 	files: ReadonlyArray<Pick<PhoneFile, "kind" | "devices" | "path">>,
-	ov: { readonly files: readonly PhoneRow[] } | null,
+	ov: { readonly files: readonly FileRow[]; readonly defaults: readonly GroupPhone[] } | null,
 ): PhoneRow[] {
 	const read = new Set(ov?.files.map((r) => r.path));
 	const outside = files.filter((f) => isPri(f) && !read.has(f.path) && namedPhones(f).length);
+	const phones: PhoneRow[] = [
+		...(ov?.files ?? []),
+		...outside.map((f): FileRow => ({ kind: "file", slug, path: f.path, phones: namedPhones(f) })),
+		...(ov?.defaults.length ? [{ kind: "defaults" as const, phones: ov.defaults }] : []),
+	];
 	return [
-		...newestFirst(ov?.files ?? []),
-		...newestFirst(outside.map((f) => ({ slug, path: f.path, phones: namedPhones(f) }))),
-		...unrecognisedPri(files).map((f) => ({
+		...phones.toSorted((x, y) => compareProducts(newestIn(y), newestIn(x)) || mvnoSetOf(x) - mvnoSetOf(y)),
+		...unrecognisedPri(files).map((f): FileRow => ({
+			kind: "file",
 			slug,
 			path: f.path,
 			phones: unknownBoards(f).map((code) => ({ code, name: `Unrecognised phone (${code})` })),
 		})),
-		...sharedPri(files).map((f) => ({ slug, path: f.path, phones: [] })),
+		...sharedPri(files).map((f): FileRow => ({ kind: "file", slug, path: f.path, phones: [] })),
 	];
 }
 
 /**
- * The row a `?file=` selection names, else the newest phone's. `missing`: a named file no phone in this version
- * reads, so the page can say so rather than quietly show another phone.
+ * The row a `?file=` selection names, else the newest phone with a file of its own. `missing`: a named file no phone
+ * in this version reads, so the page can say so rather than quietly show another phone.
  */
 export function pickPhoneRow(
 	rows: readonly PhoneRow[],
 	file: string | null,
 ): { row: PhoneRow | undefined; missing: string | undefined } {
-	const named = file ? rows.find((r) => r.path === file) : undefined;
-	return { row: named ?? rows[0], missing: file && !named ? file : undefined };
+	const named = file ? rows.find((r) => rowKey(r) === file) : undefined;
+	return {
+		row: named ?? rows.find((r) => r.kind === "file") ?? rows[0],
+		missing: file && !named ? file : undefined,
+	};
 }
 
 /** One side of a comparison: its version's rows and the file its query names. */
@@ -136,7 +153,7 @@ export interface PhoneSide {
 }
 
 const namedRow = (s: PhoneSide): PhoneRow | undefined =>
-	s.file ? s.rows.find((r) => r.path === s.file) : undefined;
+	s.file ? s.rows.find((r) => rowKey(r) === s.file) : undefined;
 
 const phoneCodes = (rows: readonly PhoneRow[]): Set<string> =>
 	new Set(rows.flatMap((r) => r.phones.map((p) => p.code)));
@@ -166,20 +183,30 @@ export interface PhoneChoice {
 	readonly href: string;
 }
 
-/** An Apple version's override-file rows as phone picker choices; picking one sets `?file=`. */
-export function fileChoices(rows: readonly PhoneRow[], href: (path: string) => string): PhoneChoice[] {
-	return rows.map((r) => {
-		const modems = [...new Set(r.phones.flatMap((p) => p.family?.name ?? []))].join(", ");
-		const newest = r.phones.toSorted((a, b) => compareProducts(b.code, a.code))[0];
-		const mvno = overrideMvnoSet(r.path);
-		return {
-			key: r.path,
-			label: r.phones.length
-				? `${phoneList(r.phones)}${modems ? ` · ${modems}` : ""}${mvno === null ? "" : ` · MVNO set ${mvno}`}`
-				: `${r.path} (not named for a phone)`,
-			id: newest?.code,
-			name: newestNamed(r.phones),
-			href: href(r.path),
-		};
-	});
+/** A row's phones, and what sets its files apart: an MVNO set's, or carrier.plist alone. */
+export function rowName(r: PhoneRow): string {
+	if (r.kind === "defaults") return `${phoneList(r.phones)} · carrier.plist only`;
+	if (!r.phones.length) return `${r.path} (not named for a phone)`;
+	const mvno = overrideMvnoSet(r.path);
+	return `${phoneList(r.phones)}${mvno === null ? "" : ` · MVNO set ${mvno}`}`;
+}
+
+/** The modems a row's phones run, where the release says. */
+export const rowModems = (r: PhoneRow): string =>
+	[...new Set(r.phones.flatMap((p) => p.family?.name ?? []))].join(", ");
+
+function choiceLabel(r: PhoneRow): string {
+	const modems = r.kind === "file" ? rowModems(r) : "";
+	return `${rowName(r)}${modems ? ` · ${modems}` : ""}`;
+}
+
+/** An Apple version's phone rows as phone picker choices; picking one sets `?file=`. */
+export function fileChoices(rows: readonly PhoneRow[], href: (key: string) => string): PhoneChoice[] {
+	return rows.map((r) => ({
+		key: rowKey(r),
+		label: choiceLabel(r),
+		id: r.phones.toSorted((a, b) => compareProducts(b.code, a.code))[0]?.code,
+		name: newestNamed(r.phones),
+		href: href(rowKey(r)),
+	}));
 }

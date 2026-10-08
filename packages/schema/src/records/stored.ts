@@ -13,6 +13,7 @@ import {
 	MODEM_SCOPES,
 	parseSourceKey,
 	PLATFORMS,
+	MODEM_SCHEMA,
 	PROFILE_SCHEMA,
 	SOURCE_KINDS,
 	type AndroidModem,
@@ -165,7 +166,7 @@ const apnSchema = v.object({
 	roamingProtocol: opt(v.picklist(IP_PROTOCOLS)),
 	auth: opt(v.picklist(APN_AUTHS)),
 	user: opt(str),
-	hasPassword: v.boolean(),
+	password: opt(str),
 	proxy: opt(str),
 	port: opt(str),
 	mmsc: opt(str),
@@ -220,7 +221,7 @@ const modemValueSchema: v.GenericSchema<ModemValue> = v.lazy(() =>
 );
 
 export const modemConfigSchema = v.object({
-	schema: v.literal(PROFILE_SCHEMA),
+	schema: v.literal(MODEM_SCHEMA),
 	family: v.picklist(MODEM_VENDORS),
 	sha: str,
 	label: str,

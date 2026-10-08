@@ -23,11 +23,6 @@ export type ContainerAnswer =
 	| Readonly<Extract<Answer, { ok: false }>>;
 
 const JOB_URL = `http://container:${JOB_PORT}${JOB_PATH}`;
-/** The image is a few hundred MB, and a cold start pulls it. */
-const READY_MS = 120_000;
-
-/** How long one job may run: about twice the slowest whole IPSW, so a hung job's container is gone within the hour. */
-export const JOB_DEADLINE_MS = 58 * 60_000;
 
 /** `work` given `ms` to settle, then `cleanup` either way; past the deadline it rejects, whether or not `work` heeds the signal. */
 async function withinDeadline<T>(
@@ -67,15 +62,15 @@ export class Extractor extends Container<Env> {
 	override sleepAfter = SLEEP_AFTER;
 
 	/**
-	 * Runs one job, the only one this object's container ever gets, to its answer within JOB_DEADLINE_MS, then destroys the
+	 * Runs one job, the only one this object's container ever gets, to its answer within its deadline, then destroys the
 	 * container. A rejection (the deadline, the container killed, the connection lost) is the caller's to retry.
 	 */
 	run(job: ContainerJob): Promise<ContainerAnswer> {
 		return withinDeadline(
-			JOB_DEADLINE_MS,
+			this.env.CONTAINER_LIMITS.jobDeadlineMs,
 			async (signal) => {
 				await this.startAndWaitForPorts({
-					cancellationOptions: { portReadyTimeoutMS: READY_MS, abort: signal },
+					cancellationOptions: { portReadyTimeoutMS: this.env.CONTAINER_LIMITS.readyMs, abort: signal },
 				});
 				const res = await this.containerFetch(JOB_URL, {
 					method: "POST",

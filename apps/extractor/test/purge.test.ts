@@ -5,6 +5,7 @@ import { afterAll, afterEach, describe, expect, it, vi } from "vitest";
 
 import { purgeTarget, queue, sendBatches, type QueueEnv } from "../src/queues.ts";
 import { batchOf, MemQueue } from "./queues.ts";
+import { productionTuning } from "./wrangler.ts";
 
 describe("sending index messages", () => {
 	it("keeps each batch under 100 messages and 256 KB: an Apple OTA unit's 98 messages of 50 URLs go in three", () => {
@@ -61,6 +62,8 @@ describe("the purge queue's consumer", () => {
 		PURGE_QUEUE: new MemQueue(),
 		PURGE_ORIGINS: ["https://site", "https://api"],
 		PURGE_TOKEN: "t",
+		INDEX_BATCH: productionTuning.INDEX_BATCH,
+		SETTLE_DELAY_S: productionTuning.SETTLE_DELAY_S,
 	};
 
 	afterEach(() => vi.unstubAllGlobals());

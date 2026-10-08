@@ -22,7 +22,7 @@ export const firmwareFactsSchema = v.object({
 	major: v.pipe(v.number(), v.integer()),
 	/** The day it was built. */
 	released: v.pipe(v.string(), v.regex(/^\d{4}-\d{2}-\d{2}$/)),
-	/** Its phone's name (`Galaxy S26`). */
+	/** Its phone's name as Samsung displays it (`Galaxy S26 (SM-S942U)`). */
 	name: v.pipe(v.string(), v.minLength(1)),
 });
 export type FirmwareFacts = Readonly<v.InferOutput<typeof firmwareFactsSchema>>;
@@ -40,8 +40,14 @@ export function fusVersion(listed: string): string | undefined {
 	return `${pda}/${csc}/${phone || pda}/${data || pda}`;
 }
 
-/** A CSC build ends in its OS-upgrade, year, month and revision characters (`…4BZID`: B, Z, I, D). */
+/**
+ * A CSC build ends in its multi-CSC package's code, then its bootloader, OS-upgrade, year, month and revision characters
+ * (`S942BOXM4BZIG`: OXM; 4, B, Z, I, G).
+ */
+export const packageOf = (build: string): string => build.slice(-8, -5);
 const upgradeOf = (build: string): string => build.slice(-4, -3);
+/** A model's builds of one package share all but their last five characters (`S942BOXM`). */
+const packageLine = (build: string): string => build.slice(0, -5);
 
 const LETTER = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 const A_YEAR = 2001;
@@ -79,8 +85,8 @@ export function launchedSince(builds: readonly string[], since: string, today: s
 }
 
 /**
- * Each model's newest build of each OS upgrade it has had: the candidates whose majors a check reads. The
- * regions a model's multi-CSC package serves list the same build, so each is a candidate once.
+ * Each model's newest build of each package and OS upgrade: the candidates whose majors a check reads. The sales codes
+ * a package serves list the same build, so each is a candidate once.
  */
 export function candidates(listed: readonly ListedFirmware[], today: string): Candidate[] {
 	const builds = new Map<string, Candidate>();
@@ -93,9 +99,9 @@ export function candidates(listed: readonly ListedFirmware[], today: string): Ca
 		}
 	}
 	const month = (b: Candidate): string => buildMonth(b.build, today);
-	return [...Map.groupBy(builds.values(), (b) => `${b.model} ${upgradeOf(b.build)}`).values()].flatMap((bs) =>
-		bs.toSorted((a, b) => compareUtf8(month(b), month(a))).slice(0, 1),
-	);
+	return [
+		...Map.groupBy(builds.values(), (b) => `${packageLine(b.build)} ${upgradeOf(b.build)}`).values(),
+	].flatMap((bs) => bs.toSorted((a, b) => compareUtf8(month(b), month(a))).slice(0, 1));
 }
 
 /** A candidate read: its facts, the phone's name null for a held build, which FUS is not asked about again. */
@@ -161,10 +167,10 @@ type Dated = Candidate & Pick<FirmwareFacts, "major" | "released">;
 const oldestFirst = (a: Dated, b: Dated): number =>
 	compareUtf8(a.released, b.released) || compareUtf8(a.build.slice(-3), b.build.slice(-3));
 
-/** The scoped majors' newest build per model (each major's newest `scope.samsung.builds` of them), not held, oldest first. */
+/** The scoped majors' newest build per model and package (each major's newest `scope.samsung.builds` of them), not held, oldest first. */
 export function planGalaxy(scope: Scope, read: readonly Dated[], held: ReadonlySet<string>): GalaxyBuild[] {
 	const wanted = scopedGalaxy(scope, read);
-	const builds = [...Map.groupBy(wanted, (r) => `${r.model} ${r.major}`).values()]
+	const builds = [...Map.groupBy(wanted, (r) => `${packageLine(r.build)} ${r.major}`).values()]
 		.flatMap((bs) => bs.toSorted(oldestFirst).slice(-1))
 		.toSorted(oldestFirst)
 		.map(({ model, region, version, build, major }) => ({ model, region, version, build, major }));

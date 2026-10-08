@@ -5,7 +5,6 @@ import { rulesOnPlmn } from "@carrier-explode/db";
 import { ruleSpecificity, selectsSim, type SimFacts, type SimRule } from "@carrier-explode/schema";
 import { parseRuleKey } from "@carrier-explode/schema/types";
 import { router, type ApiEnv } from "../context.ts";
-import { budget } from "../rate.ts";
 import { simMatchesSchema } from "../shapes.ts";
 import { carrierRef } from "../versions.ts";
 import { ERRORS, json } from "./common.ts";
@@ -20,7 +19,6 @@ export const sims: OpenAPIHono<ApiEnv> = router().openapi(
 		operationId: "lookUpSim",
 		tags: ["SIMs"],
 		summary: "Every source a SIM selects on every platform, most specific rule first",
-		middleware: [budget("base")],
 		request: {
 			query: z
 				.object({

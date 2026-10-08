@@ -16,6 +16,7 @@ import {
 } from "@carrier-explode/schema/types";
 import { keys, putJson } from "@carrier-explode/storage";
 import { type IndexMessage, indexUnit } from "../src/indexing.ts";
+import { productionTuning } from "./wrangler.ts";
 
 const MIGRATIONS = join(import.meta.dirname, "..", "..", "..", "packages", "db", "migrations");
 
@@ -111,7 +112,7 @@ async function indexed(
 	}
 	const db = indexDb(d1);
 	await syncDevices(db, [{ code: "iPhone18,1", platform: "ios", released: "2025-09-19", boards: ["V53AP"] }]);
-	for (const p of PROFILES) await putJson(bucket, keys.norm(p.sha), p);
+	for (const p of PROFILES) await putJson(bucket, keys.profile(p.sha), p);
 	for (const r of RELEASES) await putJson(bucket, keys.release("ios", r.id), r);
 
 	const queued: IndexMessage[] = order.map((i): IndexMessage => ({
@@ -121,7 +122,7 @@ async function indexed(
 	while (queued.length > 0) {
 		const [m] = queued.splice(pick(queued), 1);
 		if (m === undefined) throw new Error("no message");
-		const done = await indexUnit({ db, bucket }, m);
+		const done = await indexUnit({ db, bucket, batch: productionTuning.INDEX_BATCH }, m);
 		if (done.next !== null) queued.push(done.next);
 	}
 	return dump(d1);

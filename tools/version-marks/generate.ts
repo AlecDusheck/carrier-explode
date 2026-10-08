@@ -1,5 +1,5 @@
 /**
- * Writes static/ios/ and static/android/: each release's mark and each family's fallback.
+ * Writes apps/site/src/lib/marks/ios/ and android/: each release's mark and each family's fallback.
  * `--check` instead fails on any file that differs.
  *   node tools/version-marks/generate.ts [--check]
  */
@@ -10,7 +10,7 @@ import { ANDROID, IOS } from "./families.ts";
 import type { Family } from "./mark.ts";
 import { renderFallback, renderMark, renderPlain } from "./render.ts";
 
-const STATIC = new URL("../../apps/site/static/", import.meta.url);
+const MARKS = new URL("../../apps/site/src/lib/marks/", import.meta.url);
 
 const { values } = parseArgs({ options: { check: { type: "boolean", default: false } } });
 
@@ -25,7 +25,7 @@ function files(family: Family): Array<readonly [string, string]> {
 }
 
 const out = [IOS, ANDROID].flatMap((family) =>
-	files(family).map(([name, svg]) => [new URL(`${family.dir}/${name}`, STATIC), svg] as const),
+	files(family).map(([name, svg]) => [new URL(`${family.dir}/${name}`, MARKS), svg] as const),
 );
 
 const differing: string[] = [];

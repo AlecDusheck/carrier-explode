@@ -52,12 +52,7 @@ Answers are cached at the edge until the index changes, which drops them. A vers
 
 ## Rate limits
 
-Per IP address, per minute, shared with this site, and counted at each Cloudflare location:
-
-- **300** requests to the index: lists, carriers, features, devices, SIM lookups, builds, sources.
-- **120** requests that read a decoded record: a version, its settings, a carrier's profiles, a comparison, a modem configuration or its band combinations.
-
-An answer from the cache does not count. Past a limit, the API answers `429` with `Retry-After`.
+**300** requests per IP address in 10 seconds, counted together with this site's and at each Cloudflare location. Answers from the cache do not count. Past it, Cloudflare answers `429` with `Retry-After` and its own error page, not the JSON error shape, for 10 seconds.
 
 Please be respectful, and send a `User-Agent` that names your product. If you intend to use the service at high volume, please [contact](/wiki/credits#contact) Alec at `<alec> @ simplyalec.com` first.
 

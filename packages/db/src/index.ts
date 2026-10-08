@@ -10,6 +10,7 @@ export {
 	EVERY_CARRIER,
 	carrierMembers,
 	carrierModemConfigs,
+	shippedModemConfigs,
 	sourceModemConfigs,
 	carrierOf,
 	countryCarriers,
@@ -23,6 +24,7 @@ export type {
 	CarrierFilter,
 	CarrierModemConfig,
 	HeadIdentity,
+	ShippedModemConfig,
 	ShownCarrier,
 	ShownCountry,
 } from "./carriers.ts";
@@ -38,7 +40,16 @@ export {
 	type ShownDevice,
 } from "./devices.ts";
 export { countFacts, lastFacts } from "./facts-written.ts";
-export { syncLabels, unnamed, writeLabels } from "./labels.ts";
+export {
+	CANDIDATE_SUBJECT,
+	LABEL_CANDIDATE_KINDS,
+	labelCandidates,
+	syncLabels,
+	writeLabelMiss,
+	writeLabels,
+	type LabelCandidate,
+	type LabelCandidateKind,
+} from "./labels.ts";
 export {
 	boardRadiosOf,
 	configRadiosOf,
@@ -66,6 +77,7 @@ export {
 	releaseList,
 	releaseOf,
 	shippedIn,
+	releasesShipping,
 	shippedSourceCount,
 	syncChanges,
 } from "./releases.ts";
@@ -75,6 +87,7 @@ export type {
 	ModemConfigRow,
 	ModemFamily,
 	ModemRow,
+	NamedModemConfig,
 	ReleaseFilter,
 	ReleaseRows,
 	ShownChange,

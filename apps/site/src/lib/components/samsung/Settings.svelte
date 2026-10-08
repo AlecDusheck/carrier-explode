@@ -21,7 +21,7 @@
 
   const [groups, head, rare] = $derived(await Promise.all([getSamsungSettings(verArgs(at)), getSourceHead(verArgs(at)), getRare(verArgs(at))]));
   // Rarity is judged in the main file alone.
-  const badges = $derived(rare.head ? rareBadges(rare.rows) : {});
+  const badges = $derived(rare.state === "judged" ? rareBadges(rare.rows) : {});
   const main = $derived(mainFile(at.ref.platform));
 </script>
 

@@ -16,8 +16,8 @@
 	],
 	// Workers' maximum CPU: an extract step streams a firmware member, and an index message reads a build's profiles.
 	// Both count per invocation, which runs many Workflow steps: an Apple OTA unit's file steps make about seven
-	// subrequests each, past the default 10,000.
-	"limits": { "cpu_ms": 300000, "subrequests": 100000 },
+	// subrequests each, a reindex's normalize steps about 200, so a full reindex makes over 100,000.
+	"limits": { "cpu_ms": 300000, "subrequests": 1000000 },
 	// No public routes: /run and /runs are bearer-authed on the workers.dev URL.
 	"workers_dev": true,
 	// Declarative Durable Object classes, instead of `migrations`. Containers need SQLite storage.
@@ -103,9 +103,11 @@
 					"limits": { "steps": 25000 },
 				},
 				{ "binding": "DATASET", "name": "carrier-explode-dataset-dev", "class_name": "DatasetWorkflow" },
+				{ "binding": "LABELS", "name": "carrier-explode-labels-dev", "class_name": "LabelsWorkflow" },
 			],
 			"services": [{ "binding": "API", "service": "carrier-explode-api-dev" }],
-			// No AI binding, so no labels Workflow and no LABELLER: Workers AI has no local simulator.
+			// Workers AI and the Web Search API, for the labels Workflow; remote even under wrangler dev.
+			"ai": { "binding": "AI" },
 			// Checks run only by hand: POST /run, or /__scheduled with --test-scheduled.
 			"triggers": { "crons": [] },
 			"vars": {
@@ -125,7 +127,8 @@
 					},
 					"samsung": {
 						"families": ["Galaxy S"],
-						"exclude": [" FE", " Ultra"],
+						"exclude": [" FE", " Ultra", "+"],
+						"salesCodes": ["EUX", "ZTO"],
 						"releasedSince": "2026-01",
 						"majors": 1,
 						"builds": 2,
@@ -141,12 +144,33 @@
 					"https://carrier-explode-site-dev.simplyalec.workers.dev",
 					"https://carrier-explode-api-dev.simplyalec.workers.dev",
 				],
+				"LABELLER": {
+					"gateway": "default",
+					"provider": "exa",
+					"model": "@cf/deepseek-ai/deepseek-v4-pro-0813",
+					"perKind": 10,
+				},
+				// Production's, but for the settle delay: a rehearsal derives minutes after its last unit.
+				"PIPELINE_CRONS": {},
+				"SETTLE_DELAY_S": 300,
+				"STEP_RETRIES": { "step": 3, "container": 2, "delayMs": 10000 },
+				"STEP_TIMEOUT_MS": 1800000,
+				"CONTAINER_LIMITS": { "readyMs": 120000, "jobDeadlineMs": 3480000 },
+				"FEED_CONCURRENCY": {
+					"iosMerge": 8,
+					"ipswBundles": 8,
+					"appleCatalogs": 4,
+					"galaxyReads": 6,
+					"pixelOta": 6,
+				},
+				"INDEX_BATCH": { "otaFiles": 50, "derivedSources": 25, "changedReleases": 25, "profileRows": 25 },
 			},
 			"secrets": { "required": ["RUN_TOKEN", "PURGE_TOKEN"] },
 		},
 
 		"production": {
 			"name": "carrier-explode-extractor",
+			"observability": { "enabled": true, "traces": { "enabled": true, "head_sampling_rate": 1 } },
 			"r2_buckets": [{ "binding": "BUCKET", "bucket_name": "carrier-explode-ingest" }],
 			// packages/db's index; its migrations are packages/db's, applied by hand.
 			"d1_databases": [
@@ -166,7 +190,7 @@
 					"instance_type": { "vcpu": 1, "memory_mib": 3072, "disk_mb": 20000 },
 					// One past the sum of CONTAINER_SHARE (each iOS or Galaxy build holds one container at a time): a destroyed
 					// container's slot can be released minutes after it answers, while its build's next step already asks for one.
-					"max_instances": 5,
+					"max_instances": 7,
 				},
 			],
 			"durable_objects": { "bindings": [{ "name": "EXTRACTOR", "class_name": "Extractor" }] },
@@ -230,9 +254,8 @@
 			"services": [{ "binding": "API", "service": "carrier-explode-api" }],
 			// Workers AI and the Web Search API, for the labels Workflow.
 			"ai": { "binding": "AI" },
-			// The crons of PIPELINES in src/pipelines.ts (test/tables.test.ts checks): the container builds' only during the
-			// backfill, so no other feed's check starts units while it runs; and the daily dataset.
-			"triggers": { "crons": ["*/20 * * * *", "10,30,50 * * * *", "50 3 * * *"] },
+			// PIPELINE_CRONS' (test/tables.test.ts checks).
+			"triggers": { "crons": ["*/20 * * * *", "10,30,50 * * * *", "50 3 * * *", "30 4 * * SUN"] },
 			"vars": {
 				// What ingest scans (src/scope.ts): the newest `majors` OS majors, each on each family's newest generation
 				// that has a build on it. Changing the families needs a cost estimate and approval.
@@ -250,10 +273,26 @@
 						"everythingSince": "2026-10-05",
 						"backfill": "quarterly",
 					},
-					// US models (U and U1) Google Play lists, by name.
+					// Every regional model Google Play lists, by name. Each sales code reaches a multi-CSC package no code before it does
+					// on some model.
 					"samsung": {
-						"families": ["Galaxy S", "Galaxy Z Fold", "Galaxy Z Flip"],
+						"families": ["Galaxy S", "Galaxy Z Fold", "Galaxy Z Flip", "Galaxy A5", "Galaxy A3"],
 						"exclude": [" FE"],
+						"salesCodes": [
+							"EUX",
+							"ZTO",
+							"PEO",
+							"INS",
+							"XSG",
+							"XXV",
+							"SKZ",
+							"KOO",
+							"TGY",
+							"CHC",
+							"XAC",
+							"XAA",
+							"ATT",
+						],
 						"releasedSince": "2025-01",
 						"majors": 3,
 						"builds": "all",
@@ -261,15 +300,44 @@
 					// iPadOS and watchOS come only from here: each source's file for the newest OS it is listed for.
 					"appleOta": { "ios": "all", "ipados": "current", "watchos": "current" },
 				},
-				"CONTAINER_SHARE": { "ios-build": 3, "galaxy-build": 1 },
+				"CONTAINER_SHARE": { "ios-build": 3, "galaxy-build": 3 },
 				// The readers' origins, each purged at PURGE_PATH with the PURGE_TOKEN secret both readers hold.
 				"PURGE_ORIGINS": ["https://carrierexplode.com", "https://api.carrierexplode.com"],
 				"LABELLER": {
 					"gateway": "default",
 					"provider": "exa",
 					"model": "@cf/deepseek-ai/deepseek-v4-pro-0813",
-					"perKind": 25,
+					"perKind": 200,
 				},
+				// triggers.crons, by feed (test/tables.test.ts checks). Of the extracting feeds, only the container builds' during the
+				// backfill, so no other feed's check starts units while it runs. A check tops a container pipeline up to its
+				// CONTAINER_SHARE; Galaxy's minutes are its own, and so are the dataset's. Labels weekly, after Sunday's dataset: names
+				// change slowly, and each costs a search and a model call.
+				"PIPELINE_CRONS": {
+					"ios-build": "*/20 * * * *",
+					"galaxy-build": "10,30,50 * * * *",
+					"dataset": "50 3 * * *",
+					"labels": "30 4 * * SUN",
+				},
+				// A backfill's iOS builds end at most a build (about 40 minutes) apart while the 20-minute check keeps containers
+				// busy, so a backfill derives once, at its end.
+				"SETTLE_DELAY_S": 3600,
+				"STEP_RETRIES": { "step": 3, "container": 2, "delayMs": 10000 },
+				"STEP_TIMEOUT_MS": 1800000,
+				// A cold start pulls an image of a few hundred MB. A job's deadline (58 minutes) is about twice the slowest whole
+				// IPSW, so a hung job's container is gone within the hour.
+				"CONTAINER_LIMITS": { "readyMs": 120000, "jobDeadlineMs": 3480000 },
+				// The community catalogs (ipsw.me, AppleDB) a few requests at a time; a Worker keeps six connections open.
+				"FEED_CONCURRENCY": {
+					"iosMerge": 8,
+					"ipswBundles": 8,
+					"appleCatalogs": 4,
+					"galaxyReads": 6,
+					"pixelOta": 6,
+				},
+				// Each bounded by an invocation's 1,000 D1 queries: an OTA file costs about eleven, a derived source up to nineteen,
+				// a release's changes about ten.
+				"INDEX_BATCH": { "otaFiles": 50, "derivedSources": 25, "changedReleases": 25, "profileRows": 25 },
 			},
 			// RUN_TOKEN: bearer for /run and /runs. PURGE_TOKEN: the readers' purge bearer.
 			"secrets": { "required": ["RUN_TOKEN", "PURGE_TOKEN"] },

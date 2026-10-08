@@ -17,6 +17,7 @@ import {
 	sourceBase,
 	phoneStates,
 	profileFacts,
+	MODEM_SCHEMA,
 	PROFILE_SCHEMA,
 	RARITY,
 	releaseChanges,
@@ -53,7 +54,7 @@ const DEVICES: readonly Device[] = [
 	{ code: "iPhone12,8", family: "apple", released: "2020-04-24", boards: ["D79AP"] },
 	{ code: "iPhone10,1", family: "apple", released: "2017-09-22", boards: ["D20AP"] },
 ];
-const ORDER = newestFirst(DEVICES);
+const ORDER = newestFirst(DEVICES.map(({ code, released }) => ({ code, released, name: code })));
 
 const IOS: SourceRef = { platform: "ios", kind: "carrier", name: "Test_US" };
 const ANDROID: SourceRef = { platform: "android", kind: "carrier", name: "test_us" };
@@ -188,7 +189,7 @@ describe("Android timelines", () => {
 		]);
 	});
 
-	it("heads on the newest device, and each phone reads the file the newest build ships it", () => {
+	it("heads on the newest device, and each phone reads the file its newest build ships it", () => {
 		expect(head(ANDROID, t, ORDER)?.line).toBe("frankel");
 		const heads = phoneHeads({ source: ANDROID, copies, timeline: t, order: ORDER, base: [] }, [
 			"frankel",
@@ -204,6 +205,32 @@ describe("Android timelines", () => {
 			comet: "s9",
 			raven: "s6",
 			oriole: "s6",
+		});
+	});
+
+	it("reads each Pixel from its own train's newest build, and nothing when that build drops the source", () => {
+		const SEVEN = release("CP3A.261005.005", "2026-10"),
+			ELEVEN = release("CD1A.261005.003", "2026-10"),
+			SEPTEMBER = release("CP3A.260905.009", "2026-09"),
+			DROPPED = release("CP3A.261005.007", "2026-10");
+		const trains = [
+			...build(SEVEN, [["a2", "41", ["tokay"]]]),
+			...build(ELEVEN, [["b2", "41", ["frankel"]]]),
+			...build(SEPTEMBER, [["a1", "40", ["tokay", "oriole"]]]),
+		];
+		const base = [
+			...build(SEVEN, [["d7", "41", ["tokay"]]]),
+			...build(ELEVEN, [["d11", "41", ["frankel"]]]),
+			...build(SEPTEMBER, [["d9", "40", ["tokay", "oriole"]]]),
+			...build(DROPPED, [["d7", "41", ["oriole"]]]),
+		];
+		const heads = phoneHeads(
+			{ source: ANDROID, copies: trains, timeline: sourceTimeline(trains), order: ORDER, base },
+			["frankel", "tokay", "oriole"],
+		);
+		expect(Object.fromEntries(heads)).toEqual({
+			frankel: { sha: "b2", base: "d11" },
+			tokay: { sha: "a2", base: "d7" },
 		});
 	});
 
@@ -549,7 +576,10 @@ describe("phoneStates", () => {
 		const NEW = release("CP3A.2", "2026-09-02"),
 			OLD = release("CP3A.1", "2026-08-02");
 		const copies = [...build(NEW, [["quiet", "9", ["tokay"]]]), ...build(OLD, [["sa", "8", ["oriole"]]])];
-		const base = [...build(NEW, [["base", "2", ["tokay"]]]), ...build(OLD, [["base", "1", ["comet"]]])];
+		const base = [
+			...build(NEW, [["base", "2", ["tokay", "oriole"]]]),
+			...build(OLD, [["base", "1", ["comet"]]]),
+		];
 		const phones: Phone[] = ["tokay", "oriole"].map((code) => ({ code, boards: [], has5g: true }));
 		const heads = phoneHeads(
 			{ source: ANDROID, copies, timeline: sourceTimeline(copies), order: ORDER, base },
@@ -681,7 +711,7 @@ describe("profileFacts", () => {
 
 	it("writes a modem configuration's selection as its SIM rules, nothing a carrier list shows, and its radio over its base's", () => {
 		const config: ModemConfig = {
-			schema: PROFILE_SCHEMA,
+			schema: MODEM_SCHEMA,
 			family: "qualcomm",
 			sha: "m1",
 			label: "Commercial-TMO",
@@ -695,7 +725,7 @@ describe("profileFacts", () => {
 		};
 		expect(modemFacts(config, null)).toEqual({
 			sha: "m1",
-			schema: PROFILE_SCHEMA,
+			schema: MODEM_SCHEMA,
 			kind: "modem",
 			display: null,
 			iso: [],

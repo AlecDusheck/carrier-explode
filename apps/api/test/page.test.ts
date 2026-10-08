@@ -1,6 +1,9 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
-import { canonicalSearch, decodeCursor, encodeCursor, SOURCE_KEY, STRING_KEY } from "../src/page.ts";
+vi.mock("cloudflare:workers", () => ({ env: { API_PAGE_LIMITS: { default: 100, max: 500 } } }));
+
+const { canonicalSearch, decodeCursor, encodeCursor, SOURCE_KEY, STRING_KEY } =
+	await import("../src/page.ts");
 
 describe("cursors", () => {
 	it("carry a key through a URL-safe token and back", () => {

@@ -1,6 +1,6 @@
 /** What every platform's settings views share: how a SIM selects a source, rarity badges, and the words a filter matches. */
 
-import type { RareSetting } from "@carrier-explode/db";
+import type { RareRow } from "#lib/server/scan.ts";
 import { isTestPlmn } from "@carrier-explode/schema";
 import { parseRuleKey, type SimMatcher, type SimRule } from "@carrier-explode/schema/types";
 import { isRecord } from "@carrier-explode/values";
@@ -10,8 +10,8 @@ import type { KeyBadge } from "#lib/components/Tree.svelte";
 export interface SelectionRule {
 	readonly via: string;
 	readonly key: string;
-	/** Which SIMs on that key it takes; null when the key alone decides. */
-	readonly match: string | null;
+	/** Which SIMs on that key it takes. */
+	readonly match: string;
 }
 
 type Qualifier = Exclude<keyof SimMatcher, "mccmnc">;
@@ -47,7 +47,7 @@ function ruleRow(r: SimRule): SelectionRule {
 		case "plmn":
 			return simRule(r.sim);
 		case "iccid":
-			return { via: "ICCID", key: `${r.prefix}…`, match: null };
+			return { via: "ICCID", key: `${r.prefix}…`, match: "by SIM card number" };
 		case "carrierId":
 			return { via: "Carrier ID", key: r.id, match: "CDMA carrier ID" };
 	}
@@ -83,7 +83,7 @@ export function selectionRows(rules: readonly SelectionRule[]): SelectionRow[] {
 	const real = rules.filter(
 		(r) => !isTestRule(r) && (r.match === ANY_SIM || !open.has(`${r.via}\n${r.key}`)),
 	);
-	const grouped = Map.groupBy(real, (r) => `${r.via}\n${r.match ?? ""}`);
+	const grouped = Map.groupBy(real, (r) => `${r.via}\n${r.match}`);
 	const rows = [...grouped.values()].flatMap(([first, ...rest]): SelectionRow[] =>
 		first === undefined
 			? []
@@ -99,7 +99,7 @@ export function selectionRows(rules: readonly SelectionRule[]): SelectionRow[] {
 		(a, b) =>
 			vias.indexOf(a.via) - vias.indexOf(b.via) ||
 			Number(b.match === ANY_SIM) - Number(a.match === ANY_SIM) ||
-			(a.match ?? "").localeCompare(b.match ?? "", "en"),
+			a.match.localeCompare(b.match, "en"),
 	);
 	const tests = [...new Set(rules.filter(isTestRule).map((r) => r.key))].toSorted();
 	return tests.length ? [...sorted, { via: "MCC-MNC", match: "test networks", keys: tests }] : sorted;
@@ -118,13 +118,13 @@ export function leafCount(value: unknown): number {
 }
 
 /** One badge per top-level key: the rarest thing under it. */
-export function rareBadges(rows: readonly RareSetting[]): Record<string, KeyBadge[]> {
+export function rareBadges(rows: readonly RareRow[]): Record<string, KeyBadge[]> {
 	const out: Record<string, KeyBadge[]> = {};
 	for (const r of rows) {
 		const top = r.path.split(/[.[]/, 1)[0] ?? r.path;
 		if (out[top]) continue;
 		const what = r.rare === "key" ? `${r.path} is set` : `${r.path} = ${r.value}`;
-		const also = r.with.length ? ` (also ${r.with.join(", ")})` : " (no other source)";
+		const also = r.with.length ? ` (also ${r.with.map((w) => w.key).join(", ")})` : " (no other source)";
 		out[top] = [{ text: "rare", tone: "rare", title: `${what} in ${r.holders} of ${r.of} sources${also}` }];
 	}
 	return out;

@@ -610,7 +610,7 @@ describe("decodePri: pair families", () => {
 			name: "dyn_cps.dam.support",
 			confidence: "med",
 		});
-		expect(d.efs[0]?.meaning).toContain("Intel / Apple C1 modem NVM field");
+		expect(d.efs[0]?.meaning).toContain("Intel-dialect NVM field");
 		// D321/D331/N841 are iPhone XS/XR models, which have Intel modems.
 		expect(d.dialect).toBe("intel");
 	});
@@ -1467,7 +1467,7 @@ describe("iOS 27.0 fixtures", () => {
 			path: "%qu[8]:dyn_cps_gri.lte_regulatory_info.na_table[0][0]",
 			value: { text: "mcc:302" },
 		});
-		expect(qu[0]?.meaning).toContain("Intel / Apple C1 modem NVM field");
+		expect(qu[0]?.meaning).toContain("Intel-dialect NVM field");
 		expect(d.unknown).toEqual([]);
 	});
 });

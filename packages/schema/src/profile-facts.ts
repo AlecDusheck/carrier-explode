@@ -10,6 +10,8 @@ import { layeredRadio } from "./radio.ts";
 import {
 	decoderFamily,
 	matcherKey,
+	MODEM_SCHEMA,
+	PROFILE_SCHEMA,
 	type ConceptValue,
 	type DecoderFamily,
 	type Json,
@@ -22,16 +24,19 @@ import {
 /** One normalized object's identity, the SIM rules that select it, and what it says of a phone's radio. */
 export type ProfileFacts = {
 	readonly sha: string;
-	/** The PROFILE_SCHEMA the rows were read under: rows from an older one are written again. */
-	readonly schema: Profile["schema"];
 	readonly display: string | null;
 	readonly iso: readonly string[];
 	/** matcherKeys. */
 	readonly sims: readonly string[];
 } & (
-	| { readonly kind: "settings"; readonly radio: BoardRadios }
-	| { readonly kind: "modem"; readonly radio: ConfigRadio }
+	| { readonly kind: "settings"; readonly schema: Profile["schema"]; readonly radio: BoardRadios }
+	| { readonly kind: "modem"; readonly schema: ModemConfig["schema"]; readonly radio: ConfigRadio }
 );
+
+/** The schema each kind's rows must be read under: rows from an older one are written again. */
+export const FACTS_SCHEMA = { settings: PROFILE_SCHEMA, modem: MODEM_SCHEMA } as const satisfies {
+	readonly [K in ProfileFacts["kind"]]: Extract<ProfileFacts, { readonly kind: K }>["schema"];
+};
 
 /** A profile's raw leaves and concept values, kept for a source's head only: scans and rarity compare heads. */
 export interface HeadRows {

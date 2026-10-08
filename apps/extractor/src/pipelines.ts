@@ -60,7 +60,8 @@ const reindexTargetSchema = v.variant("kind", [
 	v.object({ kind: v.literal("all"), platform: v.exactOptional(v.picklist(RELEASE_PLATFORMS)) }),
 ]);
 
-export const PIPELINE_NAMES = [
+/** The pipelines a feed check plans: PIPELINE_CRONS schedules some, and POST /run runs any. */
+export const FEED_NAMES = [
 	"ios-build",
 	"apple-ota",
 	"pixel-device",
@@ -68,60 +69,27 @@ export const PIPELINE_NAMES = [
 	"galaxy-build",
 	"labels",
 	"dataset",
-	"reindex",
 ] as const;
+export type FeedName = (typeof FEED_NAMES)[number];
+
+export const PIPELINE_NAMES = [...FEED_NAMES, "reindex"] as const;
 export type PipelineName = (typeof PIPELINE_NAMES)[number];
 
-const DAILY = "35 3 * * *";
-/** A check tops a container pipeline up to its CONTAINER_SHARE of live builds; one that ends waits up to this long for the next. */
-const EVERY_20_MINUTES = "*/20 * * * *";
-/** Galaxy's own minutes, so production can schedule it without the iOS check. */
-const EVERY_20_MINUTES_AT_10 = "10,30,50 * * * *";
-const SIX_HOURLY = "7 */6 * * *";
-/** Its own minute, so production can schedule it without Pixel's daily check. */
-const DAILY_DATASET = "50 3 * * *";
-/** Mondays: names change slowly, and each costs a search and a model call. */
-const WEEKLY = "17 4 * * 1";
-
-/**
- * `cron`: when its feed is checked, or null for a pipeline only run by hand. `container`: its instances each hold a
- * container, so a check keeps it to its CONTAINER_SHARE of the container class's max_instances.
- */
+/** `container`: its instances each hold a container, so a check keeps it to its CONTAINER_SHARE of the container class's max_instances. */
 export const PIPELINES = {
-	"ios-build": { binding: "IOS_BUILD", params: iosBuildSchema, cron: EVERY_20_MINUTES, container: true },
-	"apple-ota": {
-		binding: "APPLE_OTA",
-		params: v.object({ manifest: sha1Schema }),
-		cron: SIX_HOURLY,
-		container: false,
-	},
-	"pixel-device": { binding: "PIXEL_DEVICE", params: pixelDeviceSchema, cron: DAILY, container: false },
-	"pixel-ota": {
-		binding: "PIXEL_OTA",
-		params: v.object({ snapshot: sha1Schema }),
-		cron: SIX_HOURLY,
-		container: false,
-	},
-	"galaxy-build": {
-		binding: "GALAXY_BUILD",
-		params: galaxyBuildSchema,
-		cron: EVERY_20_MINUTES_AT_10,
-		container: true,
-	},
-	labels: { binding: "LABELS", params: v.object({ week: day }), cron: WEEKLY, container: false },
-	dataset: { binding: "DATASET", params: v.object({ day }), cron: DAILY_DATASET, container: false },
-	reindex: {
-		binding: "REINDEX",
-		params: v.object({ target: reindexTargetSchema }),
-		cron: null,
-		container: false,
-	},
+	"ios-build": { binding: "IOS_BUILD", params: iosBuildSchema, container: true },
+	"apple-ota": { binding: "APPLE_OTA", params: v.object({ manifest: sha1Schema }), container: false },
+	"pixel-device": { binding: "PIXEL_DEVICE", params: pixelDeviceSchema, container: false },
+	"pixel-ota": { binding: "PIXEL_OTA", params: v.object({ snapshot: sha1Schema }), container: false },
+	"galaxy-build": { binding: "GALAXY_BUILD", params: galaxyBuildSchema, container: true },
+	labels: { binding: "LABELS", params: v.object({ week: day }), container: false },
+	dataset: { binding: "DATASET", params: v.object({ day }), container: false },
+	reindex: { binding: "REINDEX", params: v.object({ target: reindexTargetSchema }), container: false },
 } as const satisfies { readonly [P in PipelineName]: Pipeline };
 
 interface Pipeline {
 	readonly binding: string;
 	readonly params: v.GenericSchema;
-	readonly cron: string | null;
 	readonly container: boolean;
 }
 
@@ -130,12 +98,6 @@ export type ContainerPipeline = {
 }[PipelineName];
 
 export type PipelineParams<P extends PipelineName> = v.InferOutput<(typeof PIPELINES)[P]["params"]>;
-
-/** The pipelines a feed check plans: all but reindex. */
-export type FeedName = {
-	readonly [P in PipelineName]: (typeof PIPELINES)[P]["cron"] extends string ? P : never;
-}[PipelineName];
-export const FEED_NAMES = PIPELINE_NAMES.filter((p): p is FeedName => PIPELINES[p].cron !== null);
 
 /**
  * POST /run's body: a feed's check (with `rebuild`, its failed units run again; with `only`, just the planned units of

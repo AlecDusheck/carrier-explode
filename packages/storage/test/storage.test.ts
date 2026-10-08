@@ -52,8 +52,8 @@ const lifecycleSchema = v.object({
 });
 
 describe("keys", () => {
-	it("key a normalized object by its artifact's sha, under the profile schema's version", () => {
-		expect(keys.norm(SHA)).toMatch(new RegExp(`^norm/v\\d+/${SHA}\\.json$`));
+	it("key a normalized object by its artifact's sha, under its schema's version", () => {
+		expect(keys.profile(SHA)).toMatch(new RegExp(`^norm/v\\d+/${SHA}\\.json$`));
 	});
 
 	it("give back the release a listed key names, for every platform", () => {
@@ -74,7 +74,7 @@ describe("keys", () => {
 	it("read no release from any other key", () => {
 		for (const key of [
 			keys.obj(SHA),
-			keys.norm(SHA),
+			keys.profile(SHA),
 			"releases/android/CP3A.260905.009.json",
 			"releases/ios/24A446/x.json",
 			"releases/ios/24A446",
@@ -87,7 +87,7 @@ describe("keys", () => {
 
 	it("give back the sha of an obj/ key and of no other", () => {
 		expect(keys.shaOfObj(keys.obj(SHA))).toBe(SHA);
-		expect(keys.shaOfObj(keys.norm(SHA))).toBeUndefined();
+		expect(keys.shaOfObj(keys.profile(SHA))).toBeUndefined();
 		expect(keys.shaOfObj(keys.objPrefix())).toBeUndefined();
 	});
 
@@ -113,14 +113,14 @@ describe("keys", () => {
 		] = rules;
 		expect(keys.tmp("ios-build-24A446", "ATT_US.ipcc").startsWith(prefix)).toBe(true);
 		expect(keys.tmpPrefix("ios-build-24A446").startsWith(prefix)).toBe(true);
-		for (const key of [keys.obj(SHA), keys.norm(SHA), keys.release("ios", "24A446")])
+		for (const key of [keys.obj(SHA), keys.profile(SHA), keys.release("ios", "24A446")])
 			expect(key.startsWith(prefix)).toBe(false);
 	});
 });
 
 describe("writes", () => {
 	it("write once: an existing key gives null and keeps its bytes", async () => {
-		const key = keys.norm(SHA);
+		const key = keys.profile(SHA);
 		expect(await putJsonOnce(bucket, key, { first: true })).not.toBeNull();
 		expect(await putJsonOnce(bucket, key, { first: false })).toBeNull();
 		expect(await putOnce(bucket, key, "other", "application/octet-stream")).toBeNull();

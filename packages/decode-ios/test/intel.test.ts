@@ -97,7 +97,7 @@ describe("parseIntelKey", () => {
 });
 
 describe("describeIntelKey", () => {
-	it("names Intel / Apple C1 NVM keys by family", () => {
+	it("names Intel-dialect NVM keys by family", () => {
 		expect(describeIntelKey("%u:dyn_cps.dam.support")).toMatchObject({
 			family: "cps_u",
 			name: "dyn_cps.dam.support",

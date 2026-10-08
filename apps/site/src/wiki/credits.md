@@ -37,11 +37,11 @@ OTA images are read for every Pixel released since October 2020. Every build fro
 
 | Source                                                                                              | What is read                                                                                                                              | Checked          |
 | --------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- | ---------------- |
-| [Google Play's supported devices](https://storage.googleapis.com/play_public/supported_devices.csv) | the US Galaxy models and their names                                                                                                      | every 20 minutes |
+| [Google Play's supported devices](https://storage.googleapis.com/play_public/supported_devices.csv) | the Galaxy models, every regional variant, and their names                                                                                | every 20 minutes |
 | Samsung's `version.xml`                                                                             | each model's builds                                                                                                                       | every 20 minutes |
 | Samsung's firmware update server (FUS)                                                              | the firmware itself: its [carrier packs](/wiki/samsung/carrier-pack), IMS settings and [modem configurations](/wiki/samsung/galaxy-modem) | each new build   |
 
-Firmware is read for the US Galaxy S, Z Fold and Z Flip models (`U` and `U1`, FE models aside) launched since January 2025: of each of the three newest Android versions, each model's newest build, on each family's newest generation that has it. Samsung offers a model's current firmware, not an archive of past builds, so a Galaxy's history here starts when this site began reading it. Samsung and Samsung Galaxy are trademarks of Samsung Electronics Co., Ltd.
+Firmware is read for every regional model of the Galaxy S, Z Fold, Z Flip, A5x and A3x (FE models aside) launched since January 2025: of each of the three newest Android versions, each model's newest build in each of its multi-CSC packages, on each family's newest generation that has it. Samsung offers a model's current firmware, not an archive of past builds, so a Galaxy's history here starts when this site began reading it. Samsung and Samsung Galaxy are trademarks of Samsung Electronics Co., Ltd.
 
 ### Names and references
 

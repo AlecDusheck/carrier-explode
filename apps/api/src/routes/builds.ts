@@ -19,7 +19,6 @@ import {
 } from "@carrier-explode/schema/types";
 import { fail, router, type ApiContext, type ApiEnv } from "../context.ts";
 import { canonicalSearch, pageQuery, paged, SOURCE_KEY, STRING_KEY } from "../page.ts";
-import { budget } from "../rate.ts";
 import {
 	buildModemsSchema,
 	buildPageSchema,
@@ -81,9 +80,10 @@ export async function shippedModems(
 					family,
 					familyName,
 					devices,
-					configs: (await modemConfigsOf(c.var.db, platform, build, first)).map(({ label, sha }) => ({
-						label,
-						sha,
+					configs: (await modemConfigsOf(c.var.db, platform, build, first)).map((config) => ({
+						label: config.label,
+						name: config.name,
+						sha: config.sha,
 					})),
 				};
 			}),
@@ -125,7 +125,6 @@ builds.openapi(
 		operationId: "listBuilds",
 		tags: ["Builds"],
 		summary: "One platform's builds, newest first",
-		middleware: [budget("base")],
 		request: {
 			params: onPlatform,
 			query: z
@@ -170,7 +169,6 @@ builds.openapi(
 		operationId: "getBuild",
 		tags: ["Builds"],
 		summary: "A build: its version, devices and how many sources it carries",
-		middleware: [budget("base")],
 		request: { params: ofBuild, query: NO_QUERY },
 		responses: { ...json(buildSchema, "The build."), ...ERRORS },
 	}),
@@ -187,7 +185,6 @@ builds.openapi(
 		operationId: "listBuildChanges",
 		tags: ["Builds"],
 		summary: "The sources a build added, removed or changed against the platform's build before it",
-		middleware: [budget("base")],
 		request: {
 			params: ofBuild,
 			query: z
@@ -231,7 +228,6 @@ builds.openapi(
 		tags: ["Builds"],
 		summary:
 			"The modems a build ships: iOS baseband firmware packages, or Pixel and Galaxy modem firmware and their carrier configurations",
-		middleware: [budget("base")],
 		request: { params: ofBuild, query: NO_QUERY },
 		responses: { ...json(buildModemsSchema, "The build's modems."), ...ERRORS },
 	}),

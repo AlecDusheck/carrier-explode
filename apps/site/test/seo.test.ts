@@ -45,7 +45,7 @@ const CASES: Array<[string, Parameters<typeof seo>[1]]> = [
 	["/[platform=platform]/builds/[build]", { platform: "ios", build: "24B5089g" }],
 	["/[platform=platform]/builds/[build]/[modem]", { platform: "ios", build: "24A437", modem: "Mav25" }],
 	["/[platform=platform]/builds/[build]/[modem]", { platform: "ios", build: "24A437", modem: "Mav21" }],
-	["/[platform=platform]/builds/[build]/[modem]", { platform: "ios", build: "24A437", modem: "C1" }],
+	["/[platform=platform]/builds/[build]/[modem]", { platform: "ios", build: "24A437", modem: "c4000" }],
 	["/[platform=platform]/builds/[build]/[modem]", { platform: "ios", build: "24B5089g", modem: "c4020" }],
 	["/[platform=platform]/builds/[build]/[modem]", { platform: "ios", build: "24A437", modem: "ICE19" }],
 	[
@@ -277,6 +277,13 @@ describe("errorMessage", () => {
 	it("prefers what the error says", () => {
 		expect(errorMessage({ body: { message: "no such file" }, status: 404 })).toBe("no such file");
 		expect(errorMessage(new Error("boom"))).toBe("boom");
+	});
+
+	it("says a rate-limited call is one, whatever the zone's 429 page holds", () => {
+		// What SvelteKit's remote client throws for a 429 that is not its JSON: the status text, empty over HTTP/2.
+		expect(errorMessage({ status: 429, body: { status: 429, message: "" } })).toBe(
+			"Too many requests... please wait a bit.",
+		);
 	});
 
 	it("never renders a bare object as [object Object]", () => {

@@ -33,7 +33,7 @@ describe("modemSummary", () => {
 		const stored = {
 			schema: MODEM_SUMMARY_SCHEMA,
 			kind: "ftab",
-			package: { name: "ftab.bin", family: "C1" },
+			package: { name: "ftab.bin", family: "c4000" },
 			entries: [{ tag: "bver", offset: 48, size: 9 }],
 		};
 		expect(v.parse(modemSummary, stored)).toEqual(stored);

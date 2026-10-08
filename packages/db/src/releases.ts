@@ -124,11 +124,19 @@ export async function shippedSourceCount(
 	return row?.n ?? 0;
 }
 
-const familySchema = v.object({
-	code: v.string(),
-	label: v.nullable(v.string()),
-	devices: v.array(v.string()),
-});
+/** How many of `keys` each of a platform's releases ships; a release shipping none is left out. */
+export async function releasesShipping(
+	db: IndexDb,
+	platform: ReleasePlatform,
+	keys: readonly SourceKey[],
+): Promise<Array<{ readonly release: string; readonly sources: number }>> {
+	const rows =
+		await db.all(sql`SELECT c.origin AS release, count(DISTINCT c.source) AS sources FROM ${copies} c
+    WHERE c.origin_kind = 'release' AND c.origin IN (SELECT id FROM ${releases} WHERE platform = ${platform})
+      AND c.source IN (SELECT value FROM json_each(${JSON.stringify(keys)}))
+    GROUP BY c.origin`);
+	return v.parse(v.array(v.object({ release: v.string(), sources: v.number() })), rows);
+}
 
 /** A modem family as pages name it: its code, schema's name for it, and the devices its modems serve. */
 export interface ModemFamily {
@@ -139,37 +147,52 @@ export interface ModemFamily {
 
 const familyLabel = (family: SQLWrapper): SQL<string | null> => labelled("modem", "name", family);
 
-/** The families a release's modems are, each once, in its devices' order (newest first) of the newest phone each serves. */
-const releaseFamilies =
-	sql<string>`(SELECT json_group_array(json_object('code', f.family, 'label', f.label, 'devices', json(f.devices))) FROM (
-  SELECT m.family, ${familyLabel(sql`m.family`)} AS label, min(r.key) AS newest, json_group_array(DISTINCT j.value) AS devices
-  FROM ${modems} m, json_each(m.devices) j LEFT JOIN json_each(${qualified(releases, releases.devices)}) r ON r.value = j.value
-  WHERE m.platform = ${qualified(releases, releases.platform)} AND m.release = ${qualified(releases, releases.id)}
-  GROUP BY m.family ORDER BY newest IS NULL, newest, m.family) f)`.mapWith((s: string) =>
-		v.parse(jsonOf(v.array(familySchema)), s),
-	);
-
 /** A release as lists and build pages show it: its header and the modem families it ships. */
 export type ListedRelease = IndexedRelease & { readonly modemFamilies: readonly ModemFamily[] };
 
-const listing = (db: IndexDb) =>
-	db.select({ release: releases, modemFamilies: releaseFamilies }).from(releases).$dynamic();
+const shippedModemsSchema = v.array(
+	v.object({
+		release: v.string(),
+		family: v.string(),
+		label: v.nullable(v.string()),
+		devices: jsonOf(v.array(v.string())),
+	}),
+);
 
-function listedOf({
-	release,
-	modemFamilies,
-}: {
-	release: ReleaseRow;
-	modemFamilies: ReadonlyArray<v.InferOutput<typeof familySchema>>;
-}): ListedRelease {
-	return {
-		...releaseOfRow(release),
-		modemFamilies: modemFamilies.map((f) => ({
-			code: f.code,
-			name: modemFamilyName(release.platform, f.code, f.label),
-			devices: f.devices,
-		})),
-	};
+/** Each release with its modem families, each once, in its devices' order (newest first) of the newest phone each serves. */
+async function withFamilies(
+	db: IndexDb,
+	platform: ReleasePlatform,
+	rows: readonly ReleaseRow[],
+): Promise<ListedRelease[]> {
+	const shipped = v.parse(
+		shippedModemsSchema,
+		await db.all(sql`SELECT m.release, m.family, ${familyLabel(sql`m.family`)} AS label, m.devices FROM ${modems} m
+      WHERE m.platform = ${platform} AND m.release IN (SELECT value FROM json_each(${JSON.stringify(rows.map((r) => r.id))}))
+      ORDER BY m.release, m.name, m.devices`),
+	);
+	return rows.map((row) => {
+		const families = new Map<string, { readonly label: string | null; readonly devices: Set<string> }>();
+		for (const m of shipped.filter((s) => s.release === row.id)) {
+			const family = families.get(m.family) ?? { label: m.label, devices: new Set<string>() };
+			for (const d of m.devices) family.devices.add(d);
+			families.set(m.family, family);
+		}
+		// A family none of whose devices the release lists sorts last.
+		const newest = (devices: ReadonlySet<string>): number =>
+			Math.min(...[...devices].map((d) => row.devices.indexOf(d)).filter((i) => i >= 0));
+		return {
+			...releaseOfRow(row),
+			modemFamilies: [...families]
+				.map(([code, f]) => ({ code, label: f.label, devices: [...f.devices], newest: newest(f.devices) }))
+				.toSorted((a, b) => a.newest - b.newest || (a.code < b.code ? -1 : a.code > b.code ? 1 : 0))
+				.map((f) => ({
+					code: f.code,
+					name: modemFamilyName(row.platform, f.code, f.label),
+					devices: f.devices,
+				})),
+		};
+	});
 }
 
 /** What a release list narrows to; a null field narrows nothing. */
@@ -189,7 +212,9 @@ export async function releaseList(
 	page: Page<string>,
 	filter: ReleaseFilter = EVERY_RELEASE,
 ): Promise<ListedRelease[]> {
-	const rows = await listing(db)
+	const rows = await db
+		.select()
+		.from(releases)
 		.where(
 			and(
 				eq(releases.platform, platform),
@@ -202,7 +227,7 @@ export async function releaseList(
 		)
 		.orderBy(desc(releases.sortKey))
 		.limit(page.take);
-	return rows.map(listedOf);
+	return withFamilies(db, platform, rows);
 }
 
 export async function releaseOf(
@@ -210,10 +235,12 @@ export async function releaseOf(
 	platform: ReleasePlatform,
 	id: string,
 ): Promise<ListedRelease | undefined> {
-	const row = await listing(db)
+	const row = await db
+		.select()
+		.from(releases)
 		.where(and(eq(releases.platform, platform), eq(releases.id, id)))
 		.get();
-	return row === undefined ? undefined : listedOf(row);
+	return row === undefined ? undefined : (await withFamilies(db, platform, [row]))[0];
 }
 
 /** The releases either side of `id` by version: the one its changes are against, and the one whose changes are against it. */
@@ -410,15 +437,23 @@ export async function modemsOf(
 	}));
 }
 
+/** A configuration with a person's name for it, where its selection names no carrier to call it by. */
+export type NamedModemConfig = ModemConfigRow & { readonly name: string | null };
+
 /** The configurations a device's modem carries in a release, by label: a Pixel or Galaxy modem page. */
 export function modemConfigsOf(
 	db: IndexDb,
 	platform: ReleasePlatform,
 	release: string,
 	device: string,
-): Promise<ModemConfigRow[]> {
+): Promise<NamedModemConfig[]> {
 	return db
-		.select({ device: modemConfigs.device, label: modemConfigs.label, sha: modemConfigs.sha })
+		.select({
+			device: modemConfigs.device,
+			label: modemConfigs.label,
+			sha: modemConfigs.sha,
+			name: labelled("modem", "name", modemConfigs.label),
+		})
 		.from(modemConfigs)
 		.where(
 			and(

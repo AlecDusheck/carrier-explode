@@ -9,6 +9,7 @@ import { getPlatformProxy } from "wrangler";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
 import {
+	MODEM_SCHEMA,
 	PROFILE_SCHEMA,
 	RARITY,
 	rarityFile,
@@ -23,6 +24,7 @@ import {
 	carrierList,
 	carrierMembers,
 	carrierModemConfigs,
+	shippedModemConfigs,
 	sourceModemConfigs,
 	statedDevices,
 	carrierOf,
@@ -66,7 +68,8 @@ import {
 	syncLabels,
 	syncPhoneStates,
 	syncRoutes,
-	unnamed,
+	labelCandidates,
+	writeLabelMiss,
 	writeLabels,
 	writeLinked,
 	type IndexDb,
@@ -115,8 +118,10 @@ const profile = (
 	claimed: readonly string[],
 	kind: ProfileFacts["kind"] = "settings",
 ): ProfileFacts => {
-	const facts = { sha, schema: PROFILE_SCHEMA, display, iso, sims: claimed } as const;
-	return kind === "settings" ? { ...facts, kind, radio: {} } : { ...facts, kind, radio: "nr" };
+	const facts = { sha, display, iso, sims: claimed } as const;
+	return kind === "settings"
+		? { ...facts, kind, schema: PROFILE_SCHEMA, radio: {} }
+		: { ...facts, kind, schema: MODEM_SCHEMA, radio: "nr" };
 };
 
 const headOf = (sha: string, volte: string): HeadRows => ({
@@ -183,7 +188,26 @@ describe("feeds", () => {
 			{ code: "tokay", name: "Pixel 9", platform: "android", released: "2024-07", boards: [], has5g: true },
 			{ code: "bluejay", name: "bluejay", platform: "android", released: "2022-04", boards: [], has5g: null },
 		]);
-		expect(await unnamed(db, "device")).toEqual(["bluejay", "iPhone19,1"]);
+		const unnamed = async (day: string): Promise<string[]> =>
+			(await labelCandidates(db, "device", 10, day)).map((c) => c.code);
+		const listing = (devices: readonly string[]) =>
+			d1
+				.prepare(
+					"INSERT OR REPLACE INTO releases (platform, id, version, devices, source_count, sort_key) VALUES ('samsung', 'listing', '1', ?, 0, '0')",
+				)
+				.bind(JSON.stringify(devices))
+				.run();
+		await listing(["iPhone19,1"]);
+		expect(await unnamed("2026-10-05")).toEqual(["iPhone19,1"]);
+		await listing(["iPhone19,1", "bluejay"]);
+		expect(await unnamed("2026-10-05")).toEqual(["bluejay", "iPhone19,1"]);
+		await writeLabelMiss(db, "device", "bluejay", "2026-10-05");
+		expect(await unnamed("2026-10-12")).toEqual(["iPhone19,1"]);
+		expect(await unnamed("2027-01-05")).toEqual(["iPhone19,1", "bluejay"]);
+		expect(await labelCandidates(db, "device", 1, "2027-01-05")).toEqual([
+			{ kind: "device", code: "iPhone19,1", platform: "ios", iso: null },
+		]);
+		await d1.prepare("DELETE FROM releases WHERE id = 'listing'").run();
 	});
 
 	it("list one day's devices by code, highest first", async () => {
@@ -572,9 +596,10 @@ describe("the index step", () => {
 		expect(await missingProfiles(db, ["i1", "zz"])).toEqual(["zz"]);
 	});
 
-	it("writes a sha's rows again when they were read under an older PROFILE_SCHEMA", async () => {
+	it("writes a sha's rows again when they were read under an older schema than their kind's", async () => {
 		await d1.prepare("UPDATE profiles SET schema = schema - 1 WHERE sha = 'f1'").run();
-		expect(await missingProfiles(db, ["f1", "i1"])).toEqual(["f1"]);
+		await putProfiles(db, [profile("m9", null, [], [], "modem")]);
+		expect(await missingProfiles(db, ["f1", "i1", "m9"])).toEqual(["f1"]);
 		await putProfiles(db, [profile("f1", "France", ["fr"], ["20801"])]);
 		expect(await missingProfiles(db, ["f1"])).toEqual([]);
 		expect(await selectedBy(db, "f1", FRANCE)).toEqual({ claimed: ["20801"], routed: [] });
@@ -847,7 +872,9 @@ describe("the link step", () => {
 	});
 
 	it("names carriers: the data's name over a feed's or model's label, which name a carrier the data does not, else a source's name", async () => {
-		expect(await unnamed(db, "carrier")).toEqual(["tmobile_us"]);
+		expect(await labelCandidates(db, "carrier", 10, "2026-10-05")).toEqual([
+			{ kind: "carrier", code: "tmobile_us", platform: "android", iso: "us" },
+		]);
 		expect((await carrierOf(db, "tmobile_us"))?.name).toBe("tmobile_us");
 		await writeLabels(db, [
 			{
@@ -878,7 +905,7 @@ describe("the link step", () => {
 				"https://att.com",
 			),
 		).toBe(1);
-		expect(await unnamed(db, "carrier")).toEqual([]);
+		expect(await labelCandidates(db, "carrier", 10, "2026-10-05")).toEqual([]);
 		expect(await carrierList(db, ALL)).toEqual([
 			{ id: "ATT_US", name: "AT&T", iso: "us", platforms: ["android", "ios"], updated: "2026-10-03" },
 			{ id: "tmobile_us", name: "T-Mobile", iso: "us", platforms: ["android"], updated: "2026-09-02" },
@@ -890,17 +917,23 @@ describe("the link step", () => {
 			[ATT_PIXEL, "AT&T"],
 			[TMO_PIXEL, "T-Mobile"],
 		]);
-		// A list row carries its carrier's country and members, and its own newest change.
+		// A list row carries its carrier's logo label, its own country and its newest change.
+		await writeLabels(db, [
+			{ subject: "carrier", code: "ATT_US", field: "logo", value: "att", origin: "human", evidence: null },
+		]);
+		expect((await sourceList(db, "android", "carrier", ALL)).map((s) => [s.key, s.carrierLogo])).toEqual([
+			[ATT_PIXEL, "att"],
+			[TMO_PIXEL, null],
+		]);
 		expect((await sourceList(db, "android", "carrier", ALL))[0]).toMatchObject({
 			cc: "us",
 			updated: "2026-09-02",
-			members: [ATT_PIXEL, ATT_NR_IOS, ATT_IOS],
 		});
-		// A country bundle has no carrier: its head's country, and no members.
+		// A country bundle has no carrier: its head's country, and no logo.
 		expect((await sourceList(db, "ios", "country", ALL))[0]).toMatchObject({
 			key: FRANCE,
 			cc: "fr",
-			members: [],
+			carrierLogo: null,
 		});
 		expect(await carrierCountries(db, "android")).toEqual(["us"]);
 		expect(await carrierCountries(db, "ipados")).toEqual([]);
@@ -945,17 +978,19 @@ describe("the link step", () => {
 			devices: ["tokay"],
 		});
 		// AT&T claims 310410 and its GID1 52 exactly; the older release's us_att (m-att) is not read.
-		expect(await carrierModemConfigs(db, "ATT_US")).toEqual([
+		expect(await carrierModemConfigs(db, "ATT_US", await shippedModemConfigs(db))).toEqual([
 			config("us_att", "m-att2"),
 			config("us_plmn", "m-plmn"),
 		]);
 		// T-Mobile's carrier list routes only 310260 with a GID1 no configuration selects: every one selected by the whole of 310260.
-		expect(await carrierModemConfigs(db, "tmobile_us")).toEqual([
+		expect(await carrierModemConfigs(db, "tmobile_us", await shippedModemConfigs(db))).toEqual([
 			config("us_plmn", "m-plmn"),
 			config("us_tmo", "m-tmo2"),
 		]);
 		// A source's own rules select the same here: its carrier has no other members.
-		expect(await sourceModemConfigs(db, TMO_PIXEL)).toEqual(await carrierModemConfigs(db, "tmobile_us"));
+		expect(await sourceModemConfigs(db, TMO_PIXEL, await shippedModemConfigs(db))).toEqual(
+			await carrierModemConfigs(db, "tmobile_us", await shippedModemConfigs(db)),
+		);
 		// tokay moves to a new firmware: only that firmware's configurations are its.
 		const moved = {
 			platform: "android",
@@ -974,12 +1009,12 @@ describe("the link step", () => {
 			[{ name: "g5400c-next", family: "shannon", devices: ["tokay"], package: null, size: null, kind: null }],
 			[{ device: "tokay", label: "us_att", sha: "m-att3" }],
 		);
-		expect(await carrierModemConfigs(db, "ATT_US")).toEqual([
+		expect(await carrierModemConfigs(db, "ATT_US", await shippedModemConfigs(db))).toEqual([
 			{ ...config("us_att", "m-att3"), release: moved.id, firmware: "g5400c-next" },
 		]);
 	});
 
-	it("names a carrier by a person's label on one of its sources, whatever its id, over the data's name and a model's", async () => {
+	it("names a carrier by a person's label on it over the data's name, and the data's over a model's", async () => {
 		await putProfiles(db, [profile("v1", "Visible", ["us"], ["311480|gid2=1A"])]);
 		await putSource(db, {
 			key: VISIBLE,
@@ -990,51 +1025,25 @@ describe("the link step", () => {
 			baseSha: null,
 			updated: null,
 		});
-		const linked = (id: string) => ({
-			carriers: [
-				{ id: "ATT_US", name: "AT&T", iso: "us" },
-				{ id: "tmobile_us", name: null, iso: "us" },
-				{ id, name: "Verizon Visible", iso: "us" },
-			],
-			members: {
-				[ATT_IOS]: "ATT_US",
-				[ATT_NR_IOS]: "ATT_US",
-				[ATT_PIXEL]: "ATT_US",
-				[TMO_PIXEL]: "tmobile_us",
-				[VISIBLE]: id,
-			},
+		await writeLinked(db, {
+			carriers: [{ id: "visible_us", name: "Verizon Visible", iso: "us" }],
+			members: { [VISIBLE]: "visible_us" },
 		});
-		await writeLinked(db, linked("visible_us"));
-		await writeLabels(db, [
-			{
-				subject: "carrier",
-				code: "visible_us",
-				field: "name",
-				value: "Visible Wireless",
-				origin: "model",
-				evidence: "https://visible.com",
-			},
-		]);
-		// The seed migration named Visible through its iOS source.
-		expect(await carrierOf(db, "visible_us")).toMatchObject({
-			name: "Visible",
-			updated: null,
-			members: [VISIBLE],
-		});
-		await writeLinked(db, linked("Visible_US"));
-		expect((await carrierOf(db, "Visible_US"))?.name).toBe("Visible");
-		await expect(
+		const label = (origin: "human" | "model", value: string) =>
 			writeLabels(db, [
 				{
-					subject: "source",
-					code: VISIBLE,
-					field: "carrierName",
-					value: "Visible",
-					origin: "model",
-					evidence: null,
+					subject: "carrier",
+					code: "visible_us",
+					field: "name",
+					value,
+					origin,
+					evidence: "https://visible.com",
 				},
-			]),
-		).rejects.toThrow();
+			]);
+		await label("model", "Visible Wireless");
+		expect(await carrierOf(db, "visible_us")).toMatchObject({ name: "Verizon Visible", members: [VISIBLE] });
+		await label("human", "Visible");
+		expect((await carrierOf(db, "visible_us"))?.name).toBe("Visible");
 	});
 });
 
@@ -1305,18 +1314,21 @@ describe("scans over heads", () => {
 			.bind(...query.params)
 			.all<{ detail: string }>();
 		const details = plan.results.map((r) => r.detail);
-		// Tables are only ever searched: the group by sources_by_list; the holders of a path by settings_by_path; one source's file by its key.
+		// Tables are only ever searched: the group by its key range; the holders of a path by settings_by_path; one source's file by its key.
 		expect(details.filter((d) => /^SCAN (sources|s)\b/.test(d))).toEqual([]);
-		expect(
-			details
-				.filter((d) => d.startsWith("SEARCH sources USING"))
-				.every((d) => /sources_by_list|sqlite_autoindex_sources_1/.test(d)),
-		).toBe(true);
+		expect(details.filter((d) => d.startsWith("SEARCH sources "))).toEqual([
+			"SEARCH sources USING COVERING INDEX sqlite_autoindex_sources_1 (key>? AND key<?)",
+		]);
 		expect(details.filter((d) => d.startsWith("SEARCH s ")).toSorted()).toEqual([
 			"SEARCH s EXISTS USING COVERING INDEX sqlite_autoindex_settings_1 (source=? AND file=?)",
+			// A (path, value)'s holders in the group, counted only up to past maxSharers.
+			"SEARCH s USING COVERING INDEX settings_by_path (file=? AND path=? AND value=? AND source>? AND source<?)",
+			// A path's holders and its values: counting, bounding and reading them in full.
 			"SEARCH s USING COVERING INDEX settings_by_path (file=? AND path=?)",
-			"SEARCH s USING INDEX sqlite_autoindex_settings_1 (source=?)",
-			// A rare key's own values, by the source's key.
+			"SEARCH s USING COVERING INDEX settings_by_path (file=? AND path=?)",
+			"SEARCH s USING COVERING INDEX settings_by_path (file=? AND path=?)",
+			// A rare key's own values.
+			"SEARCH s USING INDEX sqlite_autoindex_settings_1 (source=? AND file=?)",
 			"SEARCH s USING INDEX sqlite_autoindex_settings_1 (source=?)",
 		]);
 	});

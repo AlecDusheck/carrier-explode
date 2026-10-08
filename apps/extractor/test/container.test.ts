@@ -8,16 +8,18 @@ vi.mock("cloudflare:workers", () => ({ WorkflowEntrypoint: Object }));
 vi.mock("cloudflare:workflows", () => ({ NonRetryableError: class extends Error {} }));
 vi.mock("@cloudflare/containers", () => ({ Container: Object }));
 
-const { Extractor, JOB_DEADLINE_MS, SLEEP_AFTER } = await import("../src/container.ts");
+const { Extractor, SLEEP_AFTER } = await import("../src/container.ts");
 const { containerName } = await import("../src/unit.ts");
 
 const job: ContainerJob = { job: "galaxy.ap", params: {} };
+const DEADLINE_MS = 60_000;
 
 /** A container whose job server takes `answer` to reply, recording what was asked of it. */
 function fakeContainer(answer: (signal: AbortSignal | null | undefined) => Promise<Response>) {
 	const calls: string[] = [];
 	return {
 		calls,
+		env: { CONTAINER_LIMITS: { readyMs: 1000, jobDeadlineMs: DEADLINE_MS } },
 		startAndWaitForPorts: async () => {
 			calls.push("start");
 		},
@@ -60,7 +62,7 @@ describe("a container job", () => {
 			() => "answered",
 			(e: unknown) => (e instanceof Error ? e.message : String(e)),
 		);
-		await vi.advanceTimersByTimeAsync(JOB_DEADLINE_MS - 1);
+		await vi.advanceTimersByTimeAsync(DEADLINE_MS - 1);
 		expect(c.calls).toEqual(["start", "fetch"]);
 		await vi.advanceTimersByTimeAsync(1);
 		expect(await settled).toMatch(/no answer within/);

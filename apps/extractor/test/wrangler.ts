@@ -5,6 +5,8 @@ import { fileURLToPath } from "node:url";
 import * as v from "valibot";
 import { experimental_readRawConfig } from "wrangler";
 
+import { tuningSchema } from "../src/env.ts";
+
 /** The index and bucket an environment binds: local state is keyed by their ids, so the readers must bind the extractor's. */
 const storageSchema = {
 	d1_databases: v.tuple([v.object({ database_name: v.string(), database_id: v.string() })]),
@@ -16,7 +18,7 @@ const envSchema = v.object({
 	name: v.string(),
 	...storageSchema,
 	workflows: v.array(v.object({ binding: v.string(), name: v.string() })),
-	ai: v.exactOptional(v.object({ binding: v.literal("AI") })),
+	ai: v.object({ binding: v.literal("AI") }),
 	triggers: v.object({ crons: v.array(v.string()) }),
 	containers: v.tuple([v.object({ max_instances: v.number() })]),
 	durable_objects: v.object({ bindings: v.array(v.object({ name: v.string(), class_name: v.string() })) }),
@@ -43,6 +45,9 @@ const read = (path: string): unknown =>
 	experimental_readRawConfig({ config: fileURLToPath(new URL(path, import.meta.url)) }).rawConfig;
 
 export const wrangler = v.parse(wranglerSchema, read("../wrangler.jsonc"));
+
+/** Production's vars, which the index tests run with. */
+export const productionTuning = v.parse(tuningSchema, wrangler.env.production.vars);
 
 /** The site's and the API's dev environments, which read what the extractor's writes. */
 const readerSchema = v.object({

@@ -11,7 +11,6 @@ import { NonRetryableError } from "cloudflare:workflows";
 import { indexDb, type IndexDb } from "@carrier-explode/db";
 import { keys, putJson, type OtaFeed, type OtaPointer } from "@carrier-explode/storage";
 import type { ContainerJob } from "./container-protocol.ts";
-import { JOB_DEADLINE_MS } from "./container.ts";
 import type { Env } from "./env.ts";
 import { describe, permanent } from "./errors.ts";
 import { otaMessages, type IndexMessage } from "./indexing.ts";
@@ -19,30 +18,30 @@ import { normalizeRun, type Pending } from "./normalize.ts";
 import { queueIndex } from "./queues.ts";
 import type { Scope } from "./scope.ts";
 
-/** Fetch, R2 and D1 failures. */
-export const STEP: WorkflowStepConfig = {
-	retries: { limit: 3, delay: "10 seconds", backoff: "exponential" },
-	timeout: "30 minutes",
-};
+type StepEnv = Pick<Env, "STEP_RETRIES" | "STEP_TIMEOUT_MS">;
 
-/** A container killed or disconnected, a bucket request lost or the job's deadline passed: one more run, in a fresh container. */
-const CONTAINER_STEP: WorkflowStepConfig = {
-	retries: { limit: 2, delay: "10 seconds", backoff: "exponential" },
+/** A container killed or disconnected, a bucket request lost or the job's deadline passed: another run, in a fresh container. */
+const containerStepConfig = (env: StepEnv & Pick<Env, "CONTAINER_LIMITS">): WorkflowStepConfig => ({
+	retries: { limit: env.STEP_RETRIES.container, delay: env.STEP_RETRIES.delayMs, backoff: "exponential" },
 	// Past the job's own deadline, so the container is destroyed before the step gives up on it.
-	timeout: JOB_DEADLINE_MS + 60_000,
-};
+	timeout: env.CONTAINER_LIMITS.jobDeadlineMs + 60_000,
+});
 
 /** The container of one attempt at one step: a retry never posts a second job into a container still running the first. */
 export const containerName = (instance: string, step: string, attempt: number): string =>
 	`${instance}:${step}:${attempt}`;
 
-/** `step.do`, with a permanent failure made a NonRetryableError. */
+/** `step.do`, retried through fetch, R2 and D1 failures, with a permanent failure made a NonRetryableError. */
 export function doStep<T extends Rpc.Serializable<T>>(
 	step: WorkflowStep,
 	name: string,
-	config: WorkflowStepConfig,
+	env: StepEnv,
 	run: () => Promise<T>,
 ): Promise<T> {
+	const config: WorkflowStepConfig = {
+		retries: { limit: env.STEP_RETRIES.step, delay: env.STEP_RETRIES.delayMs, backoff: "exponential" },
+		timeout: env.STEP_TIMEOUT_MS,
+	};
 	return step.do(name, config, async () => {
 		try {
 			return await run();
@@ -70,7 +69,7 @@ export interface UnitRun {
 
 /** One container job, awaited in one step, to its output as JSON text. */
 export function containerStep(r: UnitRun, name: string, job: ContainerJob): Promise<string> {
-	return r.step.do(name, CONTAINER_STEP, async (ctx) => {
+	return r.step.do(name, containerStepConfig(r.env), async (ctx) => {
 		const answer = await r.env.EXTRACTOR.getByName(containerName(r.unit.instance, name, ctx.attempt)).run(
 			job,
 		);
@@ -83,7 +82,7 @@ export function containerStep(r: UnitRun, name: string, job: ContainerJob): Prom
 /** A pending list normalized, one step per run of it. */
 export async function normalizeSteps(r: UnitRun, name: string, pending: Pending): Promise<void> {
 	for (const run of pending.batches)
-		await doStep(r.step, `${name} ${run[0]}-${run[1]}`, STEP, () =>
+		await doStep(r.step, `${name} ${run[0]}-${run[1]}`, r.env, () =>
 			normalizeRun(r.unit.bucket, pending.key, run),
 		);
 }
@@ -94,7 +93,7 @@ export function finish(
 	name: string,
 	write: () => Promise<readonly IndexMessage[]>,
 ): Promise<IndexMessage[]> {
-	return doStep(r.step, name, STEP, async () => {
+	return doStep(r.step, name, r.env, async () => {
 		const messages = [...(await write())];
 		await queueIndex(r.env, messages);
 		return messages;
@@ -116,13 +115,13 @@ export async function otaSnapshot(
 	sha1: string,
 	steps: OtaSteps,
 ): Promise<IndexMessage[]> {
-	const urls = await doStep(r.step, "plan", STEP, async () => [...(await steps.plan(r.unit))]);
+	const urls = await doStep(r.step, "plan", r.env, async () => [...(await steps.plan(r.unit))]);
 	const held: string[] = [];
 	for (const url of urls)
-		if (await doStep(r.step, `file ${url}`, STEP, () => steps.file(url, r.unit))) held.push(url);
+		if (await doStep(r.step, `file ${url}`, r.env, () => steps.file(url, r.unit))) held.push(url);
 	return finish(r, "pointer", async () => {
 		await putJson(r.env.BUCKET, keys.otaCurrent(feed), { sha1 } satisfies OtaPointer);
-		return [...steps.first, ...otaMessages(feed, held)];
+		return [...steps.first, ...otaMessages(feed, held, r.env.INDEX_BATCH.otaFiles)];
 	});
 }
 

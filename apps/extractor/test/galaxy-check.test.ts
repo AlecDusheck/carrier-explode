@@ -2,13 +2,14 @@ import { describe, expect, it } from "vitest";
 
 import { galaxyPhones } from "../src/galaxy/phones.ts";
 import { fusVersion } from "../src/galaxy/plan.ts";
+import { salesCodesToAsk } from "../src/galaxy/sales-codes.ts";
 import { SCOPE } from "./scope.ts";
 
 const csv = (...rows: string[]): string =>
 	["Retail Branding,Marketing Name,Device,Model", ...rows, ""].join("\r\n");
 
 describe("Google Play's device list", () => {
-	it("reads US Samsung models on a scoped family, by name, never by codename", () => {
+	it("reads every regional Samsung model on a scoped family, by name, never by codename", () => {
 		const phones = galaxyPhones(
 			csv(
 				'"Samsung","Galaxy S26","m1q","SM-S942U"',
@@ -26,6 +27,7 @@ describe("Google Play's device list", () => {
 		expect(phones).toEqual([
 			{ model: "SM-S942U", line: { family: "Galaxy S", generation: 26 } },
 			{ model: "SM-S942U1", line: { family: "Galaxy S", generation: 26 } },
+			{ model: "SM-S942B", line: { family: "Galaxy S", generation: 26 } },
 			{ model: "SM-G977U", line: { family: "Galaxy S", generation: 10 } },
 			{ model: "SM-F776U1", line: { family: "Galaxy Z Flip", generation: 8 } },
 		]);
@@ -46,5 +48,30 @@ describe("version.xml", () => {
 			"X200XXU1AYA1/X200OXM1AYA1/X200XXU1AYA1/X200XXU1AYA1",
 		);
 		expect(fusVersion("nonsense")).toBeUndefined();
+	});
+});
+
+describe("sales codes", () => {
+	const codes = ["EUX", "INS", "ZTO", "PEO", "KOO", "ATT"];
+
+	it("asks every code before any answer", () => {
+		expect(salesCodesToAsk(codes, {}, "2026-10-07")).toEqual(codes);
+	});
+
+	it("asks each package under its first code, and a refusal again only after 30 days", () => {
+		const answers = {
+			EUX: { package: "OXM" },
+			INS: { package: "OXM" },
+			ZTO: { package: "OWO" },
+			PEO: { package: "OWB" },
+			KOO: { refused: "2026-09-08" },
+			ATT: { refused: "2026-09-07" },
+		};
+		expect(salesCodesToAsk(codes, answers, "2026-10-07")).toEqual(["EUX", "ZTO", "PEO", "ATT"]);
+	});
+
+	it("asks a package's next code once its first refuses", () => {
+		const answers = { EUX: { refused: "2026-10-07" }, INS: { package: "OXM" } };
+		expect(salesCodesToAsk(["EUX", "INS"], answers, "2026-10-07")).toEqual(["INS"]);
 	});
 });

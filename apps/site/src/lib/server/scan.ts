@@ -15,9 +15,18 @@ import { canonical } from "@carrier-explode/values";
 import type { Json, Platform, SourceKey, SourceKind } from "@carrier-explode/schema/types";
 import type { ScanScope } from "#lib/ui-state.svelte.ts";
 import type { Ver } from "#lib/types.ts";
+import { cached } from "./cache";
 import { resolve } from "./catalog";
-import { db } from "./db";
-import { getCarriers, getCountryCarriers, getList, type ChipEntry, type ListEntry } from "./lists";
+import { db, indexVersion } from "./db";
+import {
+	chipEntries,
+	chipOf,
+	getCarriers,
+	getCountryCarriers,
+	getList,
+	type ChipEntry,
+	type ListEntry,
+} from "./lists";
 
 interface Match {
 	/** The leaf as its file states it: `apns[0].apn`. */
@@ -96,7 +105,7 @@ export function tally(
 	const hits = sources.map((s): ScanHit => {
 		const read = bySource.get(s.key);
 		return {
-			source: { key: s.key, path: s.path, brand: s.brand, picture: s.picture, tag: s.tag, name: s.name },
+			source: { ...chipOf(s), name: s.name },
 			version: read?.version ?? null,
 			held: read?.held ?? "absent",
 			matches: (read?.leaves ?? []).map((l) => ({ path: l.key, value: v.parse(leafValue, l.value) })),
@@ -164,16 +173,28 @@ export async function settingSummary(
 	};
 }
 
+/** A rare setting, the other sources holding it as their chips show them. */
+export type RareRow = Omit<RareSetting, "with"> & { readonly with: readonly ChipEntry[] };
+
 /** Rarity is judged among heads, so only a source's head version has it. */
-export type Rare = { readonly head: true; readonly rows: readonly RareSetting[] } | { readonly head: false };
+export type Rare =
+	| { readonly state: "judged"; readonly rows: readonly RareRow[] }
+	| { readonly state: "notHead" };
 
 /** A version's settings in its main file that at most a few other sources of its platform and kind share. */
 export async function getRare(at: Ver): Promise<Rare> {
 	const r = await resolve(at);
-	if (r.entry.sha !== r.source.headSha) return { head: false };
+	if (r.entry.sha !== r.source.headSha) return { state: "notHead" };
 	const { platform, kind } = r.ref;
+	const rows = await cached(`rare:v1:${r.key}:${await indexVersion()}`, async () =>
+		rareSettings(await db(), r.key, { platform, kind }, rarityFile(platform), RARITY),
+	);
+	const chips = new Map(
+		(await chipEntries([...new Set(rows.flatMap((row) => row.with))])).map((c) => [c.key, c]),
+	);
 	return {
-		head: true,
-		rows: await rareSettings(await db(), r.key, { platform, kind }, rarityFile(platform), RARITY),
+		state: "judged",
+		// oxlint-disable-next-line oxc/no-map-spread -- the rows are the cache's; assigning to them would change it.
+		rows: rows.map((row) => ({ ...row, with: row.with.flatMap((k) => chips.get(k) ?? []) })),
 	};
 }

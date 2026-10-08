@@ -54,7 +54,7 @@ A profile's SIMs are the rules its own file states: an iOS bundle's `SupportedSI
 | `apple.bbfw`, `apple.ftab` | `obj/<sha256>` | nothing                                                        |          |
 | `android.carrier-list`     | `obj/<sha256>` | nothing; its rules become `routes` rows                        |          |
 
-An artifact is stored once under the SHA-256 of its bytes, and its profile at `norm/v7/<sha>.json`, read from those bytes alone (7 is `PROFILE_SCHEMA`). When the profile's shape changes, the schema number is raised and a reindex reads every held artifact again into the new `norm/` prefix.
+An artifact is stored once under the SHA-256 of its bytes, and its profile at `norm/v8/<sha>.json`, read from those bytes alone (8 is `PROFILE_SCHEMA`; modem configurations have their own `MODEM_SCHEMA`). When the profile's shape changes, the schema number is raised and a reindex reads every held artifact again into the new `norm/` prefix.
 
 A bundle copied out of an iOS image is packed into an `.ipcc` deterministically, so identical copies from two IPSWs are one artifact.
 

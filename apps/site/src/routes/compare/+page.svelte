@@ -13,7 +13,7 @@
   import PhonePicker from "#lib/components/PhonePicker.svelte";
   import Picker from "#lib/components/Picker.svelte";
   import { COMPARE_VIEWS, nativeView } from "#lib/components/views.ts";
-  import { fileChoices, pickPhoneRows, type PhoneRow } from "#lib/apple/phones.ts";
+  import { fileChoices, pickPhoneRows, rowKey, type PhoneRow } from "#lib/apple/phones.ts";
   import { suggestedFirst, suggestions } from "#lib/counterparts.ts";
 
   const sp = $derived(page.url.searchParams);
@@ -92,13 +92,13 @@
           <VersionPicker
             timeline={head.timeline}
             current={head.entry.slug}
-            head={head.head}
+            shipping={head.current}
             href={(slug) => withParams(page.url, { [`${key}v`]: slug })}
           />
           <PhonePicker
             platform={head.ref.platform}
             choices={fileChoices(phones.rows, (file) => withParams(page.url, { [`${key}p`]: file }))}
-            selected={phones.picked?.path}
+            selected={phones.picked && rowKey(phones.picked)}
           />
         </Pane>
       {:else if sp.get(key)}
@@ -136,7 +136,7 @@
       {#if a && b}
         <Pane awaiting={{ kind: "diff", name: `${sourceOf(a.source).name}, ${sourceOf(b.source).name}` }}>
           {@const { a: pa, b: pb } = await sidesPhones(a, b, sp.get("ap"), sp.get("bp"))}
-          {@const seenBy = (s: typeof a, p: typeof pa) => (p.picked ? { ...s, variant: p.picked.path } : s)}
+          {@const seenBy = (s: typeof a, p: typeof pa) => (p.picked?.kind === "file" ? { ...s, variant: p.picked.path } : s)}
           {@const cmp = await getComparison({ a: seenBy(a, pa), b: seenBy(b, pb), ...(file ? { path: file } : {}) })}
           {#if cmp.by === "concepts"}
             <ConceptCompare comparison={cmp.comparison} left={sideName(cmp.a)} right={sideName(cmp.b)} />

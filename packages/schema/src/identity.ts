@@ -205,11 +205,21 @@ function best(row: ReadonlyMap<SourceKey, number> | undefined): Set<SourceKey> {
 
 /**
  * Per other platform, the one best match when it is mutual or covers at least half of the chooser's rules. A tie links
- * nothing: rules several sources share (a host network's, a partner's) do not say which carrier a source is.
+ * nothing: rules several sources share (a host network's, a partner's) do not say which carrier a source is. Nor does a
+ * match for under half of what either side shares with the other's platform: a Galaxy sales code that lists a host and
+ * its MVNOs is none of them.
  */
 function simEdges(members: readonly Member[]): Edge[] {
 	const shared = sharedKeys(members);
 	const bests = new Map(members.map((m) => [m.key, best(shared.get(m.key))]));
+	const byKey = new Map(members.map((m) => [m.key, m]));
+	// A source named only by its SIM rule is no operator to tell apart.
+	const claimants = new Map<string, Set<Platform>>();
+	for (const m of members.filter((x) => !isUnnamedRule(x.source, false)))
+		for (const k of m.sims) claimants.set(k, (claimants.get(k) ?? new Set()).add(m.source.platform));
+	/** How many of `m`'s rules named sources on `platform` claim. */
+	const claimedOn = (m: Member, platform: Platform): number =>
+		m.sims.filter((k) => claimants.get(k)?.has(platform) === true).length;
 	/** Whether `m` is the one best match `t` has on m's platform; one among tied bests is not. */
 	const onlyBest = (t: SourceKey, m: Member): boolean => {
 		const back = [...(bests.get(t) ?? [])].filter((k) => platformOf(k) === m.source.platform);
@@ -220,11 +230,14 @@ function simEdges(members: readonly Member[]): Edge[] {
 		const byPlatform = Map.groupBy(bests.get(m.key) ?? [], platformOf);
 		for (const candidates of byPlatform.values()) {
 			const [t, ...tied] = candidates;
-			if (t === undefined || tied.length > 0) continue;
-			const n = shared.get(m.key)?.get(t) ?? 0;
-			if (!onlyBest(t, m) && n * 2 < m.sims.length) continue;
-			if (!edges.has(pairKey(m.key, t)))
-				edges.set(pairKey(m.key, t), { kind: "sims", between: [m.key, t], shared: n });
+			const match = t === undefined ? undefined : byKey.get(t);
+			if (match === undefined || tied.length > 0) continue;
+			const n = shared.get(m.key)?.get(match.key) ?? 0;
+			if (!onlyBest(match.key, m) && n * 2 < m.sims.length) continue;
+			if (n * 2 < claimedOn(match, m.source.platform) || n * 2 < claimedOn(m, match.source.platform))
+				continue;
+			if (!edges.has(pairKey(m.key, match.key)))
+				edges.set(pairKey(m.key, match.key), { kind: "sims", between: [m.key, match.key], shared: n });
 		}
 	}
 	return [...edges.values()];

@@ -14,7 +14,8 @@ Every key is spelled in `packages/storage/src/keys.ts`.
 | Key                                     | What                                                                                  | Written                   |
 | --------------------------------------- | ------------------------------------------------------------------------------------- | ------------------------- |
 | `obj/<sha256>`                          | an artifact's bytes: a bundle, a `.pb` file, a pack, a modem package or configuration | once                      |
-| `norm/v7/<sha>.json`                    | a [profile](/wiki/pipeline/profiles) or a modem configuration                         | once per `PROFILE_SCHEMA` |
+| `norm/v8/<sha>.json`                    | a [profile](/wiki/pipeline/profiles)                                                  | once per `PROFILE_SCHEMA` |
+| `norm/v7/<sha>.json`                    | a modem configuration                                                                 | once per `MODEM_SCHEMA`   |
 | `norm/v7/combos/<key>.json`             | a band-combination list                                                               | once                      |
 | `decoded/baseband/v<n>/<sha>.json`      | an iOS modem package's summary                                                        | once                      |
 | `releases/<platform>/…json`             | a unit's release record: `ios/24A446.json`, `android/CP3A.260905.009/tokay.json`      | last, by its unit         |
@@ -60,7 +61,7 @@ An edge answer may also be served stale for a day while it is fetched again.
 
 Every cached answer carries one cache tag, `index`. When an index message writes anything, it queues a purge; the purge queue gathers up to 100 messages or 30 seconds and sends one purge of `index` to each reader.
 
-An API answer also carries an `ETag`, so a repeat request can be a `304`. Requests that miss the cache are limited per IP address ([API § Rate limits](/wiki/api#rate-limits)).
+An API answer also carries an `ETag`, so a repeat request can be a `304`. Requests are limited per IP address ([API § Rate limits](/wiki/api#rate-limits)).
 
 ## See also
 

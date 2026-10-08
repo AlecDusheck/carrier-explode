@@ -54,10 +54,9 @@ describe("compareProfiles", () => {
 				apn: "fast.example",
 				types: ["default", "mms"],
 				protocol: "ipv6",
-				hasPassword: false,
 				path: "carrier.plist:apns[0]",
 			},
-			{ apn: "ims", types: ["ims"], protocol: "ipv6", hasPassword: false, path: "carrier.plist:apns[1]" },
+			{ apn: "ims", types: ["ims"], protocol: "ipv6", path: "carrier.plist:apns[1]" },
 		],
 	);
 	const b = profile(
@@ -77,7 +76,6 @@ describe("compareProfiles", () => {
 				types: ["mms", "default"],
 				protocol: "ipv4v6",
 				mtu: 1440,
-				hasPassword: false,
 				path: "apns[0]",
 			},
 			{
@@ -85,10 +83,9 @@ describe("compareProfiles", () => {
 				types: ["ims", "xcap"],
 				protocol: "ipv6",
 				auth: "chap",
-				hasPassword: false,
 				path: "apns[1]",
 			},
-			{ apn: "sos", types: ["emergency"], hasPassword: false, path: "apns[2]" },
+			{ apn: "sos", types: ["emergency"], path: "apns[2]" },
 		],
 	);
 	const c = compareProfiles(a, b);

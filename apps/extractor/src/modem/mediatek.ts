@@ -8,7 +8,6 @@ import {
 	bundleItemTable,
 	decodeNwOta,
 	decodeOpOta,
-	sbpOperator,
 	shapesFor,
 	type ItemTable,
 	type McfItemRecord,
@@ -44,9 +43,6 @@ function plmns(records: readonly McfItemRecord[]): SbpPlmn[] {
 	return [...byKey].toSorted(([a], [b]) => compareUtf8(a, b)).map(([, p]) => p);
 }
 
-const sbpLabel = (id: number, operator: string | null): string =>
-	operator === null ? `SBP ${id}` : `SBP ${id} (${operator})`;
-
 /** The inflated bundle outgrows a step: only its leading md1rom segment is read and held. */
 async function itemTable(modem: Filesystem, label: string): Promise<ItemTable> {
 	return bundleItemTable(gunzipped(modem.readStream(`images/${label}/md/modem-bundle.img.gz`)));
@@ -69,10 +65,9 @@ export async function mediatekModem(images: ModemImages): Promise<ExtractedModem
 	for (const { name, id } of ops) {
 		const op = await images.modem.readFile(`${dir}/${name}`);
 		const opRecords = decodeOpOta(op).records;
-		const operator = sbpOperator(id)?.name ?? null;
 		const files = new Map<string, Uint8Array>([
 			["op.mcfopota", op],
-			["sbp.json", jsonBytes({ id, operator, plmns: plmns(opRecords) })],
+			["sbp.json", jsonBytes({ id, plmns: plmns(opRecords) })],
 		]);
 		let nwRecords: readonly McfItemRecord[] = [];
 		if (names.has(nwOtaName(id))) {
@@ -81,7 +76,7 @@ export async function mediatekModem(images: ModemImages): Promise<ExtractedModem
 			files.set("nw.mcfnwota", nw);
 		}
 		files.set("items.json", jsonBytes({ build: label, ...shapesFor(table, [...opRecords, ...nwRecords]) }));
-		archives.push({ label: sbpLabel(id, operator), path: `modem/${dir}/${name}`, files: async () => files });
+		archives.push({ label: `SBP ${id}`, path: `modem/${dir}/${name}`, files: async () => files });
 	}
 	return { family: "mediatek", firmware: label, archives: uniqueLabels(archives) };
 }

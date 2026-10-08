@@ -13,7 +13,6 @@ import {
 import { RELEASE_PLATFORMS } from "@carrier-explode/schema/types";
 import { fail, router, type ApiContext, type ApiEnv } from "../context.ts";
 import { pageQuery, paged, SOURCE_KEY, STRING_KEY, windowOf } from "../page.ts";
-import { budget } from "../rate.ts";
 import { deviceDetailSchema, deviceFeaturesSchema, deviceModemsSchema, devicePageSchema } from "../shapes.ts";
 import { shippedModems } from "./builds.ts";
 import {
@@ -75,7 +74,6 @@ devices.openapi(
 		operationId: "listDevices",
 		tags: ["Devices"],
 		summary: "Every phone a feed lists: iPhones, then Pixels, then Galaxies, each newest first",
-		middleware: [budget("base")],
 		request: {
 			query: z
 				.object({
@@ -116,7 +114,6 @@ devices.openapi(
 		operationId: "getDevice",
 		tags: ["Devices"],
 		summary: "A device, with the newest build that lists it",
-		middleware: [budget("base")],
 		request: { params: ofDevice, query: NO_QUERY },
 		responses: { ...json(deviceDetailSchema, "The device."), ...ERRORS },
 	}),
@@ -142,7 +139,6 @@ devices.openapi(
 		tags: ["Devices"],
 		summary:
 			"Each carrier source's feature states on one phone: on, available (a switch, or per plan), or no",
-		middleware: [budget("base")],
 		request: { params: ofDevice, query: z.object(pageQuery).strict() },
 		responses: {
 			...json(
@@ -176,7 +172,6 @@ devices.openapi(
 		tags: ["Devices"],
 		summary:
 			"The modems a device's build ships for it: an iPhone's baseband packages, a Pixel's or Galaxy's firmware and its carrier configurations",
-		middleware: [budget("base")],
 		request: {
 			params: ofDevice,
 			query: z

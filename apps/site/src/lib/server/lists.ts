@@ -25,8 +25,9 @@ import { keyRules, type SelectionRule } from "#lib/settings.ts";
 import { OTHER_RULES } from "#lib/android/naming.ts";
 import { repeated } from "#lib/names.ts";
 import type { Picture } from "#lib/types.ts";
-import { perRequest } from "./cache";
-import { db, everyPage } from "./db";
+import { sha256Hex } from "@carrier-explode/binary";
+import { cached, perRequest } from "./cache";
+import { db, everyPage, indexVersion } from "./db";
 import { brandOf, pictureOf } from "./pictures";
 
 /** A row of a list: what the pane shows and links to. */
@@ -55,37 +56,35 @@ export interface ListEntry extends ListRow {
 export type ChipEntry = Pick<ListEntry, "key" | "path" | "brand" | "picture" | "tag">;
 
 /** One platform's sources of one kind, by name. */
-const sourcesOf = perRequest(async (platform: Platform, kind: SourceKind): Promise<ListedSource[]> => {
+async function sourcesOf(platform: Platform, kind: SourceKind): Promise<ListedSource[]> {
 	const d = await db();
 	return everyPage(
 		(page: Page<string>) => sourceList(d, platform, kind, page),
 		(s) => s.name,
 	);
-});
+}
 
-export const carriers = perRequest(async (): Promise<ShownCarrier[]> => {
-	const d = await db();
-	return everyPage(
-		(page: Page<string>) => carrierList(d, page),
-		(c) => c.id,
-	);
-});
+export const carriers = perRequest(async (): Promise<ShownCarrier[]> =>
+	cached(`carriers:v1:${await indexVersion()}`, async () => {
+		const d = await db();
+		return everyPage(
+			(page: Page<string>) => carrierList(d, page),
+			(c) => c.id,
+		);
+	}),
+);
 
 type Untagged = Omit<ListEntry, "tag">;
 
 function entryOf(s: ListedSource): Untagged {
 	const ref = sourceOf(s.key);
-	const pictured =
-		s.carrier === null || s.carrierName === null
-			? null
-			: { id: s.carrier, name: s.carrierName, members: s.members };
 	return {
 		key: s.key,
 		path: sourcePath(ref),
 		platform: s.platform,
 		name: s.name,
 		brand: brandOf(ref, s.carrierName, s.cc),
-		picture: pictureOf(ref, pictured, s.cc),
+		picture: pictureOf(ref, s),
 		cc: s.cc ?? undefined,
 		updated: s.updated,
 		ruleOnly: isUnnamedRule(ref, s.carrierNamed),
@@ -106,7 +105,9 @@ function tagged(entries: readonly Untagged[]): ListEntry[] {
 }
 
 export const getList = perRequest(async (platform: Platform, kind: SourceKind): Promise<ListEntry[]> =>
-	tagged((await sourcesOf(platform, kind)).map(entryOf)),
+	cached(`list:v1:${platform}:${kind}:${await indexVersion()}`, async () =>
+		tagged((await sourcesOf(platform, kind)).map(entryOf)),
+	),
 );
 
 /** One platform's carriers: its carrier sources, those named only by a SIM rule left out. */
@@ -136,16 +137,21 @@ async function othersRow(platform: Platform): Promise<ListRow[]> {
 /** A source named only by a SIM rule, with the rules the routing sends it. */
 export type RuleSource = ListEntry & { readonly rules: readonly SelectionRule[] };
 
-const ruleSources = perRequest(async (platform: Platform): Promise<RuleSource[]> => {
-	const [list, routed] = await Promise.all([
-		getList(platform, "carrier"),
-		db().then((d) => platformRoutes(d, platform)),
-	]);
-	const bySource = Map.groupBy(routed, (r) => r.source);
-	const ruleOnly = list.filter((e) => e.ruleOnly);
-	// oxlint-disable-next-line oxc/no-map-spread -- the entries are the request cache's; assigning to them would change it.
-	return ruleOnly.map((e) => ({ ...e, rules: keyRules((bySource.get(e.key) ?? []).map((r) => r.matcher)) }));
-});
+const ruleSources = perRequest(async (platform: Platform): Promise<RuleSource[]> =>
+	cached(`rule-sources:v1:${platform}:${await indexVersion()}`, async () => {
+		const [list, routed] = await Promise.all([
+			getList(platform, "carrier"),
+			db().then((d) => platformRoutes(d, platform)),
+		]);
+		const bySource = Map.groupBy(routed, (r) => r.source);
+		const ruleOnly = list.filter((e) => e.ruleOnly);
+		// oxlint-disable-next-line oxc/no-map-spread -- the entries are the request cache's; assigning to them would change it.
+		return ruleOnly.map((e) => ({
+			...e,
+			rules: keyRules((bySource.get(e.key) ?? []).map((r) => r.matcher)),
+		}));
+	}),
+);
 
 /** A platform's sources named only by a SIM rule, in `iso` when given, each with its routed rules. */
 export const getRuleSources = async (platform: Platform, iso: string | null): Promise<RuleSource[]> =>
@@ -181,40 +187,66 @@ export const getCountryCarriers = perRequest(async (platform: Platform, iso: str
 		.toSorted((a, b) => a.brand.localeCompare(b.brand) || a.name.localeCompare(b.name)),
 );
 
-/** The entries of `keys` the index has, as their lists tag them. */
+/** The entries of `keys` the index has, as their lists tag them; cached by the set, so a page reads its few entries and not their whole lists. */
 export async function listEntries(keys: readonly SourceKey[]): Promise<ReadonlyMap<SourceKey, ListEntry>> {
-	const lists = Map.groupBy(keys.map(sourceOf), (r) => `${r.platform}:${r.kind}`);
-	const held = await Promise.all(
-		[...lists.values()].flatMap(([r]) => (r === undefined ? [] : [getList(r.platform, r.kind)])),
-	);
-	const wanted = new Set(keys);
-	return new Map(held.flat().flatMap((e) => (wanted.has(e.key) ? [[e.key, e] as const] : [])));
+	const wanted = [...new Set(keys)].toSorted();
+	const set = await sha256Hex(new TextEncoder().encode(wanted.join("\n")));
+	const held = await cached(`list-entries:v1:${set}:${await indexVersion()}`, async () => {
+		const lists = Map.groupBy(wanted.map(sourceOf), (r) => `${r.platform}:${r.kind}`);
+		const all = await Promise.all(
+			[...lists.values()].flatMap(([r]) => (r === undefined ? [] : [getList(r.platform, r.kind)])),
+		);
+		const asked = new Set(wanted);
+		return all.flat().filter((e) => asked.has(e.key));
+	});
+	return new Map(held.map((e) => [e.key, e]));
+}
+
+export const chipOf = (e: ListEntry): ChipEntry => ({
+	key: e.key,
+	path: e.path,
+	brand: e.brand,
+	picture: e.picture,
+	tag: e.tag,
+});
+
+/** The chips of `keys` the index has, in their order. */
+export async function chipEntries(keys: readonly SourceKey[]): Promise<ChipEntry[]> {
+	const entries = await listEntries(keys);
+	return keys.flatMap((k) => {
+		const e = entries.get(k);
+		return e === undefined ? [] : [chipOf(e)];
+	});
 }
 
 /** Each list that has entries. */
 const kindsHeld = perRequest(
-	async (): Promise<Array<{ readonly platform: Platform; readonly kind: SourceKind }>> => {
-		const d = await db();
-		const lists = PLATFORMS.flatMap((platform) =>
-			SOURCE_KINDS.filter((kind) => shipsKind(platform, kind)).map((kind) => ({ platform, kind })),
-		);
-		const held = await Promise.all(
-			lists.map(async (l) => (await sourceList(d, l.platform, l.kind, { after: null, take: 1 })).length > 0),
-		);
-		return lists.filter((_, i) => held[i]);
-	},
+	async (): Promise<Array<{ readonly platform: Platform; readonly kind: SourceKind }>> =>
+		cached(`lists:v1:${await indexVersion()}`, async () => {
+			const d = await db();
+			const lists = PLATFORMS.flatMap((platform) =>
+				SOURCE_KINDS.filter((kind) => shipsKind(platform, kind)).map((kind) => ({ platform, kind })),
+			);
+			const held = await Promise.all(
+				lists.map(
+					async (l) => (await sourceList(d, l.platform, l.kind, { after: null, take: 1 })).length > 0,
+				),
+			);
+			return lists.filter((_, i) => held[i]);
+		}),
 );
 
-export const allSourceKeys = perRequest(async (): Promise<SourceKey[]> =>
-	(await Promise.all((await kindsHeld()).map((l) => sourcesOf(l.platform, l.kind)))).flat().map((s) => s.key),
-);
+const allEntries = async (): Promise<ListEntry[]> =>
+	(await Promise.all((await kindsHeld()).map((l) => getList(l.platform, l.kind)))).flat();
+
+export const allSourceKeys = async (): Promise<SourceKey[]> => (await allEntries()).map((e) => e.key);
 
 /** Every source with its carrier's name, by key. */
 export const allSourceBrands = perRequest(
 	async (): Promise<Array<{ readonly key: SourceKey; readonly brand: string }>> =>
-		(await Promise.all((await kindsHeld()).map((l) => getList(l.platform, l.kind))))
-			.flat()
-			.map((e) => ({ key: e.key, brand: e.brand })),
+		cached(`source-brands:v1:${await indexVersion()}`, async () =>
+			(await allEntries()).map((e) => ({ key: e.key, brand: e.brand })),
+		),
 );
 
 /** The platforms each kind of list has entries on; a platform with carriers but no country files lists its carriers' countries. */

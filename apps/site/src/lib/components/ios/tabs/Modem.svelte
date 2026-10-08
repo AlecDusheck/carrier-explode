@@ -4,7 +4,7 @@
   import { getBundleOverrides } from "#lib/api/apple.remote.ts";
   import { modemCapabilities } from "@carrier-explode/decode-ios";
   import { modemHref, rawHref, verArgs } from "#lib/format.ts";
-  import { phoneList, pickPhoneRow } from "#lib/apple/phones.ts";
+  import { phoneList, pickPhoneRow, rowKey } from "#lib/apple/phones.ts";
   import { APPLE_DOCS } from "#lib/apple/tree-docs.ts";
   import { sourceKey } from "@carrier-explode/schema/types";
   import type { TabProps } from "#lib/types.ts";
@@ -23,20 +23,19 @@
   const sel = $derived(picked.row);
   const phone = $derived(sel?.phones[0]);
   const caps = $derived(phone?.family ? modemCapabilities(phone.family.code) : undefined);
-  const config = $derived(sel ? await getAppleModemConfig({ ...args, path: sel.path }) : null);
+  const config = $derived(sel?.kind === "file" ? await getAppleModemConfig({ ...args, path: sel.path }) : null);
 </script>
 
 {#if !rows.length}
   <p class="dimtext note">No modem override files: every phone runs its modem's defaults with this bundle.</p>
 {/if}
 {#if picked.missing}
-  <div class="banner">No phone reads <span class="mono">{picked.missing}</span> in this version; showing {sel?.phones.length ? phoneList(sel.phones) : sel?.path} instead.</div>
-{/if}
-{#if ov?.defaults.length}
-  <p class="dimtext note">No modem file for {phoneList(ov.defaults)}: they run the modem's defaults.</p>
+  <div class="banner">No phone reads <span class="mono">{picked.missing}</span> in this version; showing {sel?.phones.length ? phoneList(sel.phones) : sel && rowKey(sel)} instead.</div>
 {/if}
 
-{#if sel}
+{#if sel?.kind === "defaults"}
+  <p class="dimtext note">No modem override file for {phoneList(sel.phones)}: {sel.phones.length > 1 ? "they run their" : "it runs its"} modem's defaults.</p>
+{:else if sel}
   <!-- The file's own sections follow at the top level; its name heads them rather than boxing them. -->
   <p class="note">
     <b class="mono">{sel.path}</b>
@@ -60,7 +59,7 @@
       devices={false}
     />
   {/if}
-  {#if at.ref.kind === "carrier" && phone && caps?.plaintextDefaults}
-    <ModemDefaults {at} device={phone.code} phone={phoneList(sel.phones)} />
-  {/if}
+{/if}
+{#if sel && at.ref.kind === "carrier" && phone && caps?.plaintextDefaults}
+  <ModemDefaults {at} device={phone.code} phone={phoneList(sel.phones)} />
 {/if}

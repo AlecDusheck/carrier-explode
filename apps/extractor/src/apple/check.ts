@@ -19,9 +19,6 @@ const IPSW_ME = "https://api.ipsw.me/v4";
 const APPLEDB = "https://api.appledb.dev/ios/";
 const APPLEDB_DEVICES = "https://api.appledb.dev/device/main.json";
 
-/** Community-run APIs (ipsw.me, AppleDB): a few requests at a time. */
-const CATALOG_CONCURRENCY = 4;
-
 async function getJson<S extends v.GenericSchema>(url: string, schema: S): Promise<v.InferOutput<S>> {
 	const body: unknown = await (await fetchWithRetry(url)).json();
 	return v.parse(schema, body);
@@ -208,11 +205,15 @@ export async function checkIos(
 	const phones = records.filter((d) => iosInScope(env.SCOPE, d) && listed.has(d.code)).map((d) => d.code);
 	const releases = allOrThrow(
 		"ipsw.me firmwares",
-		await fanOut(phones, CATALOG_CONCURRENCY, deviceFirmwares),
+		await fanOut(phones, env.FEED_CONCURRENCY.appleCatalogs, deviceFirmwares),
 	).flat();
 	const betas = allOrThrow(
 		"AppleDB records",
-		await fanOut(betaCandidates(await appledbKeys(), releases), CATALOG_CONCURRENCY, appledbFirmware),
+		await fanOut(
+			betaCandidates(await appledbKeys(), releases),
+			env.FEED_CONCURRENCY.appleCatalogs,
+			appledbFirmware,
+		),
 	);
 	return planIos(
 		env.SCOPE,

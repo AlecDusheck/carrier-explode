@@ -133,14 +133,14 @@ export const PRI_TAGS: Record<string, PriTagInfo> = {
 	// plaintext .pri in CW_pa: the "Maverick" dict (Carrier ID, PRI Revision) round-trips through this pair
 	"9fa711": { kind: "name", pairsWith: "9fa712", name: "Setting name (classic)", confidence: "high" },
 	"9fa712": { kind: "value", name: "Setting value (classic)", confidence: "high" },
-	// tags 6000..6003: the Intel modem dialect, kept by Apple C1
+	// tags 6000..6003: the Intel dialect
 	"9fae70": {
 		kind: "name",
 		pairsWith: "9fae71",
-		name: "Setting name (Intel / Apple C1)",
+		name: "Setting name (Intel dialect)",
 		confidence: "high",
 	},
-	"9fae71": { kind: "value", name: "Setting value (Intel / Apple C1)", confidence: "high" },
+	"9fae71": { kind: "value", name: "Setting value (Intel dialect)", confidence: "high" },
 	// role inferred from its place next to 9fa70c
 	"9fa70e": {
 		kind: "name",
@@ -161,10 +161,10 @@ export const PRI_TAGS: Record<string, PriTagInfo> = {
 	"9fae72": {
 		kind: "path",
 		pairsWith: "9fae73",
-		name: "Intel / Apple C1 setting key (%u: / %qu[N]: + NVM path)",
+		name: "Intel-dialect setting key (%u: / %qu[N]: + NVM path)",
 		confidence: "high",
 	},
-	"9fae73": { kind: "value", name: "Intel / Apple C1 setting value", confidence: "high" },
+	"9fae73": { kind: "value", name: "Intel-dialect setting value", confidence: "high" },
 	"9fa708": { kind: "nv-list", name: "Legacy NV item list (uint16 LE)", confidence: "high" },
 	"9fa709": { kind: "schema", name: "NV path schema index (MAVZ or NUL-separated)", confidence: "high" },
 	"9fa710": {
@@ -327,7 +327,7 @@ interface PriUnknown {
 	count: number;
 }
 
-/** Which modem family a PRI is written for: Qualcomm (9fa7xx tags), or Intel and its successor Apple C1 (9fae70..73). */
+/** The dialect a PRI is written in: Qualcomm (9fa7xx tags) or Intel (9fae70..73). */
 export type PriDialect = "qualcomm" | "intel" | "mixed" | "unknown";
 
 /** The member extensions a DER PRI comes under. */

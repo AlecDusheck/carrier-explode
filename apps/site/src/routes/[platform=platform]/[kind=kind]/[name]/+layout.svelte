@@ -54,7 +54,7 @@
       {@const view = viewOf(h)}
       <LinePicker head={h} href={(line) => lineHref(h.ref, line)} />
       {#if view?.versioned ?? true}
-        <VersionPicker timeline={h.timeline} current={h.entry.slug} head={h.head} href={(slug) => versionHref({ ...headAt(h), version: slug }, tab)} />
+        <VersionPicker timeline={h.timeline} current={h.entry.slug} shipping={h.current} href={(slug) => versionHref({ ...headAt(h), version: slug }, tab)} />
       {/if}
       {#if open && view?.Choice}
         <view.Choice at={headAt(h)} tab={open} />

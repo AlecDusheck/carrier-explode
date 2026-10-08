@@ -15,9 +15,15 @@ export class IosBuildWorkflow extends UnitWorkflow {
 		const build = v.parse(PIPELINES["ios-build"].params, payload);
 		const ipsws: string[] = [];
 		for (const ipsw of build.ipsws)
-			ipsws.push(await containerStep(r, `ipsw ${ipsw.device}`, ipswJob(build, ipsw, r.unit)));
+			ipsws.push(
+				await containerStep(
+					r,
+					`ipsw ${ipsw.device}`,
+					ipswJob(build, ipsw, r.unit, r.env.FEED_CONCURRENCY.ipswBundles),
+				),
+			);
 		return finish(r, "merge", async () => {
-			await merge(build, ipsws, r.unit);
+			await merge(build, ipsws, r.unit, r.env.FEED_CONCURRENCY.iosMerge);
 			return [{ kind: "release", release: { platform: "ios", id: [build.build] } }];
 		});
 	}

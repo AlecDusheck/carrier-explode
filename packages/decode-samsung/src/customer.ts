@@ -13,7 +13,7 @@ export interface CustomerProfile {
 	/** `normal` (PAP), `secure` (CHAP), `normalorsecure`, `none`. */
 	readonly auth?: string;
 	readonly user?: string;
-	readonly hasPassword: boolean;
+	readonly password?: string;
 	/** `ipv4`, `ipv6`, `ipv4v6`. */
 	readonly ipVersion?: string;
 	readonly roamingIpVersion?: string;
@@ -58,6 +58,7 @@ function profileOf(e: XmlElement, index: number): CustomerProfile {
 		auth = childText(e, "Auth");
 	const apn = ps === undefined ? undefined : childText(ps, "APN");
 	const user = ps === undefined ? undefined : childText(ps, "UserId");
+	const password = ps === undefined ? undefined : childText(ps, "Password");
 	const ipVersion = childText(e, "IpVersion"),
 		roamingIpVersion = childText(e, "RoamingIpVersion");
 	const url = childText(e, "URL"),
@@ -69,7 +70,7 @@ function profileOf(e: XmlElement, index: number): CustomerProfile {
 		...(apn === undefined ? {} : { apn }),
 		...(auth === undefined ? {} : { auth }),
 		...(user === undefined ? {} : { user }),
-		hasPassword: ps !== undefined && childText(ps, "Password") !== undefined,
+		...(password === undefined ? {} : { password }),
 		...(ipVersion === undefined ? {} : { ipVersion }),
 		...(roamingIpVersion === undefined ? {} : { roamingIpVersion }),
 		...(url === undefined ? {} : { url }),

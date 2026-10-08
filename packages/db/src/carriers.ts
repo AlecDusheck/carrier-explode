@@ -21,7 +21,7 @@ import {
 } from "@carrier-explode/schema/types";
 import { diff, every, jsonOf, qualified, run, type IndexDb, type Page } from "./db.ts";
 import { upserts } from "./sync.ts";
-import { labelled, sourceCarrierName } from "./labels.ts";
+import { labelled } from "./labels.ts";
 import {
 	carriers,
 	links,
@@ -34,7 +34,7 @@ import {
 	sources,
 } from "./schema.ts";
 
-/** A carrier's name as pages show it: a person's label on one of its sources or on it, else the data's, else a feed's or model's, else its first source's name. */
+/** A carrier's name as pages show it: a person's label on it, else the data's, else a feed's or model's, else its first source's name. */
 export const carrierName = (
 	id: SQLWrapper,
 	name: SQLWrapper,
@@ -43,7 +43,7 @@ export const carrierName = (
 
 /** A carrier's name when a label or the data gives one, before carrierName falls back to a member's file name. */
 export const givenName = (id: SQLWrapper, name: SQLWrapper): SQL<string | null> =>
-	sql<string | null>`coalesce(${sourceCarrierName(id)}, ${labelled("carrier", "name", id, name)})`;
+	labelled("carrier", "name", id, name);
 
 /** What linking reads of a source: its head's identity, the SIM rules its platform's routing sends it, and its carrier. */
 export type HeadIdentity = Parameters<typeof linkCarriers>[0][number];
@@ -213,7 +213,7 @@ const countrySchema = v.object({
 /** A country: how many carriers it has, and the country bundles that name it. */
 export type ShownCountry = v.InferOutput<typeof countrySchema>;
 
-/** The platforms that ship country bundles, so the lookup is by sources_by_list. */
+/** The platforms that ship country bundles, so the lookup is by sources_list_page. */
 const COUNTRY_PLATFORMS = PLATFORMS.filter((p) => shipsKind(p, "country"));
 
 /** Countries whose iso fits `which`, by iso, at most `take`: the carriers' and the country bundles', grouped. */
@@ -253,16 +253,18 @@ export async function countryOf(db: IndexDb, iso: string): Promise<ShownCountry 
 	return country;
 }
 
-const carrierModemSchema = v.pipe(
+const shippedModemSchema = v.pipe(
 	v.object({
 		platform: v.picklist(RELEASE_PLATFORMS),
 		release: v.string(),
 		firmware: v.string(),
+		modem: v.string(),
 		label: v.string(),
 		sha: v.string(),
 		family: v.string(),
 		familyLabel: v.nullable(v.string()),
 		devices: jsonOf(v.array(v.string())),
+		matchers: jsonOf(v.array(v.string())),
 	}),
 	v.transform(({ familyLabel, ...c }) => ({
 		...c,
@@ -270,62 +272,88 @@ const carrierModemSchema = v.pipe(
 	})),
 );
 
+/**
+ * A configuration of the firmware in a device's newest build that ships a modem, with the SIM rules that select it.
+ * `modem` tells the release's modems of one firmware apart: their devices, as the release lists them.
+ */
+export type ShippedModemConfig = v.InferOutput<typeof shippedModemSchema>;
+
 /** A modem configuration a carrier's SIMs select, with its firmware's family, named, and devices. */
-export type CarrierModemConfig = v.InferOutput<typeof carrierModemSchema>;
+export type CarrierModemConfig = Omit<ShippedModemConfig, "modem" | "matchers">;
+
+/** Every shipped configuration, by platform, firmware, label and modem: the same for every carrier, so read once for all. */
+export async function shippedModemConfigs(db: IndexDb): Promise<ShippedModemConfig[]> {
+	const rows = await db.all(sql`
+    WITH shipped AS (
+      SELECT d.platform, d.release, d.name AS firmware, d.family, d.devices AS modem, j.value AS device, r.sort_key,
+        max(r.sort_key) OVER (PARTITION BY d.platform, j.value) AS newest
+      FROM ${modems} d, json_each(d.devices) j
+      JOIN ${releases} r ON r.platform = d.platform AND r.id = d.release
+    ),
+    current AS MATERIALIZED (
+      SELECT s.platform, s.release, s.firmware, s.family, s.modem, min(s.device) AS device, json_group_array(s.device) AS devices FROM shipped s
+      WHERE s.sort_key = s.newest
+      GROUP BY s.platform, s.release, s.firmware, s.modem
+    )
+    SELECT c.platform, c.release, c.firmware, c.modem, m.label, m.sha, c.family, ${labelled("modem", "name", sql`c.family`)} AS familyLabel, c.devices,
+      (SELECT json_group_array(s.matcher) FROM ${sims} s WHERE s.sha = m.sha) AS matchers
+    FROM current c CROSS JOIN ${modemConfigs} m ON m.platform = c.platform AND m.release = c.release AND m.device = c.device
+    ORDER BY c.platform, c.firmware, m.label, c.modem`);
+	return v.parse(v.array(shippedModemSchema), rows);
+}
 
 /**
- * Configurations of the firmware in each device's newest build that ships a modem, whose selection shares a SIM rule with the carrier's heads or routes;
- * failing any, those selected by the whole of one of its MCC-MNCs.
+ * The shipped configurations whose selection shares a SIM rule with the carrier's heads or routes; failing any, those
+ * selected by the whole of one of its MCC-MNCs.
  */
-export const carrierModemConfigs = (db: IndexDb, id: string): Promise<CarrierModemConfig[]> =>
-	modemConfigsClaimed(
-		db,
-		sql`SELECT ${sims.matcher} AS matcher FROM ${sources} JOIN ${sims} ON ${sims.sha} = ${sources.headSha} WHERE ${sources.carrier} = ${id}
+export const carrierModemConfigs = async (
+	db: IndexDb,
+	id: string,
+	shipped: readonly ShippedModemConfig[],
+): Promise<CarrierModemConfig[]> =>
+	claimedBy(
+		shipped,
+		await rulesOf(
+			db,
+			sql`SELECT ${sims.matcher} AS matcher FROM ${sources} JOIN ${sims} ON ${sims.sha} = ${sources.headSha} WHERE ${sources.carrier} = ${id}
       UNION
       SELECT ${routes.matcher} FROM ${sources} JOIN ${routes} ON ${routes.source} = ${sources.key} WHERE ${sources.carrier} = ${id}`,
+		),
 	);
 
 /** carrierModemConfigs for one source's own rules: its head's and its routes', not its linked carrier's other platforms'. */
-export const sourceModemConfigs = (db: IndexDb, key: SourceKey): Promise<CarrierModemConfig[]> =>
-	modemConfigsClaimed(
-		db,
-		sql`SELECT ${sims.matcher} AS matcher FROM ${sources} JOIN ${sims} ON ${sims.sha} = ${sources.headSha} WHERE ${sources.key} = ${key}
+export const sourceModemConfigs = async (
+	db: IndexDb,
+	key: SourceKey,
+	shipped: readonly ShippedModemConfig[],
+): Promise<CarrierModemConfig[]> =>
+	claimedBy(
+		shipped,
+		await rulesOf(
+			db,
+			sql`SELECT ${sims.matcher} AS matcher FROM ${sources} JOIN ${sims} ON ${sims.sha} = ${sources.headSha} WHERE ${sources.key} = ${key}
       UNION
       SELECT ${routes.matcher} FROM ${routes} WHERE ${routes.source} = ${key}`,
+		),
 	);
 
-const claimedRows = v.array(v.object({ matcher: v.string() }));
+const ruleRows = v.array(v.object({ matcher: v.string() }));
 
 /** A test SIM's rule a carrier lists (Samsung packs list 00101) selects no configuration of its. */
-async function modemConfigsClaimed(db: IndexDb, rules: SQL): Promise<CarrierModemConfig[]> {
-	const claimed = v
-		.parse(claimedRows, await db.all(rules))
-		.flatMap((r) => (identifies(r.matcher) ? [r.matcher] : []));
-	const rows = await db.all(sql`
-    WITH claimed AS (
-      SELECT value AS matcher FROM json_each(${JSON.stringify(claimed)})
-    ),
-    shipped AS (
-      SELECT d.platform, d.release, d.name AS firmware, d.family, d.devices AS modem, j.value AS device, r.sort_key FROM ${modems} d, json_each(d.devices) j
-      JOIN ${releases} r ON r.platform = d.platform AND r.id = d.release
-    ),
-    current AS (
-      SELECT s.platform, s.release, s.firmware, s.family, s.modem, min(s.device) AS device, json_group_array(s.device) AS devices FROM shipped s
-      WHERE s.sort_key = (SELECT max(o.sort_key) FROM shipped o WHERE o.platform = s.platform AND o.device = s.device)
-      GROUP BY s.platform, s.release, s.firmware, s.modem
-    ),
-    matched AS (
-      SELECT c.platform, c.release, c.firmware, c.modem, m.label, m.sha, max(s.matcher IN (SELECT matcher FROM claimed)) AS exact
-      FROM current c
-      JOIN ${modemConfigs} m ON m.platform = c.platform AND m.release = c.release AND m.device = c.device
-      JOIN ${sims} s ON s.sha = m.sha
-      WHERE s.matcher IN (SELECT matcher FROM claimed)
-        OR (instr(s.matcher, '|') = 0 AND s.matcher IN (SELECT substr(matcher, 1, instr(matcher || '|', '|') - 1) FROM claimed))
-      GROUP BY c.platform, c.release, c.firmware, c.modem, m.label
-    )
-    SELECT x.platform, x.release, x.firmware, x.label, x.sha, c.family, ${labelled("modem", "name", sql`c.family`)} AS familyLabel, c.devices FROM matched x
-    JOIN current c ON c.platform = x.platform AND c.release = x.release AND c.firmware = x.firmware AND c.modem = x.modem
-    WHERE x.exact OR NOT EXISTS (SELECT 1 FROM matched y WHERE y.platform = x.platform AND y.release = x.release AND y.firmware = x.firmware AND y.modem = x.modem AND y.exact)
-    ORDER BY x.platform, x.firmware, x.label, x.modem`);
-	return v.parse(v.array(carrierModemSchema), rows);
+const rulesOf = async (db: IndexDb, rules: SQL): Promise<string[]> =>
+	v.parse(ruleRows, await db.all(rules)).flatMap((r) => (identifies(r.matcher) ? [r.matcher] : []));
+
+const modemOf = (c: ShippedModemConfig): string =>
+	JSON.stringify([c.platform, c.release, c.firmware, c.modem]);
+
+/** What a claimed rule, or the bare MCC-MNC it qualifies, selects; where a claimed rule selects one of a modem's configurations, only those. */
+function claimedBy(shipped: readonly ShippedModemConfig[], claimed: readonly string[]): CarrierModemConfig[] {
+	const exact = new Set(claimed);
+	const selecting = new Set([...claimed, ...claimed.map((m) => m.slice(0, (m + "|").indexOf("|")))]);
+	const isExact = (c: ShippedModemConfig): boolean => c.matchers.some((m) => exact.has(m));
+	const matched = shipped.filter((c) => c.matchers.some((m) => selecting.has(m)));
+	const exactModems = new Set(matched.filter(isExact).map(modemOf));
+	return matched
+		.filter((c) => isExact(c) || !exactModems.has(modemOf(c)))
+		.map(({ modem: _modem, matchers: _matchers, ...c }) => c);
 }

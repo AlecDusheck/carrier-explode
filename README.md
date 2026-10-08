@@ -3,7 +3,7 @@
 </p>
 <h1 align="center">carrier-explode</h1>
 
-Carrier settings from iPhone, Pixel and Galaxy firmware, decoded and compared: [carrierexplode.com](https://carrierexplode.com), with a free JSON API at [api.carrierexplode.com](https://api.carrierexplode.com/v1): no key, a per-IP budget per minute.
+Carrier settings from iPhone, Pixel and Galaxy firmware, decoded and compared: [carrierexplode.com](https://carrierexplode.com), with a free JSON API at [api.carrierexplode.com](https://api.carrierexplode.com/v1).
 
 ## Why
 

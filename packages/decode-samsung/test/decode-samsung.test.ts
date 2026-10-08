@@ -112,7 +112,7 @@ describe("a carrier pack", () => {
 		});
 	});
 
-	it("reads customer.xml's profiles, their roles and proxies, and never a password", () => {
+	it("reads customer.xml's profiles, their roles, proxies and passwords", () => {
 		const c = pack.customer;
 		expect(c?.countryIso).toBe("FR");
 		expect(c?.handles).toEqual([
@@ -125,7 +125,7 @@ describe("a carrier pack", () => {
 			apn: "web.example",
 			auth: "normal",
 			user: "u",
-			hasPassword: true,
+			password: "p",
 			ipVersion: "ipv4v6",
 		});
 		expect(c?.profiles[1]).toMatchObject({
@@ -133,7 +133,6 @@ describe("a carrier pack", () => {
 			url: "http://mms.example",
 			proxy: { host: "10.0.0.1", port: "8080" },
 			hidden: true,
-			hasPassword: false,
 		});
 	});
 
@@ -154,9 +153,9 @@ describe("parseXml", () => {
 });
 
 describe("xmlValue", () => {
-	it("reads leaves as text, repeated names as lists, and leaves out what it is told to", () => {
-		const e = parseXml("<a><b>1</b><c><d>x</d></c><e>2</e><e>3</e><Password>p</Password></a>");
-		expect(xmlValue(e, (n) => n === "Password")).toEqual({ b: "1", c: { d: "x" }, e: ["2", "3"] });
+	it("reads leaves as text and repeated names as lists", () => {
+		const e = parseXml("<a><b>1</b><c><d>x</d></c><e>2</e><e>3</e></a>");
+		expect(xmlValue(e)).toEqual({ b: "1", c: { d: "x" }, e: ["2", "3"] });
 	});
 });
 

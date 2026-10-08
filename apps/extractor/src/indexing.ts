@@ -95,6 +95,8 @@ import {
 	sourceKeySchema,
 } from "@carrier-explode/schema/records";
 import { keys, OTA_FEEDS, parseRecord, type OtaFeed, type ReleaseKey } from "@carrier-explode/storage";
+import type { Env } from "./env.ts";
+import { chunks } from "./fan-out.ts";
 import { releaseTargetSchema } from "./pipelines.ts";
 import { FEED_PLATFORM, heldRecords, recordTarget } from "./reindex.ts";
 import {
@@ -107,23 +109,21 @@ import {
 	type OtaFacts,
 	type ReleaseFacts,
 } from "./records.ts";
-
-/** OTA file URLs one message indexes: each costs about eleven D1 queries, and an invocation may make 1,000. */
-const OTA_PER_MESSAGE = 50;
+import { CONNECTIONS } from "./store.ts";
 
 /**
  * What the index queue carries: a unit's release record or OTA files, whose facts are written; `settle`, sent
  * SETTLE_DELAY_S after facts, carrying their number; the routes of Apple's manifest; `rederive`, a platform derived
  * again; `reindex`, a platform's held records' facts, one record a message, the one heldRecords lists after `after`,
- * then its rederive; and `derive`, a rederive's sources, DERIVED_PER_MESSAGE at a time, then its releases' changes,
- * CHANGES_PER_MESSAGE at a time.
+ * then its rederive; and `derive`, a rederive's sources, INDEX_BATCH.derivedSources at a time, then its
+ * releases' changes, INDEX_BATCH.changedReleases at a time.
  */
 export const indexMessageSchema = v.variant("kind", [
 	releaseTargetSchema,
 	v.object({
 		kind: v.literal("ota"),
 		feed: v.picklist(OTA_FEEDS),
-		urls: v.pipe(v.array(v.pipe(v.string(), v.url())), v.minLength(1), v.maxLength(OTA_PER_MESSAGE)),
+		urls: v.pipe(v.array(v.pipe(v.string(), v.url())), v.minLength(1)),
 	}),
 	v.object({
 		kind: v.literal("settle"),
@@ -147,35 +147,20 @@ export const indexMessageSchema = v.variant("kind", [
 ]);
 export type IndexMessage = v.InferOutput<typeof indexMessageSchema>;
 
-/** An OTA unit's files, as the messages that index them. */
-export function otaMessages(feed: OtaFeed, urls: readonly string[]): IndexMessage[] {
-	return Array.from({ length: Math.ceil(urls.length / OTA_PER_MESSAGE) }, (_, i) => ({
+/** An OTA unit's files, as the messages that index them, `perMessage` each. */
+export function otaMessages(feed: OtaFeed, urls: readonly string[], perMessage: number): IndexMessage[] {
+	return Array.from({ length: Math.ceil(urls.length / perMessage) }, (_, i) => ({
 		kind: "ota",
 		feed,
-		urls: urls.slice(i * OTA_PER_MESSAGE, (i + 1) * OTA_PER_MESSAGE),
+		urls: urls.slice(i * perMessage, (i + 1) * perMessage),
 	}));
 }
 
-/**
- * A platform is derived once its facts stop arriving for this long: a backfill's iOS builds end at most a build (about
- * 40 minutes) apart while the 20-minute check keeps containers busy, so a backfill derives once, at its end.
- */
-const SETTLE_DELAY_S = 3600;
-
 /** How long the queue holds a message before it is delivered. */
-export const delayOf = (m: IndexMessage): number => (m.kind === "settle" ? SETTLE_DELAY_S : 0);
-
-/** Sources one derive message derives: each costs up to nineteen D1 queries (twelve when nothing changed), a Pixel source one more for its default.pb's leaves. */
-const DERIVED_PER_MESSAGE = 25;
-
-/** Releases whose changes one derive message derives, once its sources are done: one and linking cost about ten D1 queries. */
-const CHANGES_PER_MESSAGE = 25;
+export const delayOf = (m: IndexMessage, settleS: number): number => (m.kind === "settle" ? settleS : 0);
 
 /** Normalized bytes one message reads for new profile rows: a Pixel firmware's modem configurations are ~270 of ~4 MB. */
 const NORM_BYTES_PER_MESSAGE = 96_000_000;
-
-/** Profile rows written at once. */
-const PROFILES_AT_ONCE = 25;
 
 /** Whether D1 changed, so the readers purge, and the message that carries on the work, if any. */
 export interface Indexed {
@@ -186,6 +171,7 @@ export interface Indexed {
 export interface IndexContext {
 	readonly db: IndexDb;
 	readonly bucket: R2Bucket;
+	readonly batch: Env["INDEX_BATCH"];
 }
 
 /** Each family's devices are listed under one release platform. */
@@ -245,8 +231,8 @@ async function readObject(bucket: R2Bucket, key: string): Promise<R2ObjectBody> 
 	return o;
 }
 
-const readNorm = async (bucket: R2Bucket, sha: string): Promise<unknown> =>
-	parseRecord(keys.norm(sha), await (await readObject(bucket, keys.norm(sha))).text());
+const readNorm = async (bucket: R2Bucket, key: string): Promise<unknown> =>
+	parseRecord(key, await (await readObject(bucket, key)).text());
 
 /** Whether a message wrote to D1, and whether it wrote all of its unit's facts or left the rest to the next. */
 interface FactsWritten {
@@ -255,8 +241,8 @@ interface FactsWritten {
 }
 
 /**
- * Content rows for the shas the index has none for (or stale ones), read one at a time until NORM_BYTES_PER_MESSAGE
- * are read; done once every sha has its rows.
+ * Content rows for the shas the index has none for (or stale ones), read CONNECTIONS at a time until
+ * NORM_BYTES_PER_MESSAGE are read; done once every sha has its rows.
  */
 async function putNew(ctx: IndexContext, norm: readonly NormRef[]): Promise<FactsWritten> {
 	const missing = new Set(
@@ -267,21 +253,28 @@ async function putNew(ctx: IndexContext, norm: readonly NormRef[]): Promise<Fact
 	);
 	const wanted = [...new Map(norm.filter((n) => missing.has(n.sha)).map((n) => [n.sha, n])).values()];
 	const baseRadio = configRadios(ctx.bucket);
+	const factsOf = async (n: NormRef): Promise<{ readonly size: number; readonly facts: ProfileFacts }> => {
+		const key = n.kind === "profile" ? keys.profile(n.sha) : keys.modemConfig(n.sha);
+		const o = await readObject(ctx.bucket, key);
+		const json = parseRecord(key, await o.text());
+		if (n.kind === "profile") return { size: o.size, facts: profileFacts(v.parse(profileFactsSchema, json)) };
+		const config = v.parse(modemFactsSchema, json);
+		return {
+			size: o.size,
+			facts: modemFacts(config, config.base === null ? null : await baseRadio(config.base)),
+		};
+	};
 	const facts: ProfileFacts[] = [];
 	let read = 0;
 	let put = 0;
-	for (const n of wanted) {
+	for (const group of chunks(wanted, CONNECTIONS)) {
 		if (read >= NORM_BYTES_PER_MESSAGE) break;
-		const o = await readObject(ctx.bucket, keys.norm(n.sha));
-		read += o.size;
-		const json = parseRecord(keys.norm(n.sha), await o.text());
-		if (n.kind === "profile") facts.push(profileFacts(v.parse(profileFactsSchema, json)));
-		else {
-			const config = v.parse(modemFactsSchema, json);
-			facts.push(modemFacts(config, config.base === null ? null : await baseRadio(config.base)));
+		for (const r of await Promise.all(group.map(factsOf))) {
+			read += r.size;
+			facts.push(r.facts);
 		}
-		put++;
-		if (facts.length === PROFILES_AT_ONCE) await putProfiles(ctx.db, facts.splice(0));
+		put += group.length;
+		if (facts.length >= ctx.batch.profileRows) await putProfiles(ctx.db, facts.splice(0));
 	}
 	if (facts.length > 0) await putProfiles(ctx.db, facts);
 	return { wrote: put > 0, done: put === wanted.length };
@@ -320,7 +313,9 @@ async function deriveSource(
 	const shas = new Set([...heads.values()].flatMap((h) => (h.base === null ? [h.sha] : [h.sha, h.base])));
 	const profiles = new Map(
 		await Promise.all(
-			[...shas].map(async (sha) => [sha, v.parse(profileSchema, await readNorm(bucket, sha))] as const),
+			[...shas].map(
+				async (sha) => [sha, v.parse(profileSchema, await readNorm(bucket, keys.profile(sha)))] as const,
+			),
 		),
 	);
 	const baseSha = sourceBase(heads, order);
@@ -329,7 +324,8 @@ async function deriveSource(
 		(await putBaseRows(
 			db,
 			baseSha,
-			headRows(profiles.get(baseSha) ?? v.parse(profileSchema, await readNorm(bucket, baseSha))).settings,
+			headRows(profiles.get(baseSha) ?? v.parse(profileSchema, await readNorm(bucket, keys.profile(baseSha))))
+				.settings,
 		));
 	const sourceChanged = await putSource(db, {
 		key,
@@ -345,7 +341,8 @@ async function deriveSource(
 		key,
 		phoneStates(heads, (sha) => profiles.get(sha), phones),
 	);
-	const headProfile = profiles.get(at.sha) ?? v.parse(profileSchema, await readNorm(bucket, at.sha));
+	const headProfile =
+		profiles.get(at.sha) ?? v.parse(profileSchema, await readNorm(bucket, keys.profile(at.sha)));
 	const rowsChanged = await syncHeadRows(db, key, headRows(headProfile));
 
 	const after = await identityOf(db, key);
@@ -362,7 +359,7 @@ function configRadios(bucket: R2Bucket): (sha: string) => Promise<ConfigRadio> {
 	const radioOf = (sha: string): Promise<ConfigRadio> => {
 		const read =
 			known.get(sha) ??
-			readNorm(bucket, sha).then(async (json) => {
+			readNorm(bucket, keys.modemConfig(sha)).then(async (json) => {
 				const config = v.parse(modemFactsSchema, json);
 				return layeredRadio(configRadio(config), config.base === null ? null : await radioOf(config.base));
 			});
@@ -438,7 +435,7 @@ const matchers = (routed: Readonly<Record<SourceKey, readonly SimRule[]>>): Reco
 	Object.fromEntries(Object.entries(routed).map(([key, rules]) => [key, rules.map(ruleKey)]));
 
 /**
- * Derives the first DERIVED_PER_MESSAGE of a derive message's sources, linking when an identity changed; the rest follow,
+ * Derives the first INDEX_BATCH.derivedSources of a derive message's sources, linking when an identity changed; the rest follow,
  * then the releases' changes. The chain's last message links too, so a change to linking or its rules lands with a
  * reindex.
  */
@@ -446,9 +443,9 @@ async function indexDerive(
 	reads: Reads,
 	m: Extract<IndexMessage, { readonly kind: "derive" }>,
 ): Promise<Indexed> {
-	const { db } = reads.ctx;
-	const now = m.sources.slice(0, DERIVED_PER_MESSAGE);
-	const rest = m.sources.slice(DERIVED_PER_MESSAGE);
+	const { db, batch } = reads.ctx;
+	const now = m.sources.slice(0, batch.derivedSources);
+	const rest = m.sources.slice(batch.derivedSources);
 	let wrote = false;
 	let relink = false;
 	for (const key of now) {
@@ -456,7 +453,7 @@ async function indexDerive(
 		wrote ||= d.wrote;
 		relink ||= d.relink;
 	}
-	const releases = rest.length === 0 ? m.changes.slice(0, CHANGES_PER_MESSAGE) : [];
+	const releases = rest.length === 0 ? m.changes.slice(0, batch.changedReleases) : [];
 	const later = m.changes.slice(releases.length);
 	const last = rest.length === 0 && later.length === 0;
 	for (const r of releases) wrote = (await deriveChanges(reads, r.platform, r.id)) || wrote;

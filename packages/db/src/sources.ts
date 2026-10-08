@@ -16,6 +16,7 @@ import {
 } from "@carrier-explode/schema/types";
 import { every, jsonOf, qualified, type IndexDb, type Page } from "./db.ts";
 import { carrierName, contains, givenName } from "./carriers.ts";
+import { labelled } from "./labels.ts";
 import {
 	carriers,
 	copies,
@@ -226,8 +227,6 @@ export async function syncRoutes(
 	return [...new Set(written.map((r) => r.source))].toSorted();
 }
 
-const memberKeys = v.pipe(jsonOf(v.array(sourceKeySchema)), v.readonly());
-
 const listed = {
 	key: sources.key,
 	platform: sources.platform,
@@ -244,17 +243,14 @@ const listed = {
 	cc: sql<
 		string | null
 	>`(SELECT json_extract(p.iso, '$[0]') FROM ${profiles} p WHERE p.sha = ${qualified(sources, sources.headSha)})`,
-	/** Every source of its carrier, by key; none without a carrier. */
-	members:
-		sql<string>`(SELECT json_group_array(o.key) FROM (SELECT o.key FROM ${sources} o WHERE o.carrier = ${qualified(sources, sources.carrier)} ORDER BY o.key) o)`.mapWith(
-			(s: string) => v.parse(memberKeys, s),
-		),
+	/** A person's logo for its carrier, where the carrier's name names none or the wrong one. */
+	carrierLogo: labelled("carrier", "logo", qualified(sources, sources.carrier)),
 };
 
 const listing = (db: IndexDb) =>
 	db.select(listed).from(sources).leftJoin(carriers, eq(carriers.id, sources.carrier)).$dynamic();
 
-/** A source as lists show it, with its carrier's name, country, members and newest change. */
+/** A source as lists show it, with its carrier's name and logo, its country and its newest change. */
 export type ListedSource = Awaited<ReturnType<typeof listing>>[number];
 
 /** Whether a source is in a country: its head names it, or its carrier is that country's. */
@@ -447,10 +443,14 @@ export async function routedBundles(
 	// A qualified rule is `<mccmnc>|…`, and `}` follows `|`: a key range, which routes_by_matcher serves.
 	const rows = await db.all(sql`
     WITH g AS (SELECT json_extract(value, '$[0]') AS grp, json_extract(value, '$[1]') AS plmn FROM json_each(${JSON.stringify(pairs)}))
-    SELECT DISTINCT g.grp AS "group", r.source, r.matcher = g.plmn AS bare
-    FROM g JOIN ${routes} r ON r.matcher = g.plmn OR (r.matcher >= g.plmn || '|' AND r.matcher < g.plmn || '}')
-    WHERE r.source >= 'ios:' AND r.source < 'ios;'
-    ORDER BY r.source`);
+    SELECT DISTINCT "group", source, bare FROM (
+      SELECT g.grp AS "group", r.source, 1 AS bare FROM g JOIN ${routes} r ON r.matcher = g.plmn
+      UNION ALL
+      SELECT g.grp, r.source, 0 FROM g JOIN ${routes} r ON r.matcher >= g.plmn || '|' AND r.matcher < g.plmn || '}'
+    )
+    -- The unary + keeps SQLite on routes_by_matcher rather than scanning every iOS route.
+    WHERE +source >= 'ios:' AND +source < 'ios;'
+    ORDER BY source`);
 	const out: Record<string, { bundles: Set<SourceKey<"ios">>; mvnos: Set<SourceKey<"ios">> }> = {};
 	for (const r of v.parse(v.array(routedRowSchema), rows)) {
 		const ref = parseSourceKey(r.source);

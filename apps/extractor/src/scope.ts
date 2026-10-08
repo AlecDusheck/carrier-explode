@@ -44,13 +44,16 @@ export const scopeSchema = v.object({
 	/** `quarterly`: each phone's newest build of each train (its quarterly drop's last). `newest`: each phone's newest build. */
 	android: familySchema(["quarterly", "newest"]),
 	/**
-	 * Galaxy phones Google Play lists whose name starts with one of `families` and contains none of `exclude`, out since
-	 * `releasedSince`. For each of the newest `majors` majors, each model's newest build (`builds` of a major's, newest
-	 * first), on each family's newest generation that has the major.
+	 * Galaxy phones (every regional model) Google Play lists whose name starts with one of `families` and contains none of `exclude`, out since
+	 * `releasedSince`. For each of the newest `majors` majors, each model's newest build of each multi-CSC package
+	 * (`builds` of a major's, newest first), on each family's newest generation that has the major. A model's packages
+	 * are found by asking version.xml under each of `salesCodes`, then under the first that answered for each: it
+	 * answers for a sales code, never for a package's own code, and Samsung lists neither.
 	 */
 	samsung: v.object({
 		families: v.pipe(v.array(str), v.minLength(1)),
 		exclude: v.array(str),
+		salesCodes: v.pipe(v.array(v.pipe(v.string(), v.regex(/^[A-Z0-9]{3}$/))), v.minLength(1)),
 		releasedSince: v.pipe(v.string(), v.regex(/^\d{4}-\d{2}$/)),
 		majors: count,
 		builds: v.union([v.literal("all"), count]),

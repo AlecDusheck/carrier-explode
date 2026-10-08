@@ -93,7 +93,7 @@ describe("describeNv / decodeNvValue", () => {
 			defined(describeNv("/nv/item_files/modem/nr5g/RRC/cap_control_nrca_4x_f_plus_t_band_combos")).family,
 		).toBe("nr_band_combos");
 		expect(defined(describeNv("/policyman/l2nr_policy.xml")).family).toBe("policyman_xml");
-		// Intel / Apple C1 NVM keys are decode-ios's (describeIntelKey).
+		// Intel-dialect NVM keys are decode-ios's (describeIntelKey).
 		expect(describeNv("%u:dyn_cps.dam.support")).toBeUndefined();
 		expect(defined(describeNv("/nv/item_files/modem/nas/isr")).family).toBeUndefined(); // exact wins
 		expect(describeNv("/not/an/efs/path")).toBeUndefined();

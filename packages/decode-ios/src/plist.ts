@@ -440,7 +440,8 @@ export function toJsonSafe(v: PlistValue): unknown {
 	if (typeof v === "bigint") return { __int: v.toString() };
 	if (v instanceof PlistUid) return { __uid: v.uid };
 	if (v instanceof Uint8Array) {
-		return { __data: bytesToHex(v), __len: v.length, __text: maybeText(v) };
+		const text = maybeText(v);
+		return { __data: bytesToHex(v), __len: v.length, ...(text === undefined ? {} : { __text: text }) };
 	}
 	if (v instanceof Date) {
 		return { __date: Number.isNaN(v.getTime()) ? "invalid date" : v.toISOString() };

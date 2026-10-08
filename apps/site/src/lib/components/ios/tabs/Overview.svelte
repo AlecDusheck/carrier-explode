@@ -71,7 +71,6 @@
     {#if rules.length}
       <p class="dimtext note">
         The SIMs Apple's manifest sends to this bundle. An MVNO rule is checked before the plain MCC-MNC entry.
-        {#if rules.some((r) => r.via === "ICCID")}An ICCID rule takes every SIM card numbered from its prefix.{/if}
       </p>
       <SelectionTable {rules} />
     {:else}
@@ -93,7 +92,7 @@
   {#if carriers.length}
     <fieldset class="hgroup" id="carriers">
       <legend>Carriers ({carriers.length})</legend>
-      {#each carriers as c (c.key)}<SourceChip source={c.key} />{/each}
+      {#each carriers as c (c.key)}<SourceChip source={c} />{/each}
     </fieldset>
   {/if}
 {/if}

@@ -10,7 +10,7 @@
   let { at }: { at: At } = $props();
 
   const rare = $derived(await getRare(verArgs(at)));
-  const rows = $derived(rare.head ? rare.rows : []);
+  const rows = $derived(rare.state === "judged" ? rare.rows : []);
   const section = $derived(rareSection(decoderFamily(at.ref.platform), rows.length));
   const filterHref = (path: string): string => versionHref(at, "settings") + "?filter=" + encodeURIComponent(path.split(/[.[]/, 1)[0] ?? path);
 </script>
@@ -26,7 +26,7 @@
           <tr>
             <td class="mono"><a href={filterHref(r.path)}>{r.path}</a></td>
             <td class="mono">{r.value}</td>
-            <td>{#each r.with as w (w)}<SourceChip source={w} />{/each}</td>
+            <td>{#each r.with as w (w.key)}<SourceChip source={w} />{/each}</td>
           </tr>
         {/each}
       </tbody>

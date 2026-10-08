@@ -125,7 +125,7 @@
       <!-- Several files of one brand in a country (att_us, att5g_us; Verizon_LTE_US, Verizon_MVNO_US) each also say their file name. -->
       {@const twins = repeated(all, twinKey)}
       <div class="scroll list-box">
-        <ul class="list" aria-label={kind}>
+        <ul class="list" aria-label={kind} data-sveltekit-preload-data="tap">
           {#each shown as c (c.path)}
             <li>
               <a

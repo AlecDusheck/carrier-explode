@@ -51,7 +51,7 @@ function apnOf(p: CustomerProfile, handles: readonly ProfileHandle[]): Apn | und
 		...(roamingProtocol === undefined ? {} : { roamingProtocol }),
 		...(auth === undefined ? {} : { auth }),
 		...(p.user === undefined ? {} : { user: p.user }),
-		hasPassword: p.hasPassword,
+		...(p.password === undefined ? {} : { password: p.password }),
 		// An MMS profile's proxy is the MMS proxy; any other's, its HTTP proxy.
 		...(p.proxy === undefined
 			? {}

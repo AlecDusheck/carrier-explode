@@ -1,0 +1,1 @@
+CREATE INDEX `modem_configs_by_sha` ON `modem_configs` (`sha`,`platform`,`release`,`device`,`label`);

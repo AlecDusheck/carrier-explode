@@ -4,6 +4,7 @@ import { error } from "@sveltejs/kit";
 import {
 	changesOf,
 	neighbours,
+	releasesShipping,
 	releaseOf,
 	shippedIn,
 	type ListedRelease,
@@ -13,8 +14,8 @@ import {
 } from "@carrier-explode/db";
 import { sourceOf, versionPath, type ReleasePlatform, type SourceKey } from "@carrier-explode/schema/types";
 import type { Picture } from "#lib/types.ts";
-import { perRequest } from "./cache";
-import { db, everyPage } from "./db";
+import { cached, perRequest } from "./cache";
+import { db, everyPage, indexVersion } from "./db";
 import { releasesOf } from "./catalog";
 import { getCarriers, listEntries } from "./lists";
 
@@ -76,16 +77,20 @@ export async function shippedVersion(
 }
 
 /** How many of each of a platform's builds' sources its carrier list lists, by build. */
-export async function carriersShipped(platform: ReleasePlatform): Promise<Array<readonly [string, number]>> {
-	const [builds, carriers] = await Promise.all([releasesOf(platform), getCarriers(platform)]);
-	const listed = new Set(carriers.map((c) => c.key));
-	return Promise.all(
-		builds.map(async (b) => {
-			const copies = await shipped(platform, b.id);
-			return [b.id, new Set(copies.flatMap((c) => (listed.has(c.source) ? [c.source] : []))).size] as const;
-		}),
-	);
-}
+export const carriersShipped = async (platform: ReleasePlatform): Promise<Array<readonly [string, number]>> =>
+	cached(`carriers-shipped:v1:${platform}:${await indexVersion()}`, async () => {
+		const [builds, carriers] = await Promise.all([releasesOf(platform), getCarriers(platform)]);
+		const counts = new Map(
+			(
+				await releasesShipping(
+					await db(),
+					platform,
+					carriers.map((c) => c.key),
+				)
+			).map((r) => [r.release, r.sources]),
+		);
+		return builds.map((b) => [b.id, counts.get(b.id) ?? 0] as const);
+	});
 
 /** A source a build ships, at its version there. */
 export interface ShippedSource {

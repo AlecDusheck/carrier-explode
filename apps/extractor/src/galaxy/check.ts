@@ -1,6 +1,6 @@
 /**
- * The Galaxy feed: the scoped phones from Google Play's device list, their builds from Samsung's version.xml, each
- * with its Android major, which FUS is asked for once per firmware.
+ * The Galaxy feed: the scoped phones from Google Play's device list, their builds from Samsung's version.xml under
+ * the scope's sales codes, each with its Android major, which FUS is asked for once per firmware.
  */
 
 import { indexDb, syncDevices, syncLabels } from "@carrier-explode/db";
@@ -18,6 +18,7 @@ import { galaxyPhones, SUPPORTED_DEVICES, type GalaxyPhone } from "./phones.ts";
 import {
 	candidates,
 	firmwareFactsSchema,
+	packageOf,
 	fusVersion,
 	galaxyDevices,
 	launchedSince,
@@ -28,9 +29,7 @@ import {
 	type ListedFirmware,
 	type ReadFirmware,
 } from "./plan.ts";
-
-/** The US CSCs whose version.xml lists, together, a U or U1 model's launch build and each OS upgrade's newest: no one CSC does. */
-const REGIONS = ["ATT", "TMB"] as const;
+import { salesCodeAnswersSchema, salesCodesToAsk, type SalesCodeAnswers } from "./sales-codes.ts";
 
 async function fetchPhones(scope: Scope["samsung"]): Promise<GalaxyPhone[]> {
 	const csv = new TextDecoder("utf-16le").decode(
@@ -58,20 +57,13 @@ async function fetchVersions(model: string, region: string): Promise<string[]> {
 	}
 }
 
-/** version.xml requests, and R2 reads, in flight at once. */
-const ASKING = 6;
-
-/** `Galaxy S26 (SM-S942U)` → `Galaxy S26`. */
-const modelName = (display: string, model: string): string =>
-	display.replace(` (${model})`, "").trim() || model;
-
 /** One FUS conversation and a range read of the zip directory, kept so FUS is not asked about this firmware again. */
 async function readFacts(env: Env, fw: Candidate): Promise<ReadFirmware> {
 	const { firmware, released, displayName } = await openGalaxyFirmware(fw);
 	const facts: FirmwareFacts = {
 		major: androidMajor(firmware),
 		released,
-		name: modelName(displayName, fw.model),
+		name: displayName,
 	};
 	await putJson(env.BUCKET, keys.galaxyFirmware(fw.build), facts);
 	return { ...fw, ...facts };
@@ -93,17 +85,28 @@ async function knownFirmware(
 	return facts === null ? undefined : { ...fw, ...facts };
 }
 
-/** The scoped phones out since the scope's `releasedSince`, on each region, with their builds. */
-async function listGalaxy(scope: Scope["samsung"], today: string): Promise<ListedFirmware[]> {
-	const asked = (await fetchPhones(scope)).flatMap((p) => REGIONS.map((region) => ({ phone: p, region })));
-	const all = allOrThrow(
-		"version.xml",
-		await fanOut(asked, ASKING, async ({ phone, region }): Promise<ListedFirmware> => ({
-			...phone,
-			region,
-			versions: await fetchVersions(phone.model, region),
-		})),
-	);
+/** A phone under each sales code it is asked under, with its builds; what version.xml answered is kept for the next check. */
+async function listPhone(env: Env, phone: GalaxyPhone, today: string): Promise<ListedFirmware[]> {
+	const key = keys.galaxySalesCodes(phone.model);
+	const before = (await readRecord(env.BUCKET, key, salesCodeAnswersSchema)) ?? {};
+	const answers: SalesCodeAnswers = { ...before };
+	const listed: ListedFirmware[] = [];
+	for (const region of salesCodesToAsk(env.SCOPE.samsung.salesCodes, before, today)) {
+		const versions = await fetchVersions(phone.model, region);
+		const newest = versions[0]?.split("/")[1];
+		answers[region] = newest === undefined ? { refused: today } : { package: packageOf(newest) };
+		if (newest !== undefined) listed.push({ ...phone, region, versions });
+	}
+	if (JSON.stringify(answers) !== JSON.stringify(before)) await putJson(env.BUCKET, key, answers);
+	return listed;
+}
+
+/** The scoped phones out since the scope's `releasedSince`, under each sales code that lists them, with their builds. */
+async function listGalaxy(env: Env, today: string): Promise<ListedFirmware[]> {
+	const scope = env.SCOPE.samsung;
+	const all: ListedFirmware[] = [];
+	// One version.xml request at a time: Samsung's servers block a burst.
+	for (const phone of await fetchPhones(scope)) all.push(...(await listPhone(env, phone, today)));
 	return [...Map.groupBy(all, (l) => l.model).values()]
 		.filter((ls) =>
 			launchedSince(
@@ -117,11 +120,11 @@ async function listGalaxy(scope: Scope["samsung"], today: string): Promise<Liste
 
 export async function checkGalaxy(env: Env): Promise<GalaxyBuild[]> {
 	const today = new Date().toISOString().slice(0, 10);
-	const listed = await listGalaxy(env.SCOPE.samsung, today);
+	const listed = await listGalaxy(env, today);
 	const held = new Set((await heldReleases(env.BUCKET, "samsung")).map((k) => k.id[0]));
 	const known = allOrThrow(
 		"firmware",
-		await fanOut(candidates(listed, today), ASKING, async (fw) => ({
+		await fanOut(candidates(listed, today), env.FEED_CONCURRENCY.galaxyReads, async (fw) => ({
 			fw,
 			read: await knownFirmware(env, held, fw),
 		})),

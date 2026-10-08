@@ -77,6 +77,7 @@ function apnOf(item: ApnItem, i: number): Apn {
 	const rats = bearers(item.bearerBitmask);
 	const label = text(item.name),
 		user = text(item.user),
+		password = text(item.password),
 		proxy = text(item.proxy),
 		port = text(item.port);
 	const mmsc = text(item.mmsc),
@@ -90,7 +91,7 @@ function apnOf(item: ApnItem, i: number): Apn {
 		...(roamingProtocol !== undefined ? { roamingProtocol } : {}),
 		...(auth !== undefined ? { auth } : {}),
 		...(user !== undefined ? { user } : {}),
-		hasPassword: item.password !== undefined && item.password !== "",
+		...(password !== undefined ? { password } : {}),
 		...(proxy !== undefined ? { proxy } : {}),
 		...(port !== undefined ? { port } : {}),
 		...(mmsc !== undefined ? { mmsc } : {}),

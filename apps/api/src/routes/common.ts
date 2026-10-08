@@ -33,7 +33,6 @@ export const ERRORS = {
 	404: error(
 		"Nothing by that name; something only just extracted appears once its build or file is indexed.",
 	),
-	429: error("Over the per-IP budget; retry after the Retry-After seconds."),
 };
 
 /** No parameters but the path's: anything else is a 400, so one resource has one URL. */
