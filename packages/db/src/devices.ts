@@ -2,11 +2,13 @@
 
 import { and, eq, exists, sql } from "drizzle-orm";
 
-import { newestFirst } from "@carrier-explode/schema";
+import * as v from "valibot";
+
+import { modemFamilyName, newestFirst, type DeviceCoverage } from "@carrier-explode/schema";
 import type { ReleasePlatform } from "@carrier-explode/schema/types";
-import { chunks, qualified, run, type IndexDb } from "./db.ts";
+import { chunks, jsonOf, qualified, run, type IndexDb } from "./db.ts";
 import { labelled } from "./labels.ts";
-import { devices, phoneStates, releases } from "./schema.ts";
+import { devices, modems, phoneStates, profiles, releases, sources } from "./schema.ts";
 
 /** A device as a feed check lists it. */
 export type ListedDevice = Omit<typeof devices.$inferSelect, "has5g">;
@@ -133,4 +135,36 @@ export async function statedSourceCounts(
 		.where(eq(devices.platform, platform))
 		.groupBy(phoneStates.device);
 	return new Map(rows.map((r) => [r.device, r.sources]));
+}
+
+const coverageRows = v.array(
+	v.object({
+		device: v.string(),
+		countries: jsonOf(v.array(v.string())),
+		family: v.nullable(v.string()),
+		label: v.nullable(v.string()),
+	}),
+);
+
+/**
+ * Each of a platform's phones that read phone states: the countries of the profiles it reads (a Galaxy's sales codes'
+ * own, not the PLMNs its SIM rules roam on), and the modem family its newest release ships it.
+ */
+export async function deviceCoverage(db: IndexDb, platform: ReleasePlatform): Promise<DeviceCoverage[]> {
+	const family = sql`(SELECT m.family FROM ${modems} m JOIN ${releases} r ON r.platform = m.platform AND r.id = m.release,
+    json_each(m.devices) j WHERE m.platform = d.platform AND j.value = d.code ORDER BY r.sort_key DESC LIMIT 1)`;
+	const rows = v.parse(
+		coverageRows,
+		await db.all(sql`SELECT d.code AS device,
+      (SELECT json_group_array(DISTINCT c.value) FROM ${phoneStates} q JOIN ${sources} s ON s.key = q.source
+        JOIN ${profiles} f ON f.sha = s.head_sha, json_each(f.iso) c WHERE q.device = d.code) AS countries,
+      ${family} AS family, ${labelled("modem", "name", family)} AS label
+    FROM ${devices} d WHERE d.platform = ${platform}
+      AND EXISTS (SELECT 1 FROM ${phoneStates} p WHERE p.device = d.code)`),
+	);
+	return rows.map((r) => ({
+		device: r.device,
+		countries: r.countries.toSorted(),
+		modem: r.family === null ? null : modemFamilyName(platform, r.family, r.label),
+	}));
 }

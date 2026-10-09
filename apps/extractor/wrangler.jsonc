@@ -104,8 +104,14 @@
 				},
 				{ "binding": "DATASET", "name": "carrier-explode-dataset-dev", "class_name": "DatasetWorkflow" },
 				{ "binding": "LABELS", "name": "carrier-explode-labels-dev", "class_name": "LabelsWorkflow" },
+				{
+					"binding": "CHECK",
+					"name": "carrier-explode-check-dev",
+					"class_name": "CheckWorkflow",
+					"limits": { "steps": 10000 },
+				},
 			],
-			"services": [{ "binding": "API", "service": "carrier-explode-api-dev" }],
+			"services": [{ "binding": "API", "service": "carrier-explode-api-dev", "entrypoint": "Api" }],
 			// Workers AI and the Web Search API, for the labels Workflow; remote even under wrangler dev.
 			"ai": { "binding": "AI" },
 			// Checks run only by hand: POST /run, or /__scheduled with --test-scheduled.
@@ -241,6 +247,13 @@
 					"class_name": "GalaxyBuildWorkflow",
 				},
 				{ "binding": "LABELS", "name": "carrier-explode-labels", "class_name": "LabelsWorkflow" },
+				// A feed's check: Galaxy's asks version.xml about ten models a step and FUS about ten firmware a step.
+				{
+					"binding": "CHECK",
+					"name": "carrier-explode-check",
+					"class_name": "CheckWorkflow",
+					"limits": { "steps": 10000 },
+				},
 				// A reindex of all normalizes every held artifact, a step per 100 settings files or 10 modem configurations:
 				// production's backfill is up to about 5,300 steps.
 				{
@@ -251,7 +264,7 @@
 				},
 				{ "binding": "DATASET", "name": "carrier-explode-dataset", "class_name": "DatasetWorkflow" },
 			],
-			"services": [{ "binding": "API", "service": "carrier-explode-api" }],
+			"services": [{ "binding": "API", "service": "carrier-explode-api", "entrypoint": "Api" }],
 			// Workers AI and the Web Search API, for the labels Workflow.
 			"ai": { "binding": "AI" },
 			// PIPELINE_CRONS' (test/tables.test.ts checks).

@@ -10,7 +10,7 @@ import {
 	type Page,
 	type ShownDevice,
 } from "@carrier-explode/db";
-import { FEATURE_SLUGS, needs5G, type FeatureSlug } from "@carrier-explode/schema";
+import { needs5G, type FeatureSlug } from "@carrier-explode/schema";
 import {
 	FEATURE_STATES,
 	RELEASE_PLATFORMS,
@@ -21,9 +21,18 @@ import {
 } from "@carrier-explode/schema/types";
 import { defaultedSchema } from "@carrier-explode/schema/records";
 import { featurePage } from "#lib/feature-pages.ts";
+import type { ModelChoice } from "#lib/phones.ts";
+import {
+	isSetting,
+	phoneConcepts,
+	type MatrixCell,
+	type MatrixConcept,
+	type SettingValue,
+} from "#lib/feature-matrix.ts";
 import { perRequest } from "./cache";
 import { db, everyPage } from "./db";
 import { getCarriers, type ListEntry } from "./lists";
+import { modelChoices } from "./phones";
 
 /** A phone a features page can show. `covered`: its states come from at least half as many sources as its platform's best-covered phone. */
 export type FeaturePhone = ShownDevice & { readonly covered: boolean };
@@ -41,6 +50,22 @@ export const featurePhones = perRequest(async (): Promise<FeaturePhone[]> => {
 		}),
 	);
 	return platforms.flat();
+});
+
+/** The features pages' phones as the phone picker offers them: each platform's grouped into phones. */
+export const featureModels = perRequest(async (): Promise<ModelChoice[]> => {
+	const phones = await featurePhones();
+	const models = await Promise.all(
+		RELEASE_PLATFORMS.map((p) =>
+			modelChoices(
+				p,
+				phones.filter((phone) => phone.platform === p),
+				(name) => name,
+				p,
+			),
+		),
+	);
+	return models.flat();
 });
 
 /** The platform whose newest phone a features page shows when none is named. */
@@ -63,7 +88,7 @@ export async function featurePhone(
 	return phones.find((p) => p.code === named) ?? fallback[0] ?? null;
 }
 
-async function mustPhone(code: string): Promise<ShownDevice> {
+async function mustPhone(code: string): Promise<FeaturePhone> {
 	const phone = (await featurePhones()).find((p) => p.code === code);
 	if (!phone) error(404, `No phone ${code}.`);
 	return phone;
@@ -114,30 +139,70 @@ export async function getFeatureTable(slug: FeatureSlug, phoneId: string): Promi
 	};
 }
 
-export interface FeatureCount {
-	readonly slug: FeatureSlug;
-	readonly unusable: boolean;
-	readonly counts: Readonly<Record<PhoneState, number>>;
+/** Every carrier source's feature states on one phone, by source. */
+async function statesBySource(
+	device: string,
+): Promise<Map<SourceKey, Readonly<Record<string, FeatureState>>>> {
+	const d = await db();
+	const rows = await everyPage(
+		(page: Page<SourceKey>) => statesOn(d, device, page),
+		(r) => r.source,
+	);
+	return new Map(rows.map((r) => [r.source, r.states]));
 }
 
-/** How many carriers give each feature on one phone. */
-export async function getFeatureSummary(phoneId: string): Promise<FeatureCount[]> {
+const phoneState = (states: Readonly<Record<string, FeatureState>> | undefined, slug: string): PhoneState =>
+	states === undefined ? "unknown" : (states[slug] ?? "unset");
+
+const settingValue = v.pipe(
+	v.string(),
+	v.parseJson(),
+	v.nullable(v.union([v.string(), v.number(), v.boolean(), v.array(v.union([v.string(), v.number()]))])),
+);
+
+const settingCell = (value: SettingValue | null | undefined): MatrixCell =>
+	value === undefined ? "unknown" : value === null ? "unset" : { value };
+
+export interface MatrixRow {
+	readonly entry: ListEntry;
+	/** In `FeatureMatrix.columns` order. */
+	readonly cells: readonly MatrixCell[];
+}
+
+export interface FeatureMatrix {
+	readonly phone: FeaturePhone;
+	readonly columns: readonly MatrixConcept[];
+	readonly rows: readonly MatrixRow[];
+}
+
+/** What every carrier gives one phone: its feature states, and the settings its own file makes. */
+export async function getFeatureMatrix(phoneId: string): Promise<FeatureMatrix> {
 	const phone = await mustPhone(phoneId);
+	const columns = phoneConcepts(phone);
+	const group = { platform: phone.platform, kind: "carrier" } as const;
 	const d = await db();
-	const [list, rows] = await Promise.all([
+	const [list, states, settings] = await Promise.all([
 		getCarriers(phone.platform),
-		everyPage(
-			(page: Page<SourceKey>) => statesOn(d, phone.code, page),
-			(r) => r.source,
+		statesBySource(phone.code),
+		Promise.all(
+			columns.filter(isSetting).map(async (id) => {
+				const scanned = await scanConcept(d, group, id, phone.code);
+				return [id, new Map(scanned.map((s) => [s.source, v.parse(settingValue, s.value)]))] as const;
+			}),
 		),
 	]);
-	const states = new Map(rows.map((r) => [r.source, r.states]));
-	return FEATURE_SLUGS.map((slug) => {
-		const counts = { on: 0, available: 0, no: 0, unset: 0, unknown: 0 };
-		for (const { key } of list) {
-			const read = states.get(key);
-			counts[read === undefined ? "unknown" : (read[slug] ?? "unset")]++;
-		}
-		return { slug, unusable: unusable(slug, phone), counts };
-	});
+	const byId = new Map<MatrixConcept, ReadonlyMap<SourceKey, SettingValue | null>>(settings);
+	return {
+		phone,
+		columns,
+		rows: list.map((entry) => ({
+			entry,
+			cells: columns.map((id) => {
+				const setting = byId.get(id);
+				return setting === undefined
+					? phoneState(states.get(entry.key), id)
+					: settingCell(setting.get(entry.key));
+			}),
+		})),
+	};
 }

@@ -233,6 +233,32 @@ describe("linkCarriers", () => {
 		]);
 	});
 
+	it("names a carrier Android names by an SPN rule after the SPN, in capitals only where it may be an acronym", () => {
+		const spn = (name: string): Head => m("android", name, [{ mccmnc: name.slice(0, 5), spn: "x" }]);
+		const names = linkCarriers(
+			[
+				"24005SPN=TELE2",
+				"23415SPN=SAINSBURY'S",
+				"20408SPN=RABO MOBIEL",
+				"24004SPN=TELENOR SE",
+				"20416SPN=BEN NL",
+				"23430SPN=LycaMobile",
+				"311450SPN=PTCI",
+			].map(spn),
+			[],
+		).carriers.map((c) => c.name);
+		expect(names.toSorted()).toEqual([
+			"BEN NL",
+			"LycaMobile",
+			"PTCI",
+			"Rabo Mobiel",
+			"Sainsbury's",
+			"Tele2",
+			"Telenor SE",
+		]);
+		expect(linkCarriers([spn("20404GID1=2801")], []).carriers.map((c) => c.name)).toEqual([null]);
+	});
+
 	it("keeps a carrier's current id while it is still one of its names", () => {
 		const fresh = [
 			m("ios", "ATT_NR_US", plain("310410", "310280")),

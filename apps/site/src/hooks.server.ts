@@ -31,5 +31,7 @@ export const handle: Handle = async ({ event, resolve }) => {
 		: await repair(event.request, env.LEGACY_REPAIR, held, () => resolve(event));
 	const policy = await responsePolicy(event, response, env.CACHE_TTL);
 	if (policy) applyPolicy(response.headers, policy);
+	// Kept out of search indexes; robots.txt still lets crawlers fetch pages, so they see this.
+	response.headers.set("x-robots-tag", "noindex");
 	return response;
 };

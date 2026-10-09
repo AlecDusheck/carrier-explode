@@ -29,6 +29,7 @@ export type {
 	ShownCountry,
 } from "./carriers.ts";
 export {
+	deviceCoverage,
 	deviceList,
 	deviceOf,
 	releasedDevices,

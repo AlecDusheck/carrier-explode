@@ -69,13 +69,12 @@ export const deviceNames = perRequest(
 		new Map((await devicesOf(platform)).map((d) => [d.code, d.name])),
 );
 
-/** The names of the devices a platform's lines are, by code. */
-export const lineNames = (platform: Platform): Promise<ReadonlyMap<string, string>> =>
-	deviceNames(LINE_DEVICES[decoderFamily(platform)]);
+/** The platform whose devices a platform's lines are. */
+export const linePlatform = (platform: Platform): ReleasePlatform => LINE_DEVICES[decoderFamily(platform)];
 
 /** The order a platform's lines are listed in: its devices, newest first. */
 export const deviceOrder = async (platform: Platform): Promise<DeviceOrder> =>
-	newestFirst(await devicesOf(LINE_DEVICES[decoderFamily(platform)]));
+	newestFirst(await devicesOf(linePlatform(platform)));
 
 /** A platform's releases, newest first. */
 export const releasesOf = perRequest(async (platform: ReleasePlatform): Promise<ListedRelease[]> =>

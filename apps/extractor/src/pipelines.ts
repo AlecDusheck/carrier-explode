@@ -72,8 +72,15 @@ export const FEED_NAMES = [
 ] as const;
 export type FeedName = (typeof FEED_NAMES)[number];
 
-export const PIPELINE_NAMES = [...FEED_NAMES, "reindex"] as const;
+export const PIPELINE_NAMES = [...FEED_NAMES, "check", "reindex"] as const;
 export type PipelineName = (typeof PIPELINE_NAMES)[number];
+
+/** A feed's check: with `rebuild`, its failed units run again; with `only`, just the planned units of those instance ids start. */
+const checkSchema = v.object({
+	feed: v.picklist(FEED_NAMES),
+	rebuild: v.boolean(),
+	only: v.nullable(v.array(str)),
+});
 
 /** `container`: its instances each hold a container, so a check keeps it to its CONTAINER_SHARE of the container class's max_instances. */
 export const PIPELINES = {
@@ -84,6 +91,7 @@ export const PIPELINES = {
 	"galaxy-build": { binding: "GALAXY_BUILD", params: galaxyBuildSchema, container: true },
 	labels: { binding: "LABELS", params: v.object({ week: day }), container: false },
 	dataset: { binding: "DATASET", params: v.object({ day }), container: false },
+	check: { binding: "CHECK", params: checkSchema, container: false },
 	reindex: { binding: "REINDEX", params: v.object({ target: reindexTargetSchema }), container: false },
 } as const satisfies { readonly [P in PipelineName]: Pipeline };
 
@@ -99,10 +107,7 @@ export type ContainerPipeline = {
 
 export type PipelineParams<P extends PipelineName> = v.InferOutput<(typeof PIPELINES)[P]["params"]>;
 
-/**
- * POST /run's body: a feed's check (with `rebuild`, its failed units run again; with `only`, just the planned units of
- * those instance ids start), a reindex, or a platform derived again.
- */
+/** POST /run's body: a feed's check, a reindex, or a platform derived again. */
 export const runRequestSchema = v.variant("run", [
 	v.object({
 		run: v.picklist(FEED_NAMES),

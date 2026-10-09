@@ -1,6 +1,7 @@
 /**
  * UE capability band combinations (`uecapconfig/*.binarypb`). Three layouts, told apart by wire type: `<CARRIER>_<n>`
- * files (EN-DC and NR CA), `lte_<n>` files (LTE CA), and `ap_plmn_mapping` (carrier index → PLMNs).
+ * files (EN-DC and NR CA), `lte_<n>` files (LTE CA), and `ap_plmn_mapping` (carrier index → PLMNs). Field names past
+ * band and classes follow 3GPP TS 38.331 and a community .proto (jchin14/binarypb-band-editor), matched against the corpus.
  */
 
 import { packedVarints, wireFields, type WireField } from "@carrier-explode/binary";
@@ -16,18 +17,30 @@ const UL_MIMO_LAYERS = [1, 2, 4] as const;
 /** NR bands are stored as 10000 + n. */
 const NR_BAND_BASE = 10000;
 
+/** FeatureSetDownlinkPerCC / FeatureSetUplinkPerCC; a field proto3 leaves out reads 0. */
 interface CarrierFeature<Layers extends readonly number[]> {
 	readonly scsKHz: (typeof SCS_KHZ)[number];
 	readonly bandwidthMHz: number;
 	readonly mimoLayers: Layers[number];
+	/** maxModOrder: 1 on FR2 and 64QAM-only carriers, 2 for 256QAM. */
+	readonly maxModulation: number;
+	readonly bandwidth90MHz: boolean;
 }
 type DlFeature = CarrierFeature<typeof DL_MIMO_LAYERS>;
-type UlFeature = CarrierFeature<typeof UL_MIMO_LAYERS>;
+type UlFeature = CarrierFeature<typeof UL_MIMO_LAYERS> & {
+	/** maxNumberMIMO-LayersNonCB-PUSCH. */
+	readonly nonCbMimoLayers: number;
+};
 
 interface ComponentBase {
 	readonly band: number;
 	readonly dlClass: BandwidthClass;
 	readonly ulClass: BandwidthClass | null;
+	/** The band's downlink and uplink FeatureSet ids; 0 for none. */
+	readonly dlFeatureSet: number;
+	readonly ulFeatureSet: number;
+	/** In the community .proto as srstxswitch; 0 in every file seen. */
+	readonly srsTxSwitch: number;
 }
 
 export type Component =
@@ -39,12 +52,34 @@ export type Component =
 			readonly ul: readonly UlFeature[];
 	  });
 
+/** What a group of combinations shares; 0 where unset. */
+export interface ComboHeader {
+	/** BandCombinationSet bitmaps (bcsNr, bcsIntraEndc, bcsEutra), most significant bit first. */
+	readonly bcsNr: number;
+	readonly bcsIntraEndc: number;
+	readonly bcsEutra: number;
+	/** 1 forces power class 2, by the community .proto. */
+	readonly powerClass: number;
+	readonly intraBandEnDcSupport: number;
+}
+
+export interface UeCapCombination {
+	readonly header: ComboHeader;
+	/** The band list's field 2 (bitMask in the community .proto): 0 in every file seen. */
+	readonly bitMask: number;
+	readonly components: readonly Component[];
+}
+
 export type UeCapFile =
 	/** `combinations` is empty in the placeholder files some carriers have. */
 	| {
 			readonly kind: "combinations";
+			/** Field 1: one of two values across tokay's files. */
+			readonly version: number;
 			readonly carrierIndex: number;
-			readonly combinations: readonly (readonly Component[])[];
+			/** Field 9: differs per file, unexplained. */
+			readonly field9: number;
+			readonly combinations: readonly UeCapCombination[];
 	  }
 	| { readonly kind: "lte-ca"; readonly combinations: readonly (readonly LteCaComponent[])[] }
 	| {
@@ -77,22 +112,24 @@ const bytesOf = (m: Message, key: `${number}:bytes`): Uint8Array[] =>
 /** A singular varint; proto3 leaves 0 out. */
 const varint = (m: Message, key: `${number}:varint`): number => varints(m, key).at(-1) ?? 0;
 
-/** Fields 4 and 5 (and the uplink's 6) are read but not understood. */
-function feature<const L extends readonly number[]>(
-	b: Uint8Array,
-	layers: L,
-	extra: readonly WireField["key"][],
-): CarrierFeature<L> {
-	const m = message(
-		b,
-		["1:varint", "2:varint", "3:varint", "4:varint", "5:varint", ...extra],
-		"uecap feature",
-	);
+function feature<const L extends readonly number[]>(m: Message, layers: L): CarrierFeature<L> {
 	return {
 		scsKHz: enumOf(SCS_KHZ, varint(m, "1:varint"), "subcarrier spacing"),
 		bandwidthMHz: required(varints(m, "3:varint").at(-1), "bandwidth"),
 		mimoLayers: enumOf(layers, varint(m, "2:varint"), "MIMO layers"),
+		maxModulation: varint(m, "4:varint"),
+		bandwidth90MHz: varint(m, "5:varint") !== 0,
 	};
+}
+
+const FEATURE_FIELDS = ["1:varint", "2:varint", "3:varint", "4:varint", "5:varint"] as const;
+
+const dlFeature = (b: Uint8Array): DlFeature =>
+	feature(message(b, FEATURE_FIELDS, "uecap DL feature"), DL_MIMO_LAYERS);
+
+function ulFeature(b: Uint8Array): UlFeature {
+	const m = message(b, [...FEATURE_FIELDS, "6:varint"], "uecap UL feature");
+	return { ...feature(m, UL_MIMO_LAYERS), nonCbMimoLayers: varint(m, "6:varint") };
 }
 
 const ulClassOf = (v: number): BandwidthClass | null =>
@@ -106,16 +143,18 @@ function features<F>(b: Uint8Array | undefined, table: readonly F[]): F[] {
 }
 
 function component(b: Uint8Array, dl: readonly DlFeature[], ul: readonly UlFeature[]): Component {
-	// Fields 4 and 5 are read but not understood.
 	const m = message(
 		b,
-		["1:varint", "2:varint", "3:varint", "4:varint", "5:varint", "6:bytes", "7:bytes"],
+		["1:varint", "2:varint", "3:varint", "4:varint", "5:varint", "6:bytes", "7:bytes", "8:varint"],
 		"uecap component",
 	);
 	const stored = required(varints(m, "1:varint").at(-1), "band");
 	const base = {
 		dlClass: enumOf(BANDWIDTH_CLASSES, varint(m, "2:varint"), "DL class"),
 		ulClass: ulClassOf(varint(m, "3:varint")),
+		dlFeatureSet: varint(m, "4:varint"),
+		ulFeatureSet: varint(m, "5:varint"),
+		srsTxSwitch: varint(m, "8:varint"),
 	};
 	if (stored < NR_BAND_BASE) return { rat: "LTE", band: stored, ...base };
 	return {
@@ -127,14 +166,37 @@ function component(b: Uint8Array, dl: readonly DlFeature[], ul: readonly UlFeatu
 	};
 }
 
-function combination(b: Uint8Array, dl: readonly DlFeature[], ul: readonly UlFeature[]): Component[] {
-	// Field 1 holds bitmaps and a small enum not yet understood; band-list field 2 is always 0.
-	const m = message(b, ["1:bytes", "2:bytes"], "uecap combination");
-	return bytesOf(m, "2:bytes").flatMap((list) =>
-		bytesOf(message(list, ["1:bytes", "2:varint"], "uecap band list"), "1:bytes").map((c) =>
-			component(c, dl, ul),
-		),
+function comboHeader(b: Uint8Array | undefined): ComboHeader {
+	const m = message(
+		b ?? new Uint8Array(),
+		["1:varint", "2:varint", "3:varint", "4:varint", "5:varint"],
+		"uecap combination header",
 	);
+	return {
+		bcsNr: varint(m, "1:varint"),
+		bcsIntraEndc: varint(m, "2:varint"),
+		bcsEutra: varint(m, "3:varint"),
+		powerClass: varint(m, "4:varint"),
+		intraBandEnDcSupport: varint(m, "5:varint"),
+	};
+}
+
+/** A group of combinations under one header: each band list is a combination (variants differ in FeatureSet ids). */
+function combinationGroup(
+	b: Uint8Array,
+	dl: readonly DlFeature[],
+	ul: readonly UlFeature[],
+): UeCapCombination[] {
+	const m = message(b, ["1:bytes", "2:bytes"], "uecap combination group");
+	const header = comboHeader(bytesOf(m, "1:bytes").at(-1));
+	return bytesOf(m, "2:bytes").map((list) => {
+		const l = message(list, ["1:bytes", "2:varint"], "uecap band list");
+		return {
+			header,
+			bitMask: varint(l, "2:varint"),
+			components: bytesOf(l, "1:bytes").map((c) => component(c, dl, ul)),
+		};
+	});
 }
 
 /** Fields 1-3: band, DL class bitmap, UL class bitmap. */
@@ -175,17 +237,18 @@ export function decodeUeCap(bytes: Uint8Array): UeCapFile {
 			),
 		};
 	}
-	// Field 1 is an id shared across files, 9 a per-file hash.
 	const m = message(
 		bytes,
 		["1:varint", "2:varint", "3:bytes", "6:bytes", "7:bytes", "9:varint"],
 		"uecap file",
 	);
-	const dl = bytesOf(m, "6:bytes").map((f) => feature(f, DL_MIMO_LAYERS, []));
-	const ul = bytesOf(m, "7:bytes").map((f) => feature(f, UL_MIMO_LAYERS, ["6:varint"]));
+	const dl = bytesOf(m, "6:bytes").map(dlFeature);
+	const ul = bytesOf(m, "7:bytes").map(ulFeature);
 	return {
 		kind: "combinations",
+		version: varint(m, "1:varint"),
 		carrierIndex: varint(m, "2:varint"),
-		combinations: bytesOf(m, "3:bytes").map((c) => combination(c, dl, ul)),
+		field9: varint(m, "9:varint"),
+		combinations: bytesOf(m, "3:bytes").flatMap((c) => combinationGroup(c, dl, ul)),
 	};
 }

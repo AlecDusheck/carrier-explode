@@ -239,8 +239,6 @@ const kindsHeld = perRequest(
 const allEntries = async (): Promise<ListEntry[]> =>
 	(await Promise.all((await kindsHeld()).map((l) => getList(l.platform, l.kind)))).flat();
 
-export const allSourceKeys = async (): Promise<SourceKey[]> => (await allEntries()).map((e) => e.key);
-
 /** Every source with its carrier's name, by key. */
 export const allSourceBrands = perRequest(
 	async (): Promise<Array<{ readonly key: SourceKey; readonly brand: string }>> =>

@@ -8,5 +8,5 @@ export { byName, confseqCaCombinations, type ItemLookup, type LteCaComponent } f
 export { decodeManifest, type HardwareCondition, type Manifest, type ManifestScope } from "./manifest.ts";
 export { confseqPlmnCategories, type PlmnCategory } from "./plmn-categories.ts";
 export type { Plmn } from "./plmn.ts";
-export { type Component, decodeUeCap } from "./uecap.ts";
+export { type ComboHeader, type Component, decodeUeCap, type UeCapCombination } from "./uecap.ts";
 export { ShannonFormatError } from "./wire.ts";

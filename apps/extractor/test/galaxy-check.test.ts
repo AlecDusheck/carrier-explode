@@ -1,8 +1,14 @@
 import { describe, expect, it } from "vitest";
 
 import { galaxyPhones } from "../src/galaxy/phones.ts";
-import { fusVersion } from "../src/galaxy/plan.ts";
-import { salesCodesToAsk } from "../src/galaxy/sales-codes.ts";
+import { fusVersion, oldestMonth } from "../src/galaxy/plan.ts";
+import {
+	LaunchBound,
+	mayLaunchSince,
+	newestGenerationFirst,
+	NO_PROBES,
+	salesCodesToAsk,
+} from "../src/galaxy/sales-codes.ts";
 import { SCOPE } from "./scope.ts";
 
 const csv = (...rows: string[]): string =>
@@ -73,5 +79,42 @@ describe("sales codes", () => {
 	it("asks a package's next code once its first refuses", () => {
 		const answers = { EUX: { refused: "2026-10-07" }, INS: { package: "OXM" } };
 		expect(salesCodesToAsk(["EUX", "INS"], answers, "2026-10-07")).toEqual(["INS"]);
+	});
+});
+
+describe("a model's launch", () => {
+	it("is dated by its oldest build whose month decodes", () => {
+		expect(oldestMonth(["S942BOXM4BZIG", "S942BOXM1AZAQ", "S942BOXM1AZMQ"], "2026-10-07")).toBe("2026-01");
+		expect(oldestMonth([], "2026-10-07")).toBeUndefined();
+	});
+
+	it("rules a model out for good once a build predates the scope", () => {
+		expect(mayLaunchSince(NO_PROBES, "2025-01")).toBe(true);
+		expect(mayLaunchSince({ oldest: "2025-01", answers: {} }, "2025-01")).toBe(true);
+		expect(mayLaunchSince({ oldest: "2024-02", answers: {} }, "2025-01")).toBe(false);
+	});
+});
+
+const a = (generation: number) => ({ line: { family: "Galaxy A3", generation } });
+const s = (generation: number) => ({ line: { family: "Galaxy S", generation } });
+
+describe("a family's launch bound", () => {
+	it("rules out a generation seen older than the scope and every earlier one of its family, no other family", () => {
+		const bound = new LaunchBound("2025-01");
+		expect(bound.seen(a(36), { oldest: "2025-03", answers: {} })).toBe(true);
+		expect(bound.seen(a(35), { oldest: "2024-03", answers: {} })).toBe(false);
+		expect([a(36), a(35), a(30), a(3), s(24)].map((m) => bound.open(m))).toEqual([
+			true,
+			false,
+			false,
+			false,
+			true,
+		]);
+	});
+
+	it("orders newest generation first", () => {
+		expect([a(30), a(37), a(35)].toSorted(newestGenerationFirst).map((m) => m.line.generation)).toEqual([
+			37, 35, 30,
+		]);
 	});
 });

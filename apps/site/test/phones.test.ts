@@ -160,7 +160,7 @@ describe("override files", () => {
 			defaults: phones("iPhone19,2", "iPhone19,7"),
 		});
 		expect(rows.map(rowKey)).toEqual(["carrier.plist", "overrides_V53_V54_V57.der.pri"]);
-		expect(fileChoices(rows, (key) => key)[0]?.label).toBe("iPhone 18 Pro, 18 Pro Max · carrier.plist only");
+		expect(fileChoices(rows, (key) => key)[0]?.label).toBe("Other phones · carrier defaults");
 		// Unnamed, a page opens on the newest phone with a file of its own.
 		expect(pickPhoneRow(rows, null).row).toBe(rows[1]);
 		expect(pickPhoneRow(rows, "carrier.plist").row).toBe(rows[0]);

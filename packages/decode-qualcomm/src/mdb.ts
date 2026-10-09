@@ -50,8 +50,10 @@ export function readMdb(b: Uint8Array): MdbFile {
 		creator: cstr(b.subarray(2, 0x1d)),
 		...(t ? { built: new Date(t * 1000).toISOString() } : {}),
 	};
-	if (header.layout === 3) return { header, layout: 3, blob: inflate(b.subarray(0x34), u32le(b, 0x30)) };
-	if (header.layout !== 1) throw new Error(`mdb: unknown layout ${header.layout}`);
+	// Samsung's CPP2 files say layout 3 but are indexed.
+	if (header.layout === 3 && header.creator !== "CPP2")
+		return { header, layout: 3, blob: inflate(b.subarray(0x34), u32le(b, 0x30)) };
+	if (header.layout !== 1 && header.layout !== 3) throw new Error(`mdb: unknown layout ${header.layout}`);
 	const zlen = u32le(b, 0x30);
 	const idx = inflate(b.subarray(0x38, 0x38 + zlen), u32le(b, 0x34));
 	const keySize = u32le(idx, 0),
@@ -271,6 +273,35 @@ export function parsePlmnFeatures(f: MdbFile): PlmnFeatures[] {
 			out.hex = bytesToHex(trimZeros(d.subarray(4)));
 		}
 		return out;
+	});
+}
+
+export interface PlmnCombos {
+	/** `302-FF`: an MNC of FF is any. */
+	readonly plmns: readonly string[];
+	/** u32 tag of the record (0x303, as plmn2features' NR records). */
+	readonly tag: number;
+	/** The u32 between tag and length: 0 in every file seen. */
+	readonly reserved: number;
+	/** `b1AA-n3AA`, as parseCombo reads them. */
+	readonly combos: readonly string[];
+}
+
+/** Record: u32 tag, u32 reserved, u32 length, then that many bytes of `;`-separated combos, NUL-ended. */ // Galaxy mcfg_sw: /mdb/nr/plmn2cacombos_nr_sub.mdb
+export function parsePlmnCombos(f: MdbFile): PlmnCombos[] {
+	if (f.layout !== 1) throw new Error("plmn2cacombos: not an indexed mdb");
+	return f.records.map((r) => {
+		const d = r.data;
+		if (d.length < 12 || u32le(d, 8) !== d.length - 12)
+			throw new Error(`plmn2cacombos: a ${d.length}-byte record whose length field disagrees`);
+		const text = latin1(d.subarray(12)).replace(/\0$/, "");
+		if (text.includes("\0")) throw new Error("plmn2cacombos: a record with bytes past its text's end");
+		return {
+			plmns: r.keys.map(plmnFromKey),
+			tag: u32le(d, 0),
+			reserved: u32le(d, 4),
+			combos: text.split(";").filter((c) => c !== ""),
+		};
 	});
 }
 

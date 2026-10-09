@@ -108,6 +108,10 @@ body {
 	image-rendering: pixelated;
 	margin-right: -4px;
 }
+.titlebar .home {
+	color: inherit;
+	text-decoration: none;
+}
 .titlebar .spacer {
 	flex: 1;
 }
@@ -1181,29 +1185,19 @@ article.consumer tr.group td {
 	background: var(--face);
 	font-weight: bold;
 }
-article.consumer ul.features {
-	list-style: none;
-	padding: 0;
-	margin: 0;
-}
-article.consumer ul.features li {
-	display: flex;
-	flex-direction: column;
-	gap: 1px;
-	padding: 6px 0;
-	border-bottom: 1px solid var(--shadow);
-}
 article.consumer ul.others {
 	columns: 2 14em;
 	padding-left: 18px;
 }
 
+/* A badge: a carrier's logo, or a feature's in the matrix. Its corner is a quarter of its size at any size. */
 .logo {
+	--logo: 20px;
 	display: inline-block;
 	flex: none;
-	width: 20px;
-	height: 20px;
-	border-radius: 5px;
+	width: var(--logo);
+	height: var(--logo);
+	border-radius: calc(var(--logo) / 4);
 	vertical-align: middle;
 	box-shadow: 0 0 0 1px var(--shadow);
 }
@@ -1429,4 +1423,63 @@ a[href][aria-busy="true"] {
 	border: 1px solid;
 	border-color: var(--light) var(--dark) var(--dark) var(--light);
 	animation: busy-in 0s 150ms backwards;
+}
+
+/* Feature matrix badges, filled as a carrier's is: gold when on, green when offered but off until turned on,
+   greyed when not given (ringed red when required, amber when nice to have), empty when nothing says. */
+.tone-met {
+	--bg: #f0cc5c;
+	--rim: var(--shadow);
+}
+.tone-offered {
+	--bg: #8fcf78;
+	--rim: var(--shadow);
+}
+.tone-unmet,
+.tone-need,
+.tone-want {
+	--bg: #e6e3dc;
+	--rim: var(--shadow);
+}
+.tone-need {
+	--rim: #d23a22;
+}
+.tone-want {
+	--rim: #e0a030;
+}
+.tone-blank {
+	--bg: transparent;
+	--rim: var(--shadow);
+}
+/* A feature's badge: its pixel glyph (--icon) on the tone's fill. Its holder sets --lock and --switch, the corner marks. */
+.logo.feature {
+	--glyph: calc(var(--logo) * 2 / 3);
+	--mark: calc(var(--logo) / 3);
+	background:
+		var(--icon) center / var(--glyph) no-repeat,
+		var(--bg);
+	box-shadow: 0 0 0 1px var(--rim);
+	image-rendering: pixelated;
+}
+.logo.feature:is(.tone-need, .tone-want) {
+	box-shadow: 0 0 0 2px var(--rim);
+}
+.logo.feature:is(.tone-unmet, .tone-need, .tone-want) {
+	background:
+		var(--lock) right 2px bottom 2px / var(--mark) no-repeat,
+		linear-gradient(rgb(230 227 220 / 0.7), rgb(230 227 220 / 0.7)),
+		var(--icon) center / var(--glyph) no-repeat,
+		var(--bg);
+}
+.logo.feature.tone-offered {
+	background:
+		var(--switch) right 2px bottom 2px / var(--mark) no-repeat,
+		var(--icon) center / var(--glyph) no-repeat,
+		var(--bg);
+}
+.logo.feature.tone-blank {
+	background: none;
+	box-shadow: none;
+	outline: 1px dashed var(--shadow);
+	outline-offset: -1px;
 }

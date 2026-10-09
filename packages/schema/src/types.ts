@@ -2,7 +2,13 @@
 
 /** Bump when a stored shape changes: its objects are keyed under norm/v<N>/ and rebuilt by `reindex`. */
 export const PROFILE_SCHEMA = 8;
-export const MODEM_SCHEMA = 7;
+export const MODEM_SCHEMA = 8;
+/**
+ * Readers serve a modem record at this schema where MODEM_SCHEMA's is not written yet, as during a reindex: its shape
+ * is MODEM_SCHEMA's. It moves up with the next bump.
+ */
+export const PREVIOUS_MODEM_SCHEMA = 7;
+export const READ_MODEM_SCHEMAS = [MODEM_SCHEMA, PREVIOUS_MODEM_SCHEMA] as const;
 
 /** The OS that ships the settings. iPad and Watch bundles are separate files with their own versions; Pixel is `android`. */
 export const PLATFORMS = ["ios", "ipados", "watchos", "android", "samsung"] as const;
@@ -555,6 +561,24 @@ export interface BandComponent {
 	readonly dlLayers?: number;
 	readonly bandwidthMhz?: number;
 	readonly scsKhz?: number;
+	/** The band's FeatureSet ids, where the family states them: combinations of equal bands can differ in these alone. */
+	readonly dlFeatureSet?: number;
+	readonly ulFeatureSet?: number;
+	/** Each carrier of the class, where the family lists them; dlLayers, bandwidthMhz and scsKhz sum them up. */
+	readonly dlCarriers?: readonly CarrierFeatures[];
+	readonly ulCarriers?: readonly CarrierFeatures[];
+}
+
+/** One component carrier's limits (3GPP TS 38.331 FeatureSetDownlinkPerCC / FeatureSetUplinkPerCC). */
+export interface CarrierFeatures {
+	readonly scsKhz: number;
+	readonly bandwidthMhz: number;
+	readonly layers: number;
+	/** maxModOrder as stored: 1 on FR2 and 64QAM-only carriers, 2 for 256QAM; 0 when unset. */
+	readonly maxModulation: number;
+	readonly bandwidth90Mhz: boolean;
+	/** Uplink only: maxNumberMIMO-LayersNonCB-PUSCH. */
+	readonly nonCbLayers?: number;
 }
 
 export type BandCombination = readonly BandComponent[];
@@ -574,7 +598,7 @@ export type ModemScope = (typeof MODEM_SCOPES)[number];
 
 /** A configuration in one modem family, normalised. Stored at norm/v<MODEM_SCHEMA>/<sha>.json. */
 export interface ModemConfig {
-	readonly schema: typeof MODEM_SCHEMA;
+	readonly schema: (typeof READ_MODEM_SCHEMAS)[number];
 	readonly family: ModemVendor;
 	readonly sha: string;
 	/** The family's own name for it: `Commercial-TMO`, `us_tmo`, `SBP 12`. */

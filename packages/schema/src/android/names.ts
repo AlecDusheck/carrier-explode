@@ -22,6 +22,16 @@ const RULE_NAME = /^\d{5,6}(?:(?:SPN|IMSI|GID1|ICCID)=.+)?$/;
 
 export const isRuleNamed = (canonical: string): boolean => RULE_NAME.test(canonical);
 
+/**
+ * The brand an SPN rule's name gives: its SPN. carrier_list.pb writes most in capitals; one with a word of five or more is a
+ * name, title-cased but for words of up to three (`TELENOR SE` -> "Telenor SE"); shorter ones may be acronyms (`PTCI`).
+ */
+export function spnBrand(canonical: string): string | undefined {
+	const spn = /^\d{5,6}SPN=(.+)$/.exec(canonical)?.[1];
+	if (spn === undefined || /\p{Ll}/u.test(spn) || !/\S{5}/u.test(spn)) return spn;
+	return spn.replace(/\S{4,}/gu, (word) => word.charAt(0) + word.slice(1).toLowerCase());
+}
+
 /** carrier_name_string when set, else the canonical name without its country suffix. */
 export function androidDisplay(canonical: string, carrierNameString: string | undefined): string {
 	if (carrierNameString !== undefined) return carrierNameString;

@@ -130,9 +130,10 @@ Every rule the SIM satisfies, most specific first: a GID or IMSI/ICCID prefix ru
 - **Pages**: `limit` (100, at most 500) and an opaque `cursor`; `next` is `{ cursor, url }` or null. Keyset, so a page costs its size.
 - **One spelling**: parameters sorted, the default limit left out; any other spelling is a 308 to it, an unknown parameter a 400. One URL, one cache entry.
 - **Field selection**: `fields=apns,concepts` on a version and on a carrier's profiles; `settings` is its own resource, so a version never carries every native key.
-- **Errors**: `{ "error": { "status": 404, "code": "not_found", "message": "No carrier Nope." } }`; codes `bad_request`, `not_found`, `internal`.
+- **Errors**: `{ "error": { "status": 404, "code": "not_found", "message": "No carrier Nope." } }`; codes `bad_request`, `unidentified_client`, `not_found`, `internal`.
 - **Caching**: everything is edge-cached until the next index purge (one tag, `index`). A version by slug, a modem config, and a comparison of two named versions are pinned (30 days); `latest` and lists 1 day, stale-while-revalidate. Every answer has an ETag; `If-None-Match` gets a 304.
 - **Rate limit**: a zone WAF rule against floods, 300 requests per IP per 10 seconds across the site and the API (the site's static files excepted: `/_app/immutable/`, its SVGs outside `/raw/`, and `/cdn-cgi/`), counted per Cloudflare location; cache hits do not count (`requests_to_origin`). Past it, Cloudflare's own `429` page with `Retry-After` for 10 seconds, not the JSON error shape.
+- **User-Agent**: a request with none, or one that starts with an HTTP library's bare default (`curl/…`, `python-requests/…`; wrangler.jsonc `UNIDENTIFIED_AGENTS`, matched on the first product token), gets a `403` `unidentified_client` asking for a project name and a contact. `/`, `/openapi.json`, `/robots.txt` and `/internal/*` stay open. The Worker's uncached default entrypoint decides before the cached `Api` entrypoint is consulted, and the refusal is `no-store`.
 - **Discovery**: `/v1` lists every collection; `/openapi.json` (3.1) has every route, parameter, example and response schema; the site's `/llms.txt` and wiki article point here.
 
 ## Changed from the first `/v1`

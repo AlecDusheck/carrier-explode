@@ -183,9 +183,9 @@ export interface PhoneChoice {
 	readonly href: string;
 }
 
-/** A row's phones, and what sets its files apart: an MVNO set's, or carrier.plist alone. */
+/** A row's phones, and what sets its files apart: an MVNO set's. Phones with no override file are the others. */
 export function rowName(r: PhoneRow): string {
-	if (r.kind === "defaults") return `${phoneList(r.phones)} · carrier.plist only`;
+	if (r.kind === "defaults") return "Other phones · carrier defaults";
 	if (!r.phones.length) return `${r.path} (not named for a phone)`;
 	const mvno = overrideMvnoSet(r.path);
 	return `${phoneList(r.phones)}${mvno === null ? "" : ` · MVNO set ${mvno}`}`;

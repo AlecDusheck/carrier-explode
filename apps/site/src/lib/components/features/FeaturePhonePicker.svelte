@@ -2,14 +2,14 @@
   import { goto } from "$app/navigation";
   import { page } from "$app/state";
   import { withParams } from "#lib/format.ts";
+  import type { ModelChoice } from "#lib/phones.ts";
   import { PLATFORM_NAMES } from "#lib/platforms.ts";
   import type { FeaturePhone } from "#lib/server/features.ts";
   import { visitorDevice, visitorPhone } from "#lib/visitor.ts";
-  import PhoneImage from "#lib/components/PhoneImage.svelte";
-  import Picker from "#lib/components/Picker.svelte";
+  import ModelPicker from "#lib/components/ModelPicker.svelte";
 
-  /** Every phone in one list, iPhones then Pixels, each platform under its heading. */
-  let { phones, phone }: { phones: readonly FeaturePhone[]; phone: FeaturePhone | null } = $props();
+  /** Every phone in one list, iPhones then Pixels, each platform under its heading; `models` are `phones` grouped. */
+  let { phones, models, phone }: { phones: readonly FeaturePhone[]; models: readonly ModelChoice[]; phone: FeaturePhone | null } = $props();
 
   // A URL naming no phone shows the newest covered one; the visitor's own is a better default.
   $effect(() => {
@@ -24,18 +24,12 @@
   });
 </script>
 
-{#snippet option(p: FeaturePhone)}
-  <span class="picker-opt"><PhoneImage platform={p.platform} id={p.code} name={p.name} /><span class="text">{p.name}</span></span>
-{/snippet}
-
 <div class="filters">
-  <Picker
+  <ModelPicker
     label="Your phone"
-    items={phones}
-    selected={phone ?? undefined}
-    key={(p) => p.code}
+    phones={models}
+    selected={phone?.code}
     section={(p) => PLATFORM_NAMES[p.platform]}
-    {option}
-    href={(p) => withParams(page.url, { phone: p.code })}
+    href={(code) => withParams(page.url, { phone: code })}
   />
 </div>

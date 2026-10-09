@@ -1,6 +1,6 @@
 /** Links sources into carriers by exact shared SIM rules (matcherKeys), with people's link and split rules, each with its reason. */
 
-import { androidDisplay, androidIso, isRuleNamed } from "./android/names.ts";
+import { androidDisplay, androidIso, isRuleNamed, spnBrand } from "./android/names.ts";
 import { assignIds } from "./ids.ts";
 import { appleDisplay, appleNameIso } from "./ios/names.ts";
 import {
@@ -88,6 +88,13 @@ const NAMED = {
 	(s: SourceRef) => { readonly display: string; readonly iso: readonly string[] }
 >;
 
+/** The brand a source's name gives where its head displays only that name. */
+const NAME_BRAND = {
+	android: spnBrand,
+	apple: () => undefined,
+	samsung: () => undefined,
+} as const satisfies Record<DecoderFamily, (name: string) => string | undefined>;
+
 /**
  * MCCs no network is assigned: ITU-T E.212's list (Annex to ITU OB 1117, note a) reserves those starting 0, 1 and 8, and
  * E.212 (06/2024) Appendix III gives 999 to any private network. Test SIMs (00101, 99999) use them, so they say nothing of a carrier.
@@ -112,12 +119,14 @@ export function identifies(key: string): boolean {
 
 function memberOf(s: SourceIdentity): Member {
 	const source = sourceOf(s.key);
-	const named = NAMED[decoderFamily(source.platform)](source);
+	const family = decoderFamily(source.platform);
+	const named = NAMED[family](source);
+	const display = s.display ?? named.display;
 	return {
 		key: s.key,
 		source,
 		sims: [...new Set([...s.sims, ...s.routes])].filter(identifies),
-		display: s.display ?? named.display,
+		display: display === source.name ? (NAME_BRAND[family](display) ?? display) : display,
 		iso: s.iso.length > 0 ? s.iso : named.iso,
 	};
 }

@@ -1,9 +1,8 @@
 /** What a container job is: a function of its params (unvalidated: each job parses its own) to its output; and how it answers a failure. */
 
 import type { Json } from "@carrier-explode/schema/types";
-import { describe } from "../../src/errors.ts";
 import type { Answer } from "../../src/container-protocol.ts";
-import { permanent } from "../../src/errors.ts";
+import { describe, failureOf } from "../../src/errors.ts";
 import type { Bucket } from "./bucket.ts";
 
 export interface JobContext {
@@ -15,5 +14,5 @@ export interface JobContext {
 
 export type JobRunner = (params: unknown, ctx: JobContext) => Promise<Json>;
 
-/** A job's failure as its answer: whether a rerun would fail the same way is decided here, where the error is still an object. */
-export const failure = (e: unknown): Answer => ({ ok: false, error: describe(e), permanent: permanent(e) });
+/** A job's failure as its answer: how a rerun would fare is decided here, where the error is still an object. */
+export const failure = (e: unknown): Answer => ({ ok: false, error: describe(e), failure: failureOf(e) });

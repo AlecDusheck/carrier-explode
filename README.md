@@ -11,6 +11,7 @@ I started this while chasing how iOS handles cell broadcast for Indian carriers,
 
 ## What you can do with it
 
+- Pick the features you need (5G SA, VoNR, Wi-Fi Calling and more) and see which carriers give them on your phone.
 - Look up a carrier and see its settings on each platform: APNs, VoLTE, Wi-Fi Calling, 5G and the rest, per phone.
 - Compare any two versions of a carrier's settings, or two carriers, and see what a given OS release changed.
 - Find which settings a SIM selects from its MCC/MNC, GID1/GID2, SPN, IMSI or ICCID (API).
@@ -19,6 +20,8 @@ I started this while chasing how iOS handles cell broadcast for Indian carriers,
 - Download everything as a daily CC0 zip: [dataset](https://carrierexplode.com/wiki/datasets).
 
 ## Screenshots
+
+![The home page: every US carrier on the iPhone 18 Pro Max against every feature, with the picked requirements first](docs/images/features.png)
 
 ![AT&T on iPhone and Pixel side by side: features, voice and IMS settings compared](docs/images/cross-platform.png)
 

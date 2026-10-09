@@ -7,11 +7,13 @@ import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
+import { deflateSync } from "node:zlib";
 
 import {
 	decodeModemEfs,
 	nrArfcnToMHz,
 	parseMcc2Arfcn,
+	parsePlmnCombos,
 	parsePlmnFeatures,
 	plmnFromKey,
 	readMdb,
@@ -158,6 +160,50 @@ describe("parsePlmnFeatures", () => {
 		expect(parsePlmnFeatures(readMdb(fx("features-lte.mdb")))).toEqual([
 			{ plmns: ["460-FF"], tag: 0x37f, hex: "080000001000000001010101010000005a005a005a005b" },
 		]);
+	});
+});
+
+const le32 = (n: number): number[] => [n & 0xff, (n >> 8) & 0xff, (n >> 16) & 0xff, n >>> 24];
+
+/** A Samsung CPP2 mdb: header says layout 3, body is an index and records, as layout 1's. */
+function cpp2(key: number, combos: string): Uint8Array {
+	const list = [...new TextEncoder().encode(combos), 0];
+	const record = Uint8Array.from([...le32(0x303), ...le32(0), ...le32(list.length), ...list]);
+	const index = Uint8Array.from([4, 8, 400, 8192, 8, 0, key, 0].flatMap(le32));
+	const zIndex = deflateSync(index);
+	const zRecord = deflateSync(record);
+	const header = new Uint8Array(0x30);
+	header.set([1, 3, ...new TextEncoder().encode("CPP2")]);
+	return Uint8Array.from([
+		...header,
+		...le32(zIndex.length),
+		...le32(index.length),
+		...zIndex,
+		record.length & 0xff,
+		record.length >> 8,
+		zRecord.length & 0xff,
+		zRecord.length >> 8,
+		...zRecord,
+	]);
+}
+
+describe("parsePlmnCombos", () => {
+	it("reads a CPP2 file, indexed though its header says layout 3, as each PLMN's combination strings", () => {
+		const f = readMdb(cpp2(0x03f2ff, "b1AA-n3AA;b2A-b7A-n66AA;n77AA;"));
+		expect([f.header.creator, f.layout]).toEqual(["CPP2", 1]);
+		expect(parsePlmnCombos(f)).toEqual([
+			{ plmns: ["302-FF"], tag: 0x303, reserved: 0, combos: ["b1AA-n3AA", "b2A-b7A-n66AA", "n77AA"] },
+		]);
+	});
+
+	it("refuses a record whose length field disagrees", () => {
+		const f = readMdb(cpp2(0x03f2ff, "b1AA"));
+		if (f.layout !== 1) throw new Error("not indexed");
+		const [r] = f.records;
+		if (r === undefined) throw new Error("no record");
+		expect(() => parsePlmnCombos({ ...f, records: [{ ...r, data: r.data.subarray(0, 14) }] })).toThrow(
+			/length/,
+		);
 	});
 });
 

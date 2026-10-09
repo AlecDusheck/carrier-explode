@@ -23,9 +23,9 @@ import { cached, perRequest } from "../cache";
 import { deviceNames, deviceOrder, resolve, shippedModems, type Resolved } from "../catalog";
 import { db, indexVersion } from "../db";
 import { mustRelease } from "../releases";
-import { readJson } from "../store";
+import { readModemJson } from "../store";
 
-const modemConfigOf = perRequest((sha: string) => readJson(keys.modemConfig(sha), modemConfigSchema));
+const modemConfigOf = perRequest((sha: string) => readModemJson(keys.modemConfig(sha), modemConfigSchema));
 
 async function mustConfig(sha: string): Promise<ModemConfig> {
 	const config = await modemConfigOf(sha);
@@ -111,7 +111,7 @@ export const getModemConfigBySha = mustConfig;
 
 /** One stored list of band combinations. */
 export async function getModemCombos(key: string): Promise<readonly BandCombination[]> {
-	const list = await readJson(keys.combos(key), bandCombinationsSchema);
+	const list = await readModemJson(keys.combos(key), bandCombinationsSchema);
 	if (!list) error(404, `${keys.combos(key)} is not in the bucket.`);
 	return list;
 }

@@ -7,6 +7,7 @@ import * as v from "valibot";
 
 import { jsonSchema } from "@carrier-explode/schema/records";
 import type { Json } from "@carrier-explode/schema/types";
+import { FAILURES } from "./errors.ts";
 
 export const CONTAINER_JOBS = ["ios.ipsw", "galaxy.ap"] as const;
 export type ContainerJobName = (typeof CONTAINER_JOBS)[number];
@@ -17,10 +18,10 @@ export interface ContainerJob {
 	readonly params: Json;
 }
 
-/** A failed job says whether a rerun would fail the same way (errors.ts `permanent`), as only the container sees the error. */
+/** A failed job says how a rerun would fare (errors.ts `failureOf`), as only the container sees the error. */
 export const answerSchema = v.variant("ok", [
 	v.object({ ok: v.literal(true), output: jsonSchema }),
-	v.object({ ok: v.literal(false), error: v.string(), permanent: v.boolean() }),
+	v.object({ ok: v.literal(false), error: v.string(), failure: v.picklist(FAILURES) }),
 ]);
 export type Answer = v.InferOutput<typeof answerSchema>;
 

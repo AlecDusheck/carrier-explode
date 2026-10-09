@@ -15,8 +15,8 @@ Every key is spelled in `packages/storage/src/keys.ts`.
 | --------------------------------------- | ------------------------------------------------------------------------------------- | ------------------------- |
 | `obj/<sha256>`                          | an artifact's bytes: a bundle, a `.pb` file, a pack, a modem package or configuration | once                      |
 | `norm/v8/<sha>.json`                    | a [profile](/wiki/pipeline/profiles)                                                  | once per `PROFILE_SCHEMA` |
-| `norm/v7/<sha>.json`                    | a modem configuration                                                                 | once per `MODEM_SCHEMA`   |
-| `norm/v7/combos/<key>.json`             | a band-combination list                                                               | once                      |
+| `norm/v8/<sha>.json`                    | a modem configuration                                                                 | once per `MODEM_SCHEMA`   |
+| `norm/v8/combos/<key>.json`             | a band-combination list                                                               | once                      |
 | `decoded/baseband/v<n>/<sha>.json`      | an iOS modem package's summary                                                        | once                      |
 | `releases/<platform>/…json`             | a unit's release record: `ios/24A446.json`, `android/CP3A.260905.009/tokay.json`      | last, by its unit         |
 | `ota/apple/manifests/<sha1>.plist`      | a manifest as fetched                                                                 | once                      |

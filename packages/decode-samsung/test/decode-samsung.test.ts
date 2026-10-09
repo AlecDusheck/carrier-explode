@@ -5,9 +5,11 @@ import { gzipSync } from "fflate";
 import { describe, expect, it } from "vitest";
 
 import {
+	decodeCarrierFeature,
 	decodeOmcText,
 	mnoName,
 	mnoRule,
+	OmcTextError,
 	omcVersion,
 	imsOperator,
 	openOmc,
@@ -21,15 +23,19 @@ import {
 } from "../src/index.ts";
 import { OMC_TABLES } from "../src/omc-text.ts";
 
-/** Samsung's encoding: gzip, XOR with the salt, rotate right by the shift. */
-function encode(text: string): Uint8Array {
-	const z = gzipSync(new TextEncoder().encode(text));
-	return z.map((b, i) => {
+/** XOR with the salt, rotate right by the shift. */
+const mask = (gz: Uint8Array): Uint8Array =>
+	gz.map((b, i) => {
 		const x = b ^ (OMC_TABLES.salts[i % 256] ?? 0);
 		const s = OMC_TABLES.shifts[i % 256] ?? 0;
 		return ((x >>> s) | (x << (8 - s))) & 0xff;
 	});
-}
+
+const gzip = (text: string | Uint8Array): Uint8Array =>
+	gzipSync(typeof text === "string" ? new TextEncoder().encode(text) : text, { mtime: 0 });
+
+/** Samsung's encoding: gzip, masked. */
+const encode = (text: string | Uint8Array): Uint8Array => mask(gzip(text));
 
 const OMC_INFO = `<?xml version="1.0" encoding="UTF-8"?>
 <omcInfo><version>SAOMC_SM-S931B_OXM_XYZ_16_0007</version><model><name>SM-S931B</name></model>
@@ -76,6 +82,30 @@ describe("decodeOmcText", () => {
 	it("decodes Samsung's encoding, and passes plain XML and JSON through", () => {
 		expect(decodeOmcText(encode("<a>é</a>"))).toBe("<a>é</a>");
 		expect(decodeOmcText(new TextEncoder().encode('{"a":1}'))).toBe('{"a":1}');
+	});
+
+	it("reads a file that is not UTF-8 as EUC-KR", () => {
+		const gov = [0xac, 0xa4, 0xac, 0xe0, 0xac, 0xd3];
+		const json = Uint8Array.of(
+			...new TextEncoder().encode('{"v":"'),
+			...gov,
+			...new TextEncoder().encode('"}'),
+		);
+		expect(decodeOmcText(encode(json))).toBe('{"v":"Гов"}');
+		expect(decodeOmcText(json)).toBe('{"v":"Гов"}');
+	});
+
+	it("reads a file whose bytes went through a LF → CR LF conversion", () => {
+		const encoded = encode('{"version":"0"}');
+		expect(encoded.includes(0x0a)).toBe(true);
+		const converted = Uint8Array.from([...encoded].flatMap((b) => (b === 0x0a ? [0x0d, 0x0a] : [b])));
+		expect(decodeOmcText(converted)).toBe('{"version":"0"}');
+	});
+
+	it("refuses a stream its trailer disagrees with, however large a size the trailer claims", () => {
+		const gz = gzip("<a/>");
+		new DataView(gz.buffer, gz.byteOffset).setUint32(gz.length - 4, 0xb3896838, true);
+		expect(() => decodeOmcText(mask(gz))).toThrow(OmcTextError);
 	});
 });
 
@@ -142,6 +172,16 @@ describe("a carrier pack", () => {
 			{ group: "XYZ", features: { CarrierFeature_RIL_SupportVolte: "TRUE" } },
 		]);
 		expect(pack.carrierFeature?.carriers[0]?.id).toBe("30643");
+		expect(pack.carrierFeature?.carrierListVersion).toBe("160027");
+	});
+
+	it("reads a carrier feature file with no carrier list version or per-id entries", () => {
+		const groups = [{ carrier_group: "XYZ", feature: { CarrierFeature_RIL_GcfSor: "TRUE" } }];
+		expect(decodeCarrierFeature(JSON.stringify({ version: "1", customer: groups }))).toEqual({
+			version: "1",
+			groups: [{ group: "XYZ", features: { CarrierFeature_RIL_GcfSor: "TRUE" } }],
+			carriers: [],
+		});
 	});
 });
 

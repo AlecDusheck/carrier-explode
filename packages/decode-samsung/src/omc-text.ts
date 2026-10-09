@@ -3,8 +3,8 @@
  * SHIFTS[i % 256] and XORed with SALTS[i % 256], over a gzip stream. Tables from fei-ke/OmcTextDecoder (Apache-2.0).
  */
 
-import { gunzipSync } from "fflate";
-import { hexToBytes } from "@carrier-explode/binary";
+import { Gunzip } from "fflate";
+import { concatBytes, crc32, errorMessage, hexToBytes, u32le } from "@carrier-explode/binary";
 
 const SALTS = hexToBytes(
 	"41c521de6b1c95374e11af06b087dde9487ac1d54477b291c41f3c395ca89cbb965b455d6e175d35d4cd40b02e02fc0cd350d4dd91e4be8c2702e5d3cc7d2742" +
@@ -23,18 +23,73 @@ const SHIFTS = hexToBytes(
 export const OMC_TABLES = { salts: SALTS, shifts: SHIFTS } as const;
 
 const utf8 = new TextDecoder("utf-8", { fatal: true, ignoreBOM: false });
+const eucKr = new TextDecoder("euc-kr", { fatal: true, ignoreBOM: false });
+
+/** UTF-8, or Samsung's EUC-KR where a file is not: EUY's carrier features name its voicemail in KS X 1001 Cyrillic. */
+function text(bytes: Uint8Array): string {
+	try {
+		return utf8.decode(bytes);
+	} catch {
+		return eucKr.decode(bytes);
+	}
+}
 
 /** A plain file passes through: older packages and customer.xml are not encoded. */
 const isPlain = (b: Uint8Array): boolean =>
 	b[0] === 0x3c || b[0] === 0x7b || (b[0] === 0xef && b[1] === 0xbb);
 
-export function decodeOmcText(bytes: Uint8Array): string {
-	if (isPlain(bytes)) return utf8.decode(bytes);
+export class OmcTextError extends Error {
+	override name = "OmcTextError";
+}
+
+function unmask(bytes: Uint8Array): Uint8Array {
 	const out = new Uint8Array(bytes.length);
 	for (let i = 0; i < bytes.length; i++) {
 		const b = bytes[i] ?? 0;
 		const s = SHIFTS[i % 256] ?? 0;
 		out[i] = (((b << s) | (b >>> (8 - s))) & 0xff) ^ (SALTS[i % 256] ?? 0);
 	}
-	return utf8.decode(gunzipSync(out));
+	return out;
+}
+
+/** Streamed rather than sized from the trailer: a damaged trailer can claim gigabytes. */
+function gunzipChecked(gz: Uint8Array): Uint8Array {
+	const parts: Uint8Array[] = [];
+	new Gunzip((chunk) => {
+		parts.push(chunk);
+	}).push(gz, true);
+	const out = concatBytes(parts);
+	if (crc32(out) !== u32le(gz, gz.length - 8) || out.length % 2 ** 32 !== u32le(gz, gz.length - 4))
+		throw new OmcTextError("the gzip stream's CRC-32 or size disagrees with its trailer");
+	return out;
+}
+
+const CR = 0x0d;
+const LF = 0x0a;
+
+/** Every CR LF back to LF: the inverse of a text-mode LF → CR LF conversion. */
+function undoCrLf(bytes: Uint8Array): Uint8Array {
+	return bytes.filter((b, i) => !(b === CR && bytes[i + 1] === LF));
+}
+
+function inflate(bytes: Uint8Array): Uint8Array {
+	try {
+		return gunzipChecked(unmask(bytes));
+	} catch (asStored) {
+		// Some packs' encoded files went through a text-mode LF → CR LF conversion; the gzip trailer tells which
+		// reading is Samsung's.
+		const undone = undoCrLf(bytes);
+		if (undone.length === bytes.length) throw asStored;
+		try {
+			return gunzipChecked(unmask(undone));
+		} catch (converted) {
+			throw new OmcTextError(
+				`not an OMC text file as stored (${errorMessage(asStored)}) nor with CR LF undone (${errorMessage(converted)})`,
+			);
+		}
+	}
+}
+
+export function decodeOmcText(bytes: Uint8Array): string {
+	return text(isPlain(bytes) ? bytes : inflate(bytes));
 }

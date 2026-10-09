@@ -97,6 +97,7 @@ export {
 	type SourceIdentity,
 } from "./identity.ts";
 export { newestFirst, newestOf, type DeviceOrder, type NamedDevice } from "./devices.ts";
+export { phonesOf, type DeviceCoverage, type PhoneModel, type PhoneVariant } from "./phones.ts";
 export { boardProducts, boardRefs, productOf, type BoardProducts, type BoardRef } from "./ios/boards.ts";
 export { countryName, isoForMcc } from "./countries.ts";
 export * from "./records.ts";

@@ -24,7 +24,9 @@ import {
 
 import {
 	type BandCombination,
+	OWNER_SEPARATOR,
 	type BandComponent,
+	type CarrierFeatures,
 	type ModemItem,
 	type ModemValue,
 	type SimMatcher,
@@ -79,31 +81,52 @@ type ItemDefs = Readonly<Record<string, ItemDef>>;
 /** A LIKE pattern as a prefix (`abc%`, `abc`; "" for any), or undefined for any other use of wildcards. */
 const prefixOf = (p: string | null): string | undefined => (p === null ? "" : /^([^%_]+)%?$/.exec(p)?.[1]);
 
-/** cfg.db's rows as SimMatchers; a row with a pattern that is no prefix, or a certificate rule, has none. */
-function selectionOf(rows: readonly ShannonMatcher[]): SimMatcher[] {
-	return uniqueSims(
-		rows.flatMap((r) => {
-			const [imsiPrefix, gid1, gid2] = [prefixOf(r.imsiPrefix), prefixOf(r.gid1), prefixOf(r.gid2)];
-			if (
-				r.accessRule !== null ||
-				imsiPrefix === undefined ||
-				gid1 === undefined ||
-				gid2 === undefined ||
-				r.spn?.includes("%")
-			)
-				return [];
-			return (
-				simMatcher({
-					mccmnc: r.mccMnc,
-					imsiPrefix,
-					gid1,
-					gid2,
-					spn: r.spn ?? "",
-					iccidPrefix: r.iccidPrefix ?? "",
-				}) ?? []
-			);
-		}),
-	);
+/** A cfg.db row as a SimMatcher; none for a pattern that is no prefix, or a certificate rule. */
+function rowMatcher(r: ShannonMatcher): SimMatcher | undefined {
+	const [imsiPrefix, gid1, gid2] = [prefixOf(r.imsiPrefix), prefixOf(r.gid1), prefixOf(r.gid2)];
+	if (
+		r.accessRule !== null ||
+		imsiPrefix === undefined ||
+		gid1 === undefined ||
+		gid2 === undefined ||
+		r.spn?.includes("%")
+	)
+		return undefined;
+	return simMatcher({
+		mccmnc: r.mccMnc,
+		imsiPrefix,
+		gid1,
+		gid2,
+		spn: r.spn ?? "",
+		iccidPrefix: r.iccidPrefix ?? "",
+	});
+}
+
+const ROW_FIELDS = [
+	["imsiPrefix", "IMSI"],
+	["spn", "SPN"],
+	["gid1", "GID1"],
+	["gid2", "GID2"],
+	["iccidPrefix", "ICCID"],
+	["plmnName", "PLMN name"],
+	["preferredApn", "preferred APN"],
+	["accessRule", "certificate"],
+] as const satisfies ReadonlyArray<readonly [Exclude<keyof ShannonMatcher, "mccMnc">, string]>;
+
+/**
+ * A cfg.db row the selection does not state as it is: libsitril also matches the SIM's PLMN name and preferred APN,
+ * which a SimMatcher has no field for, and patterns and certificate rules no matcher states.
+ */
+function unstatedRow(r: ShannonMatcher): { label: string; value: string } | undefined {
+	const stated = rowMatcher(r) !== undefined;
+	if (stated && r.plmnName === null && r.preferredApn === null) return undefined;
+	const fields = ROW_FIELDS.flatMap(([key, name]) => (r[key] === null ? [] : [`${name} ${r[key]}`]));
+	const left = [
+		...(r.plmnName === null ? [] : ["PLMN name"]),
+		...(r.preferredApn === null ? [] : ["preferred APN"]),
+	].join(" and ");
+	const why = stated ? `its selection leaves the ${left} out` : "no SIM matcher states it";
+	return { label: "cfg.db rule", value: `${[r.mccMnc, ...fields].join(" · ")} (${why})` };
 }
 
 /** Exact: past 2^53 an int64 becomes decimal text rather than a rounded number. */
@@ -135,8 +158,13 @@ function valueOf(
 
 type ItemScope = Exclude<ManifestScope, "file">;
 type Layer = ReadonlyMap<number, readonly bigint[]>;
-/** Per item, per scope, its values after every layer that applies. */
-type Effective = Map<number, Map<ItemScope, readonly bigint[]>>;
+/** One layer's values for an item. */
+interface Write {
+	readonly layer: string;
+	readonly values: readonly bigint[];
+}
+/** Per item, per scope, each layer's write in manifest order: the modem applies them in turn, so the last is in effect. */
+type Writes = Map<number, Map<ItemScope, Write[]>>;
 
 const conditionKey = (c: HardwareCondition): string => `hw ${c.key}=${c.value}/${c.variant}`;
 
@@ -145,22 +173,35 @@ type ItemEntry = Exclude<Entry, { readonly scope: "file" }>;
 /** Which of the manifest's entries a view reads: the base layers, or the configuration's own. */
 type Part = (e: ItemEntry) => boolean;
 
-/** One device's view of a part: its unconditional entries and those of one hardware condition, in manifest order, later layers overriding. */
-function effective(
+/** One device's view of a part: its unconditional entries and those of one hardware condition, in manifest order. */
+function writesOf(
 	manifest: Manifest,
 	layers: ReadonlyMap<string, NamedLayer>,
 	part: Part,
 	condition: string | null,
-): Effective {
-	const out: Effective = new Map();
+): Writes {
+	const out: Writes = new Map();
 	for (const e of manifest.entries) {
 		if (e.scope === "file" || !part(e) || (e.condition !== null && conditionKey(e.condition) !== condition))
 			continue;
-		for (const [h, values] of layers.get(e.confseq)?.items ?? [])
-			out.set(h, (out.get(h) ?? new Map<ItemScope, readonly bigint[]>()).set(e.scope, values));
+		const layer = layers.get(e.confseq);
+		for (const [h, values] of layer?.items ?? []) {
+			const scopes = out.get(h) ?? new Map<ItemScope, Write[]>();
+			scopes.set(e.scope, [...(scopes.get(e.scope) ?? []), { layer: layer?.name ?? e.confseq, values }]);
+			out.set(h, scopes);
+		}
 	}
 	return out;
 }
+
+/** The values in effect: each scope's last write. */
+const inEffect = (scopes: ReadonlyMap<ItemScope, readonly Write[]>): Map<ItemScope, readonly bigint[]> =>
+	new Map(
+		[...scopes].flatMap(([scope, writes]) => {
+			const last = writes.at(-1);
+			return last === undefined ? [] : [[scope, last.values] as const];
+		}),
+	);
 
 /** The manifest's hardware conditions; one null when it has none. */
 function conditionsOf(manifest: Manifest): (string | null)[] {
@@ -205,6 +246,7 @@ function itemOf(
 	byCondition: ReadonlyMap<string | null, ReadonlyMap<ItemScope, ModemValue>>,
 	conditions: number,
 	defs: ItemDefs,
+	replacedBy: string | null,
 ): ModemItem {
 	const fields: Record<string, ModemValue> = {};
 	const scopes = new Set<ItemScope>();
@@ -224,10 +266,14 @@ function itemOf(
 	const id = u32Hex(h);
 	const def = defs[id];
 	const name = def?.name;
+	const typed = def === undefined ? UNREGISTERED : typeName(def);
 	return {
-		id: `crc:${id}`,
+		id: replacedBy === null ? `crc:${id}` : `crc:${id}?${replacedBy}`,
 		name: name ?? null,
-		description: def === undefined ? null : typeName(def),
+		description:
+			replacedBy === null
+				? typed
+				: `${typed}${OWNER_SEPARATOR}set by ${replacedBy}, which a later layer replaces`,
 		value:
 			only !== undefined && new Set(values.map((value) => canonical(value))).size === 1
 				? only
@@ -237,7 +283,27 @@ function itemOf(
 	};
 }
 
-/** What one part of a manifest sets, typed. */
+/** The firmware skips such an item when it applies the configuration. */
+const UNREGISTERED = "Not in this firmware's item registry, so the modem skips it; values untyped";
+
+type ByCondition = Map<string | null, Map<ItemScope, ModemValue>>;
+
+const addValue = (
+	into: Map<string, ByCondition>,
+	key: string,
+	c: string | null,
+	scope: ItemScope,
+	value: ModemValue,
+): void => {
+	const byCondition = into.get(key) ?? new Map<string | null, Map<ItemScope, ModemValue>>();
+	byCondition.set(c, (byCondition.get(c) ?? new Map<ItemScope, ModemValue>()).set(scope, value));
+	into.set(key, byCondition);
+};
+
+/**
+ * What one part of a manifest sets, typed: each item in effect, then each value a later layer replaced, as
+ * `crc:<hash>?<layer>`.
+ */
 function partItems(
 	manifest: Manifest,
 	layers: ReadonlyMap<string, NamedLayer>,
@@ -247,30 +313,43 @@ function partItems(
 ): ModemItem[] {
 	const conditions = conditionsOf(manifest);
 	const bad = new Set<number>();
-	const byHash = new Map<number, Map<string | null, Map<ItemScope, ModemValue>>>();
+	const typed = (h: number, values: readonly bigint[]): ModemValue =>
+		valueOf(defs[u32Hex(h)], values, (e) => {
+			if (!bad.has(h)) errors.push(`crc:${u32Hex(h)}: ${errorMessage(e)}`);
+			bad.add(h);
+		});
+	const final = new Map<number, ByCondition>();
+	const replaced = new Map<string, ByCondition>();
+	const replacedOf = new Map<string, { readonly h: number; readonly layer: string }>();
 	for (const c of conditions) {
-		for (const [h, scopes] of effective(manifest, layers, part, c)) {
-			const def = defs[u32Hex(h)];
-			if (def === undefined && !bad.has(h)) {
-				errors.push(`crc:${u32Hex(h)}: not in the modem's item registry; its values are shown untyped`);
-				bad.add(h);
+		for (const [h, scopes] of writesOf(manifest, layers, part, c)) {
+			for (const [scope, values] of inEffect(scopes)) {
+				const byCondition = final.get(h) ?? new Map<string | null, Map<ItemScope, ModemValue>>();
+				byCondition.set(
+					c,
+					(byCondition.get(c) ?? new Map<ItemScope, ModemValue>()).set(scope, typed(h, values)),
+				);
+				final.set(h, byCondition);
 			}
-			const typed = new Map(
-				[...scopes].map(
-					([scope, values]) =>
-						[
-							scope,
-							valueOf(def, values, (e) => {
-								if (!bad.has(h)) errors.push(`crc:${u32Hex(h)}: ${errorMessage(e)}`);
-								bad.add(h);
-							}),
-						] as const,
-				),
-			);
-			byHash.set(h, (byHash.get(h) ?? new Map<string | null, Map<ItemScope, ModemValue>>()).set(c, typed));
+			for (const [scope, writes] of scopes) {
+				const last = writes.at(-1);
+				for (const w of writes.slice(0, -1)) {
+					if (last === undefined || canonical(w.values.map(String)) === canonical(last.values.map(String)))
+						continue;
+					const key = `${h}?${w.layer}`;
+					replacedOf.set(key, { h, layer: w.layer });
+					addValue(replaced, key, c, scope, typed(h, w.values));
+				}
+			}
 		}
 	}
-	return [...byHash].map(([h, byCondition]) => itemOf(h, byCondition, conditions.length, defs));
+	return [
+		...[...final].map(([h, byCondition]) => itemOf(h, byCondition, conditions.length, defs, null)),
+		...[...replacedOf].flatMap(([key, { h, layer }]) => {
+			const byCondition = replaced.get(key);
+			return byCondition === undefined ? [] : [itemOf(h, byCondition, conditions.length, defs, layer)];
+		}),
+	];
 }
 
 const LTE_CA = "LTE CA items";
@@ -286,8 +365,8 @@ function lteCa(
 	let unknownUplink = 0;
 	for (const c of conditionsOf(manifest)) {
 		const common = new Map(
-			[...effective(manifest, layers, part, c)].flatMap(([h, scopes]) => {
-				const values = scopes.get("common");
+			[...writesOf(manifest, layers, part, c)].flatMap(([h, scopes]) => {
+				const values = inEffect(scopes).get("common");
 				return values === undefined ? [] : [[h, values] as const];
 			}),
 		);
@@ -298,7 +377,7 @@ function lteCa(
 			() => confseqCaCombinations(byName(common)),
 		);
 		unknownUplink = Math.max(unknownUplink, ca.unknownUplink);
-		for (const combo of ca.combinations) combos.set(JSON.stringify(combo), combo.map(component));
+		for (const combo of ca.combinations) combos.set(JSON.stringify(combo), combo.map(lteCaComponent));
 	}
 	if (unknownUplink)
 		errors.push(
@@ -323,12 +402,37 @@ function nrFeatures(
 	};
 }
 
-function component(c: Component | LteCaComponent): BandComponent {
-	const classes = { dl: c.dlClass, ...(c.ulClass === null ? {} : { ul: c.ulClass }) };
-	if ("dlMimoLayers" in c) return { band: `B${c.band}`, ...classes, dlLayers: c.dlMimoLayers };
-	return c.rat === "NR"
-		? { band: `n${c.band}`, ...classes, ...nrFeatures(c.dl) }
-		: { band: `B${c.band}`, ...classes };
+const carrierFeatures = (f: NrComponent["dl" | "ul"][number]): CarrierFeatures => ({
+	scsKhz: f.scsKHz,
+	bandwidthMhz: f.bandwidthMHz,
+	layers: f.mimoLayers,
+	maxModulation: f.maxModulation,
+	bandwidth90Mhz: f.bandwidth90MHz,
+	...("nonCbMimoLayers" in f ? { nonCbLayers: f.nonCbMimoLayers } : {}),
+});
+
+const lteCaComponent = (c: LteCaComponent): BandComponent => ({
+	band: `B${c.band}`,
+	dl: c.dlClass,
+	...(c.ulClass === null ? {} : { ul: c.ulClass }),
+	dlLayers: c.dlMimoLayers,
+});
+
+function component(c: Component): BandComponent {
+	const own = {
+		dl: c.dlClass,
+		...(c.ulClass === null ? {} : { ul: c.ulClass }),
+		dlFeatureSet: c.dlFeatureSet,
+		ulFeatureSet: c.ulFeatureSet,
+	};
+	if (c.rat === "LTE") return { band: `B${c.band}`, ...own };
+	return {
+		band: `n${c.band}`,
+		...own,
+		...nrFeatures(c.dl),
+		dlCarriers: c.dl.map(carrierFeatures),
+		ulCarriers: c.ul.map(carrierFeatures),
+	};
 }
 
 /** Each uecap file the archive carries, one source each. */
@@ -338,9 +442,11 @@ function ueCapCombinations(files: ArchiveFiles, errors: string[]): ComboSource[]
 		.toSorted(([a], [b]) => compareUtf8(a, b))
 		.flatMap(([name, bytes]): ComboSource[] => {
 			const f = readOr(errors, name, undefined, () => decodeUeCap(bytes));
-			return f === undefined || f.kind === "plmn-map"
-				? []
-				: [[name, f.combinations.map((combo) => combo.map(component))]];
+			if (f === undefined || f.kind === "plmn-map") return [];
+			if (f.kind === "lte-ca") return [[name, f.combinations.map((c) => c.map(lteCaComponent))]];
+			const switched = f.combinations.filter((c) => c.components.some((x) => x.srsTxSwitch !== 0)).length;
+			if (switched > 0) errors.push(`${name}: ${switched} combinations set srstxswitch, which is not shown`);
+			return [[name, f.combinations.map((c) => c.components.map(component))]];
 		});
 }
 
@@ -374,10 +480,11 @@ export function shannonConfig(files: ArchiveFiles, sha: string): MappedConfig {
 		label: manifest.name,
 		// cfg.db names no SIM for it: the modem loads it for a SIM no carrier row matches.
 		scope: matchers.length ? "carrier" : "firmware",
-		selection: selectionOf(matchers),
+		selection: uniqueSims(matchers.flatMap((r) => rowMatcher(r) ?? [])),
 		facts: [
 			{ label: "Manifest version", value: manifest.version },
 			...(manifest.carrierId === 0 ? [] : [{ label: "Carrier id", value: String(manifest.carrierId) }]),
+			...matchers.flatMap((r) => unstatedRow(r) ?? []),
 		],
 		items: partItems(manifest, layers, layered ? isOwn : all, defs, errors),
 		combos: [...ueCapCombinations(files, errors), [LTE_CA, ownCa]],

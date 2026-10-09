@@ -71,6 +71,7 @@ export interface Env extends PurgeVars, Tuning {
 	readonly LABELS: Workflow<PipelineParams<"labels">>;
 	readonly REINDEX: Workflow<PipelineParams<"reindex">>;
 	readonly DATASET: Workflow<PipelineParams<"dataset">>;
+	readonly CHECK: Workflow<PipelineParams<"check">>;
 	/** The public API (apps/api), which the dataset is read from. */
 	readonly API: Fetcher;
 	/** Workers AI and the Web Search API, for the labels Workflow. */

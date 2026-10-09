@@ -1,4 +1,4 @@
-/** The extractor Worker: feed checks start a Workflow instance per unit; each unit extracts to R2 and queues its records, which the index queue's consumer writes into D1. */
+/** The extractor Worker: crons start feed checks, each a Workflow that starts an instance per unit; each unit extracts to R2 and queues its records, which the index queue's consumer writes into D1. */
 
 import type { Env } from "./env.ts";
 import { handleApi } from "./http.ts";
@@ -11,7 +11,7 @@ export { IosBuildWorkflow, AppleOtaWorkflow } from "./apple/workflows.ts";
 export { Extractor } from "./container.ts";
 export { GalaxyBuildWorkflow } from "./galaxy/workflows.ts";
 export { PixelDeviceWorkflow, PixelOtaWorkflow } from "./pixel/workflows.ts";
-export { LabelsWorkflow, ReindexWorkflow } from "./workflows.ts";
+export { CheckWorkflow, LabelsWorkflow, ReindexWorkflow } from "./workflows.ts";
 export { DatasetWorkflow } from "./dataset/workflow.ts";
 
 export default {

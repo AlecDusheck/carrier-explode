@@ -5,7 +5,7 @@ import { Worker } from "node:worker_threads";
 
 import { afterAll, describe, expect, it } from "vitest";
 
-import { DataError } from "../../src/errors.ts";
+import { BurstRefusal, DataError } from "../../src/errors.ts";
 import { bucketAt } from "../src/bucket.ts";
 import { failure } from "../src/job.ts";
 
@@ -65,23 +65,28 @@ describe("bucket", () => {
 		expect(failure(await putError(await serve(400)))).toEqual({
 			ok: false,
 			error: "PUT tmp/u/a: 400 refused",
-			permanent: true,
+			failure: "permanent",
 		});
-		expect(failure(await putError(await serve(503)))).toMatchObject({ permanent: false });
+		expect(failure(await putError(await serve(503)))).toMatchObject({ failure: "transient" });
 	});
 });
 
 describe("failure", () => {
-	it("calls a lost connection retryable and bad data permanent", () => {
+	it("calls a lost connection retryable, bad data permanent and a WAF's block a burst refusal", () => {
 		expect(failure(Object.assign(new Error("socket hang up"), { code: "ECONNRESET" }))).toEqual({
 			ok: false,
 			error: "socket hang up",
-			permanent: false,
+			failure: "transient",
 		});
 		expect(failure(new DataError("no BuildManifest.plist"))).toEqual({
 			ok: false,
 			error: "no BuildManifest.plist",
-			permanent: true,
+			failure: "permanent",
+		});
+		expect(failure(new BurstRefusal("HTTP 403 for x"))).toEqual({
+			ok: false,
+			error: "HTTP 403 for x",
+			failure: "burst",
 		});
 	});
 });

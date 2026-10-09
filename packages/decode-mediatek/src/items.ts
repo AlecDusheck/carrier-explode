@@ -5,7 +5,8 @@ import type { McfLid, SectionBody } from "./container.ts";
 import { McfError } from "./errors.ts";
 
 const RECORD_HEADER = 12;
-const SEGMENTED = 0x02;
+/** A segmented condition's first byte is a segment kind; a plain one's is a digit or the N of `NA`. */
+const SEGMENT_KINDS: ReadonlySet<number> = new Set([1, 2, 3]);
 
 /** `<sbp>_<mcc>_<mnc>`, each `NA` for any. */
 export interface PlmnCondition {
@@ -35,6 +36,8 @@ interface McfItemValue {
 export interface McfItemRecord {
 	readonly lid: number;
 	readonly itemId: number;
+	/** Record byte 8: 1, 2, 3 and 17 seen, unexplained (1 and 2 pair records with equal values, as if per SIM stack). */
+	readonly flags: number;
 	readonly condition: McfCondition;
 	readonly values: readonly McfItemValue[];
 }
@@ -76,9 +79,10 @@ function segments(tag: Uint8Array, offset: number): McfConditionSegment[] {
 	return out;
 }
 
-function condition(flags: number, tag: Uint8Array, offset: number): McfCondition {
-	if (tag.length === 0) return { kind: "always" };
-	if (flags & SEGMENTED) return { kind: "segments", segments: segments(tag, offset) };
+function condition(tag: Uint8Array, offset: number): McfCondition {
+	const [first] = tag;
+	if (first === undefined) return { kind: "always" };
+	if (SEGMENT_KINDS.has(first)) return { kind: "segments", segments: segments(tag, offset) };
 	return plmn(latin1(tag), offset);
 }
 
@@ -125,8 +129,8 @@ export function readItemRecords(section: SectionBody, lids: readonly McfLid[]): 
 		records.push({
 			lid,
 			itemId,
-			// Record byte 8 is opaque flags (1, 2, 3 and 17 seen) whose bit 1 marks a segmented condition.
-			condition: condition(u8(body, o + 8), tag, base + o),
+			flags: u8(body, o + 8),
+			condition: condition(tag, base + o),
 			values: readValues(body, base, o + RECORD_HEADER + pad4(tag.length), o + length, u16le(body, o + 10)),
 		});
 		o += length;

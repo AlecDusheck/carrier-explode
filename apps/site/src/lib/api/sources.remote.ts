@@ -58,6 +58,8 @@ export const getComparison = query(
 export const getRare = query(verSchema, scan.getRare);
 
 export const getFeaturePhones = query(features.featurePhones);
+/** The same phones grouped as the phone picker offers them. */
+export const getFeatureModels = query(features.featureModels);
 /** The phone `?phone=` names; any other text, like an unknown code, means the newest covered one the feature is on. */
 export const getFeaturePhone = query(
 	v.object({
@@ -69,4 +71,4 @@ export const getFeaturePhone = query(
 export const getFeatureTable = query(v.object({ slug: v.picklist(FEATURE_SLUGS), phone }), (a) =>
 	features.getFeatureTable(a.slug, a.phone),
 );
-export const getFeatureSummary = query(phone, features.getFeatureSummary);
+export const getFeatureMatrix = query(phone, features.getFeatureMatrix);

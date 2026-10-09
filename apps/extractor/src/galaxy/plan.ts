@@ -17,7 +17,7 @@ type GalaxyFirmware = Omit<GalaxyBuild, "major">;
 export type Candidate = GalaxyFirmware & Pick<GalaxyPhone, "line">;
 
 /** What FUS and the firmware's zip directory say of a firmware: what planning scopes by, and its phone's record. */
-export const firmwareFactsSchema = v.object({
+const firmwareFactsSchema = v.object({
 	/** The Android major its AP member names (`…_OS17…`). */
 	major: v.pipe(v.number(), v.integer()),
 	/** The day it was built. */
@@ -26,6 +26,13 @@ export const firmwareFactsSchema = v.object({
 	name: v.pipe(v.string(), v.minLength(1)),
 });
 export type FirmwareFacts = Readonly<v.InferOutput<typeof firmwareFactsSchema>>;
+
+/** What FUS answered of a firmware: its facts, or the day it said it does not serve it. */
+export const firmwareAnswerSchema = v.union([
+	firmwareFactsSchema,
+	v.object({ refused: v.pipe(v.string(), v.isoDate()) }),
+]);
+export type FirmwareAnswer = Readonly<v.InferOutput<typeof firmwareAnswerSchema>>;
 
 /** A phone on a region, with the `PDA/CSC/PHONE/DATA` builds its version.xml lists. */
 export interface ListedFirmware extends GalaxyPhone {
@@ -76,6 +83,13 @@ export function buildMonth(build: string, today: string): string {
  * Whether a phone's CSC builds all date from `since` (`YYYY-MM`) on, so it launched then. Not every old build's month
  * decodes, so one older build rules a phone out before the rest must date.
  */
+/** YYYY-MM of the oldest of `builds` whose month decodes. */
+export function oldestMonth(builds: readonly string[], today: string): string | undefined {
+	return builds
+		.flatMap((b) => datedMonth(b, today)?.slice(0, 7) ?? [])
+		.reduce<string | undefined>((min, m) => (min === undefined || m < min ? m : min), undefined);
+}
+
 export function launchedSince(builds: readonly string[], since: string, today: string): boolean {
 	const older = builds.some((b) => {
 		const month = datedMonth(b, today);

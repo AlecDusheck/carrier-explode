@@ -6,16 +6,19 @@ import { linesOf } from "@carrier-explode/schema";
 import { decoderFamily, MAIN_LINE, type DecoderFamily, type SourceRef } from "@carrier-explode/schema/types";
 import { readAgainst } from "#lib/apple/phones.ts";
 import { DEVICE_LINE_LABELS, PLATFORM_DEVICES } from "#lib/platforms.ts";
+import type { ModelChoice } from "#lib/phones.ts";
 import type { Picture, Ver, Version } from "#lib/types.ts";
 import {
 	PHONE_IMAGES,
 	canonicalPath,
-	lineNames,
+	devicesOf,
+	linePlatform,
 	releasesOf,
 	resolve,
 	versionsOf,
 	type Resolved,
 } from "./catalog";
+import { modelChoices } from "./phones";
 import { brandOf, pictureOf } from "./pictures";
 
 export interface SourceHead {
@@ -34,8 +37,8 @@ export interface SourceHead {
 	readonly head: string;
 	/** The head when a device on the newest OS runs it; null on a line no current OS ships, such as an old model's. */
 	readonly current: string | null;
-	/** The lines to choose between: Android's Pixels, newest first; Apple's main line and its model-specific ones. None when there is no choice. `name` is the device's, which its drawing is found by. */
-	readonly lines: ReadonlyArray<{ readonly id: string; readonly name: string; readonly label: string }>;
+	/** The lines to choose between, as phones whose variants are lines: Android's newest first; Apple's main line, then its model-specific ones. None when there is no choice. */
+	readonly lines: readonly ModelChoice[];
 	/** Where this content's page is canonical: the newest Pixel carrying the same file. */
 	readonly canonical: string;
 }
@@ -44,15 +47,27 @@ export interface SourceHead {
 async function choosableLines(r: Resolved): Promise<SourceHead["lines"]> {
 	const { platform } = r.ref;
 	const ids = linesOf(r.ref, r.timeline, r.order);
-	const names = await lineNames(platform);
-	const lines = ids.map((id) => {
-		if (id === MAIN_LINE)
-			return { id, name: PLATFORM_DEVICES[platform], label: `${PLATFORM_DEVICES[platform]} (Modern)` };
-		const name = names.get(id) ?? id;
-		return { id, name, label: DEVICE_LINE_LABELS[decoderFamily(platform)](name) };
-	});
 	// The default line alone is no choice.
-	return lines.length === 1 && lines[0]?.id === MAIN_LINE ? [] : lines;
+	if (ids.length === 1 && ids[0] === MAIN_LINE) return [];
+	const known = new Map((await devicesOf(linePlatform(platform))).map((d) => [d.code, d]));
+	const devices = ids.flatMap((id) =>
+		id === MAIN_LINE ? [] : [known.get(id) ?? { code: id, name: id, released: "" }],
+	);
+	const phones = await modelChoices(
+		linePlatform(platform),
+		devices,
+		DEVICE_LINE_LABELS[decoderFamily(platform)],
+		platform,
+	);
+	const device = PLATFORM_DEVICES[platform];
+	const main: ModelChoice = {
+		key: MAIN_LINE,
+		name: device,
+		label: `${device} (Modern)`,
+		platform,
+		variants: [{ code: MAIN_LINE, descriptor: null, countries: [] }],
+	};
+	return ids.includes(MAIN_LINE) ? [main, ...phones] : phones;
 }
 
 /** The number an OTA listing's OS states (`27.0`, `Watch4` -> `4`); undefined for `legacy` or a prerelease. */

@@ -1,11 +1,13 @@
 /**
  * Runs: one Workflow instance per unit, named by its pipeline and unit (`galaxy-build-S942UOYN4BZID`), so a planned
  * unit is never started twice; a held iOS build adds its held phones' digest, so a phone listed for it plans it again;
- * a reindex adds when it was asked for, so it runs each time.
+ * a reindex and a feed's check add when they were asked for, so each runs each time.
  */
 
+import * as v from "valibot";
+
 import { crc32 } from "@carrier-explode/binary";
-import { keys } from "@carrier-explode/storage";
+import { keys, putJson, readRecord } from "@carrier-explode/storage";
 import { checkIos } from "./apple/check.ts";
 import { checkAppleOta } from "./apple/ota.ts";
 import type { Env } from "./env.ts";
@@ -23,6 +25,8 @@ import {
 } from "./pipelines.ts";
 import { chunks } from "./fan-out.ts";
 import { heldIosPhones } from "./store.ts";
+import type { Steps } from "./unit.ts";
+import { refusedTwice } from "./errors.ts";
 
 /** Workflows take instance ids of up to 100 characters of [A-Za-z0-9_-]. */
 const MAX_ID = 100;
@@ -111,48 +115,57 @@ export async function reindexRun(
 }
 
 type Status = InstanceStatus["status"];
+/** An instance's status, "refused" for one a server's burst refusals ended (unit.ts), null when there is none. */
+type State = Status | "refused" | null;
 
 /** The statuses of an instance that has not finished. */
-const LIVE: ReadonlySet<Status> = new Set<Status>([
+const LIVE: ReadonlySet<State> = new Set<State>([
 	"queued",
 	"running",
 	"paused",
 	"waiting",
 	"waitingForPause",
 ]);
-const FAILED: ReadonlySet<Status> = new Set<Status>(["errored", "terminated"]);
+const FAILED: ReadonlySet<State> = new Set<State>(["errored", "terminated"]);
 
 export const workflowOf = (env: Env, pipeline: PipelineName): Workflow => env[PIPELINES[pipeline].binding];
 
-/** An instance's status; null when there is none. */
-async function statusOf(env: Env, pipeline: PipelineName, id: string): Promise<Status | null> {
+async function instanceStatus(env: Env, pipeline: PipelineName, id: string): Promise<InstanceStatus | null> {
 	try {
-		return (await (await workflowOf(env, pipeline).get(id)).status()).status;
+		return await (await workflowOf(env, pipeline).get(id)).status();
 	} catch (e) {
 		if (e instanceof Error && /not.?found/i.test(e.message)) return null;
 		throw e;
 	}
 }
 
+async function stateOf(env: Env, pipeline: PipelineName, id: string): Promise<State> {
+	const s = await instanceStatus(env, pipeline, id);
+	if (s === null) return null;
+	return refusedTwice(s) ? "refused" : s.status;
+}
+
 /** What a check did with the units it planned. */
 export interface Started {
 	readonly started: readonly string[];
 	readonly live: readonly string[];
-	/** Ended in error: listed by every check until one asks to rebuild them. */
+	/** Ended in error other than a burst refusal: listed by every check until one asks to rebuild them. */
 	readonly failed: readonly string[];
 	/** Planned but left for a later check: every container is taken. */
 	readonly waiting: readonly string[];
 }
 
-/** What to do with each planned unit, by its instance's status; the order of `runs` (oldest first) is the order of starts. */
+/** What to do with each planned unit, by its instance's state; the order of `runs` (oldest first) is the order of starts. */
 export function decide(
-	runs: ReadonlyArray<{ readonly id: string; readonly status: Status | null }>,
+	runs: ReadonlyArray<{ readonly id: string; readonly status: State }>,
 	rebuild: boolean,
 	room: number,
 ): Started & { readonly restart: readonly string[] } {
-	const live = runs.filter((r) => r.status !== null && LIVE.has(r.status)).map((r) => r.id);
-	const failed = runs.filter((r) => r.status !== null && FAILED.has(r.status)).map((r) => r.id);
-	const restart = rebuild ? failed : [];
+	const live = runs.filter((r) => LIVE.has(r.status)).map((r) => r.id);
+	const failed = runs.filter((r) => FAILED.has(r.status)).map((r) => r.id);
+	const restart = runs
+		.filter((r) => r.status === "refused" || (rebuild && FAILED.has(r.status)))
+		.map((r) => r.id);
 	const wanted = [...runs.filter((r) => r.status === null).map((r) => r.id), ...restart];
 	const free = Math.max(0, room - live.length);
 	const now = wanted.slice(0, free);
@@ -174,7 +187,10 @@ export const roomFor = (env: Pick<Env, "CONTAINER_SHARE">, pipeline: PipelineNam
 /** The most instances one createBatch call takes. */
 const BATCH = 100;
 
-/** Starts what `runs` plans that has no instance (and, rebuilding, restarts the failed), up to its room; the rest wait. */
+/**
+ * Starts what `runs` plans that has no instance, and restarts those burst refusals ended (and, rebuilding, the failed),
+ * up to its room; the rest wait.
+ */
 export async function startRuns(
 	env: Env,
 	pipeline: PipelineName,
@@ -183,7 +199,7 @@ export async function startRuns(
 ): Promise<Started> {
 	const workflow = workflowOf(env, pipeline);
 	const statuses = await Promise.all(
-		runs.map(async (r) => ({ id: r.id, status: await statusOf(env, pipeline, r.id) })),
+		runs.map(async (r) => ({ id: r.id, status: await stateOf(env, pipeline, r.id) })),
 	);
 	const d = decide(statuses, rebuild, roomFor(env, pipeline));
 	const restarting = new Set(d.restart);
@@ -196,52 +212,85 @@ export async function startRuns(
 	return { started: d.started, live: d.live, failed: d.failed, waiting: d.waiting };
 }
 
-/** Today, YYYY-MM-DD: the labels and dataset runs' unit, as their crons fire them. */
-const today = (): string => new Date().toISOString().slice(0, 10);
-
-async function plan(env: Env, feed: FeedName): Promise<Run[]> {
+/** A feed's plan, made in `steps`: Galaxy's in many, every other feed's in one. */
+async function plan(env: Env, feed: FeedName, steps: Steps): Promise<Run[]> {
+	const today = await steps("today", async () => new Date().toISOString().slice(0, 10));
 	switch (feed) {
-		case "ios-build": {
-			const held = await heldIosPhones(env.BUCKET);
-			return (await checkIos(env, held)).map((params) => iosRun(params, held.get(params.build)));
-		}
+		case "ios-build":
+			return steps("plan", async () => {
+				const held = await heldIosPhones(env.BUCKET);
+				return (await checkIos(env, held)).map((params) => iosRun(params, held.get(params.build)));
+			});
 		case "pixel-device":
-			return (await checkPixel(env)).map((params) => runOf({ pipeline: feed, params }));
+			return steps("plan", async () =>
+				(await checkPixel(env)).map((params) => runOf({ pipeline: feed, params })),
+			);
 		case "galaxy-build":
-			return (await checkGalaxy(env)).map((params) => runOf({ pipeline: feed, params }));
-		case "apple-ota": {
-			const params = await checkAppleOta(env);
-			return params === null ? [] : [runOf({ pipeline: feed, params })];
-		}
-		case "pixel-ota": {
-			const params = await checkPixelOta(env);
-			return params === null ? [] : [runOf({ pipeline: feed, params })];
-		}
+			return (await checkGalaxy(env, today, steps)).map((params) => runOf({ pipeline: feed, params }));
+		case "apple-ota":
+			return steps("plan", async () => {
+				const params = await checkAppleOta(env);
+				return params === null ? [] : [runOf({ pipeline: feed, params })];
+			});
+		case "pixel-ota":
+			return steps("plan", async () => {
+				const params = await checkPixelOta(env);
+				return params === null ? [] : [runOf({ pipeline: feed, params })];
+			});
 		case "labels":
-			return [runOf({ pipeline: feed, params: { week: today() } })];
+			return [runOf({ pipeline: feed, params: { week: today } })];
 		case "dataset":
-			return [runOf({ pipeline: feed, params: { day: today() } })];
+			return [runOf({ pipeline: feed, params: { day: today } })];
 	}
 }
+
+/** What a check did: what it planned, and what it started of it. */
+export type Checked = Started & { readonly planned: readonly Run[] };
 
 /** Plans the units its feed lists that the bucket does not hold, and starts them, or of them only the ids in `only`. */
 export async function checkFeed(
 	env: Env,
-	feed: FeedName,
-	rebuild: boolean,
-	only?: readonly string[],
-): Promise<Started & { readonly planned: readonly Run[] }> {
-	const planned = await plan(env, feed);
-	const runs = only === undefined ? planned : planned.filter((r) => only.includes(r.id));
-	return { ...(await startRuns(env, feed, runs, rebuild)), planned };
+	{ feed, rebuild, only }: PipelineParams<"check">,
+	steps: Steps,
+): Promise<Checked> {
+	const planned = await plan(env, feed, steps);
+	const runs = only === null ? planned : planned.filter((r) => only.includes(r.id));
+	return { ...(await steps("start", () => startRuns(env, feed, runs, rebuild))), planned };
 }
 
-/** Checks the feeds due now (a scheduled run has 15 minutes). */
+/** A check asked for `at`, named by its feed and that second. */
+export const checkRun = (
+	params: PipelineParams<"check">,
+	at: Date,
+): Extract<Run, { readonly pipeline: "check" }> => ({
+	pipeline: "check",
+	params,
+	id: instanceId("check", `${params.feed}-${at.toISOString().replace(/\D/g, "").slice(0, 14)}`),
+});
+
+/**
+ * Starts a check unless its feed's last is still running, whose id it then gives: two checks of one feed would ask its
+ * sources twice and race for its room.
+ */
+export async function startCheck(env: Env, params: PipelineParams<"check">, at: Date): Promise<string> {
+	const key = keys.feedCheck(params.feed);
+	const last = await readRecord(env.BUCKET, key, lastCheckSchema);
+	if (last !== null) {
+		const status = await instanceStatus(env, "check", last.id);
+		if (status !== null && LIVE.has(status.status)) return last.id;
+	}
+	const run = checkRun(params, at);
+	await workflowOf(env, "check").create({ id: run.id, params: run.params });
+	await putJson(env.BUCKET, key, { id: run.id });
+	return run.id;
+}
+
+const lastCheckSchema = v.object({ id: v.pipe(v.string(), v.minLength(1)) });
+
+/** Starts a check of each feed due now, named by the fire time, so a fire starts it once. */
 export async function scheduled(controller: ScheduledController, env: Env): Promise<void> {
 	const due = FEED_NAMES.filter((f) => env.PIPELINE_CRONS[f] === controller.cron);
 	if (!due.length) throw new Error(`no feed is checked at "${controller.cron}"`);
-	const checked = await Promise.allSettled(due.map((feed) => checkFeed(env, feed, false)));
-	const failed = checked.flatMap((r) => (r.status === "rejected" ? [r.reason] : []));
-	if (failed.length)
-		throw new AggregateError(failed, `cron ${controller.cron}: ${failed.length} feed check(s) failed`);
+	const at = new Date(controller.scheduledTime);
+	for (const feed of due) await startCheck(env, { feed, rebuild: false, only: null }, at);
 }

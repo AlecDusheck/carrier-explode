@@ -28,7 +28,8 @@ const DESCRIPTION = `Every carrier settings file Apple, Google and Samsung ship,
 - Lists come a page at a time: follow \`next.url\`, or pass \`next.cursor\` as \`cursor\`. A query has one spelling; any other redirects to it.
 - Errors are \`{ error: { status, code, message } }\`.
 - Answers are cached at the edge until the index changes them. \`latest\` follows a line's newest version; a version slug never changes.
-- No key. Each IP may make 300 uncached requests in 10 seconds, counted with carrierexplode.com's; past that, Cloudflare answers 429 for 10 seconds.`;
+- No key, but send a User-Agent that names your project and a contact, e.g. \`myproject/1.0 (+https://example.com; me@example.com)\`: a bare library default such as \`curl/8.7.1\` gets 403.
+- Each IP may make 300 uncached requests in 10 seconds, counted with carrierexplode.com's; past that, Cloudflare answers 429 for 10 seconds.`;
 
 /** One D1 session per request: reads go to the nearest replica and stay in order within the request. */
 const session = createMiddleware<ApiEnv>(async (c, next) => {

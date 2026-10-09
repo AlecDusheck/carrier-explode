@@ -4,6 +4,8 @@ import * as v from "valibot";
 import { describe, expect, it } from "vitest";
 import { experimental_readRawConfig } from "wrangler";
 
+import { agentsSchema } from "../src/agents.ts";
+
 const ENVIRONMENTS = ["dev", "production"] as const;
 
 const positive = v.pipe(v.number(), v.integer(), v.minValue(1));
@@ -16,6 +18,7 @@ const apiVars = v.object({
 		v.object({ default: positive, max: positive }),
 		v.check((l) => l.default <= l.max, "the default page is at most the largest"),
 	),
+	UNIDENTIFIED_AGENTS: agentsSchema,
 });
 
 const wranglerSchema = <S extends v.GenericSchema>(vars: S) => {

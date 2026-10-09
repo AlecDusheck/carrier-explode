@@ -1,5 +1,5 @@
 /**
- * Bearer-authed: POST /run {run, rebuild?, only?} checks a feed now; POST /run {run: "reindex", target} starts a reindex;
+ * Bearer-authed: POST /run {run, rebuild?, only?} starts a feed's check (its id; GET /runs/:id gives what it planned); POST /run {run: "reindex", target} starts a reindex;
  * POST /run {run: "rederive", platform}; GET /runs/:id, an instance's status.
  */
 
@@ -10,7 +10,7 @@ import { describe, RequestError } from "./errors.ts";
 import { runRequestSchema, type RunRequest } from "./pipelines.ts";
 import type { IndexMessage } from "./indexing.ts";
 import { queueIndex } from "./queues.ts";
-import { checkFeed, pipelineOfInstance, reindexRun, startRuns, workflowOf } from "./runs.ts";
+import { pipelineOfInstance, reindexRun, startCheck, startRuns, workflowOf } from "./runs.ts";
 
 /** The response for a thrown value: its own status for a RequestError, 500 (and a log line) otherwise. */
 function errorResponse(e: unknown): Response {
@@ -60,8 +60,10 @@ async function run(body: RunRequest, env: Env): Promise<Response> {
 			await queueIndex(env, [message]);
 			return Response.json({ queued: [message] });
 		}
-		default:
-			return Response.json({ feed: body.run, ...(await checkFeed(env, body.run, body.rebuild, body.only)) });
+		default: {
+			const params = { feed: body.run, rebuild: body.rebuild, only: body.only ?? null };
+			return Response.json({ check: await startCheck(env, params, new Date()) });
+		}
 	}
 }
 

@@ -33,7 +33,7 @@
     const from = page.url.href;
     void (async () => {
       const [h, { line }] = await Promise.all([head, visitorDevice()]);
-      const better = line !== null && line !== h.line && h.entry.slug === h.head && h.lines.some((l) => l.id === line);
+      const better = line !== null && line !== h.line && h.entry.slug === h.head && h.lines.some((l) => l.variants.some((v) => v.code === line));
       if (better && page.url.href === from) await goto(lineHref(h.ref, line), { replace: true });
     })();
   });

@@ -69,14 +69,34 @@ const FORMAT_ERRORS = [
 	SqliteError,
 ] as const;
 
+/** A WAF's refusal of a burst of requests: an immediate retry meets it too, a run some minutes on is served. */
+export class BurstRefusal extends Error {
+	override name = "BurstRefusal";
+}
+
 const TRANSIENT_STATUSES: ReadonlySet<number> = new Set([408, 429]);
 
 export function permanent(e: unknown): boolean {
 	if (e instanceof HttpError) return e.status < 500 && !TRANSIENT_STATUSES.has(e.status);
 	return (
 		e instanceof DataError ||
+		e instanceof BurstRefusal ||
 		e instanceof ValiError ||
 		e instanceof RangeResponseError ||
 		FORMAT_ERRORS.some((format) => e instanceof format)
 	);
 }
+
+/** How a failed step runs again: at once, never, or once a burst refusal has lifted (unit.ts). */
+export const FAILURES = ["transient", "permanent", "burst"] as const;
+export type Failure = (typeof FAILURES)[number];
+
+export const failureOf = (e: unknown): Failure =>
+	e instanceof BurstRefusal ? "burst" : permanent(e) ? "permanent" : "transient";
+
+/** Starts the error of a unit whose step met a burst refusal twice: an instance's error keeps only its message. */
+export const REFUSED_TWICE = "refused twice:";
+
+/** An instance a burst refusal ended: worth a restart, unlike any other failure. */
+export const refusedTwice = (s: InstanceStatus): boolean =>
+	s.status === "errored" && s.error?.message.startsWith(REFUSED_TWICE) === true;

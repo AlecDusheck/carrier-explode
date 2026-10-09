@@ -11,3 +11,6 @@
   Cache-Control: public, max-age=604800, stale-while-revalidate=604800
 /favicon.svg
   Cache-Control: public, max-age=604800, stale-while-revalidate=604800
+# Kept out of search indexes, like every page the worker answers.
+/*
+  X-Robots-Tag: noindex

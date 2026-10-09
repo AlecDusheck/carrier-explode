@@ -98,7 +98,7 @@ const trailer: Schema<McfgTrailerSummary> = v.object({
 	label: opt(str),
 	baseVersion: opt(str),
 	capability: opt(str),
-	digest: opt(str),
+	field8: opt(str),
 });
 
 const image: Schema<BasebandImage> = v.object({

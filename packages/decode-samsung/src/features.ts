@@ -27,8 +27,8 @@ export function decodeCscFeature(xml: string): CscFeature {
 
 export interface CarrierFeature {
 	readonly version: string;
-	/** The Samsung carrier list version the ids below refer to (omc.info's carrierListVersion). */
-	readonly carrierListVersion: string;
+	/** The Samsung carrier list version the ids below refer to (omc.info's carrierListVersion); older files have none. */
+	readonly carrierListVersion?: string;
 	/** By carrier group: `SFR`. */
 	readonly groups: ReadonlyArray<{ readonly group: string; readonly features: Features }>;
 	/** By Samsung carrier id: one network or MVNO of the pack. */
@@ -71,7 +71,7 @@ export function decodeCarrierFeature(json: string): CarrierFeature {
 	if (!isRecord(doc)) throw new CarrierFeatureError("customer_carrier_feature.json is not an object");
 	return {
 		version: str(doc, "version"),
-		carrierListVersion: str(doc, "mapped_cid_version"),
+		...(doc.mapped_cid_version === undefined ? {} : { carrierListVersion: str(doc, "mapped_cid_version") }),
 		groups: entries(doc, "customer").map((e) => ({ group: str(e, "carrier_group"), features: features(e) })),
 		carriers: entries(doc, "specific").map((e) => ({ id: str(e, "canonical_id"), features: features(e) })),
 	};

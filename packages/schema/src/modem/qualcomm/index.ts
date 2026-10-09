@@ -1,5 +1,6 @@
 /** Pixel MCFG (`mcfg_sw.mbn`, its selection records, optionally mcfg_hw's band combos) -> ModemConfig. */
 
+import { canonical } from "@carrier-explode/values";
 import * as v from "valibot";
 
 import { bytesToHex } from "@carrier-explode/binary";
@@ -11,12 +12,17 @@ import {
 	parseBandCombos,
 	parseCombo,
 	parseMcfg,
+	parsePlmnCombos,
 	readLayout,
+	readMdb,
 	SELECTION_MATCHERS,
 	trailerField,
 	type ComboComponent,
+	type McfgCondition,
 	type McfgImage,
+	type McfgItem,
 	type McfgSetting,
+	type McfgTrailer,
 	type NvLayout,
 	type SelectionMatcher,
 	type SelectionRecord,
@@ -34,7 +40,7 @@ import {
 	type MappedConfig,
 } from "../archive.ts";
 import type { ComboSource } from "../combos.ts";
-import { lastPerId, qualcommItem } from "./items.ts";
+import { qualcommItem } from "./items.ts";
 
 export const QUALCOMM_IMAGE = "mcfg_sw.mbn";
 
@@ -215,36 +221,152 @@ function rawItem(id: string, name: string, hex: string): ModemItem {
 	return { id, name, description: null, value: { kind: "bytes", hex }, label: null, certainty: "opaque" };
 }
 
+type McfgBranchItem = Extract<McfgItem, { readonly kind: "branch" }>;
+
+/** What a branch adds to the ids of the items it governs: `?if=0 53FF`, `?else`; nothing past its group's end. */
+function branchSuffix(b: McfgBranchItem): string {
+	if (b.branch === "end") return "";
+	const tests = b.conditions.map((c) => c.text).join(" & ");
+	return tests === "" ? `?${b.branch}` : `?${b.branch}=${tests}`;
+}
+
+const conditionValue = (c: McfgCondition): ModemValue => ({
+	kind: "fields",
+	fields: {
+		type: numberValue(c.type),
+		word: numberValue(c.word),
+		form: numberValue(c.form),
+		text: { kind: "text", value: c.text },
+	},
+});
+
+function branchItem(i: number, b: McfgBranchItem): ModemItem {
+	return {
+		id: `mcfg:${i}`,
+		name: "Branch on the SIM",
+		description:
+			"Item type 12: the items after it, up to the next branch, apply only when it holds; a type 2 condition reads as subscription and GID1",
+		value: {
+			kind: "fields",
+			fields: {
+				branch: { kind: "text", value: b.branch },
+				conditions: { kind: "list", values: b.conditions.map(conditionValue) },
+				lead: { kind: "bytes", hex: b.lead },
+			},
+		},
+		label: null,
+		certainty: "low",
+	};
+}
+
+/**
+ * Each item as a ModemItem, the last write of an id under it: the modem writes them in order. One inside a branch has
+ * the branch in its id, so its group's alternatives stay apart; an earlier write a later one changes keeps its value as
+ * `<id>?item <n>`, its index in the file (an MVNO config writes its parent's items, then its own).
+ */
 function mcfgItems(img: Uint8Array, mcfg: McfgImage, errors: string[]): ModemItem[] {
-	return mcfg.items.flatMap((it, i): ModemItem[] => {
+	let suffix = "";
+	const writes = mcfg.items.flatMap((it, i): Array<{ readonly item: ModemItem; readonly index: number }> => {
 		if (it.kind === "trailer") return [];
-		if (it.kind === "other") {
-			errors.push(`${QUALCOMM_IMAGE}: item ${i} of type ${it.type} not read`);
-			return [
-				rawItem(
-					`mcfg:${i}`,
-					`Item type ${it.type}`,
-					bytesToHex(img.subarray(it.offset, it.offset + it.length)),
-				),
-			];
+		if (it.kind === "branch") {
+			suffix = branchSuffix(it);
+			return [{ item: branchItem(i, it), index: i }];
 		}
-		const key = it.kind === "nv" ? it.nv : it.path;
-		const layout = itemLayout(key);
-		const s = mcfgSetting(img, it);
-		if (s === undefined) {
-			const id = typeof key === "number" ? `nv:${key}` : `efs:${key}`;
-			errors.push(`${id}: attributes 0x${it.attr.toString(16)} do not fit its bytes; shown as stored`);
-			const raw =
-				it.data === undefined
-					? new Uint8Array(0)
-					: img.subarray(it.data.offset, it.data.offset + it.data.length);
-			return [rawItem(id, describeNv(key)?.name ?? id, bytesToHex(raw))];
-		}
-		const id = settingId(key, s);
-		if (s.value !== null) return [setItem(key, id, s.value, layout?.fields, errors)];
+		return mcfgItem(img, it, i, errors).map((item) => ({
+			item: { ...item, id: `${item.id}${suffix}` },
+			index: i,
+		}));
+	});
+	const last = new Map(writes.map((w) => [w.item.id, w.item]));
+	return writes.flatMap(({ item, index }): ModemItem[] => {
+		const final = last.get(item.id);
+		if (final === item) return [item];
+		if (final !== undefined && canonical(final.value) === canonical(item.value)) return [];
+		const description = item.description === null ? REPLACED : `${REPLACED}. ${item.description}`;
+		return [{ ...item, id: `${item.id}?item ${index}`, description }];
+	});
+}
+
+const REPLACED = "Written earlier in the file and replaced by a later write";
+
+function mcfgItem(
+	img: Uint8Array,
+	it: Exclude<McfgItem, { readonly kind: "trailer" | "branch" }>,
+	i: number,
+	errors: string[],
+): ModemItem[] {
+	if (it.kind === "other") {
+		errors.push(`${QUALCOMM_IMAGE}: item ${i} of type ${it.type} not read`);
 		return [
-			{ ...qualcommItem(key, new Uint8Array(0)), id, value: { kind: "bytes", hex: "" }, label: "No value" },
+			rawItem(
+				`mcfg:${i}`,
+				`Item type ${it.type}`,
+				bytesToHex(img.subarray(it.offset, it.offset + it.length)),
+			),
 		];
+	}
+	const key = it.kind === "nv" ? it.nv : it.path;
+	const layout = itemLayout(key);
+	const s = mcfgSetting(img, it);
+	if (s === undefined) {
+		const id = typeof key === "number" ? `nv:${key}` : `efs:${key}`;
+		errors.push(`${id}: attributes 0x${it.attr.toString(16)} do not fit its bytes; shown as stored`);
+		const raw =
+			it.data === undefined
+				? new Uint8Array(0)
+				: img.subarray(it.data.offset, it.data.offset + it.data.length);
+		return [rawItem(id, describeNv(key)?.name ?? id, bytesToHex(raw))];
+	}
+	const id = settingId(key, s);
+	if (s.value !== null) return [setItem(key, id, s.value, layout?.fields, errors)];
+	return [
+		{ ...qualcommItem(key, new Uint8Array(0)), id, value: { kind: "bytes", hex: "" }, label: "No value" },
+	];
+}
+
+/** A version TLV's bytes as the u32 they hold. */
+const u32Hex = (hex: string): string => `0x${(hex.match(/../g) ?? []).toReversed().join("")}`;
+
+/** A trailer field as a fact: what the config was built for, not what selects it. The label is the config's own. */
+function trailerFact(f: McfgTrailer["fields"][number]): Array<{ label: string; value: string }> {
+	switch (f.kind) {
+		case "label":
+		case "end":
+			return [];
+		case "trailerVersion":
+			return [{ label: "Trailer version", value: f.hex }];
+		case "version":
+			return [{ label: "Version", value: u32Hex(f.hex) }];
+		case "baseVersion":
+			return [{ label: "Base version", value: u32Hex(f.hex) }];
+		case "capability":
+			return [{ label: "Capability id", value: u32Hex(f.hex) }];
+		case "iins":
+			return [{ label: "Built for IINs", value: `${f.iins.join(", ") || "none listed"} (flag ${f.flag})` }];
+		case "plmns": {
+			const plmns = f.plmns.map((p) => `${p.mcc}-${String(p.mnc).padStart(2, "0")}`);
+			return [{ label: "Built for PLMNs", value: `${plmns.join(", ") || "none listed"} (flag ${f.flag})` }];
+		}
+		case "applicableMccMnc":
+			return [{ label: "Applicable MCC-MNC", value: f.values.join(", ") }];
+		case "field8":
+		case "other":
+			return [{ label: `Trailer field ${f.type}`, value: f.hex }];
+	}
+}
+
+/** What the image's per-PLMN combination MDBs list, one source per record. */
+function mdbCombos(img: Uint8Array, mcfg: McfgImage, errors: string[]): ComboSource[] {
+	return mcfg.items.flatMap((it): ComboSource[] => {
+		if (it.kind !== "file" || !it.path.includes("/plmn2cacombos")) return [];
+		const bytes = mcfgSetting(img, it)?.value;
+		if (bytes === undefined || bytes === null) return [];
+		return readOr(errors, it.path, [], () =>
+			parsePlmnCombos(readMdb(bytes)).map((r): ComboSource => [
+				`${it.path}: ${r.plmns.join(" ")}`,
+				r.combos.map((c) => parseCombo(c).components.map(component)),
+			]),
+		);
 	});
 }
 
@@ -264,13 +386,14 @@ export function qualcommConfig(files: ArchiveFiles, sha: string): MappedConfig {
 		label,
 		scope: scopeOf(records),
 		selection,
-		// An MCFG's header is raw version words and a digest: nothing a reader can use.
-		facts: [],
-		items: lastPerId(mcfgItems(img, mcfg, errors)),
-		combos:
-			combos === undefined
+		facts: (mcfg.trailer?.fields ?? []).flatMap(trailerFact),
+		items: mcfgItems(img, mcfg, errors),
+		combos: [
+			...(combos === undefined
 				? []
-				: readOr(errors, BAND_COMBOS, [], () => combinations(new TextDecoder().decode(combos), selection)),
+				: readOr(errors, BAND_COMBOS, [], () => combinations(new TextDecoder().decode(combos), selection))),
+			...mdbCombos(img, mcfg, errors),
+		],
 		errors,
 	};
 	return { config, base: null };

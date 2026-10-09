@@ -46,6 +46,14 @@
 
   const listOf = async (of: KindSegment): Promise<readonly ListRow[]> => getList({ platform, kind: SEGMENT_KIND[of] });
 
+  const twinKey = (c: ListRow): string => `${c.brand} ${c.cc}`;
+  // Several files of one brand in a country (att_us, att5g_us; Verizon_LTE_US, Verizon_MVNO_US) each also say their file name.
+  // Found with the rows: a template constant after an await is recomputed by every row that reads it.
+  const rowsOf = async (of: KindSegment): Promise<{ all: readonly ListRow[]; twins: ReadonlySet<string> }> => {
+    const all = await listOf(of);
+    return { all, twins: repeated(all, twinKey) };
+  };
+
   async function guessFor(of: KindSegment): Promise<string> {
     if (guessShown[of]) return "";
     const guess = await GUESSES[of]();
@@ -92,7 +100,6 @@
   const here = $derived(page.url.pathname);
   const isOpen = (c: ListRow): boolean => here === link(c.path) || here.startsWith(link(c.path) + "/");
 
-  const twinKey = (c: ListRow): string => `${c.brand} ${c.cc}`;
 
   const reveal: Attachment<HTMLElement> = (node) => node.scrollIntoView({ block: "nearest" });
 
@@ -117,13 +124,11 @@
     </div>
     {#if showList}
     <Pane>
-      {@const all = await listOf(kind)}
+      {@const { all, twins } = await rowsOf(kind)}
       {@const q = query.trim().toLowerCase()}
       {@const matched = q ? all.filter((c) => matches(c, q)) : all}
       {@const dated = sortable && byUpdated}
       {@const shown = dated ? [...matched].sort(newestFirst) : matched}
-      <!-- Several files of one brand in a country (att_us, att5g_us; Verizon_LTE_US, Verizon_MVNO_US) each also say their file name. -->
-      {@const twins = repeated(all, twinKey)}
       <div class="scroll list-box">
         <ul class="list" aria-label={kind} data-sveltekit-preload-data="tap">
           {#each shown as c (c.path)}

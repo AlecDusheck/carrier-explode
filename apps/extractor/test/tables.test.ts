@@ -2,7 +2,7 @@ import * as v from "valibot";
 import { describe, expect, it } from "vitest";
 
 import { type NormArtifact, normBatches } from "../src/normalize.ts";
-import { instanceId, iosRun, pipelineOfInstance, reindexRun, runOf } from "../src/runs.ts";
+import { checkRun, instanceId, iosRun, pipelineOfInstance, reindexRun, runOf } from "../src/runs.ts";
 import { PIPELINE_NAMES, type PipelineParams, PIPELINES } from "../src/pipelines.ts";
 import { QUEUES } from "../src/queues.ts";
 import { tuningSchema } from "../src/env.ts";
@@ -60,6 +60,12 @@ describe("ids", () => {
 		expect((await reindexRun(release, new Date("2026-10-05T22:10:00Z"))).id).toBe(
 			"reindex-android-CP3A_260905_009-tokay-20261005221000",
 		);
+	});
+
+	it("names a feed's check by its feed and the second it was asked for, so a cron fire starts it once", () => {
+		const params = { feed: "galaxy-build", rebuild: false, only: null } as const;
+		expect(checkRun(params, new Date("2026-10-08T02:10:00Z")).id).toBe("check-galaxy-build-20261008021000");
+		expect(pipelineOfInstance("check-galaxy-build-20261008021000")).toBe("check");
 	});
 
 	it("names a reindex of an OTA file by its record's key, within the id limit", async () => {

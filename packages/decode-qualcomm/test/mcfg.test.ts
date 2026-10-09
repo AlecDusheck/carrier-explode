@@ -126,13 +126,13 @@ describe("Pixel mcfg_sw.mbn", () => {
 		expect(m.trailer?.fields.map((f) => f.kind)).toEqual([
 			"trailerVersion",
 			"version",
-			"other",
+			"applicableMccMnc",
 			"label",
 			"iins",
 			"baseVersion",
 			"plmns",
 			"capability",
-			"digest",
+			"field8",
 			"end",
 		]);
 		expect(trailerField(m.trailer, "label")?.text).toBe("Commercial-DCM");
@@ -142,7 +142,13 @@ describe("Pixel mcfg_sw.mbn", () => {
 			flag: 0,
 			plmns: [{ mcc: 440, mnc: 10 }],
 		});
-		expect(trailerField(m.trailer, "other")).toEqual({ type: 2, hex: "0a00b801", kind: "other" });
+		// DCM states MNC 10 before MCC 440.
+		expect(trailerField(m.trailer, "applicableMccMnc")).toEqual({
+			type: 2,
+			hex: "0a00b801",
+			kind: "applicableMccMnc",
+			values: [10, 440],
+		});
 	});
 
 	it("keeps a list TLV whose count disagrees with its length as raw hex", () => {
@@ -222,6 +228,33 @@ describe("MCFG items", () => {
 		expect(new TextDecoder().decode(mcfgItemData(img, defined(m.items[0])))).toBe("<a/>");
 	});
 
+	it("reads a type 12 group: a branch per GID1 test, an else and its end", () => {
+		const test = (text: string): number[] => {
+			const t = [...new TextEncoder().encode(text), 0];
+			return [1, ...u16(2), ...u16(10), 2, ...u16(t.length), ...t];
+		};
+		const img = segment([
+			item(12, 0xff, [0, 1, 0, 0, ...test("0 53FF")]),
+			nvItem(0x19, 71, [7, 0x41]),
+			item(12, 0xff, [0, 1, 0, 2]),
+			nvItem(0x19, 71, [7, 0x42]),
+			item(12, 0xff, [0, 1, 0, 3]),
+			item(12, 0xff, [0, 1, 0, 9]),
+		]);
+		const branches = defined(parseMcfg(img)).items.map((x) =>
+			x.kind === "branch" ? [x.branch, x.lead, x.conditions] : x.kind,
+		);
+		expect(branches).toEqual([
+			["if", "000100", [{ type: 2, word: 10, form: 2, text: "0 53FF" }]],
+			"nv",
+			["else", "000100", []],
+			"nv",
+			["end", "000100", []],
+			// A fourth byte no group uses: kept as an unread item.
+			"other",
+		]);
+	});
+
 	it("reads the subscription mask and index bytes the attributes declare, and value-less items", () => {
 		const img = segment([
 			nvItem(0x39, 10, [7, 0, 4, 0]),
@@ -246,7 +279,8 @@ describe("MCFG items", () => {
 			[7, 0, null],
 			[7, null, null],
 			[null, null, null],
-			undefined,
+			// Galaxy's /mcfg_ftb: attribute 0x40 with data, which is its value.
+			[null, null, [0, 0]],
 			undefined,
 		]);
 	});

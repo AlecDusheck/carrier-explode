@@ -336,10 +336,10 @@ export function seo(id: string | null, p: Params, names: PageNames): Meta {
 						title: fit(TITLE_MAX, `${device} carrier settings — all carriers`, `${device} carrier settings`),
 						description: `Every ${DEVICE[platform].noun} for the ${device}, decoded: APN, VoLTE, 5G, Wi-Fi Calling and MCC/MNC for every carrier, side by side.`,
 					};
-		case "/features":
+		case "/":
 			return {
-				title: `Carrier features by carrier, ${deviceWords(RELEASE_PLATFORMS, "and")}`,
-				description: `Does your carrier support 5G Standalone, Voice over 5G, Wi-Fi Calling, RCS or satellite texting on your ${deviceWords(RELEASE_PLATFORMS, "or")}? Check every carrier, for your model.`,
+				title: `Carrier features for ${deviceWords(RELEASE_PLATFORMS, "and")}`,
+				description: `Every carrier's 5G SA, VoNR, VoLTE, Wi-Fi Calling, RCS and satellite on your ${deviceWords(RELEASE_PLATFORMS, "or")}, side by side. Pick what you need; see who has it.`,
 			};
 		case "/compare":
 			return {

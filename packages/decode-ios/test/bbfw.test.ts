@@ -343,7 +343,7 @@ describe("basebandSummary", () => {
 					version: "0000000a",
 					label: "generic_config_label",
 					baseVersion: "0000000a",
-					digest: expect.any(String),
+					field8: expect.stringMatching(/^([0-9a-f]{2})+$/),
 				},
 				files: ["/mcfg_ftb", "/rfc/2900_0_res.dat", "/rfc/2900_0_cmn.dat"],
 			},

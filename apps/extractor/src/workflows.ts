@@ -1,4 +1,4 @@
-/** The Workflows of no family: the weekly labels run, and a reindex. */
+/** The Workflows of no family: a feed's check, the weekly labels run, and a reindex. */
 
 import { WorkflowEntrypoint, type WorkflowEvent, type WorkflowStep } from "cloudflare:workers";
 import { NonRetryableError } from "cloudflare:workflows";
@@ -21,6 +21,7 @@ import { pend } from "./normalize.ts";
 import { PIPELINES } from "./pipelines.ts";
 import { queuePurge } from "./queues.ts";
 import { reindexArtifacts, reindexPlatforms } from "./reindex.ts";
+import { checkFeed, type Checked } from "./runs.ts";
 import { doStep, finish, normalizeSteps, UnitWorkflow, type UnitRun } from "./unit.ts";
 
 /** Search and model through the AI binding, both through the configured AI Gateway. */
@@ -90,6 +91,14 @@ export class LabelsWorkflow extends WorkflowEntrypoint<Env, unknown> {
 		if (named.length > 0) await doStep(step, "purge", this.env, () => queuePurge(this.env));
 		if (failed.length > 0) throw new Error(`${failed.length} code(s) failed: ${failed.join(" | ")}`);
 		return { named, missed };
+	}
+}
+
+/** A feed's check: its plan made in steps, then its units started. */
+export class CheckWorkflow extends WorkflowEntrypoint<Env, unknown> {
+	override async run(event: Readonly<WorkflowEvent<unknown>>, step: WorkflowStep): Promise<Checked> {
+		const params = v.parse(PIPELINES.check.params, event.payload);
+		return checkFeed(this.env, params, (name, run) => doStep(step, name, this.env, run));
 	}
 }
 

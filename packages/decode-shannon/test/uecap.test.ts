@@ -17,6 +17,16 @@ describe("unpackPlmn", () => {
 	});
 });
 
+const varint = (n: number): number[] => {
+	const out: number[] = [];
+	let v = n;
+	while (v > 0x7f) {
+		out.push((v & 0x7f) | 0x80);
+		v = Math.floor(v / 128);
+	}
+	return [...out, v];
+};
+
 const label = (c: Component): string =>
 	`${c.rat === "NR" ? "n" : ""}${c.band}${c.dlClass}${c.ulClass ? `+${c.ulClass}` : ""}`;
 
@@ -25,7 +35,7 @@ describe("decodeUeCap", () => {
 		const f = decodeUeCap(fixture("uecap-combinations.pb"));
 		if (f.kind !== "combinations") throw new Error(f.kind);
 		expect(f.carrierIndex).toBe(9);
-		expect(f.combinations.map((c) => c.map(label).join("-"))).toEqual([
+		expect(f.combinations.map((c) => c.components.map(label).join("-"))).toEqual([
 			"n25A+A",
 			"2A+A-n41A+A",
 			"n41C+A",
@@ -33,18 +43,19 @@ describe("decodeUeCap", () => {
 			"2A+A-n260H+G",
 			"2A+A-n260G+G",
 		]);
-		expect(f.combinations[2]?.[0]).toEqual({
+		expect(f.combinations[2]?.components[0]).toMatchObject({
 			rat: "NR",
 			band: 41,
 			dlClass: "C",
 			ulClass: "A",
+			srsTxSwitch: 0,
 			dl: [
 				{ scsKHz: 30, bandwidthMHz: 100, mimoLayers: 4 },
 				{ scsKHz: 30, bandwidthMHz: 80, mimoLayers: 4 },
 			],
 			ul: [{ scsKHz: 30, bandwidthMHz: 100, mimoLayers: 2 }],
 		});
-		expect(f.combinations[4]?.[1]).toMatchObject({
+		expect(f.combinations[4]?.components[1]).toMatchObject({
 			dl: Array.from({ length: 3 }, () => ({ scsKHz: 120, bandwidthMHz: 100, mimoLayers: 2 })),
 		});
 	});
@@ -57,7 +68,7 @@ describe("decodeUeCap", () => {
 				c.map((x) => `${x.band}${x.dlClass}${x.dlMimoLayers}${x.ulClass ?? ""}`).join("-"),
 			),
 		).toEqual(["1A2-3A4A", "1A2-7A2A", "1A2-8A2A", "1C4A"]);
-		expect(decodeUeCap(fixture("uecap-empty.pb"))).toEqual({
+		expect(decodeUeCap(fixture("uecap-empty.pb"))).toMatchObject({
 			kind: "combinations",
 			carrierIndex: 0,
 			combinations: [],
@@ -70,5 +81,63 @@ describe("decodeUeCap", () => {
 			[3, "ATT", 21],
 		]);
 		expect(map.carriers[1]?.plmns[7]).toEqual({ mcc: "310", mnc: "260" });
+	});
+
+	it("keeps a group's header, each of its band lists, FeatureSet ids, per-carrier features and srstxswitch", () => {
+		const field = (n: number, v: number): number[] => [(n << 3) | 0, ...varint(v)];
+		const bytes = (n: number, b: readonly number[]): number[] => [(n << 3) | 2, ...varint(b.length), ...b];
+		const nr41 = (dlSet: number): number[] => [
+			...field(1, 10041),
+			...field(2, 1),
+			...field(3, 1),
+			...field(4, dlSet),
+			...field(5, 1),
+			...bytes(6, [1]),
+			...bytes(7, [1]),
+			...field(8, 1),
+		];
+		const list = (dlSet: number): number[] => bytes(2, bytes(1, nr41(dlSet)));
+		const file = Uint8Array.from([
+			...field(1, 5),
+			...field(2, 3),
+			...bytes(3, [
+				...bytes(1, [...field(1, 0x80000000), ...field(4, 1), ...field(5, 2)]),
+				...list(1),
+				...list(2),
+			]),
+			...bytes(6, [...field(1, 2), ...field(2, 2), ...field(3, 100), ...field(4, 2), ...field(5, 1)]),
+			...bytes(7, [...field(1, 2), ...field(2, 2), ...field(3, 100), ...field(4, 1), ...field(6, 2)]),
+			...field(9, 77),
+		]);
+		const f = decodeUeCap(file);
+		if (f.kind !== "combinations") throw new Error(f.kind);
+		expect([f.version, f.carrierIndex, f.field9]).toEqual([5, 3, 77]);
+		expect(f.combinations.map((c) => [c.header, c.bitMask, c.components[0]?.dlFeatureSet])).toEqual(
+			[1, 2].map((set) => [
+				{ bcsNr: 0x80000000, bcsIntraEndc: 0, bcsEutra: 0, powerClass: 1, intraBandEnDcSupport: 2 },
+				0,
+				set,
+			]),
+		);
+		expect(f.combinations[0]?.components[0]).toEqual({
+			rat: "NR",
+			band: 41,
+			dlClass: "A",
+			ulClass: "A",
+			dlFeatureSet: 1,
+			ulFeatureSet: 1,
+			srsTxSwitch: 1,
+			dl: [{ scsKHz: 30, bandwidthMHz: 100, mimoLayers: 4, maxModulation: 2, bandwidth90MHz: true }],
+			ul: [
+				{
+					scsKHz: 30,
+					bandwidthMHz: 100,
+					mimoLayers: 2,
+					maxModulation: 1,
+					bandwidth90MHz: false,
+					nonCbMimoLayers: 2,
+				},
+			],
+		});
 	});
 });

@@ -25,15 +25,6 @@ const BUILD_MODEMS = {
 	samsung: (build: string) => android.buildModems("samsung", build),
 } as const satisfies Record<ReleasePlatform, (build: string) => Promise<BuildModem[]>>;
 
-/** The modem pages a build's listing names: an iOS image's package generations; a Pixel or Galaxy firmware's page is named by a device the listing does not hold. */
-const LISTED_MODEMS = {
-	ios: (r: ListedRelease) => r.modemFamilies.map((f) => f.code),
-	android: () => [],
-	samsung: () => [],
-} as const satisfies Record<ReleasePlatform, (r: ListedRelease) => readonly string[]>;
-
-export const listedModems = (r: ListedRelease): readonly string[] => LISTED_MODEMS[r.platform](r);
-
 /** Every build held, each platform's newest first. */
 export const getBuilds = async (): Promise<ListedRelease[]> =>
 	(await Promise.all(RELEASE_PLATFORMS.map((p) => releasesOf(p)))).flat();

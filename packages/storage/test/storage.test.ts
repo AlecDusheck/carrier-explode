@@ -19,6 +19,7 @@ import {
 	putJsonOnce,
 	putObj,
 	putOnce,
+	readModemRecord,
 	readRecord,
 	RecordError,
 	releaseOfKey,
@@ -175,6 +176,12 @@ describe("writes", () => {
 	});
 });
 
+function previous(key: string): string {
+	const at = keys.previousModem(key);
+	if (at === undefined) throw new Error(`${key}: no previous key`);
+	return at;
+}
+
 describe("readers", () => {
 	it("reads a record checked against its contract: null when absent, a RecordError naming the key when broken", async () => {
 		const schema = v.object({ sha1: v.string() });
@@ -186,6 +193,18 @@ describe("readers", () => {
 		await expect(readRecord(bucket, "ota/pixel/broken.json", schema)).rejects.toThrow(
 			/ota\/pixel\/broken\.json does not match its contract/,
 		);
+	});
+
+	it("reads a modem record at the current schema, else at the previous one", async () => {
+		const schema = v.object({ at: v.string() });
+		const [current, other] = ["c".repeat(64), "d".repeat(64)];
+		await putJson(bucket, previous(keys.modemConfig(current)), { at: "previous" });
+		await putJson(bucket, keys.modemConfig(current), { at: "current" });
+		await putJson(bucket, previous(keys.combos(other)), { at: "previous" });
+		expect(await readModemRecord(bucket, keys.modemConfig(current), schema)).toEqual({ at: "current" });
+		expect(await readModemRecord(bucket, keys.combos(other), schema)).toEqual({ at: "previous" });
+		expect(await readModemRecord(bucket, keys.modemConfig(other), schema)).toBeNull();
+		expect(keys.previousModem(keys.obj(current))).toBeUndefined();
 	});
 
 	it("takes a purge only with the shared bearer", () => {

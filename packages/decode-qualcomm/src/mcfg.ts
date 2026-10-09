@@ -17,9 +17,16 @@ import { itemLayout } from "./layouts.ts";
 
 const trimNul = (s: string): string => s.replace(/\0+$/, "");
 
-// MCFG_TRL TLVs: 0 trailer ver | 1 version | 3 label | 4 IINs | 5 base version | 6 PLMNs | 7 capability id | 8 digest | 9 end
-const HEX_TLVS = { 0: "trailerVersion", 1: "version", 5: "baseVersion", 7: "capability" } as const;
-const TEXT_TLVS = { 3: "label", 8: "digest" } as const;
+// MCFG_TRL TLVs: 0 trailer ver | 1 version | 2 applicable MCC-MNC | 3 label | 4 IINs | 5 base version | 6 PLMNs |
+// 7 capability id | 8 32 bytes (mbn-mcfg-tools: "checksum"; on Galaxy a cut Python bytes repr, so no digest) | 9 end
+const HEX_TLVS = {
+	0: "trailerVersion",
+	1: "version",
+	5: "baseVersion",
+	7: "capability",
+	8: "field8",
+} as const;
+const TEXT_TLVS = { 3: "label" } as const;
 type HexKind = (typeof HEX_TLVS)[keyof typeof HEX_TLVS];
 type TextKind = (typeof TEXT_TLVS)[keyof typeof TEXT_TLVS];
 const HEX_KINDS: readonly string[] = Object.values(HEX_TLVS);
@@ -37,6 +44,8 @@ type McfgTrailerField = { readonly type: number; readonly hex: string } & (
 	| { readonly kind: TextKind; readonly text: string }
 	| { readonly kind: "iins"; readonly flag: number; readonly iins: readonly number[] }
 	| { readonly kind: "plmns"; readonly flag: number; readonly plmns: readonly McfgPlmn[] }
+	/** Two u16s, MCC then MNC on most configs and MNC then MCC on others (DCM, SBM: 10 440). */
+	| { readonly kind: "applicableMccMnc"; readonly values: readonly [number, number] }
 	| { readonly kind: "end" }
 	| { readonly kind: "other" }
 );
@@ -59,6 +68,8 @@ function decodeTlv(type: number, v: Uint8Array): McfgTrailerField {
 	if (isTlvOf(HEX_TLVS, type)) return { type, hex, kind: HEX_TLVS[type] };
 	if (isTlvOf(TEXT_TLVS, type)) return { type, hex, kind: TEXT_TLVS[type], text: trimNul(latin1(v)) };
 	if (type === 9) return { type, hex, kind: "end" };
+	if (type === 2 && v.length === 4)
+		return { type, hex, kind: "applicableMccMnc", values: [u16le(v, 0), u16le(v, 2)] };
 	if (type === 4) {
 		const l = list4(v, (o) => u32le(v, o));
 		if (l) return { type, hex, kind: "iins", flag: l.flag, iins: l.entries };
@@ -121,14 +132,63 @@ interface McfgItemBase {
 	readonly length: number;
 }
 
-/** An NV item, a file item (its data when the item declares some), the trailer, or another item type. */
+/** Where a type 12 item stands in its group, by its fourth byte: ATT's 0, 1, 2, 3 and Rogers' 0, 2, 3. */
+export const MCFG_BRANCHES = ["if", "else if", "else", "end"] as const;
+export type McfgBranch = (typeof MCFG_BRANCHES)[number];
+
+/**
+ * A branch's test on the SIM: `0 53FF`, read as subscription and GID1 by the OEM's logs. `type` 2 and `word` 10 on every
+ * one seen, `form` 2; `word` is no length (Rogers' 5-byte text has it too).
+ */
+export interface McfgCondition {
+	readonly type: number;
+	readonly word: number;
+	readonly form: number;
+	readonly text: string;
+}
+
+/** An NV item, a file item (its data when the item declares some), a branch, the trailer, or another item type. */
 export type McfgItem = McfgItemBase &
 	(
 		| { readonly kind: "nv"; readonly nv: number; readonly data: McfgSpan }
 		| { readonly kind: "file"; readonly path: string; readonly data?: McfgSpan }
+		/** The items after it, up to the next branch, apply only when its conditions hold; `lead`: its first 3 bytes, unread. */
+		| {
+				readonly kind: "branch";
+				readonly lead: string;
+				readonly branch: McfgBranch;
+				readonly conditions: readonly McfgCondition[];
+		  }
 		| { readonly kind: "trailer" }
 		| { readonly kind: "other" }
 	);
+
+/**
+ * u8[3], u8 branch, then u8 count and that many {u16 type, u16 word, u8 form, u16 length, text}; undefined when the body
+ * is not that shape.
+ */
+function branchOf(
+	body: Uint8Array,
+): Omit<Extract<McfgItem, { readonly kind: "branch" }>, keyof McfgItemBase | "kind"> | undefined {
+	const branch = body.length < 4 ? undefined : MCFG_BRANCHES[byteAt(body, 3)];
+	if (branch === undefined) return undefined;
+	const lead = bytesToHex(body.subarray(0, 3));
+	if (body.length === 4) return { lead, branch, conditions: [] };
+	const conditions: McfgCondition[] = [];
+	let o = 5;
+	for (let i = byteAt(body, 4); i > 0; i--) {
+		if (o + 7 > body.length || o + 7 + u16le(body, o + 5) > body.length) return undefined;
+		const end = o + 7 + u16le(body, o + 5);
+		conditions.push({
+			type: u16le(body, o),
+			word: u16le(body, o + 2),
+			form: byteAt(body, o + 4),
+			text: trimNul(latin1(body.subarray(o + 7, end))),
+		});
+		o = end;
+	}
+	return o === body.length ? { lead, branch, conditions } : undefined;
+}
 
 export interface McfgImage {
 	/** Where the MCFG segment starts in the image (non-zero inside an ELF). */
@@ -169,6 +229,10 @@ const U32_LENGTH_TYPES: ReadonlySet<number> = new Set([8, 16, 23, 27]);
 function mcfgItem(img: Uint8Array, o: number, ln: number, body: Uint8Array): McfgItem {
 	const base = { offset: o, type: byteAt(img, o + 4), attr: byteAt(img, o + 5), length: ln };
 	if (base.type === 10) return { ...base, kind: "trailer" };
+	if (base.type === 12) {
+		const branch = branchOf(body);
+		return branch === undefined ? { ...base, kind: "other" } : { ...base, kind: "branch", ...branch };
+	}
 	if (base.type === 1) {
 		// u16 item, u16 data length, data
 		if (body.length < 4 || 4 + u16le(body, 2) !== body.length) return { ...base, kind: "other" };
@@ -235,7 +299,7 @@ export function parseMcfg(img: Uint8Array, maxItems = 4096): McfgImage | undefin
  * Item attribute bits whose effect shows in the payload; others stay unread in `attr`. The firmware logs a subs_mask
  * for MultiSIM items and an index for Indexed ones (qdsp6m.qdb); a value-less item has no bytes past those prefixes.
  */
-const MCFG_ATTR = { value: 0x01, subsMask: 0x10, index: 0x20 } as const;
+const MCFG_ATTR = { value: 0x01, subsMask: 0x10, index: 0x20, unexplained: 0x40 } as const;
 
 /** An item's payload, past the subscription-mask byte its attributes declare. */
 export function mcfgItemData(img: Uint8Array, it: McfgItem): Uint8Array {
@@ -272,7 +336,9 @@ export function mcfgSetting(
 	const index = indexed ? byteAt(d, prefixes - 1) : null;
 	const bytes = d.subarray(prefixes);
 	if (valued) return { subsMask, index, value: bytes };
-	return bytes.length ? undefined : { subsMask, index, value: null };
+	if (bytes.length === 0) return { subsMask, index, value: null };
+	// 0x40 in place of 0x01 comes with data on Galaxy's /mcfg_ftb, and with none on NV items masked 0x50.
+	return it.attr & MCFG_ATTR.unexplained ? { subsMask, index, value: bytes } : undefined;
 }
 
 /** Paths of an image's file items, in order. */

@@ -8,6 +8,7 @@ import { createHash } from "node:crypto";
 import { bytesToHex, u32le } from "@carrier-explode/binary";
 import { childText, parseXml, type XmlElement } from "@carrier-explode/decode-samsung";
 import { fetchWithRetry, HttpError } from "@carrier-explode/http";
+import { BurstRefusal } from "../errors.ts";
 import params from "./auth-param.dat";
 
 const SERVER = "https://neofussvr.sslcs.cdngc.net/";
@@ -91,6 +92,14 @@ const signNonce = (nonce: string): string =>
 
 export class FusError extends Error {
 	override name = "FusError";
+}
+
+/** BinaryInform's status for a firmware FUS does not serve: a withdrawn build, or a model or region it does not know. */
+const NOT_SERVED = "S01";
+
+/** FUS does not serve the firmware asked for; asked again soon, it says the same. */
+export class FusRefusal extends FusError {
+	override name = "FusRefusal";
 }
 
 /** FUS answered with an HTTP error; its body's start names who refused (a WAF's block page). */
@@ -202,7 +211,11 @@ export class FusSession {
 		});
 		this.take(res);
 		const text = await res.text();
-		if (!res.ok) throw new FusHttpError(`${SERVER}${path}`, res.status, text);
+		if (!res.ok) {
+			const e = new FusHttpError(`${SERVER}${path}`, res.status, text);
+			// Imperva's block page: FUS refuses a burst for some minutes.
+			throw res.status === 403 ? new BurstRefusal(e.message, { cause: e }) : e;
+		}
 		return text;
 	}
 
@@ -229,8 +242,9 @@ export class FusSession {
 					] as const)),
 		];
 		const { status, put } = answer(await this.post(INFORM, message(puts, "BINARY_SW_VERSION")));
-		if (status !== "200" && status !== "S00")
-			throw new FusError(`${fw.model} ${fw.region} ${fw.version}: BinaryInform status ${status ?? "none"}`);
+		const said = `${fw.model} ${fw.region} ${fw.version}: BinaryInform status ${status ?? "none"}`;
+		if (status === NOT_SERVED) throw new FusRefusal(said);
+		if (status !== "200" && status !== "S00") throw new FusError(said);
 		const need = (k: string): string => {
 			const v = put.get(k);
 			if (!v) throw new FusError(`${fw.model} ${fw.region} ${fw.version}: BinaryInform without ${k}`);

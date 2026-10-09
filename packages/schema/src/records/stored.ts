@@ -13,7 +13,7 @@ import {
 	MODEM_SCOPES,
 	parseSourceKey,
 	PLATFORMS,
-	MODEM_SCHEMA,
+	READ_MODEM_SCHEMAS,
 	PROFILE_SCHEMA,
 	SOURCE_KINDS,
 	type AndroidModem,
@@ -221,7 +221,7 @@ const modemValueSchema: v.GenericSchema<ModemValue> = v.lazy(() =>
 );
 
 export const modemConfigSchema = v.object({
-	schema: v.literal(MODEM_SCHEMA),
+	schema: v.picklist(READ_MODEM_SCHEMAS),
 	family: v.picklist(MODEM_VENDORS),
 	sha: str,
 	label: str,
@@ -255,6 +255,15 @@ export const modemFactsSchema = v.object({
 	items: v.array(v.pick(modemConfigSchema.entries.items.item, ["id", "name"])),
 });
 
+const carrierFeaturesSchema = v.object({
+	scsKhz: v.number(),
+	bandwidthMhz: v.number(),
+	layers: v.number(),
+	maxModulation: v.number(),
+	bandwidth90Mhz: v.boolean(),
+	nonCbLayers: opt(v.number()),
+});
+
 /** keys.combos: one stored list of band combinations. */
 export const bandCombinationsSchema = v.array(
 	v.array(
@@ -265,6 +274,10 @@ export const bandCombinationsSchema = v.array(
 			dlLayers: opt(v.number()),
 			bandwidthMhz: opt(v.number()),
 			scsKhz: opt(v.number()),
+			dlFeatureSet: opt(v.number()),
+			ulFeatureSet: opt(v.number()),
+			dlCarriers: opt(v.array(carrierFeaturesSchema)),
+			ulCarriers: opt(v.array(carrierFeaturesSchema)),
 		}),
 	),
 ) satisfies v.GenericSchema<unknown, readonly BandCombination[]>;

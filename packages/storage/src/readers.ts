@@ -2,6 +2,7 @@
 
 import * as v from "valibot";
 
+import { keys } from "./keys.ts";
 import { INDEX_TAG } from "./purge.ts";
 
 /** A stored record that breaks its contract: a 500 for a reader, never a guess. */
@@ -34,6 +35,26 @@ export async function readRecord<T>(
 ): Promise<T | null> {
 	const o = await bucket.get(key);
 	return o === null ? null : validRecord(key, schema, parseRecord(key, await o.text()));
+}
+
+/**
+ * The object at a modemConfig or combos key, else at its PREVIOUS_MODEM_SCHEMA key, which serves until a reindex writes
+ * the current one; null when neither is held.
+ */
+export async function readModem(bucket: R2Bucket, key: string): Promise<R2ObjectBody | null> {
+	const previous = keys.previousModem(key);
+	if (previous === undefined) throw new Error(`${key}: not a modem record's key`);
+	return (await bucket.get(key)) ?? bucket.get(previous);
+}
+
+/** readRecord of a modem record, by readModem. */
+export async function readModemRecord<T>(
+	bucket: R2Bucket,
+	key: string,
+	schema: v.GenericSchema<unknown, T>,
+): Promise<T | null> {
+	const o = await readModem(bucket, key);
+	return o === null ? null : validRecord(o.key, schema, parseRecord(o.key, await o.text()));
 }
 
 /** Browsers revalidate before each use, so a purge reaches them at once; the edge answers the revalidation. */

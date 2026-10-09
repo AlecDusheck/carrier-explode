@@ -32,15 +32,18 @@
   /** A platform's pages lead to its own lists and builds. */
   const platform = $derived(page.params.platform !== undefined && isPlatform(page.params.platform) ? page.params.platform : (visitor ?? PLATFORM_ORDER[0]));
   const menu = $derived<Array<[string, string]>>([
+    ["/", "Features"],
     [listPath(platform, "carrier"), "Carriers"],
     [listPath(platform, "country"), "Countries"],
-    ["/features", "Features"],
     [buildsPath(isReleasePlatform(platform) ? platform : RELEASE_PLATFORMS[0]), "Builds"],
     ["/compare", "Compare"],
     ["/wiki", "Wiki"],
   ]);
 
   const here = $derived(page.url.pathname);
+  // The home page is the features matrix, so the features' own pages sit under it.
+  const owns = (href: string): string => link(href === "/" ? "/features" : href);
+  const current = (href: string): boolean => here === link(href) || here.startsWith(owns(href) + "/");
   // A page that knows its own title (a wiki article) says so in its data.
   const meta = $derived(page.data.meta ?? seo(page.route.id, page.params, page.data.names));
   // One address per page: the compare tool is the only page with meaningful
@@ -67,7 +70,7 @@
   <div class="frame">
     <div class="titlebar">
       <img class="app-icon" src={asset("favicon.svg")} alt="" width="16" height="16" />
-      <span>carrier-explode</span>
+      <a class="home" href={link("/")}>carrier-explode</a>
       <span class="spacer"></span>
       <span class="sub">Explode and decode carrier data</span>
       <a class="github" href="https://github.com/AlecDusheck/carrier-explode" rel="noreferrer">GitHub</a>
@@ -76,7 +79,7 @@
 
     <nav class="menubar">
       {#each menu as [href, label] (label)}
-        <a href={link(href)} aria-current={here === link(href) || here.startsWith(link(href) + "/") ? "page" : undefined} aria-busy={isNavigatingTo(link(href)) || undefined}>{label}</a>
+        <a href={link(href)} aria-current={current(href) ? "page" : undefined} aria-busy={isNavigatingTo(link(href)) || undefined}>{label}</a>
       {/each}
     </nav>
 

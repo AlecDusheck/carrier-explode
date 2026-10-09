@@ -34,10 +34,9 @@ ${SITE_ARTICLES.map(entry).join("\n")}
 ## Data
 
 - [Carriers](${url.origin}/ios/carriers): one platform's carrier sources, \`/<platform>/carriers\` (${platforms})
-- [Carrier features](${url.origin}/features): which carriers offer 5G Standalone, Voice over 5G, Wi-Fi Calling, RCS, satellite and more, per iPhone, Pixel or Galaxy (\`/features/<feature>?phone=iPhone19,3\`, \`?phone=tokay\`)
+- [Carrier features](${url.origin}/), the home page: every carrier against every feature (5G Standalone, Voice over 5G, Wi-Fi Calling, RCS, satellite and more) on one iPhone, Pixel or Galaxy, filtered by required features (\`/?phone=tokay&need=sa,vonr,wfc\`); one feature's carriers at \`/features/<feature>?phone=iPhone19,3\`
 - [Country bundles](${url.origin}/ios/countries): each one's emergency alerts (\`/ios/countries/<name>/alerts\`), emergency numbers and carriers; \`/android/countries\` lists Android's carriers by country (\`/android/countries/us\`)
 - [Builds](${url.origin}/ios/builds): \`/ios/builds\`, \`/android/builds\` and \`/samsung/builds\`; each build (\`/<platform>/builds/<build>\`) lists the sources it added and changed, and the modems it ships, if any (none for an Exynos Galaxy, whose modem is encrypted) (\`/ios/builds/<build>/<package>\`, \`/android/builds/<build>/<device>\`, \`/samsung/builds/<build>/<model>\`)
-- [Sitemap](${url.origin}/sitemap.xml)
 
 ## Source pages
 

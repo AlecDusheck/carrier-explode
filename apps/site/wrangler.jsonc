@@ -38,7 +38,11 @@
 		},
 		"production": {
 			"name": "carrier-explode-site",
-			"observability": { "enabled": true, "traces": { "enabled": true, "head_sampling_rate": 0.1 } },
+			"observability": {
+				"enabled": true,
+				"logs": { "head_sampling_rate": 0.1 },
+				"traces": { "enabled": true, "head_sampling_rate": 0.1 },
+			},
 			// www is a zone Redirect Rule to the apex, so it never reaches this worker.
 			"routes": [{ "pattern": "carrierexplode.com", "custom_domain": true }],
 			"workers_dev": false,

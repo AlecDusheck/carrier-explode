@@ -2,11 +2,15 @@
 
 import { env } from "cloudflare:workers";
 import * as v from "valibot";
-import { readRecord } from "@carrier-explode/storage";
+import { readModemRecord, readRecord } from "@carrier-explode/storage";
 
 /** A JSON record, validated (a broken one throws, a 500); null when the key is absent. */
 export const readJson = <T>(key: string, schema: v.GenericSchema<unknown, T>): Promise<T | null> =>
 	readRecord(env.BUCKET, key, schema);
+
+/** A modem record (keys.modemConfig, keys.combos), as readJson, at the previous modem schema while the current is unwritten. */
+export const readModemJson = <T>(key: string, schema: v.GenericSchema<unknown, T>): Promise<T | null> =>
+	readModemRecord(env.BUCKET, key, schema);
 
 /** An object's bytes, or one range of them; null when the key is absent. */
 export async function readBytes(

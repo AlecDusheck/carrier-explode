@@ -1,7 +1,7 @@
 <script lang="ts">
   import { page } from "$app/state";
   import { jsonLdScript } from "#lib/seo.ts";
-  import { getFeaturePhone, getFeaturePhones, getFeatureTable, getVisitorCountry, guessCarrierPages } from "#lib/api/sources.remote.ts";
+  import { getFeatureModels, getFeaturePhone, getFeaturePhones, getFeatureTable, getVisitorCountry, guessCarrierPages } from "#lib/api/sources.remote.ts";
   import { deviceWords, FEATURE_PAGES } from "#lib/feature-pages.ts";
   import { PLATFORM_DEVICES } from "#lib/platforms.ts";
   import type { ReleasePlatform } from "@carrier-explode/schema/types";
@@ -43,7 +43,7 @@
       "@context": "https://schema.org",
       "@type": "BreadcrumbList",
       itemListElement: [
-        { "@type": "ListItem", position: 1, name: "Carrier features", item: `${page.url.origin}/features` },
+        { "@type": "ListItem", position: 1, name: "Carrier features", item: `${page.url.origin}/` },
         { "@type": "ListItem", position: 2, name: feature.name, item: page.url.origin + page.url.pathname },
       ],
     },
@@ -68,7 +68,7 @@
 <div class="view">
   <div class="scroll pad">
     <article class="consumer">
-      <p class="crumbs"><a href={link("/features")}>Carrier features</a></p>
+      <p class="crumbs"><a href={link("/")}>Carrier features</a></p>
       <h1>{feature.name}</h1>
       <p class="lead">{feature.what}</p>
 
@@ -77,7 +77,8 @@
         {@const phone = await getFeaturePhone({ phone: page.url.searchParams.get("phone") ?? undefined, slug: feature.slug })}
         {@const where = phone ? feature.where[phone.platform] : undefined}
         {#if where}<p>Where to turn it on: <b>{where}</b>.</p>{/if}
-        <FeaturePhonePicker {phones} {phone} />
+        {@const models = (await getFeatureModels()).filter((p) => feature.platforms.some((f) => f === p.platform))}
+        <FeaturePhonePicker {phones} {models} {phone} />
         {#if phone && !feature.platforms.includes(phone.platform)}
           <p class="answer">{feature.name} is not on {PLATFORM_DEVICES[phone.platform]}s: their carrier settings have no switch for it.</p>
         {:else if phone}

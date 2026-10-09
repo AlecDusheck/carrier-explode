@@ -5,6 +5,7 @@ import {
 	annotateNv,
 	CCM_FLAG_BYTES,
 	CCM_ITEMS,
+	decodeModemEfs,
 	describeNv,
 	type Confidence,
 	type NvType,
@@ -64,6 +65,16 @@ export function qualcommItem(key: number | string, bytes: Uint8Array): ModemItem
 		};
 	}
 	const value = modemValue(bytes, info !== undefined && TEXT_TYPES.has(info.type));
+	const efs = info === undefined && typeof key === "string" ? decodeModemEfs(key, bytes) : undefined;
+	if (efs !== undefined)
+		return {
+			id,
+			name: efs.name,
+			description: null,
+			value,
+			label: efs.value,
+			certainty: CERTAINTY[efs.confidence],
+		};
 	const note = annotateNv(key, value.kind === "number" ? value.value : undefined, bytes);
 	return {
 		id,

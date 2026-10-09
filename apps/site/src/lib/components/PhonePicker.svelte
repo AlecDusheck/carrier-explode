@@ -17,6 +17,6 @@
   <span class="picker-opt"><PhoneImage {platform} id={c.id} name={c.name} /><span class="text">{c.label}</span></span>
 {/snippet}
 
-{#if choices.length}
+{#if choices.length > 1}
   <Picker items={choices} selected={choices.find((c) => c.key === selected)} key={(c) => c.key} {option} href={(c) => c.href} />
 {/if}

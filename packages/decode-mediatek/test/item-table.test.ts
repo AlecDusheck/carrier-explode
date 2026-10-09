@@ -281,6 +281,7 @@ describe("values", () => {
 const record = (itemId: number, lid: number): McfItemRecord => ({
 	itemId,
 	lid,
+	flags: 1,
 	condition: { kind: "always" },
 	values: [],
 });

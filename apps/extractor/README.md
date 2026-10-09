@@ -44,7 +44,7 @@ pnpm wrangler d1 migrations apply carrier-explode-index-dev --local --env dev --
 pnpm wrangler dev --env dev --port 8811 --test-scheduled --persist-to $STATE   # add --enable-containers=false without Docker
 
 AUTH='authorization: Bearer dev'
-curl -H "$AUTH" -X POST localhost:8811/run -d '{"run":"pixel-device"}'                 # a feed check: {started, live, failed, waiting, planned}
+curl -H "$AUTH" -X POST localhost:8811/run -d '{"run":"pixel-device"}'                 # starts a feed check: {check: <id>}; GET /runs/<id> gives {started, live, failed, waiting, planned}
 curl -H "$AUTH" -X POST localhost:8811/run -d '{"run":"pixel-device","rebuild":true}'  # restarts its failed units
 curl -H "$AUTH" -X POST localhost:8811/run -d '{"run":"pixel-device","only":[]}'      # plans, starts nothing: `planned` lists every unit
 curl -H "$AUTH" -X POST localhost:8811/run -d '{"run":"pixel-device","only":["pixel-device-CP3A_260905_009-frankel"]}'  # starts just that unit
@@ -52,7 +52,7 @@ curl -H "$AUTH" -X POST localhost:8811/run -d '{"run":"reindex","target":{"kind"
 curl -H "$AUTH" -X POST localhost:8811/run -d '{"run":"reindex","target":{"kind":"all","platform":"samsung"}}'  # normalizes what no norm/ object holds, then indexes every held record
 curl -H "$AUTH" -X POST localhost:8811/run -d '{"run":"rederive","platform":"android"}'  # every source and change of a platform derived again
 curl -H "$AUTH" localhost:8811/runs/pixel-device-CP3A_260905_009-frankel                         # an instance's status
-curl "localhost:8811/__scheduled?cron=35+3+*+*+*"                                      # the daily checks, as cron fires them
+curl "localhost:8811/__scheduled?cron=35+3+*+*+*"                                      # starts the daily checks, as cron fires them
 pnpm wrangler d1 execute carrier-explode-index-dev --local --env dev --persist-to $STATE --command "SELECT * FROM releases"
 curl localhost:8811/cdn-cgi/local/explorer/api/r2/buckets                              # the local bucket
 ```
@@ -73,9 +73,9 @@ A check starts at most `CONTAINER_SHARE["ios-build"]` builds (production: 3 of t
 many run; the `*/20 * * * *` cron checks again, so a slot that frees is taken within 20 minutes and the ~114 builds of
 the backfill run back to back in about a day (at ~40 minutes a build), never more than 3 at once.
 
-1. Deploy; to start at once rather than at the next cron, `POST /run {"run":"ios-build"}`. Its answer lists `started`,
-   `live`, `waiting` (planned, no container free) and `failed`.
-2. Watch `waiting` shrink in the cron's logs or by calling the same check; `GET /runs/<id>` follows one build.
+1. Deploy; to start at once rather than at the next cron, `POST /run {"run":"ios-build"}`. It answers the check's id;
+   `GET /runs/<id>` gives its output once done: `started`, `live`, `waiting` (planned, no container free) and `failed`.
+2. Watch `waiting` shrink in each check's output; `GET /runs/<id>` follows one build.
 3. A failed build stays failed until `POST /run {"run":"ios-build","rebuild":true}` restarts it (within the share).
 
 ## Test

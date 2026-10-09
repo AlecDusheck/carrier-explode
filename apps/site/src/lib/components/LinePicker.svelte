@@ -1,13 +1,9 @@
 <script lang="ts">
   import type { SourceHead } from "#lib/server/head.ts";
-  import PhonePicker from "./PhonePicker.svelte";
+  import ModelPicker from "./ModelPicker.svelte";
 
-  /** A source's lines (Android's Pixels, Apple's models), each linking where `href` says. */
+  /** A source's lines (Android's phones, Apple's models), each linking where `href` says. */
   let { head, href }: { head: SourceHead; href: (line: string) => string } = $props();
 </script>
 
-<PhonePicker
-  platform={head.ref.platform}
-  choices={head.lines.map((l) => ({ key: l.id, label: l.label, id: l.id || undefined, name: l.name, href: href(l.id) }))}
-  selected={head.line}
-/>
+<ModelPicker phones={head.lines} selected={head.line} {href} />

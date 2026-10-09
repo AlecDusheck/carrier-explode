@@ -2,7 +2,7 @@
 
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { zipSync } from "fflate";
+import { zipSync, zlibSync } from "fflate";
 import * as v from "valibot";
 import { describe, expect, it } from "vitest";
 
@@ -125,7 +125,7 @@ describe("qualcommConfig", () => {
 		expect(c.errors).toEqual([]);
 	});
 
-	it("types each value, with the decoders' meaning and label, and states no header", () => {
+	it("types each value, with the decoders' meaning and label, and states the trailer as built-for facts", () => {
 		expect(byId(c, "efs:/nv/item_files/ims/IMS_enable")).toEqual({
 			id: "efs:/nv/item_files/ims/IMS_enable",
 			name: "IMS enable",
@@ -138,7 +138,14 @@ describe("qualcommConfig", () => {
 			value: { kind: "number", value: 512 },
 			label: null,
 		});
-		expect(c.facts).toEqual([]);
+		expect(c.facts).toEqual(
+			expect.arrayContaining([
+				{ label: "Built for IINs", value: "8981100 (flag 0)" },
+				{ label: "Built for PLMNs", value: "440-10 (flag 0)" },
+				{ label: "Applicable MCC-MNC", value: "10, 440" },
+			]),
+		);
+		expect(c.facts.map((f) => f.label)).toContain("Trailer field 8");
 	});
 
 	it("keeps the config when the band combos do not read, with the error", async () => {
@@ -204,6 +211,147 @@ describe("qualcommConfig", () => {
 		// Every way in needs custom id 11.
 		expect(sims("USCC-Fi")).toEqual([]);
 		expect(sims("ROW")).toEqual([]);
+	});
+
+	describe("a Galaxy image: GID1 branches, a 0x40 file, MDB combinations and a replaced write", () => {
+		const banner = (text: string): number[] => nv(0x19, 71, [7, ...new TextEncoder().encode(text), 0]);
+		const gid1 = (text: string): number[] => {
+			const t = [...new TextEncoder().encode(text), 0];
+			return [1, ...u16(2), ...u16(10), 2, ...u16(t.length), ...t];
+		};
+		const branch = (n: number, test: number[]): number[] => mcfgItem(12, 0xff, [0, 1, 0, n, ...test]);
+		const combosText = [...new TextEncoder().encode("b1AA-n3AA;n77AA;"), 0];
+		const cppRecord = [...u32(0x303), ...u32(0), ...u32(combosText.length), ...combosText];
+		const index = [4, 8, 400, 8192, 8, 0, 0x03f2ff, 0].flatMap(u32);
+		const [zIndex, zRecord] = [zlibSync(Uint8Array.from(index)), zlibSync(Uint8Array.from(cppRecord))];
+		const mdb = [
+			1,
+			3,
+			...new TextEncoder().encode("CPP2"),
+			...Array.from({ length: 0x30 - 6 }, () => 0),
+			...u32(zIndex.length),
+			...u32(index.length),
+			...zIndex,
+			...u16(cppRecord.length),
+			...u16(zRecord.length),
+			...zRecord,
+		];
+		const p = [...new TextEncoder().encode("/mdb/nr/plmn2cacombos_nr_sub.mdb"), 0];
+		const mdbItem = mcfgItem(23, 0x19, [
+			...u16(1),
+			...u16(p.length),
+			...p,
+			...u16(2),
+			...u32(mdb.length + 1),
+			7,
+			...mdb,
+		]);
+		const trailer = mcfgItem(10, 0, [
+			0xa1,
+			0,
+			0,
+			0,
+			...new TextEncoder().encode("MCFG_TRL"),
+			3,
+			...u16(3),
+			...new TextEncoder().encode("ATT"),
+			4,
+			...u16(6),
+			0,
+			1,
+			...u32(8901410),
+			6,
+			...u16(6),
+			0,
+			1,
+			...u16(310),
+			...u16(410),
+			9,
+			0,
+			0,
+		]);
+		const items = [
+			banner("Parent_config"),
+			efs(0x40, "/mcfg_ftb", [0, 4, 0, 0, 0, 0, 0, 0]),
+			branch(0, gid1("0 53FF")),
+			banner("ATT_5G_w_NSA"),
+			branch(2, []),
+			banner("ATT_normal"),
+			branch(3, []),
+			banner("ATT_final"),
+			mdbItem,
+			trailer,
+		];
+		const mbn = Uint8Array.from([
+			...new TextEncoder().encode("MCFG"),
+			...u16(2),
+			...u16(1),
+			...u32(items.length),
+			...u16(0),
+			...u16(0),
+			...u16(0x1383),
+			...u16(0),
+			...items.flat(),
+		]);
+		const galaxy = qualcommConfig(
+			new Map([
+				["mcfg_sw.mbn", mbn],
+				["selection.json", json([])],
+			]),
+			"s4",
+		);
+		const g = galaxy.config;
+		const text = (id: string): unknown => {
+			const value = g.items.find((i) => i.id === id)?.value;
+			return value?.kind === "text" ? value.value : value;
+		};
+
+		it("keeps every branch's item under the branch's test, and an earlier write a later one replaces", async () => {
+			expect(await stored(galaxy)).toBe(true);
+			expect(g.errors).toEqual([]);
+			expect(text("nv:71?if=0 53FF")).toBe("ATT_5G_w_NSA");
+			expect(text("nv:71?else")).toBe("ATT_normal");
+			expect(text("nv:71")).toBe("ATT_final");
+			expect(g.items.find((i) => i.id === "nv:71?item 0")).toMatchObject({
+				value: { kind: "text", value: "Parent_config" },
+				description: expect.stringMatching(/^Written earlier in the file/),
+			});
+			expect(byId(g, "mcfg:2")).toMatchObject({
+				value: {
+					kind: "fields",
+					fields: {
+						branch: { kind: "text", value: "if" },
+						conditions: {
+							kind: "list",
+							values: [{ kind: "fields", fields: { text: { kind: "text", value: "0 53FF" } } }],
+						},
+					},
+				},
+			});
+		});
+
+		it("reads /mcfg_ftb's attribute 0x40 data as its value, the MDB's combinations and the trailer's lists", () => {
+			expect(byId(g, "efs:/mcfg_ftb")).toMatchObject({
+				name: "MCFG first-boot flag",
+				label: "0004000000000000",
+			});
+			expect(g.combos).toEqual([
+				[
+					"/mdb/nr/plmn2cacombos_nr_sub.mdb: 302-FF",
+					[
+						[
+							{ band: "B1", dl: "A", ul: "A" },
+							{ band: "n3", dl: "A", ul: "A" },
+						],
+						[{ band: "n77", dl: "A", ul: "A" }],
+					],
+				],
+			]);
+			expect(g.facts).toEqual([
+				{ label: "Built for IINs", value: "8901410 (flag 0)" },
+				{ label: "Built for PLMNs", value: "310-410 (flag 0)" },
+			]);
+		});
 	});
 
 	describe("items with prefix bytes, no value or a layout", () => {
@@ -377,6 +525,7 @@ describe("shannonConfig", () => {
 		expect(c.facts).toEqual([
 			{ label: "Manifest version", value: "v0.1" },
 			{ label: "Carrier id", value: "4242" },
+			{ label: "cfg.db rule", value: `310120 · certificate ${"0".repeat(64)} (no SIM matcher states it)` },
 		]);
 		expect(c.errors).toEqual([]);
 		expect(c.selection).toEqual([
@@ -438,7 +587,21 @@ describe("shannonConfig", () => {
 		]);
 		// Files in UTF-8 order: TMO_1's n41C+A (100 + 80 MHz), then lte_1's 1A2-3A4A.
 		expect(combinations(c)[2]).toEqual([
-			{ band: "n41", dl: "C", ul: "A", dlLayers: 4, bandwidthMhz: 180, scsKhz: 30 },
+			{
+				band: "n41",
+				dl: "C",
+				ul: "A",
+				dlLayers: 4,
+				bandwidthMhz: 180,
+				scsKhz: 30,
+				dlFeatureSet: expect.any(Number),
+				ulFeatureSet: expect.any(Number),
+				dlCarriers: [
+					expect.objectContaining({ scsKhz: 30, bandwidthMhz: 100, layers: 4 }),
+					expect.objectContaining({ scsKhz: 30, bandwidthMhz: 80, layers: 4 }),
+				],
+				ulCarriers: [expect.objectContaining({ scsKhz: 30, bandwidthMhz: 100, layers: 2 })],
+			},
 		]);
 		expect(combinations(c)[6]).toEqual([
 			{ band: "B1", dl: "A", dlLayers: 2 },
@@ -599,13 +762,48 @@ describe("shannonConfig", () => {
 			expect(layered.errors).toContain(`crc:${hex("AP_BASED_EMC")}: AP_BASED_EMC: 2 values for 1 elements`);
 		});
 
-		it("keeps an item the registry lacks, untyped, and says so", () => {
+		it("keeps an item the registry lacks, untyped, as one the modem skips rather than an error", () => {
 			expect(layered.items.find((i) => i.id === `crc:${hex("NOT_IN_REGISTRY")}`)).toMatchObject({
 				value: { kind: "number", value: 7 },
+				description: expect.stringMatching(/so the modem skips it/),
 			});
-			expect(layered.errors).toContain(
-				`crc:${hex("NOT_IN_REGISTRY")}: not in the modem's item registry; its values are shown untyped`,
-			);
+			expect(layered.errors.filter((e) => e.includes(hex("NOT_IN_REGISTRY")))).toEqual([]);
+		});
+
+		it("keeps the value a later layer replaces, under the layer that set it", () => {
+			const parent = seq("parent.sim1", item(MTU, 1400));
+			const own = seq("own.sim1", item(MTU, 1500));
+			const sim1 = (layer: Uint8Array): Uint8Array =>
+				pb([
+					[1, 1],
+					[2, hexBytes(sha1Hex(layer))],
+					[8, 4],
+				]);
+			const over = shannonConfig(
+				new Map([
+					[
+						"manifest.pb",
+						pb([
+							[1, "v0.1"],
+							[2, "xx_mvno"],
+							[5, sim1(parent)],
+							[5, sim1(own)],
+						]),
+					],
+					...[parent, own].map((b) => [`confseqs/${sha1Hex(b)}.pb`, b] as const),
+					["items.json", json({ [hex(MTU)]: { name: MTU, type: "u16", capacity: 1 } })],
+					["carrier.json", json([])],
+				]),
+				"s5",
+			).config;
+			expect(over.items.map((i) => [i.id, i.value, i.description])).toEqual([
+				[`crc:${hex(MTU)}`, { kind: "number", value: 1500 }, "u16"],
+				[
+					`crc:${hex(MTU)}?parent.sim1`,
+					{ kind: "number", value: 1400 },
+					"u16 · set by parent.sim1, which a later layer replaces",
+				],
+			]);
 		});
 
 		it("reads LTE CA combinations from the items, once however many conditions give them", () => {
@@ -625,6 +823,68 @@ describe("shannonConfig", () => {
 });
 
 const textValue = (value: string): ModemValue => ({ kind: "text", value });
+const numberValue = (value: number): ModemValue => ({ kind: "number", value });
+
+const sumWords = (b: readonly number[]): number => {
+	let sum = 0;
+	for (let i = 0; i < b.length; i += 4)
+		sum =
+			(sum + ((b[i] ?? 0) | ((b[i + 1] ?? 0) << 8) | ((b[i + 2] ?? 0) << 16) | ((b[i + 3] ?? 0) << 24))) >>>
+			0;
+	return sum;
+};
+const pad4 = (b: readonly number[]): number[] => [...b, ...Array.from({ length: -b.length & 3 }, () => 0)];
+
+/** One MCF item record: item id, flags, a `<sbp>_<mcc>_<mnc>` tag or none, values by `i$` path. */
+function mcfRecord(
+	item: number,
+	flags: number,
+	tag: string,
+	values: ReadonlyArray<readonly [string, number[]]>,
+): number[] {
+	const t = [...new TextEncoder().encode(tag)];
+	const body = [
+		...pad4(t),
+		...values.flatMap(([path, bytes]) =>
+			pad4([...u16(path.length), ...u16(bytes.length), ...new TextEncoder().encode(path), ...bytes]),
+		),
+	];
+	return [...u32(12 + body.length), ...u32(item), flags, t.length, ...u16(values.length), ...body];
+}
+
+/** An OP-OTA (or, empty, an NW-OTA) file of LID 0x88f's items 0x20cf and 0x20d1: one section, checksums made. */
+function mcf(records: readonly number[][]): Uint8Array {
+	const table = [...u32(0x88f), ...u32(2), ...u32(0x20cf), ...u32(0x20d1)];
+	const build = Array.from({ length: 60 }, () => 0);
+	const kind = [...new TextEncoder().encode(records.length ? "OP-OTA" : "NW-OTA"), 0, 0];
+	const payload = records.flat();
+	const section = [
+		...u32(0x00020004),
+		...u32(40 + payload.length),
+		...u32(0xccaa),
+		...u32(1),
+		...u32(payload.length),
+		...u32(0x88f),
+		...u32(0x88f),
+		...u32(records.length),
+		...u32(0),
+		...u32(0),
+		...payload,
+	];
+	const sum = sumWords(section);
+	section.splice(0x24, 4, ...u32(-sum >>> 0));
+	const header = [
+		...u32(0x00010004),
+		...u32(0x20 + table.length + 60),
+		...u32(0x1021aacc),
+		...u16(11),
+		...u16(1),
+		...u32(table.length),
+		...kind,
+		...u32(sum),
+	];
+	return Uint8Array.from([...header, ...table, ...build, ...section]);
+}
 
 describe("mediatekConfig", () => {
 	// The fixtures' items as a900a-MP_260716's md1rom item table shapes them: LID, size, unit, array depth.
@@ -692,6 +952,8 @@ describe("mediatekConfig", () => {
 			{ label: "Build", value: expect.stringMatching(/./) },
 			{ label: "SBP", value: "108" },
 			{ label: "Item table", value: expect.stringMatching(/^a900a-/) },
+			{ label: "Loaded by", value: expect.stringMatching(/^its SBP id/) },
+			{ label: "Record flags", value: "1 (38 records)" },
 		]);
 		expect(c.items.every((i) => /^lid:0x[0-9a-f]+\/\d+$/.test(i.id))).toBe(true);
 		expect(c.items.filter((i) => i.name !== null).map((i) => [i.id, i.name, i.certainty])).toEqual([
@@ -710,6 +972,54 @@ describe("mediatekConfig", () => {
 		});
 		// A scalar for any PLMN of the SBP.
 		expect(c.items.find((i) => i.id.endsWith(`/${0x7130}`))?.value).toEqual({ kind: "number", value: 12 });
+	});
+
+	it("merges an array MCF splits over records, keeps a path written twice with both values, and keys records by flags where they differ", () => {
+		const split = mediatekConfig(
+			new Map([
+				...files,
+				[
+					"op.mcfopota",
+					mcf([
+						mcfRecord(0x20cf, 1, "108_466_97", [
+							["0$", [1]],
+							["1$", [2]],
+						]),
+						mcfRecord(0x20cf, 1, "108_466_97", [
+							["2$", [3]],
+							["1$", [9]],
+						]),
+						mcfRecord(0x20d1, 1, "", [["0$", [5]]]),
+						mcfRecord(0x20d1, 2, "", [["0$", [5]]]),
+					]),
+				],
+				["nw.mcfnwota", mcf([])],
+			]),
+			"s6",
+		).config;
+		expect(byId(split, `lid:0x88f/${0x20cf}`)).toMatchObject({
+			value: {
+				kind: "fields",
+				fields: {
+					"466-97 flags 1": {
+						kind: "fields",
+						fields: {
+							"0$": numberValue(1),
+							"1$": { kind: "list", values: [numberValue(2), numberValue(9)] },
+							"2$": numberValue(3),
+						},
+					},
+				},
+			},
+		});
+		expect(byId(split, `lid:0x88f/${0x20d1}`)).toMatchObject({
+			value: {
+				kind: "fields",
+				fields: { "any flags 1": { kind: "fields", fields: { "0$": numberValue(5) } }, "any flags 2": {} },
+			},
+		});
+		expect(split.errors).toEqual([`lid:0x88f/${0x20cf} 1$: written twice with different values; both kept`]);
+		expect(split.facts.at(-1)).toEqual({ label: "Record flags", value: "1 (3 records), 2 (1 record)" });
 	});
 
 	it("is the firmware's own for SBP 0, no operator's", () => {

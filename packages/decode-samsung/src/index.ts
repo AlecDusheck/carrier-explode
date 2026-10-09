@@ -13,7 +13,7 @@ export {
 } from "./features.ts";
 export { type Customer, type CustomerProfile, decodeCustomer, type ProfileHandle } from "./customer.ts";
 export { decodeOmcInfo, gidHex, type OmcCarrier, type OmcInfo, omcVersion } from "./omc-info.ts";
-export { decodeOmcText } from "./omc-text.ts";
+export { decodeOmcText, OmcTextError } from "./omc-text.ts";
 export {
 	IMS_FILES,
 	ImsError,

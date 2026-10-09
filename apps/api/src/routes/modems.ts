@@ -2,7 +2,7 @@
 
 import { createRoute, z, type OpenAPIHono } from "@hono/zod-openapi";
 import { bandCombinationsSchema, modemConfigSchema } from "@carrier-explode/schema/records";
-import { keys, readRecord, validRecord } from "@carrier-explode/storage";
+import { keys, readModem, readModemRecord, validRecord } from "@carrier-explode/storage";
 import { fail, router, type ApiEnv } from "../context.ts";
 import { combosSchema, modemConfigRecordSchema } from "../shapes.ts";
 import { ERRORS, json, NO_QUERY } from "./common.ts";
@@ -31,7 +31,7 @@ modems.openapi(
 	async (c) => {
 		const { sha } = c.req.valid("param");
 		c.set("pinned", true);
-		const raw: unknown = await (await c.env.BUCKET.get(keys.modemConfig(sha)))?.json();
+		const raw: unknown = await (await readModem(c.env.BUCKET, keys.modemConfig(sha)))?.json();
 		// norm/ holds versions' Profiles beside the configurations, and a Profile names its source.
 		if (raw === undefined || (typeof raw === "object" && raw !== null && "source" in raw))
 			throw fail(404, `No modem configuration ${sha}.`);
@@ -55,7 +55,7 @@ modems.openapi(
 	async (c) => {
 		const { key } = c.req.valid("param");
 		c.set("pinned", true);
-		const combos = await readRecord(c.env.BUCKET, keys.combos(key), bandCombinationsSchema);
+		const combos = await readModemRecord(c.env.BUCKET, keys.combos(key), bandCombinationsSchema);
 		if (!combos) throw fail(404, `No band combinations ${key}.`);
 		return c.json(combos, 200);
 	},

@@ -57,7 +57,11 @@ const itemsSchema = v.object({
 interface TypedRecord {
 	readonly record: McfItemRecord;
 	readonly shape: ItemShape | undefined;
-	readonly values: readonly { readonly path: readonly number[]; readonly value: McfValue }[];
+	readonly values: readonly {
+		readonly path: readonly number[];
+		readonly bytes: Uint8Array;
+		readonly value: McfValue;
+	}[];
 }
 
 function typed(record: McfItemRecord, shapes: ItemShapes): TypedRecord {
@@ -65,7 +69,7 @@ function typed(record: McfItemRecord, shapes: ItemShapes): TypedRecord {
 	return {
 		record,
 		shape,
-		values: record.values.map(({ path, bytes }) => ({ path, value: readValue(shape, path, bytes) })),
+		values: record.values.map(({ path, bytes }) => ({ path, bytes, value: readValue(shape, path, bytes) })),
 	};
 }
 
@@ -95,18 +99,42 @@ const runsReadAsText = (records: readonly TypedRecord[]): boolean =>
 
 const pathKey = (path: readonly number[]): string => path.map((i) => `${i}$`).join("");
 
-/** A record's values: one scalar as itself, else values by array path (`0$1$`, as MCF writes it). */
-function recordValue(r: TypedRecord, asText: boolean): ModemValue {
-	const [only, ...more] = r.values;
-	if (only !== undefined && more.length === 0 && only.path.length === 0)
-		return modemValue(only.value, asText);
+type PathValue = TypedRecord["values"][number];
+
+/**
+ * The values of the records written under one condition, by path: MCF splits a long array over records, each a range
+ * of its paths. A path records give different bytes keeps each, and is added to `clashes`.
+ */
+function mergedValues(records: readonly TypedRecord[], clashes: Set<string>): Map<string, PathValue[]> {
+	const byPath = new Map<string, PathValue[]>();
+	for (const r of records)
+		for (const x of r.values) {
+			const path = pathKey(x.path);
+			const held = byPath.get(path) ?? [];
+			if (!held.some((h) => bytesToHex(h.bytes) === bytesToHex(x.bytes))) held.push(x);
+			if (held.length > 1) clashes.add(`${itemKey(r)}${path && ` ${path}`}`);
+			byPath.set(path, held);
+		}
+	return byPath;
+}
+
+function pathValue(held: readonly PathValue[], asText: boolean): ModemValue {
+	const [only, ...more] = held;
+	if (only !== undefined && more.length === 0) return modemValue(only.value, asText);
+	return { kind: "list", values: held.map((x) => modemValue(x.value, asText)) };
+}
+
+/** One condition's values: one scalar as itself, else values by array path (`0$1$`, as MCF writes it). */
+function conditionValue(byPath: ReadonlyMap<string, readonly PathValue[]>, asText: boolean): ModemValue {
+	const [only, ...more] = byPath;
+	if (only !== undefined && more.length === 0 && only[0] === "") return pathValue(only[1], asText);
 	return {
 		kind: "fields",
-		fields: Object.fromEntries(r.values.map((x) => [pathKey(x.path), modemValue(x.value, asText)])),
+		fields: Object.fromEntries([...byPath].map(([path, held]) => [path, pathValue(held, asText)])),
 	};
 }
 
-/** `466-97`, `466-any`, `any`; segmented conditions keep their raw form. */
+/** The SIM PLMN a record applies under: `466-97`, `466-any`, `any`; segmented conditions keep their raw form. */
 function conditionKey(c: McfCondition): string {
 	if (c.kind === "always") return "any";
 	if (c.kind === "plmn") return c.mcc === null ? "any" : `${c.mcc}-${c.mnc ?? "any"}`;
@@ -124,20 +152,39 @@ function shapeText([lid, size, unit, depth]: ItemShape, shapes: ItemShapes): str
 	return `${shapes.owners[lid] ?? "LID owner unknown"}${OWNER_SEPARATOR}${width}${array}`;
 }
 
-/** One item per LID and item id; one that differs by PLMN is keyed by condition. */
-function items(records: readonly TypedRecord[], shapes: ItemShapes): ModemItem[] {
-	const byId = new Map<string, TypedRecord[]>();
-	for (const r of records) byId.set(itemKey(r), [...(byId.get(itemKey(r)) ?? []), r]);
-	return [...byId].map(([id, rs]): ModemItem => {
+/** Each flags value with its record count: `1 (483 records)`. */
+const flagCounts = (records: readonly TypedRecord[]): string =>
+	[...Map.groupBy(records, (r) => r.record.flags)]
+		.toSorted(([a], [b]) => a - b)
+		.map(([flags, of]) => `${flags} (${of.length} record${of.length === 1 ? "" : "s"})`)
+		.join(", ");
+
+/**
+ * One item per LID and item id, its values by the condition they apply under unless that is only `any`. Where the
+ * config's records differ in flags, a condition names its flags too: records then differ by more than condition.
+ */
+function items(
+	records: readonly TypedRecord[],
+	shapes: ItemShapes,
+	byFlags: boolean,
+	clashes: Set<string>,
+): ModemItem[] {
+	const conditionOf = (r: TypedRecord): string => {
+		const key = conditionKey(r.record.condition);
+		return byFlags ? `${key} flags ${r.record.flags}` : key;
+	};
+	return [...Map.groupBy(records, itemKey)].map(([id, rs]): ModemItem => {
 		const asText = runsReadAsText(rs);
-		const byCondition = new Map(rs.map((r) => [conditionKey(r.record.condition), recordValue(r, asText)]));
+		const byCondition = [...Map.groupBy(rs, conditionOf)].map(
+			([condition, of]) => [condition, conditionValue(mergedValues(of, clashes), asText)] as const,
+		);
 		const first = rs[0]?.record;
 		const shape = rs[0]?.shape;
 		const name = first === undefined ? undefined : nameOf(shapes, first.itemId, first.lid);
-		const [only, ...more] = byCondition.values();
+		const [only, ...more] = byCondition;
 		const value: ModemValue =
-			only !== undefined && more.length === 0
-				? only
+			only !== undefined && more.length === 0 && only[0] === "any"
+				? only[1]
 				: { kind: "fields", fields: Object.fromEntries(byCondition) };
 		return {
 			id,
@@ -160,6 +207,10 @@ function unplaced(records: readonly TypedRecord[]): string[] {
 	return [...new Set(lines)];
 }
 
+/** md1rom opens `<file>_<sbp>.mcfopota` and applies the records whose `<sbp>_<mcc>_<mnc>` tag fits the SIM. */
+const LOADED_BY =
+	"its SBP id, which the modem sets for the SIM; a PLMN in its selection is one its records apply to, not every SIM it loads for";
+
 /** SBP 0 is no operator's: the modem's settings for none. */
 const NO_OPERATOR = 0;
 
@@ -174,11 +225,15 @@ export function mediatekConfig(files: ArchiveFiles, sha: string): MappedConfig {
 		.flatMap(([name, b]) => readOr(errors, name, [], () => decodeNwOta(b).records));
 	const records = [...op.records, ...nw].map((r) => typed(r, shapes));
 	const id = String(sbp.id);
+	const clashes = new Set<string>();
+	const byFlags = new Set(records.map((r) => r.record.flags)).size > 1;
+	const configItems = items(records, shapes, byFlags, clashes);
 	const config: ConfigDraft = {
 		family: "mediatek",
 		sha,
 		label: `SBP ${id}`,
 		scope: sbp.id === NO_OPERATOR ? "firmware" : "carrier",
+		// The PLMNs its records name; MCC-only ones have no SimMatcher.
 		selection: uniqueSims(
 			sbp.plmns.flatMap((p) => (p.mnc === null ? [] : (simMatcher({ mccmnc: `${p.mcc}${p.mnc}` }) ?? []))),
 		),
@@ -186,10 +241,16 @@ export function mediatekConfig(files: ArchiveFiles, sha: string): MappedConfig {
 			{ label: "Build", value: op.header.build },
 			{ label: "SBP", value: id },
 			{ label: "Item table", value: shapes.build },
+			{ label: "Loaded by", value: LOADED_BY },
+			...(records.length === 0 ? [] : [{ label: "Record flags", value: flagCounts(records) }]),
 		],
-		items: items(records, shapes),
+		items: configItems,
 		combos: [],
-		errors: [...errors, ...unplaced(records)],
+		errors: [
+			...errors,
+			...unplaced(records),
+			...[...clashes].map((at) => `${at}: written twice with different values; both kept`),
+		],
 	};
 	return { config, base: null };
 }

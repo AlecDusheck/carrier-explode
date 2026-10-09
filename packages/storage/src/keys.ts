@@ -1,6 +1,11 @@
 /** Every key of the carrier-explode-ingest bucket. Nothing else spells a key out. */
 
-import { MODEM_SCHEMA, PROFILE_SCHEMA, type ReleasePlatform } from "@carrier-explode/schema/types";
+import {
+	MODEM_SCHEMA,
+	PREVIOUS_MODEM_SCHEMA,
+	PROFILE_SCHEMA,
+	type ReleasePlatform,
+} from "@carrier-explode/schema/types";
 
 /** What a release record is keyed by: a Pixel build is stored per device, so each device step writes its own. */
 export type ReleaseId = {
@@ -19,6 +24,7 @@ export type OtaFeed = (typeof OTA_FEEDS)[number];
 const OBJ = "obj/";
 const PROFILES = `norm/v${PROFILE_SCHEMA}/`;
 const MODEMS = `norm/v${MODEM_SCHEMA}/`;
+const PREVIOUS_MODEMS = `norm/v${PREVIOUS_MODEM_SCHEMA}/`;
 const RELEASES = "releases/";
 const TMP = "tmp/";
 const JSON_EXT = ".json";
@@ -39,6 +45,9 @@ export const keys = {
 	modemConfig: (sha: string): string => `${MODEMS}${sha}${JSON_EXT}`,
 	/** A band-combination list, named by its ComboSet.key. */
 	combos: (key: string): string => `${MODEMS}combos/${key}${JSON_EXT}`,
+	/** A modemConfig or combos key at PREVIOUS_MODEM_SCHEMA, for readModem; undefined for any other key. */
+	previousModem: (key: string): string | undefined =>
+		key.startsWith(MODEMS) ? `${PREVIOUS_MODEMS}${key.slice(MODEMS.length)}` : undefined,
 	/** `schema` is decode-ios's MODEM_SUMMARY_SCHEMA, which storage may not import. */
 	basebandSummary: (schema: number, sha: string): string => `decoded/baseband/v${schema}/${sha}${JSON_EXT}`,
 	/** Listed by planning: a unit is held once its release record is. */
@@ -57,8 +66,10 @@ export const keys = {
 		`ota/${feed}/files/${await urlHash(url)}${JSON_EXT}`,
 	/** What FUS and its AP member said of a Galaxy firmware a check read: fixed once built, so FUS is asked once. */
 	galaxyFirmware: (build: string): string => `firmware/samsung/${build}${JSON_EXT}`,
-	/** What version.xml answered for a Galaxy model under each sales code a check asked. */
-	galaxySalesCodes: (model: string): string => `firmware/samsung/sales-codes/${model}${JSON_EXT}`,
+	/** What version.xml has said of a Galaxy model: its oldest build's month, and its answer under each sales code asked. */
+	galaxyModel: (model: string): string => `firmware/samsung/models/${model}${JSON_EXT}`,
+	/** The id of a feed's last check instance, which the next waits for. */
+	feedCheck: (feed: string): string => `checks/${feed}${JSON_EXT}`,
 	/** The daily archive of everything the API answers; the site serves it at this same path. */
 	dataset: (): string => "datasets/carrier-explode.zip",
 	/** Swept by the bucket's lifecycle rule (lifecycle.json). */

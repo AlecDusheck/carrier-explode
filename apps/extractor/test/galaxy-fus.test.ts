@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { permanent } from "../src/errors.ts";
-import { FusHttpError, FusSession, type Inform } from "../src/galaxy/fus.ts";
+import { BurstRefusal, failureOf, permanent } from "../src/errors.ts";
+import { FusError, FusHttpError, FusRefusal, FusSession, type Inform } from "../src/galaxy/fus.ts";
+import { reaskDue } from "../src/galaxy/sales-codes.ts";
 import { ranged } from "../src/galaxy/firmware.ts";
 
 const fw = { model: "SM-X", region: "XAA", version: "A/B/C/D" };
@@ -45,12 +46,38 @@ describe("FUS downloads", () => {
 		expect(server.inits()).toBe(2);
 	});
 
-	it("fails a refused request for good, with the start of the refusal", async () => {
-		vi.stubGlobal("fetch", async (): Promise<Response> => new Response("Access Denied", { status: 403 }));
-		const refusal = await new FusSession().inform(fw).catch((e: unknown) => e);
-		expect(refusal).toBeInstanceOf(FusHttpError);
-		expect(String(refusal)).toMatch(/HTTP 403 .*: Access Denied$/);
-		expect(permanent(refusal)).toBe(true);
+	it("calls a 403 a burst refusal, and any other HTTP error final, each with the start of its body", async () => {
+		const answering = async (status: number): Promise<unknown> => {
+			vi.stubGlobal("fetch", async (): Promise<Response> => new Response("Access Denied", { status }));
+			return new FusSession().inform(fw).catch((e: unknown) => e);
+		};
+		const blocked = await answering(403);
+		expect(blocked).toBeInstanceOf(BurstRefusal);
+		expect(String(blocked)).toMatch(/HTTP 403 .*: Access Denied$/);
+		expect(failureOf(blocked)).toBe("burst");
+		expect(permanent(blocked)).toBe(true);
+		const refused = await answering(404);
+		expect(refused).toBeInstanceOf(FusHttpError);
+		expect(failureOf(refused)).toBe("permanent");
+	});
+
+	it("tells a firmware FUS does not serve (S01) from any other failed answer, and asks it again after 30 days", async () => {
+		const informAnswering = async (status: string): Promise<unknown> => {
+			vi.stubGlobal(
+				"fetch",
+				async (): Promise<Response> =>
+					new Response(`<FUSMsg><FUSBody><Results><Status>${status}</Status></Results></FUSBody></FUSMsg>`, {
+						headers: { nonce: "AAAAAAAAAAAAAAAA" },
+					}),
+			);
+			return new FusSession().inform(fw).catch((e: unknown) => e);
+		};
+		expect(await informAnswering("S01")).toBeInstanceOf(FusRefusal);
+		const other = await informAnswering("408");
+		expect(other).toBeInstanceOf(FusError);
+		expect(other).not.toBeInstanceOf(FusRefusal);
+		expect(reaskDue("2026-09-08", "2026-10-07")).toBe(false);
+		expect(reaskDue("2026-09-07", "2026-10-07")).toBe(true);
 	});
 
 	it("fails when the renewal brings no new nonce", async () => {

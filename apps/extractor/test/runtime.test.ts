@@ -16,7 +16,7 @@ import { HttpError, RangeResponseError } from "@carrier-explode/http";
 import { SqliteError } from "@carrier-explode/sqlite";
 import { parseRecord } from "@carrier-explode/storage";
 import { GalaxyError } from "../src/galaxy/members.ts";
-import { DataError, permanent } from "../src/errors.ts";
+import { DataError, permanent, REFUSED_TWICE, refusedTwice } from "../src/errors.ts";
 import { decide, roomFor } from "../src/runs.ts";
 
 function caught(f: () => unknown): unknown {
@@ -74,6 +74,12 @@ describe("step retries", () => {
 	});
 });
 
+const failedWith = (message: string): InstanceStatus => ({
+	status: "errored",
+	error: { name: "Error", message },
+	output: null,
+});
+
 describe("a check's starts", () => {
 	const runs = [
 		{ id: "a", status: null },
@@ -108,6 +114,20 @@ describe("a check's starts", () => {
 			failed: [],
 			waiting: [],
 		});
+	});
+
+	it("restart a unit burst refusals ended at every check, and only that failure", () => {
+		const ended = [...runs, { id: "f", status: "refused" }] as const;
+		expect(decide(ended, false, 10)).toEqual({
+			started: ["a", "d", "f"],
+			restart: ["f"],
+			live: ["b"],
+			failed: ["c"],
+			waiting: [],
+		});
+		expect(refusedTwice(failedWith(`${REFUSED_TWICE} csc again: HTTP 403 for x`))).toBe(true);
+		expect(refusedTwice(failedWith("Invalid typed array length: 3012126776"))).toBe(false);
+		expect(refusedTwice(failedWith("NonRetryableError: csc: HTTP 403 for x"))).toBe(false);
 	});
 
 	it("give iOS builds their container share with no Apple OTA manifest held", () => {

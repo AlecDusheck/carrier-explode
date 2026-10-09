@@ -11,6 +11,7 @@ import {
 	type ReleasePlatform,
 } from "@carrier-explode/schema";
 import type { Defaulted, DefaultLayer } from "@carrier-explode/schema/types";
+import type { PhoneState } from "#lib/server/features.ts";
 import { PLATFORM_DEVICES } from "./platforms";
 
 /** `iPhone, Pixel and Galaxy`, or with `or`. */
@@ -69,3 +70,16 @@ export function defaultNote(d: Defaulted): DefaultNote {
 		? { kind: "badge", label, hint: `The carrier leaves it unset: ${by} decides` }
 		: { kind: "hint", hint: `The carrier sets part of it: ${by} decides the rest` };
 }
+
+/** What each state means to someone holding the phone. */
+export const STATUS = {
+	on: { label: "On", tone: "good", hint: "Available and on by default" },
+	available: {
+		label: "Available",
+		tone: "info",
+		hint: "Offered: turn it on in Settings, or your plan decides",
+	},
+	no: { label: "Not offered", tone: "bad", hint: "This carrier does not offer it on this phone" },
+	unset: { label: "Not set", tone: "", hint: "The carrier's settings for this phone leave it unset" },
+	unknown: { label: "Unknown", tone: "", hint: "We don't have this carrier's settings for this phone" },
+} as const satisfies Record<PhoneState, { label: string; tone: string; hint: string }>;

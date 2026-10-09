@@ -11,7 +11,7 @@ updated: 2026-10-07
 
 | Stage          | Runs in                           | Reads                               | Writes                                        |
 | -------------- | --------------------------------- | ----------------------------------- | --------------------------------------------- |
-| Feed check     | extractor, on a cron              | a feed; the bucket's held records   | one Workflow instance per new unit            |
+| Feed check     | a Workflow instance a cron starts | a feed; the bucket's held records   | one Workflow instance per new unit            |
 | Unit           | a Workflow instance, step by step | the firmware or file, by HTTP Range | `obj/` artifacts, `norm/` profiles            |
 | Release record | the unit's last step              | what the steps left in `tmp/`       | `releases/<platform>/…json`; an index message |
 | Indexing       | the index queue's consumer        | records, profiles                   | D1 rows; a purge message                      |

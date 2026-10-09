@@ -21,6 +21,7 @@ export type ApiContext = Context<ApiEnv>;
 const ERROR_CODES = {
 	400: "bad_request",
 	401: "unauthorized",
+	403: "unidentified_client",
 	404: "not_found",
 	500: "internal",
 	502: "bad_gateway",
