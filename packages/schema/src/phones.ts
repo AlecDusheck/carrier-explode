@@ -13,6 +13,8 @@ export interface DeviceCoverage {
 
 export interface PhoneVariant {
 	readonly code: string;
+	/** The device's own name: `Galaxy S25 (SM-S931B)`. */
+	readonly name: string;
 	/** What sets it apart from its siblings; null when only its code does. */
 	readonly descriptor: string | null;
 	readonly countries: readonly string[];
@@ -94,6 +96,7 @@ export function phonesOf(
 				name: members.length === 1 ? first.name : rule.name(first),
 				variants: members.map((d, n) => ({
 					code: d.code,
+					name: d.name,
 					descriptor:
 						(fields[n] ?? []).filter((f, i): f is string => f !== null && differing(i)).join(", ") || null,
 					countries: covered.get(d.code)?.countries ?? [],

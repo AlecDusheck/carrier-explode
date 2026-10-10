@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { untrack } from "svelte";
   import { goto } from "$app/navigation";
   import { page } from "$app/state";
   import { getCarrierMembers, getComparison, getSourceBrands, getSourceHead } from "#lib/api/sources.remote.ts";
@@ -11,10 +12,13 @@
   import LinePicker from "#lib/components/LinePicker.svelte";
   import VersionPicker from "#lib/components/VersionPicker.svelte";
   import PhonePicker from "#lib/components/PhonePicker.svelte";
+  import SourceIcon from "#lib/components/SourceIcon.svelte";
   import Picker from "#lib/components/Picker.svelte";
   import { COMPARE_VIEWS, nativeView } from "#lib/components/views.ts";
   import { fileChoices, pickPhoneRows, rowKey, type PhoneRow } from "#lib/apple/phones.ts";
   import { suggestedFirst, suggestions } from "#lib/counterparts.ts";
+  import { guessedVariant } from "#lib/guess.ts";
+  import { visitorGuess } from "#lib/visitor.ts";
 
   const sp = $derived(page.url.searchParams);
   const file = $derived(sp.get("file"));
@@ -54,12 +58,32 @@
   const a = $derived(side("a"));
   const b = $derived(side("b"));
 
+  // A URL naming no left side opens it on the guessed carrier, seen by the guessed phone. Once, as the page opens: a
+  // swap that empties the left side keeps it empty.
+  $effect(() => {
+    untrack(() => {
+      if (sp.has("a")) return;
+      const from = page.url.href;
+      void (async () => {
+        const g = await visitorGuess();
+        const { bundle } = g;
+        if (bundle === null) return;
+        const head = await getSourceHead({ source: bundle });
+        const line = guessedVariant(head.lines, g)?.code;
+        const al = line !== undefined && line !== head.line ? line : null;
+        const rows = await rowsOf({ source: bundle, ...(al ? { line: al } : {}) });
+        const row = rows.find((r) => r.phones.some((p) => p.name === g.phone));
+        if (page.url.href === from) await goto(withParams(page.url, { a: bundle, al, ap: row ? rowKey(row) : null }), { replace: true });
+      })();
+    });
+  });
+
   /** A cross-platform column: which platform comes first, then the file. */
   const sideName = (key: SourceKey): string => `${PLATFORM_NAMES[sourceOf(key).platform]} · ${sourceOf(key).name}`;
 
-  type SourceOption = { readonly key: SourceKey; readonly brand: string; readonly name: string; readonly platform: Platform };
-  const sourceOptions = (sources: ReadonlyArray<{ readonly key: SourceKey; readonly brand: string }>): SourceOption[] =>
-    sources.map(({ key, brand }) => ({ key, brand, ...sourceOf(key) }));
+  type Brand = Awaited<ReturnType<typeof getSourceBrands>>[number];
+  type SourceOption = Brand & { readonly name: string; readonly platform: Platform };
+  const sourceOptions = (sources: readonly Brand[]): SourceOption[] => sources.map((s) => ({ ...s, ...sourceOf(s.key) }));
 
   /** What a side's picker offers first: the other side's carrier on other platforms. */
   const suggestedOpposite = async (other: typeof a): Promise<SourceKey[]> =>
@@ -79,7 +103,7 @@
         section={suggested.length ? (s) => (suggested.includes(s.key) ? "Suggested" : "All") : undefined}
       >
         {#snippet option(s)}
-          <span class="picker-opt"><span class="text">{s.brand}</span></span>
+          <span class="picker-opt"><SourceIcon picture={s.picture} /><span class="text">{s.brand}</span></span>
           <span class="picker-tag mono">{s.name}</span>
           <span class="picker-tag">{PLATFORM_NAMES[s.platform]}</span>
         {/snippet}

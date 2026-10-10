@@ -6,7 +6,7 @@
 import { conceptById, decoderFamily, expresses, needs5G } from "@carrier-explode/schema";
 import type { ReleasePlatform } from "@carrier-explode/schema/types";
 import type { PhoneState } from "#lib/server/features.ts";
-import type { IconName } from "./pixel-icons.ts";
+import type { FeatureIcon } from "./feature-icons.ts";
 
 /** States are per phone; settings are read from the carrier's own file, so the same on every phone. */
 const STATES = [
@@ -98,7 +98,7 @@ export type TreeConcept = MatrixConcept | (typeof COUNTRY_CONCEPTS)[number];
 
 interface Place {
 	readonly group: RuleGroup;
-	readonly icon: IconName;
+	readonly icon: FeatureIcon;
 	/** The feature it is a setting of or rides on. */
 	readonly under: TreeConcept | null;
 }
@@ -151,7 +151,7 @@ interface RuleDef {
 	readonly id: string;
 	readonly group: RuleGroup;
 	readonly name: string;
-	readonly icon: IconName;
+	readonly icon: FeatureIcon;
 	/** A column header's label. */
 	readonly short: string;
 	/** The rule this one refines: a setting of it, or a feature that rides on it. */

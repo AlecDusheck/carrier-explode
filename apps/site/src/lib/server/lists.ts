@@ -48,6 +48,8 @@ export interface ListEntry extends ListRow {
 	readonly platform: Platform;
 	/** Named only by the SIM rule that selects it (a part of a Pixel's others.pb): no carrier, so listed apart. */
 	readonly ruleOnly: boolean;
+	/** The carrier's id, when linked. */
+	readonly carrier: string | null;
 	/** What tells it from the others of its list with its brand: their country, or, sharing that too, its name; null when its brand is its own. */
 	readonly tag: string | null;
 }
@@ -88,6 +90,7 @@ function entryOf(s: ListedSource): Untagged {
 		cc: s.cc ?? undefined,
 		updated: s.updated,
 		ruleOnly: isUnnamedRule(ref, s.carrierNamed),
+		carrier: s.carrier,
 	};
 }
 
@@ -105,7 +108,7 @@ function tagged(entries: readonly Untagged[]): ListEntry[] {
 }
 
 export const getList = perRequest(async (platform: Platform, kind: SourceKind): Promise<ListEntry[]> =>
-	cached(`list:v1:${platform}:${kind}:${await indexVersion()}`, async () =>
+	cached(`list:v2:${platform}:${kind}:${await indexVersion()}`, async () =>
 		tagged((await sourcesOf(platform, kind)).map(entryOf)),
 	),
 );
@@ -191,7 +194,7 @@ export const getCountryCarriers = perRequest(async (platform: Platform, iso: str
 export async function listEntries(keys: readonly SourceKey[]): Promise<ReadonlyMap<SourceKey, ListEntry>> {
 	const wanted = [...new Set(keys)].toSorted();
 	const set = await sha256Hex(new TextEncoder().encode(wanted.join("\n")));
-	const held = await cached(`list-entries:v1:${set}:${await indexVersion()}`, async () => {
+	const held = await cached(`list-entries:v2:${set}:${await indexVersion()}`, async () => {
 		const lists = Map.groupBy(wanted.map(sourceOf), (r) => `${r.platform}:${r.kind}`);
 		const all = await Promise.all(
 			[...lists.values()].flatMap(([r]) => (r === undefined ? [] : [getList(r.platform, r.kind)])),
@@ -241,11 +244,11 @@ const allEntries = async (): Promise<ListEntry[]> =>
 
 export const allSourceKeys = async (): Promise<SourceKey[]> => (await allEntries()).map((e) => e.key);
 
-/** Every source with its carrier's name, by key. */
+/** Every source with its carrier's name and picture, by key. */
 export const allSourceBrands = perRequest(
-	async (): Promise<Array<{ readonly key: SourceKey; readonly brand: string }>> =>
-		cached(`source-brands:v1:${await indexVersion()}`, async () =>
-			(await allEntries()).map((e) => ({ key: e.key, brand: e.brand })),
+	async (): Promise<Array<Pick<ListEntry, "key" | "brand" | "picture">>> =>
+		cached(`source-brands:v2:${await indexVersion()}`, async () =>
+			(await allEntries()).map((e) => ({ key: e.key, brand: e.brand, picture: e.picture })),
 		),
 );
 

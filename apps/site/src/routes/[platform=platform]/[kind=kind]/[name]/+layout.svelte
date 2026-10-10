@@ -6,7 +6,8 @@
   import { link, versionHref } from "#lib/format.ts";
   import { linePath, type SourceRef } from "@carrier-explode/schema/types";
   import type { SourceHead } from "#lib/server/head.ts";
-  import { visitorDevice } from "#lib/visitor.ts";
+  import { guessedVariant } from "#lib/guess.ts";
+  import { visitorGuess } from "#lib/visitor.ts";
   import { overviewChoice, tabView, type TabView } from "#lib/components/views.ts";
   import { TABS } from "../../../../params.ts";
   import LinePicker from "#lib/components/LinePicker.svelte";
@@ -26,14 +27,15 @@
   // What the head shows comes from the head alone: while another source loads, the URL already names it.
   const viewOf = (h: SourceHead): TabView | undefined => (open === undefined ? undefined : tabView(h.ref.platform, open));
 
-  // A URL naming no line shows the default line; at its head, the visitor's own line, where the source has it, is a better default.
+  // A URL naming no line shows the default line; at its head, the guessed phone's line, where the source has it, is a better default.
   $effect(() => {
     if (page.params.line !== undefined) return;
     const head = getSourceHead(ver);
     const from = page.url.href;
     void (async () => {
-      const [h, { line }] = await Promise.all([head, visitorDevice()]);
-      const better = line !== null && line !== h.line && h.entry.slug === h.head && h.lines.some((l) => l.variants.some((v) => v.code === line));
+      const [h, g] = await Promise.all([head, visitorGuess()]);
+      const line = guessedVariant(h.lines, g)?.code;
+      const better = line !== undefined && line !== h.line && h.entry.slug === h.head;
       if (better && page.url.href === from) await goto(lineHref(h.ref, line), { replace: true });
     })();
   });

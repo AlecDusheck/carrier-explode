@@ -1,7 +1,9 @@
 <script lang="ts">
   import { page } from "$app/state";
   import { jsonLdScript } from "#lib/seo.ts";
-  import { getFeatureModels, getFeaturePhone, getFeaturePhones, getFeatureTable, getVisitorCountry, guessCarrierPages } from "#lib/api/sources.remote.ts";
+  import { getFeatureModels, getFeaturePhone, getFeaturePhones, getFeatureTable } from "#lib/api/sources.remote.ts";
+  import type { VisitorGuess } from "#lib/guess.ts";
+  import { visitorGuess } from "#lib/visitor.ts";
   import { deviceWords, FEATURE_PAGES } from "#lib/feature-pages.ts";
   import { PLATFORM_DEVICES } from "#lib/platforms.ts";
   import type { ReleasePlatform } from "@carrier-explode/schema/types";
@@ -52,12 +54,9 @@
   const offers = (state: string) => state === "on" || state === "available";
 
   // Guessed after mount, so the server's page reads no visitor and the edge can keep it.
-  let mine: readonly string[] = $state([]);
-  let home: string | null = $state(null);
+  let guess: VisitorGuess | null = $state(null);
   $effect(() => {
-    void (async () => {
-      [mine, home] = await Promise.all([guessCarrierPages(), getVisitorCountry()]);
-    })();
+    void visitorGuess().then((g) => (guess = g));
   });
 </script>
 
@@ -87,12 +86,12 @@
             <p class="answer">The {phone.name} has no 5G modem, so {feature.name} is not available on it with any carrier.</p>
           {:else}
             {@const rows = table.rows}
-            {@const yours = rows.find((r) => mine.includes(r.path))}
+            {@const yours = guess?.fromNetwork ? rows.find((r) => r.brand === guess?.carrier && r.cc === guess.country) : undefined}
             {#if yours}
               <p class="answer">
                 {yours.brand} on the {phone.name}: <FeatureStatus state={yours.state} defaulted={yours.defaulted} />
               </p>
-              <p class="dimtext">Guessed from the network you are on. Not yours? Find it below.</p>
+              <p class="dimtext">Not yours? Find it below.</p>
             {/if}
 
             {@const offered = rows.filter((r) => offers(r.state)).length}
@@ -108,7 +107,7 @@
             </p>
             <CarrierList
               rows={hideNo ? rows.filter((r) => r.state !== "no") : rows}
-              {home}
+              home={guess?.country ?? null}
               column={feature.name}
             >
               {#snippet filters()}

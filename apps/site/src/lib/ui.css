@@ -1494,7 +1494,7 @@ a[href][aria-busy="true"] {
 	--bg: transparent;
 	--rim: var(--shadow);
 }
-/* A feature's badge: its pixel glyph (--icon) on the tone's fill. Its holder sets --lock and --switch, the corner marks. */
+/* A feature's badge: its icon (--icon) on the tone's fill. Its holder sets --lock and --switch, the corner marks. */
 .logo.feature {
 	--glyph: calc(var(--logo) * 2 / 3);
 	--mark: calc(var(--logo) / 3);

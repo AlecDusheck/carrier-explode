@@ -1,16 +1,10 @@
 /** Carrier icons: `static/carriers/<slug>.svg`, found by the brand a carrier's name gives, or by a `logo` label. */
 
-import { assets } from "$app/manifest";
-import type { AssetPath } from "$app/types";
+import { svgNames, type SvgName } from "./asset-names.ts";
 
-type Slug<P> = P extends `carriers/${infer S}.svg` ? (S extends `${string}/${string}` ? never : S) : never;
+export type LogoSlug = SvgName<"carriers">;
 
-/** The name of an icon file, so asset() checks there is one. */
-export type LogoSlug = Slug<AssetPath>;
-
-const SLUGS: ReadonlySet<string> = new Set(
-	assets.flatMap(({ path }) => /^carriers\/([^/]+)\.svg$/.exec(path)?.slice(1, 2) ?? []),
-);
+const SLUGS = svgNames("carriers");
 
 export const isLogoSlug = (s: string): s is LogoSlug => SLUGS.has(s);
 

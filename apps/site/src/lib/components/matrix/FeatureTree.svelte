@@ -1,7 +1,7 @@
 <script lang="ts">
   import type { Snippet } from "svelte";
   import { RULE_GROUP_NAMES } from "#lib/feature-matrix.ts";
-  import { iconUrl } from "#lib/pixel-icons.ts";
+  import { featureIconImage } from "#lib/feature-icons.ts";
   import type { FeatureGroup, FeatureNode } from "./tree.ts";
 
   interface Props {
@@ -28,7 +28,7 @@
 </script>
 
 {#snippet line(n: FeatureNode)}
-  <span class="logo feature tone-{n.tone}" style:--icon={iconUrl(n.icon)}></span>
+  <span class="logo feature tone-{n.tone}" style:--icon={featureIconImage(n.icon)}></span>
   <span class="name" class:weak={!n.strong}>{n.name}</span>
   {#if tail}{@render tail(n)}{:else}<span class="value" title={n.words}>{n.words}</span>{/if}
 {/snippet}
@@ -57,7 +57,7 @@
   </li>
 {/snippet}
 
-<div class="ftree" style:--lock={iconUrl("lock")} style:--switch={iconUrl("toggle")}>
+<div class="ftree" style:--lock={featureIconImage("lock")} style:--switch={featureIconImage("toggle")}>
   {#each groups as g (g.group)}
     <h3>{RULE_GROUP_NAMES[g.group]}</h3>
     <ul>{#each g.roots as r (r.id)}{@render node(r)}{/each}</ul>

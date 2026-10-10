@@ -14,6 +14,7 @@ const entry = (name: string, brand: string): ListEntry => ({
 	cc: "us",
 	updated: null,
 	ruleOnly: false,
+	carrier: null,
 	tag: null,
 });
 

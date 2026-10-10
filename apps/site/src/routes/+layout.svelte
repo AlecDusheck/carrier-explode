@@ -4,13 +4,13 @@
   import { asset } from "$app/paths";
   import { navigating, page } from "$app/state";
   import { buildsPath, isPlatform, isReleasePlatform, listPath, RELEASE_PLATFORMS, type Platform } from "@carrier-explode/schema/types";
-  import { browserDevice } from "#lib/device.ts";
   import { link } from "#lib/format.ts";
   import { shortcuts } from "#lib/keys.ts";
   import { isNavigatingTo } from "#lib/navigating.ts";
   import { PLATFORM_ORDER } from "#lib/platforms.ts";
   import { SITE, seo } from "#lib/seo.ts";
   import { scan } from "#lib/ui-state.svelte.ts";
+  import { visitorPlatform } from "#lib/visitor.ts";
   import { busyText } from "#lib/components/Busy.svelte";
   import ContextMenu from "#lib/components/ContextMenu.svelte";
   import ScanDialog from "#lib/components/ScanDialog.svelte";
@@ -23,10 +23,10 @@
     if (type === "link" && to?.url.href === page.url.href) cancel();
   });
 
-  // The visitor's platform, once their browser says: what the menu leads to from a page of no platform.
+  // The guess's platform, once the browser says: what the menu leads to from a page of no platform.
   let visitor: Platform | null = $state(null);
   $effect(() => {
-    void browserDevice().then((d) => (visitor = d.platform));
+    void visitorPlatform().then((p) => (visitor = p));
   });
 
   /** A platform's pages lead to its own lists and builds. */

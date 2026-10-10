@@ -33,9 +33,9 @@ import {
 	type TreeConcept,
 } from "#lib/feature-matrix.ts";
 import type { Ver } from "#lib/types.ts";
-import { perRequest } from "./cache";
+import { cached, perRequest } from "./cache";
 import { resolve } from "./catalog";
-import { db, everyPage } from "./db";
+import { db, everyPage, indexVersion } from "./db";
 import { getCarriers, getCountryCarriers, type ListEntry } from "./lists";
 import { modelChoices } from "./phones";
 import { profileAt } from "./profiles";
@@ -45,19 +45,21 @@ import { overridePlistOf } from "./apple/phones";
 export type FeaturePhone = ShownDevice & { readonly covered: boolean };
 
 /** Every platform's phones that read phone states from some carrier, each platform's newest first. */
-export const featurePhones = perRequest(async (): Promise<FeaturePhone[]> => {
-	const d = await db();
-	const platforms = await Promise.all(
-		RELEASE_PLATFORMS.map(async (p) => {
-			const [phones, counts] = await Promise.all([statedDevices(d, p), statedSourceCounts(d, p)]);
-			const best = Math.max(0, ...counts.values());
-			return phones.map((phone) =>
-				Object.assign(phone, { covered: (counts.get(phone.code) ?? 0) * 2 >= best }),
-			);
-		}),
-	);
-	return platforms.flat();
-});
+export const featurePhones = perRequest(async (): Promise<FeaturePhone[]> =>
+	cached(`feature-phones:v1:${await indexVersion()}`, async () => {
+		const d = await db();
+		const platforms = await Promise.all(
+			RELEASE_PLATFORMS.map(async (p) => {
+				const [phones, counts] = await Promise.all([statedDevices(d, p), statedSourceCounts(d, p)]);
+				const best = Math.max(0, ...counts.values());
+				return phones.map((phone) =>
+					Object.assign(phone, { covered: (counts.get(phone.code) ?? 0) * 2 >= best }),
+				);
+			}),
+		);
+		return platforms.flat();
+	}),
+);
 
 /** The features pages' phones as the phone picker offers them: each platform's grouped into phones. */
 export const featureModels = perRequest(async (): Promise<ModelChoice[]> => {

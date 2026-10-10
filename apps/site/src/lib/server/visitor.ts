@@ -1,12 +1,13 @@
-/** Guesses from the request: the visitor's country and, on a phone, network. Each keeps the response out of the shared cache. */
+/** The best guess's inputs from the request and the index. Reading the request keeps the response out of the shared cache. */
 
 import { getRequestEvent } from "$app/server";
-import { carrierOf, countryOf } from "@carrier-explode/db";
-import { countryName } from "@carrier-explode/schema";
-import { sourceOf, sourcePath } from "@carrier-explode/schema/types";
-import { db } from "./db";
-import { guessCarrierOf, guessCarrierQuery } from "./guess";
-import { carriers } from "./lists";
+import type { Device } from "#lib/device.ts";
+import { bestGuess, guessPlatform, type VisitorGuess } from "#lib/guess.ts";
+import { featureModels, featurePhones } from "./features";
+import { carriers, getCountryCarriers } from "./lists";
+
+/** Where the platform has no carriers in the visitor's country, or the country is unknown. */
+const FALLBACK_COUNTRY = "us";
 
 /** What Cloudflare says about the visitor, from the request's `cf`; marks the response as theirs. */
 function visitor(): { country: string | null; organisation: string | null; mobile: boolean } {
@@ -23,31 +24,25 @@ function visitor(): { country: string | null; organisation: string | null; mobil
 	};
 }
 
-/** ISO code ("us"). */
-export function visitorCountry(): string | null {
-	return visitor().country;
-}
-
-/** The visitor's country by name, when the site has carriers or bundles for it. */
-export async function guessCountry(): Promise<string | null> {
-	const cc = visitorCountry();
-	return cc !== null && (await countryOf(await db(), cc)) !== undefined ? (countryName(cc) ?? null) : null;
-}
-
-const guessable = async (): Promise<
-	Array<{ readonly id: string; readonly name: string; readonly iso: string | undefined }>
-> => (await carriers()).map((c) => ({ id: c.id, name: c.name, iso: c.iso ?? undefined }));
-
-/** On a phone, a carrier search from the network the request came in on. */
-export async function guessCarrier(): Promise<string | null> {
-	const { mobile, organisation } = visitor();
-	return mobile ? guessCarrierQuery(organisation ?? undefined, await guessable()) : null;
-}
-
-/** The pages of the carrier the visitor's network most likely is, one per platform. */
-export async function guessCarrierPages(): Promise<string[]> {
-	const query = await guessCarrier();
-	const carrier = query ? guessCarrierOf(query, await guessable(), visitorCountry()) : null;
-	const members = carrier === null ? [] : ((await carrierOf(await db(), carrier.id))?.members ?? []);
-	return members.map((k) => sourcePath(sourceOf(k)));
+/** The guess for a visitor whose browser reports `device`. */
+export async function visitorGuess(device: Device): Promise<VisitorGuess> {
+	const { country, organisation, mobile } = visitor();
+	const platform = guessPlatform(device);
+	const [all, local, fallback, phones, models] = await Promise.all([
+		carriers(),
+		country === null ? [] : getCountryCarriers(platform, country),
+		getCountryCarriers(platform, FALLBACK_COUNTRY),
+		featurePhones(),
+		featureModels(),
+	]);
+	return bestGuess({
+		device,
+		country,
+		network: mobile ? organisation : null,
+		carriers: all,
+		local,
+		fallback,
+		phones: phones.filter((p) => p.platform === platform),
+		models: models.filter((m) => m.platform === platform),
+	});
 }

@@ -2,7 +2,6 @@
   import { goto } from "$app/navigation";
   import { page } from "$app/state";
   import { countryName } from "@carrier-explode/schema";
-  import { getVisitorCountry } from "#lib/api/sources.remote.ts";
   import {
     phoneRules,
     PRESETS,
@@ -16,6 +15,7 @@
   } from "#lib/feature-matrix.ts";
   import { featurePage } from "#lib/feature-pages.ts";
   import { link, withParams } from "#lib/format.ts";
+  import { visitorGuess } from "#lib/visitor.ts";
   import FeaturePhonePicker from "#lib/components/features/FeaturePhonePicker.svelte";
   import CarrierTree from "#lib/components/matrix/CarrierTree.svelte";
   import { MARKDOWN_PATH } from "#lib/components/matrix/markdown.ts";
@@ -55,7 +55,7 @@
   $effect(() => {
     if (named !== null) return;
     void (async () => {
-      const cc = await getVisitorCountry();
+      const cc = (await visitorGuess()).country;
       if (find === "" && cc !== null && matrix?.rows.some((r) => r.entry.cc === cc)) find = countryName(cc) ?? "";
     })();
   });

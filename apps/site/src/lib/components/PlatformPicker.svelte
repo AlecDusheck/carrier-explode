@@ -4,10 +4,10 @@
   import type { Platform } from "@carrier-explode/schema/types";
   import Picker from "./Picker.svelte";
 
-  /** With `every`, a first item named so chooses every platform: null. */
+  /** With `every`, a first item named so chooses every platform: null; undefined is not yet chosen. */
   type Props =
     | { platforms: readonly P[]; selected: P | undefined; href: (p: P) => string; every?: undefined }
-    | { platforms: readonly P[]; selected: P | null; href: (p: P | null) => string; every: string };
+    | { platforms: readonly P[]; selected: P | null | undefined; href: (p: P | null) => string; every: string };
 
   let props: Props = $props();
 </script>

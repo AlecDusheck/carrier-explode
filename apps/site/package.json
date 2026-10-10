@@ -23,6 +23,7 @@
 		"@carrier-explode/decode-ios": "workspace:*",
 		"@carrier-explode/decode-qualcomm": "workspace:*",
 		"@carrier-explode/decode-samsung": "workspace:*",
+		"@carrier-explode/networks": "workspace:*",
 		"@carrier-explode/schema": "workspace:*",
 		"@carrier-explode/storage": "workspace:*",
 		"@carrier-explode/values": "workspace:*",

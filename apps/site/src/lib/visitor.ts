@@ -1,39 +1,22 @@
-/** The visitor's phone, read in the browser after a page has drawn, so no page reads the visitor on the server. */
+/** The visitor's best guess, read in the browser after a page has drawn, so no page reads the visitor on the server and the edge can keep every page. */
 
 import type { Platform } from "@carrier-explode/schema/types";
-import { getPixelOfModel } from "#lib/api/sources.remote.ts";
-import type { FeaturePhone } from "#lib/server/features.ts";
+import { getVisitorGuess } from "#lib/api/sources.remote.ts";
 import { browserDevice } from "./device";
+import { guessPlatform, type VisitorGuess } from "./guess";
 
-export interface VisitorDevice {
-	readonly platform: Platform | null;
-	/** The source line the visitor's phone is, when its platform names one by the model it reports. */
-	readonly line: string | null;
+let asked: Promise<VisitorGuess> | undefined;
+
+/** Asked once a page load, so every part of the page agrees; a failure is asked again. */
+export function visitorGuess(): Promise<VisitorGuess> {
+	asked ??= browserDevice()
+		.then(getVisitorGuess)
+		.catch((e: unknown) => {
+			asked = undefined;
+			throw e;
+		});
+	return asked;
 }
 
-const none = async (): Promise<null> => null;
-
-/** An Apple device never says its model; a Pixel's reported model (`Pixel 9 Pro`) names its codename; a Galaxy's is its line. */
-const LINE_OF_MODEL = {
-	ios: none,
-	ipados: none,
-	watchos: none,
-	android: async (model) => getPixelOfModel(model),
-	// A Galaxy's line is its model number.
-	samsung: async (model) => model,
-} as const satisfies Record<Platform, (model: string) => Promise<string | null>>;
-
-export async function visitorDevice(): Promise<VisitorDevice> {
-	const { platform, model } = await browserDevice();
-	return {
-		platform,
-		line: platform === null || model === undefined ? null : await LINE_OF_MODEL[platform](model),
-	};
-}
-
-/** The visitor's own among the Features phones; one that names no line, or one the site lacks, means its platform's newest covered phone. */
-export const visitorPhone = (
-	phones: readonly FeaturePhone[],
-	{ platform, line }: VisitorDevice,
-): FeaturePhone | undefined =>
-	phones.find((p) => p.code === line) ?? phones.find((p) => p.platform === platform && p.covered);
+/** The guess's platform alone, which the browser answers without the server. */
+export const visitorPlatform = async (): Promise<Platform> => guessPlatform(await browserDevice());

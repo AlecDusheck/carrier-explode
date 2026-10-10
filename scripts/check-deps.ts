@@ -49,6 +49,7 @@ const ALLOWED: Readonly<Record<string, readonly string[]>> = {
 	],
 	storage: ["schema", "values"],
 	db: ["binary", "schema", "values"],
+	networks: ["schema"],
 	tsconfig: [],
 };
 

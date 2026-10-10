@@ -1,10 +1,10 @@
-/** What every source's pages share: the lists, the source head, comparisons, rarity, the visitor guesses, and the feature pages. */
+/** What every source's pages share: the lists, the source head, comparisons, rarity, the visitor guess, and the feature pages. */
 
 import * as v from "valibot";
 import { query } from "$app/server";
 import { FEATURE_SLUGS } from "@carrier-explode/schema";
 import { RELEASE_PLATFORMS } from "@carrier-explode/schema/types";
-import { carrierMembers, devicesOf } from "#lib/server/catalog.ts";
+import { carrierMembers } from "#lib/server/catalog.ts";
 import { getComparison as compare } from "#lib/server/compare.ts";
 import * as features from "#lib/server/features.ts";
 import { getHead } from "#lib/server/head.ts";
@@ -28,21 +28,17 @@ export const getListEntry = query.batch(key, async (keys) => {
 });
 /** Every source of a source's carrier, on every platform, its primary bundle first. */
 export const getCarrierMembers = query(key, async (k) => lists.chipEntries(await carrierMembers(k)));
-/** The Pixel a phone's reported model names (`Pixel 9 Pro`), or null. */
-export const getPixelOfModel = query(
-	v.pipe(v.string(), v.maxLength(64)),
-	async (model) => (await devicesOf("android")).find((d) => d.name === model)?.code ?? null,
-);
 /** Every source with its carrier's name: what Compare's boxes complete from. */
 export const getSourceBrands = query(lists.allSourceBrands);
 /** The platforms each kind of list has, as [kind, platforms] pairs. */
 export const getListPlatforms = query(async () =>
 	[...(await lists.listPlatforms())].map(([k, ps]) => [k, [...ps]] as const),
 );
-export const guessCarrier = query(visitor.guessCarrier);
-export const guessCountry = query(visitor.guessCountry);
-export const getVisitorCountry = query(visitor.visitorCountry);
-export const guessCarrierPages = query(visitor.guessCarrierPages);
+/** The visitor's best guess, from what their browser reports of their device. */
+export const getVisitorGuess = query(
+	v.object({ platform: v.nullable(platform), model: v.undefinedable(v.pipe(v.string(), v.maxLength(64))) }),
+	visitor.visitorGuess,
+);
 
 /** The source head: the line's versions, the one open and the source's lines. */
 export const getSourceHead = query(verSchema, getHead);

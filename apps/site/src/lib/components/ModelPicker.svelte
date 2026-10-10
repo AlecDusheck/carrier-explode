@@ -1,7 +1,7 @@
 <script lang="ts">
   import type { PhoneVariant } from "@carrier-explode/schema";
-  import { getVisitorCountry } from "#lib/api/sources.remote.ts";
   import { differsByCountry, openingVariant, type ModelChoice } from "#lib/phones.ts";
+  import { visitorGuess } from "#lib/visitor.ts";
   import PhoneImage from "./PhoneImage.svelte";
   import Picker from "./Picker.svelte";
 
@@ -24,7 +24,7 @@
   $effect(() => {
     if (!differsByCountry(phones)) return;
     void (async () => {
-      country = await getVisitorCountry();
+      country = (await visitorGuess()).country;
     })();
   });
 

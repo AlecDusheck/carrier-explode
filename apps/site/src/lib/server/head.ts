@@ -65,7 +65,7 @@ async function choosableLines(r: Resolved): Promise<SourceHead["lines"]> {
 		name: device,
 		label: `${device} (Modern)`,
 		platform,
-		variants: [{ code: MAIN_LINE, descriptor: null, countries: [] }],
+		variants: [{ code: MAIN_LINE, name: device, descriptor: null, countries: [] }],
 	};
 	return ids.includes(MAIN_LINE) ? [main, ...phones] : phones;
 }

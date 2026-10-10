@@ -1,10 +1,10 @@
 <script lang="ts">
   import type { Attachment } from "svelte/attachments";
   import { MODE_NAMES, ruleWhat, type Requirement, type Rule, type RuleId } from "#lib/feature-matrix.ts";
-  import { iconUrl, STIPPLE_URL } from "#lib/pixel-icons.ts";
+  import { asset } from "$app/paths";
+  import { featureIcon, featureIconImage } from "#lib/feature-icons.ts";
   import SourceIcon from "#lib/components/SourceIcon.svelte";
   import FeatureTip from "./FeatureTip.svelte";
-  import PixelIcon from "./PixelIcon.svelte";
   import ToneKey from "./ToneKey.svelte";
   import { atRest, releaseVelocity, rubber, step, type Bounds, type Motion, type Sample } from "./inertia.ts";
   import { cellWords, tileTone, TONE_WORDS, toneOf, type Scored } from "./score.ts";
@@ -289,9 +289,9 @@
   aria-rowcount={rows.length}
   tabindex="0"
   style:--name-w="{nameW}px"
-  style:--stipple={STIPPLE_URL}
-  style:--lock={iconUrl("lock")}
-  style:--switch={iconUrl("toggle")}
+  style:--stipple={`url("${asset("stipple.svg")}")`}
+  style:--lock={featureIconImage("lock")}
+  style:--switch={featureIconImage("toggle")}
   bind:this={view}
   bind:clientWidth={vw}
   bind:clientHeight={vh}
@@ -310,7 +310,7 @@
           {#each columns as c, k (c)}
             {@const rule = rules[c]}
             {#if rule}
-              <span class="logo feature tile tone-{tileTone(s, c, modeOf(rule))}" class:muted={picked > 0 && k >= picked} role="gridcell" style:--icon={iconUrl(rule.icon)}></span>
+              <span class="logo feature tile tone-{tileTone(s, c, modeOf(rule))}" class:muted={picked > 0 && k >= picked} role="gridcell" style:--icon={featureIconImage(rule.icon)}></span>
             {/if}
           {/each}
         </div>
@@ -342,7 +342,7 @@
         {#if rule}
           {@const href = featureHref(rule)}
           <svelte:element this={href ? "a" : "span"} {href} class="col" class:picked={k < picked} class:muted={picked > 0 && k >= picked} style:left="{k * CELL}px" title={rule.name} role="columnheader">
-            <PixelIcon name={rule.icon} size={24} />
+            <img src={featureIcon(rule.icon)} alt="" width="24" height="24" />
             <span class="short">{rule.short}</span>
           </svelte:element>
         {/if}

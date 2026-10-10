@@ -12,12 +12,12 @@ import {
 	type RuleId,
 	type TreeConcept,
 } from "#lib/feature-matrix.ts";
-import type { IconName } from "#lib/pixel-icons.ts";
+import type { FeatureIcon } from "#lib/feature-icons.ts";
 import { cellWords, toneOf, type Scored, type Tone } from "./score.ts";
 
 export interface FeatureNode {
 	readonly id: string;
-	readonly icon: IconName;
+	readonly icon: FeatureIcon;
 	readonly tone: Tone;
 	readonly name: string;
 	/** What the carrier gives: a state, or a setting's value. */

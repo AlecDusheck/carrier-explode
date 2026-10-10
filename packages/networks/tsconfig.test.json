@@ -1,0 +1,4 @@
+{
+	"extends": "@carrier-explode/tsconfig/node.json",
+	"include": ["src", "test"]
+}

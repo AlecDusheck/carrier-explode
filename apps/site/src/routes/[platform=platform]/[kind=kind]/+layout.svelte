@@ -1,5 +1,5 @@
 <script module lang="ts">
-  // The IP guess is for the first look at each list in a page load; later visits start empty.
+  // The guess is for the first look at each list in a page load; later visits start empty.
   // Not reactive state: it is read once per guess and written when a guess is shown.
   const guessShown: Partial<Record<string, true>> = {};
 </script>
@@ -9,7 +9,9 @@
   import { MediaQuery } from "svelte/reactivity";
   import { page } from "$app/state";
   import type { Attachment } from "svelte/attachments";
-  import { getList, getListPlatforms, guessCarrier, guessCountry } from "#lib/api/sources.remote.ts";
+  import { getList, getListPlatforms } from "#lib/api/sources.remote.ts";
+  import type { VisitorGuess } from "#lib/guess.ts";
+  import { visitorGuess } from "#lib/visitor.ts";
   import { link } from "#lib/format.ts";
   import { listKeys } from "#lib/keys.ts";
   import { menuTrigger, copyText, type MenuItem } from "#lib/ui-state.svelte.ts";
@@ -33,12 +35,12 @@
     return c.cc === q || (!!f && [c.name, c.brand].some((n) => fold(n).includes(f)));
   };
 
-  /** Carriers are guessed from the network the request came in on, countries from where it came from; defaults are not guessed. */
-  const GUESSES = {
-    carriers: () => guessCarrier(),
-    countries: () => guessCountry(),
-    defaults: async () => null,
-  } as const satisfies Record<KindSegment, () => Promise<string | null>>;
+  /** The row a list's search starts at: the guessed carrier when it is the network's, not a stand-in for the country; the guessed country. */
+  const GUESSED = {
+    carriers: (rows, g) => (g.fromNetwork ? rows.find((r) => r.brand === g.carrier) : undefined),
+    countries: (rows, g) => rows.find((r) => r.cc === g.country),
+    defaults: () => undefined,
+  } as const satisfies Record<KindSegment, (rows: readonly ListRow[], g: VisitorGuess) => ListRow | undefined>;
 
   // Plain values, so moving between sources leaves the list's awaits alone.
   const platform = $derived(params.platform);
@@ -56,10 +58,8 @@
 
   async function guessFor(of: KindSegment): Promise<string> {
     if (guessShown[of]) return "";
-    const guess = await GUESSES[of]();
-    if (!guess) return "";
-    const list = await listOf(of);
-    return list.some((c) => matches(c, guess.toLowerCase())) ? guess : "";
+    const [g, list] = await Promise.all([visitorGuess(), listOf(of)]);
+    return GUESSED[of](list, g)?.brand ?? "";
   }
 
   // Only a list that is the page gets a guess; beside an open bundle it is navigation. Guessed after mount, so the
@@ -81,10 +81,9 @@
   });
   // The box starts from the guess and resets with it when the list changes; typing overrides it.
   let query = $derived(guess);
-  const fromIp = $derived(!!guess && query === guess);
   /** Once a guess has been on screen, that list is not guessed again. */
   const spend: Attachment = () => {
-    if (fromIp) guessShown[kind] = true;
+    if (guess && query === guess) guessShown[kind] = true;
   };
 
   // With nothing selected the list is the page. With a bundle open it is navigation, which a phone reaches by the menu bar instead.
@@ -120,7 +119,6 @@
     </Pane>
     <div class="find">
       <input class="grow" type="search" name="find" placeholder="find" aria-label="find in {kind}" bind:value={query} {@attach spend} />
-      {#if fromIp}<span class="dimtext from-ip" title="Guessed from your IP address">from IP</span>{/if}
     </div>
     {#if showList}
     <Pane>
@@ -177,7 +175,6 @@
   .find { padding: 6px; display: flex; gap: 6px; }
   .family { padding: 6px 6px 0; }
   .family :global(.picker), .family :global(.picker-btn) { width: 100%; }
-  .from-ip { align-self: center; }
   .list-box { margin: 0 6px 6px; }
   .list-status { padding: 2px 6px 6px; }
   .sort { font: inherit; cursor: pointer; }

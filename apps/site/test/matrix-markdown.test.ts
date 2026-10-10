@@ -30,6 +30,7 @@ const row = (brand: string, cc: string, cells: Partial<Record<MatrixConcept, Mat
 		cc,
 		updated: null,
 		ruleOnly: false,
+		carrier: null,
 		tag: null,
 	},
 	cells: COLUMNS.map((id) => cells[id] ?? "unknown"),

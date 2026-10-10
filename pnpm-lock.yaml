@@ -172,6 +172,9 @@ importers:
       '@carrier-explode/decode-samsung':
         specifier: workspace:*
         version: link:../../packages/decode-samsung
+      '@carrier-explode/networks':
+        specifier: workspace:*
+        version: link:../../packages/networks
       '@carrier-explode/schema':
         specifier: workspace:*
         version: link:../../packages/schema
@@ -457,6 +460,25 @@ importers:
         version: 4.147.0(@cloudflare/workers-types@5.20261003.1)(@types/node@22.20.3)
 
   packages/http:
+    devDependencies:
+      '@carrier-explode/tsconfig':
+        specifier: workspace:*
+        version: link:../tsconfig
+      '@types/node':
+        specifier: ^22.20.3
+        version: 22.20.3
+      typescript:
+        specifier: ^6.0.0
+        version: 6.0.3
+      vitest:
+        specifier: ^5.0.3
+        version: 5.0.3(@types/node@22.20.3)(vite@8.3.2(@types/node@22.20.3)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1))
+
+  packages/networks:
+    dependencies:
+      '@carrier-explode/schema':
+        specifier: workspace:*
+        version: link:../schema
     devDependencies:
       '@carrier-explode/tsconfig':
         specifier: workspace:*
