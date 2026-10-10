@@ -116,9 +116,12 @@ export async function getModemConfig(v: Ver, path: string): Promise<ModemConfig 
 
 export async function getRaw(v: Ver, path: string): Promise<Uint8Array> {
 	const { opened } = await open(v);
-	const bytes = opened.entries[opened.prefix + path];
-	if (!bytes) error(404, `no such file: ${path}`);
-	return bytes;
+	try {
+		return opened.read(path);
+	} catch (e) {
+		if (e instanceof MemberError) error(404, e.message);
+		throw e;
+	}
 }
 
 /** A country bundle's emergency alert settings at this version. */

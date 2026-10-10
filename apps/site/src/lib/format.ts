@@ -2,6 +2,7 @@ import { resolve } from "$app/paths";
 import type { ReadonlyURL } from "$app/state";
 import type { Path } from "$app/types";
 import { isBigInt, isUid } from "@carrier-explode/decode-ios";
+import type { Shipped } from "@carrier-explode/db";
 import { isRecord, type DiffKind } from "@carrier-explode/values";
 import {
 	buildPath,
@@ -20,6 +21,24 @@ export function humanBytes(n: number): string {
 	if (n < 1024 * 1024) return (n / 1024).toFixed(1) + " KiB";
 	return (n / 1024 / 1024).toFixed(2) + " MiB";
 }
+
+const DAY_MS = 86_400_000;
+const RELATIVE = new Intl.RelativeTimeFormat("en", { numeric: "auto" });
+const MONTH = new Intl.DateTimeFormat("en", { month: "short", year: "numeric", timeZone: "UTC" });
+
+/** `3 days ago`, `last month`; a Pixel build's patch month as `Oct 2026`. */
+export function shippedText(r: Shipped, now: Date): string {
+	if (r.kind === "month") return MONTH.format(new Date(`${r.month}-01T00:00:00Z`));
+	const today = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
+	const days = Math.round((Date.parse(`${r.day}T00:00:00Z`) - today) / DAY_MS);
+	const size = Math.abs(days);
+	if (size < 31) return RELATIVE.format(days, "day");
+	if (size < 365) return RELATIVE.format(Math.round(days / 30), "month");
+	return RELATIVE.format(Math.round(days / 365), "year");
+}
+
+/** `72.7.1 → 73.0`; a content change can keep the version. */
+export const versionStep = (from: string, to: string): string => (from === to ? to : `${from} → ${to}`);
 
 function writeJson(x: unknown): string | undefined {
 	if (isBigInt(x)) return x.__int;

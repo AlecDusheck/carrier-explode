@@ -35,7 +35,7 @@
 
   const id = $props.id();
 
-  const isSelected = (item: T) => !!selected && key(item) === key(selected);
+  const isSelected = (item: T) => selected !== undefined && key(item) === key(selected);
   // The list closes on a pick; the button carries on showing that the choice is loading.
   const loading = $derived(items.some((item) => isNavigatingTo(href(item))));
 
@@ -54,8 +54,8 @@
 <div class="picker">
   {#if label}<span class="lbl" id="{id}-label">{label}</span>{/if}
   <button class="btn picker-btn" popovertarget="{id}-list" aria-labelledby={label ? `${id}-label` : undefined} aria-busy={loading || undefined} style:anchor-name="--{id}">
-    {#if selected}{@render option(selected)}{:else}<span class="dimtext">Choose</span>{/if}
-    {#if loading}<span class="caret busy-spin" aria-hidden="true"></span>{:else}<span class="caret" aria-hidden="true">▾</span>{/if}
+    {#if selected !== undefined}{@render option(selected)}{:else}<span class="dimtext">Choose</span>{/if}
+    <span class={loading ? "busy-spin" : "caret"} aria-hidden="true"></span>
   </button>
   <div popover id="{id}-list" class="picker-list" {ontoggle} style:position-anchor="--{id}" {@attach listKeys("input, a")}>
     {#if search}

@@ -22,16 +22,15 @@ export const sha256Schema = v.pipe(v.string(), v.regex(/^[0-9a-f]{64}$/, "expect
 export const sha1Schema = v.pipe(v.string(), v.regex(/^[0-9a-f]{40}$/, "expected a lower-case sha1"));
 const count = v.pipe(v.number(), v.integer(), v.minValue(0));
 
-export const jsonSchema: v.GenericSchema<Json> = v.lazy(() =>
-	v.union([
-		v.null(),
-		v.boolean(),
-		v.number(),
-		v.string(),
-		v.array(jsonSchema),
-		v.record(v.string(), jsonSchema),
-	]),
-);
+const nestedJson: v.GenericSchema<Json> = v.lazy(() => jsonSchema);
+export const jsonSchema: v.GenericSchema<Json> = v.union([
+	v.null(),
+	v.boolean(),
+	v.number(),
+	v.string(),
+	v.array(nestedJson),
+	v.record(v.string(), nestedJson),
+]);
 
 export const sourceKeySchema = v.custom<SourceKey>(
 	(s) => typeof s === "string" && isSourceKey(s),

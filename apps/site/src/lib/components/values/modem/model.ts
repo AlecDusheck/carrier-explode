@@ -170,6 +170,12 @@ const plmnNameItem = (n: string): string => `NRCAPA_CA_NV_PLMN_NAME_FOR_PLMN_CAT
 
 export const isPlmnCategory = (item: ModemItem): boolean => PLMN_IDS.test(item.name ?? "");
 
+/** The names of the items an item's view reads beside it: a PLMN category's name. */
+export function itemRefs(item: ModemItem): readonly string[] {
+	const n = PLMN_IDS.exec(item.name ?? "")?.[1];
+	return n === undefined ? [] : [plmnNameItem(n)];
+}
+
 /** Text typed as text by the firmware's registry, or (archives without one) the characters of a NUL-terminated byte list. */
 function textOf(v: ModemValue): string | undefined {
 	if (v.kind === "text") return v.value;

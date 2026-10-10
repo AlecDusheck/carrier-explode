@@ -53,6 +53,7 @@ export {
 } from "./labels.ts";
 export {
 	boardRadiosOf,
+	headConcepts,
 	configRadiosOf,
 	missingProfiles,
 	putProfiles,
@@ -77,6 +78,8 @@ export {
 	releaseIds,
 	releaseList,
 	releaseOf,
+	changeFeed,
+	feedKeySchema,
 	shippedIn,
 	releasesShipping,
 	shippedSourceCount,
@@ -90,6 +93,10 @@ export type {
 	ModemRow,
 	NamedModemConfig,
 	ReleaseFilter,
+	FeedFilter,
+	FeedItem,
+	FeedKey,
+	Shipped,
 	ReleaseRows,
 	ShownChange,
 	ShownEnd,

@@ -21,7 +21,7 @@ I started this while chasing how iOS handles cell broadcast for Indian carriers,
 
 ## Screenshots
 
-![The home page: every US carrier on the iPhone 18 Pro Max against every feature, with the picked requirements first](docs/images/features.png)
+![The feature matrix: every US carrier on the iPhone 18 Pro Max against every feature, with the picked requirements first](docs/images/features.png)
 
 ![AT&T on iPhone and Pixel side by side: features, voice and IMS settings compared](docs/images/cross-platform.png)
 

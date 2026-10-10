@@ -18,6 +18,7 @@ import type {
 	SourceKey,
 } from "@carrier-explode/schema/types";
 import type { BuildModem } from "../builds";
+import { modemHead, type ModemHead } from "#lib/modem.ts";
 import type { Ver } from "#lib/types.ts";
 import { cached, perRequest } from "../cache";
 import { deviceNames, deviceOrder, resolve, shippedModems, type Resolved } from "../catalog";
@@ -27,7 +28,8 @@ import { readModemJson } from "../store";
 
 const modemConfigOf = perRequest((sha: string) => readModemJson(keys.modemConfig(sha), modemConfigSchema));
 
-async function mustConfig(sha: string): Promise<ModemConfig> {
+/** One stored modem configuration, decoded. */
+export async function storedConfig(sha: string): Promise<ModemConfig> {
 	const config = await modemConfigOf(sha);
 	if (!config) error(404, `${keys.modemConfig(sha)} is not in the bucket.`);
 	return config;
@@ -35,7 +37,7 @@ async function mustConfig(sha: string): Promise<ModemConfig> {
 
 export interface ShownModem {
 	readonly modem: CarrierModemConfig;
-	readonly config: ModemConfig;
+	readonly head: ModemHead;
 	/** Its firmware's page, as getBuildModems names it: the newest Pixel running the firmware. */
 	readonly firmware: string;
 }
@@ -63,7 +65,7 @@ export async function getAndroidModems(at: Ver): Promise<readonly ShownModem[]> 
 	return Promise.all(
 		mine.map(async (c): Promise<ShownModem> => ({
 			modem: c,
-			config: await mustConfig(c.sha),
+			head: modemHead(await storedConfig(c.sha)),
 			firmware: c.devices.toSorted(order)[0] ?? r.line,
 		})),
 	);
@@ -106,8 +108,8 @@ export async function getModemFirmware(
 	return { modem, configs: await modemConfigsOf(await db(), platform, build, device) };
 }
 
-/** One stored modem configuration, decoded. */
-export const getModemConfigBySha = mustConfig;
+/** One stored modem configuration's head. */
+export const getModemHead = async (sha: string): Promise<ModemHead> => modemHead(await storedConfig(sha));
 
 /** One stored list of band combinations. */
 export async function getModemCombos(key: string): Promise<readonly BandCombination[]> {

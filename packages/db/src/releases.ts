@@ -10,10 +10,26 @@ import {
 	type ReleaseChange,
 	type ShippedCopy,
 } from "@carrier-explode/schema";
-import type { EntryRef, ReleasePlatform, SourceKey } from "@carrier-explode/schema/types";
+import { sourceKeySchema } from "@carrier-explode/schema/records";
+import {
+	RELEASE_PLATFORMS,
+	type EntryRef,
+	type ReleasePlatform,
+	type SourceKey,
+} from "@carrier-explode/schema/types";
 import { every, jsonOf, qualified, type IndexDb, type Page } from "./db.ts";
 import { labelled } from "./labels.ts";
-import { changes, copies, entries, modemConfigs, modems, releases, sources } from "./schema.ts";
+import {
+	carriers,
+	changes,
+	copies,
+	devices as phones,
+	entries,
+	modemConfigs,
+	modems,
+	releases,
+	sources,
+} from "./schema.ts";
 import { syncScope } from "./sync.ts";
 
 type ReleaseRow = typeof releases.$inferSelect;
@@ -405,6 +421,93 @@ export async function changesOf(
 				};
 		}
 	});
+}
+
+/** Where a feed page starts: after this item, in the feed's order. `at` is a day, or a Pixel build's patch month. */
+export const feedKeySchema = v.object({
+	at: v.pipe(v.string(), v.regex(/^\d{4}-\d{2}(?:-\d{2})?$/)),
+	source: sourceKeySchema,
+	line: v.pipe(v.string(), v.maxLength(64)),
+	slug: v.pipe(v.string(), v.maxLength(64)),
+});
+export type FeedKey = v.InferOutput<typeof feedKeySchema>;
+
+const feedSchema = v.array(
+	v.pipe(
+		v.object({
+			platform: v.picklist(RELEASE_PLATFORMS),
+			source: sourceKeySchema,
+			line: v.string(),
+			slug: v.string(),
+			version: v.string(),
+			prev: v.nullable(v.string()),
+			kind: v.picklist(["day", "month"]),
+			at: v.string(),
+		}),
+		v.transform((r) => ({
+			key: { at: r.at, source: r.source, line: r.line, slug: r.slug },
+			platform: r.platform,
+			version: r.version,
+			from: r.prev,
+			shipped:
+				r.kind === "day" ? { kind: "day" as const, day: r.at } : { kind: "month" as const, month: r.at },
+		})),
+	),
+);
+
+/** A version a carrier's source changed to, and the version before it; `from` is null for a new source. */
+export type FeedItem = v.InferOutput<typeof feedSchema>[number];
+
+/** When a version first shipped: a day, or, for a Pixel build, its only date, its security patch month. */
+export type Shipped = FeedItem["shipped"];
+
+/** What a feed narrows to: a country and a platform (null: every one with builds). */
+export interface FeedFilter {
+	readonly iso: string;
+	readonly platform: ReleasePlatform | null;
+}
+
+/**
+ * Carriers' new versions, newest first, a page at a time. A version its timeline dates (an image's release day, an OTA
+ * bundle's publish day) is listed on that day, once per source and day, preferring a line it changed on, then the main
+ * line, then the newest phone's; a phone's first line is not a new source. A Pixel version is listed by the build that
+ * first changed to it, on the build's patch month.
+ */
+export async function changeFeed(db: IndexDb, filter: FeedFilter, page: Page<FeedKey>): Promise<FeedItem[]> {
+	const platforms = filter.platform === null ? RELEASE_PLATFORMS : [filter.platform];
+	const after = page.after;
+	const rows = await db.all(sql`WITH scoped AS (
+    SELECT s.key, s.platform FROM ${sources} s
+    WHERE s.kind = 'carrier' AND s.platform IN (SELECT value FROM json_each(${JSON.stringify(platforms)}))
+      AND s.carrier IN (SELECT id FROM ${carriers} WHERE iso = ${filter.iso})
+  ), dated AS (
+    SELECT s.platform, e.source, e.line, e.slug, e.version, p.version AS prev, e.day,
+      row_number() OVER (PARTITION BY e.source, e.day
+        ORDER BY p.version IS NOT NULL DESC, e.line = '' DESC, d.released DESC, e.line, e.rank) AS nth
+    FROM scoped s CROSS JOIN ${entries} e
+    LEFT JOIN ${entries} p ON p.source = e.source AND p.line = e.line AND p.rank = e.rank + 1
+    LEFT JOIN ${phones} d ON d.code = e.line
+    WHERE e.source = s.key AND e.changed = 1 AND e.day IS NOT NULL
+      ${after === null ? sql`` : sql`AND e.day <= ${after.at}`}
+  ), built AS (
+    SELECT s.platform, ch.source, ch.to_line AS line, ch.to_slug AS slug, t.version, f.version AS prev, r.patch,
+      row_number() OVER (PARTITION BY ch.source, ch.to_line, ch.to_slug ORDER BY r.sort_key) AS nth
+    FROM scoped s CROSS JOIN ${releases} r CROSS JOIN ${changes} ch
+    JOIN ${entries} t ON t.source = ch.source AND t.line = ch.to_line AND t.slug = ch.to_slug
+    LEFT JOIN ${entries} f ON f.source = ch.source AND f.line = ch.from_line AND f.slug = ch.from_slug
+    WHERE r.platform = s.platform AND r.patch IS NOT NULL AND ch.platform = r.platform AND ch.release = r.id
+      AND ch.source = s.key AND ch.kind <> 'removed' AND t.day IS NULL
+  ), feed AS (
+    SELECT platform, source, line, slug, version, prev, 'day' AS kind, day AS at FROM dated x
+    WHERE nth = 1 AND (prev IS NOT NULL
+      OR NOT EXISTS (SELECT 1 FROM ${entries} o WHERE o.source = x.source AND o.day < x.day))
+    UNION ALL
+    SELECT platform, source, line, slug, version, prev, 'month', patch FROM built WHERE nth = 1
+  )
+  SELECT * FROM feed
+  ${after === null ? sql`` : sql`WHERE at < ${after.at} OR (at = ${after.at} AND (source, line, slug) > (${after.source}, ${after.line}, ${after.slug}))`}
+  ORDER BY at DESC, source, line, slug LIMIT ${page.take}`);
+	return v.parse(feedSchema, rows);
 }
 
 /** A release's modems, in name order, each family named. */

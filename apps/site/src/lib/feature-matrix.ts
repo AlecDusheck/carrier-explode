@@ -48,7 +48,7 @@ const MATRIX_CONCEPTS = [...STATES, ...SETTINGS] as const;
 export type MatrixConcept = (typeof MATRIX_CONCEPTS)[number];
 type Setting = (typeof SETTINGS)[number];
 
-export const isSetting = (id: MatrixConcept): id is Setting => SETTINGS.some((s) => s === id);
+export const isSetting = (id: string): id is Setting => SETTINGS.some((s) => s === id);
 
 export type SettingValue = string | number | boolean | readonly (string | number)[];
 /** A setting the file leaves unset is "unset"; one we have no file for, "unknown". */
@@ -81,7 +81,7 @@ const equals = (c: MatrixCell, want: SettingValue): Outcome => {
 	return v === undefined ? null : v === want;
 };
 
-export const RULE_GROUPS = ["5g", "voice", "wifi-calling", "data", "more"] as const;
+export const RULE_GROUPS = ["5g", "voice", "wifi-calling", "data", "more", "emergency"] as const;
 export type RuleGroup = (typeof RULE_GROUPS)[number];
 export const RULE_GROUP_NAMES = {
 	"5g": "5G",
@@ -89,7 +89,59 @@ export const RULE_GROUP_NAMES = {
 	"wifi-calling": "Wi-Fi Calling",
 	data: "Data",
 	more: "More features",
+	emergency: "Emergency",
 } as const satisfies Record<RuleGroup, string>;
+
+/** What a country bundle sets that a feature tree shows. */
+const COUNTRY_CONCEPTS = ["emergency-numbers", "cell-broadcast-channels", "nr-modes"] as const;
+export type TreeConcept = MatrixConcept | (typeof COUNTRY_CONCEPTS)[number];
+
+interface Place {
+	readonly group: RuleGroup;
+	readonly icon: IconName;
+	/** The feature it is a setting of or rides on. */
+	readonly under: TreeConcept | null;
+}
+
+/** Each concept's place in a feature tree; key order is the tree's order. */
+export const PLACES = {
+	"5g": { group: "5g", icon: "tower", under: null },
+	"5g-standalone": { group: "5g", icon: "bolt", under: "5g" },
+	"voice-over-5g": { group: "5g", icon: "mic", under: "5g" },
+	"5g-icon-advanced": { group: "5g", icon: "plus", under: "5g" },
+	"nr-modes": { group: "5g", icon: "bolt", under: null },
+	"lte-icon": { group: "5g", icon: "letters", under: null },
+	volte: { group: "voice", icon: "handset", under: null },
+	"hd-voice-plus": { group: "voice", icon: "wave", under: "volte" },
+	"video-calling": { group: "voice", icon: "camera", under: "volte" },
+	"sip-ipsec": { group: "voice", icon: "lock", under: "volte" },
+	"volte-switch": { group: "voice", icon: "toggle", under: "volte" },
+	"ss-over-ut": { group: "voice", icon: "forward", under: null },
+	"visual-voicemail": { group: "voice", icon: "tape", under: null },
+	"voicemail-number": { group: "voice", icon: "hash", under: null },
+	"wifi-calling": { group: "wifi-calling", icon: "wifi", under: null },
+	"epdg-address": { group: "wifi-calling", icon: "pin", under: "wifi-calling" },
+	"wfc-mode": { group: "wifi-calling", icon: "house", under: "wifi-calling" },
+	"wfc-roaming": { group: "wifi-calling", icon: "globe", under: "wifi-calling" },
+	"wfc-roaming-mode": { group: "wifi-calling", icon: "house", under: "wfc-roaming" },
+	"wifi-calling-name": { group: "wifi-calling", icon: "tag", under: "wifi-calling" },
+	"calls-on-other-devices": { group: "wifi-calling", icon: "laptop", under: "wifi-calling" },
+	"apn-internet": { group: "data", icon: "apn", under: null },
+	"internet-ip": { group: "data", icon: "dual", under: "apn-internet" },
+	mmsc: { group: "data", icon: "envelope", under: null },
+	rcs: { group: "more", icon: "bubble", under: null },
+	"rcs-business-messaging": { group: "more", icon: "shop", under: "rcs" },
+	satellite: { group: "more", icon: "satellite", under: null },
+	"branded-calling": { group: "more", icon: "badge", under: null },
+	"spam-call-warnings": { group: "more", icon: "shield", under: null },
+	"esim-transfer": { group: "more", icon: "sim", under: null },
+	"esim-from-android": { group: "more", icon: "arrows", under: "esim-transfer" },
+	"apple-watch-number-sharing": { group: "more", icon: "watch", under: null },
+	"emergency-numbers": { group: "emergency", icon: "cross", under: null },
+	"cell-broadcast-channels": { group: "emergency", icon: "alert", under: null },
+} as const satisfies Record<TreeConcept, Place>;
+
+export const isTreeConcept = (id: string): id is TreeConcept => id in PLACES;
 
 type Param =
 	| { readonly kind: "choice"; readonly options: readonly (readonly [value: string, label: string])[] }
@@ -113,7 +165,6 @@ interface RuleDef {
 const feature = <const Id extends (typeof STATES)[number]>(
 	id: Id,
 	group: RuleGroup,
-	icon: IconName,
 	short: string,
 	under: string | null,
 ) =>
@@ -121,7 +172,7 @@ const feature = <const Id extends (typeof STATES)[number]>(
 		id,
 		group,
 		name: conceptById(id)?.name ?? id,
-		icon,
+		icon: PLACES[id].icon,
 		short,
 		under,
 		reads: [id],
@@ -129,7 +180,7 @@ const feature = <const Id extends (typeof STATES)[number]>(
 		test: (read: Read) => offered(read(id)),
 	}) satisfies RuleDef;
 
-const RULES = [
+export const RULES = [
 	{
 		id: "nr",
 		group: "5g",
@@ -261,7 +312,7 @@ const RULES = [
 		param: null,
 		test: (r) => not(isSet(r("voicemail-number"))),
 	},
-	{ ...feature("wifi-calling", "wifi-calling", "wifi", "WFC", null), id: "wfc" },
+	{ ...feature("wifi-calling", "wifi-calling", "WFC", null), id: "wfc" },
 	{
 		id: "epdg",
 		group: "wifi-calling",
@@ -388,16 +439,16 @@ const RULES = [
 			return p === "empty" ? not(set) : set;
 		},
 	},
-	feature("video-calling", "more", "camera", "ViLTE", "ims"),
-	feature("calls-on-other-devices", "more", "laptop", "Devices", "wfc"),
-	feature("rcs", "more", "bubble", "RCS", null),
-	feature("rcs-business-messaging", "more", "shop", "RCS biz", "rcs"),
-	feature("satellite", "more", "satellite", "Satellite", null),
-	feature("branded-calling", "more", "badge", "Caller ID", null),
-	feature("spam-call-warnings", "more", "shield", "Spam", null),
-	feature("esim-transfer", "more", "sim", "eSIM", null),
-	feature("esim-from-android", "more", "arrows", "From Android", "esim-transfer"),
-	feature("apple-watch-number-sharing", "more", "watch", "Watch", null),
+	feature("video-calling", "more", "ViLTE", "ims"),
+	feature("calls-on-other-devices", "more", "Devices", "wfc"),
+	feature("rcs", "more", "RCS", null),
+	feature("rcs-business-messaging", "more", "RCS biz", "rcs"),
+	feature("satellite", "more", "Satellite", null),
+	feature("branded-calling", "more", "Caller ID", null),
+	feature("spam-call-warnings", "more", "Spam", null),
+	feature("esim-transfer", "more", "eSIM", null),
+	feature("esim-from-android", "more", "From Android", "esim-transfer"),
+	feature("apple-watch-number-sharing", "more", "Watch", null),
 	{
 		id: "5g-icon-advanced",
 		group: "more",
@@ -448,9 +499,18 @@ interface Preset {
 	readonly want: readonly RuleId[];
 }
 
+/** Rules that ask for something to be absent: only a bundle swap wants them. */
+const ABSENCES: ReadonlySet<RuleId> = new Set(["vvm", "vmpilot", "epdg", "label"]);
+
 export const PRESETS = [
 	{ id: "everyday", name: "Everyday", need: [], want: ["nr", "ims", "wfc"] },
 	{ id: "latest", name: "Latest", need: ["sa", "vonr", "wfc"], want: [] },
+	{
+		id: "everything",
+		name: "Everything",
+		need: [],
+		want: RULES.map((rule) => rule.id).filter((id) => !ABSENCES.has(id)),
+	},
 	// For a SIM run on another carrier's settings bundle: ios-bundles' own starting selection, of the rules we read.
 	{
 		id: "swap",
@@ -483,7 +543,7 @@ export const presetOf = (reqs: ReadonlyMap<RuleId, Requirement>): PresetId | nul
 	)?.id ?? null;
 
 /** What `need` says when nothing is picked, so an emptied list is not read as the first preset. */
-const NONE = "none";
+export const NONE = "none";
 
 /**
  * Requirements as the URL keeps them: `need` and `want` list rule ids; a rule's own key holds its parameter. A URL with
@@ -523,3 +583,14 @@ export function requirementParams(reqs: ReadonlyMap<RuleId, Requirement>): Recor
 		),
 	};
 }
+
+/** Every query parameter the matrix page reads: the requirements and their parameters, misses, search, columns and phone. */
+export const MATRIX_PARAMS: readonly string[] = [
+	"need",
+	"want",
+	...RULES.map((r) => r.id),
+	"miss",
+	"q",
+	"all",
+	"phone",
+];

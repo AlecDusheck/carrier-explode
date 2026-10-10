@@ -68,7 +68,7 @@
 <div class="view">
   <div class="scroll pad">
     <article class="consumer">
-      <p class="crumbs"><a href={link("/")}>Carrier features</a></p>
+      <p class="crumbs"><a href={link("/features")}>Carrier features</a></p>
       <h1>{feature.name}</h1>
       <p class="lead">{feature.what}</p>
 

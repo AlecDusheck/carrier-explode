@@ -1,6 +1,6 @@
 <script lang="ts">
   import { getRelease, getShipped } from "#lib/api/builds.remote.ts";
-  import { buildHref, link } from "#lib/format.ts";
+  import { buildHref, link, versionStep } from "#lib/format.ts";
   import { releaseLabel } from "#lib/naming.ts";
   import { sourceOf, type SourceKind } from "@carrier-explode/schema/types";
   import type { ReleasedVersion, SourceChange } from "#lib/server/releases.ts";
@@ -86,7 +86,7 @@
                   <thead><tr><th>{view.column}</th><th class="num">Version</th></tr></thead>
                   <tbody>
                     {#each changed as c (c.source)}
-                      {@const text = c.from?.version === c.to?.version ? c.to?.version : `${c.from?.version} → ${c.to?.version}`}
+                      {@const text = c.from && c.to ? versionStep(c.from.version, c.to.version) : ""}
                       <tr>
                         <td class="k">{@render named(c, c.to, "picker-opt")}</td>
                         <!-- The version links to what changed; a content change can keep the version. -->

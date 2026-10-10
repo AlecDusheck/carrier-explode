@@ -39,12 +39,7 @@ function bundle(name: string): OpenedBundle {
 }
 
 /** Raw bytes of a bundle-relative path. */
-function raw(bundleName: string, path: string): Uint8Array {
-	const b = bundle(bundleName);
-	const bytes = b.entries[b.prefix + path];
-	if (!bytes) throw new Error(`missing fixture entry ${bundleName}:${path}`);
-	return bytes;
-}
+const raw = (bundleName: string, path: string): Uint8Array => bundle(bundleName).read(path);
 
 function pri(bundleName: string, path: string): PriDecoded {
 	return decodePri(raw(bundleName, path), path.endsWith(".der.gri") ? "der.gri" : "der.pri");

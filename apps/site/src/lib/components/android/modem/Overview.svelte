@@ -1,7 +1,7 @@
 <script lang="ts">
   import { page } from "$app/state";
   import type { NamedModemConfig } from "@carrier-explode/db";
-  import { getModemConfigBySha, getModemFirmware } from "#lib/api/android.remote.ts";
+  import { getModemFirmware, getModemHead } from "#lib/api/android.remote.ts";
   import { baseHref, configHref } from "#lib/android/links.ts";
   import type { DeviceReleasePlatform } from "@carrier-explode/schema/types";
   import type { ModemProps } from "../../views.ts";
@@ -35,15 +35,16 @@
         <p class="dimtext note">This firmware carries no configuration.</p>
       {/if}
       {#if shown}
-        {@const config = await getModemConfigBySha(shown.sha)}
-        {#if config.base}
+        {@const head = await getModemHead(shown.sha)}
+        {#if head.base}
           <p class="note">
             {#if onBase}<a href={configHref(platform, build, modem, shown.sha)}>Own layers</a> · <b>Base layers</b>{:else}<b>Own layers</b> · <a href={baseHref(platform, build, modem, shown.sha)}>Base layers</a>{/if}
           </p>
         {:else if onBase}
           <div class="banner"><span class="mono">{shown.label}</span> is built on no base layers.</div>
         {/if}
-        <ModemConfigView config={onBase && config.base ? await getModemConfigBySha(config.base) : config} />
+        {@const sha = onBase && head.base ? head.base : shown.sha}
+        <ModemConfigView ref={{ kind: "stored", sha }} head={sha === shown.sha ? head : await getModemHead(sha)} />
       {/if}
     {/if}
   </Pane>

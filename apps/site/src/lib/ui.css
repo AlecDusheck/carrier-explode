@@ -43,6 +43,13 @@
 	--policy-logic: #8a4a14;
 	--ui: "Tahoma", "Verdana", "DejaVu Sans", "Segoe UI", system-ui, sans-serif;
 	--mono: "DejaVu Sans Mono", "Menlo", "Consolas", ui-monospace, monospace;
+	/* The dropdown arrow of a picker and a select alike: a down triangle drawn as two halves, sized by the control's text. */
+	--caret-w: 0.6em;
+	--caret-h: 0.35em;
+	--caret-gap: 6px;
+	--caret-halves:
+		linear-gradient(to bottom left, currentColor 50%, transparent 50%),
+		linear-gradient(to bottom right, currentColor 50%, transparent 50%);
 }
 
 * {
@@ -254,17 +261,38 @@ select {
 }
 /* overflow: WebKit otherwise lets a long option's text widen its parent's scroll area, and an iPhone pans sideways. */
 select {
-	padding: 2px;
+	appearance: none;
+	padding: 2px calc(var(--caret-w) + 2 * var(--caret-gap)) 2px 4px;
 	max-width: 100%;
 	text-overflow: ellipsis;
 	overflow: hidden;
+	background-image: var(--caret-halves);
+	background-size: calc(var(--caret-w) / 2) var(--caret-h);
+	background-position:
+		right calc(var(--caret-gap) + var(--caret-w) / 2) center,
+		right var(--caret-gap) center;
+	background-repeat: no-repeat;
 }
 /* Safari on a touch screen zooms the page into a focused field set under 16px. */
 @media (pointer: coarse) {
 	input[type="text"],
-	input[type="search"],
+	input[type="search"] {
+		font-size: 16px;
+	}
+}
+/* A dropdown under a finger: an arrow you can see and a box you can hit. */
+@media (max-width: 760px), (pointer: coarse) {
+	:root {
+		--caret-w: 0.85em;
+		--caret-h: 0.5em;
+		--caret-gap: 10px;
+	}
 	select {
 		font-size: 16px;
+	}
+	select,
+	.btn.picker-btn {
+		min-height: 44px;
 	}
 }
 label.lbl {
@@ -746,6 +774,15 @@ table.grid.decoded {
 .dimtext {
 	color: var(--text-dim);
 }
+/* Not drawn, but read: by screen readers, and by fetchers that turn the page into text. */
+.sr-only {
+	position: absolute;
+	width: 1px;
+	height: 1px;
+	overflow: hidden;
+	clip-path: inset(50%);
+	white-space: nowrap;
+}
 fieldset.hgroup {
 	border: 1px solid;
 	border-color: var(--shadow) var(--light) var(--light) var(--shadow);
@@ -1103,7 +1140,6 @@ p.note {
 	}
 	/* iOS Safari zooms the page when a focused field is under 16px. */
 	input,
-	select,
 	textarea,
 	input[type="text"],
 	input[type="search"] {
@@ -1254,10 +1290,17 @@ article.consumer ul.others {
 	max-width: 100%;
 	text-align: left;
 }
-.picker-btn .caret {
+.picker-btn > :is(.caret, .busy-spin) {
 	margin-left: auto;
-	padding-left: 4px;
-	font-size: 10px;
+}
+.picker-btn .caret {
+	flex: none;
+	width: var(--caret-w);
+	height: var(--caret-h);
+	background-image: var(--caret-halves);
+	background-size: 50% 100%;
+	background-position: left, right;
+	background-repeat: no-repeat;
 }
 .picker-find {
 	margin: 6px;

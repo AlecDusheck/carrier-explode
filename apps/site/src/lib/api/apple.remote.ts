@@ -2,6 +2,7 @@
 
 import * as v from "valibot";
 import { query } from "$app/server";
+import { modemHead } from "#lib/modem.ts";
 import * as baseband from "#lib/server/apple/baseband.ts";
 import * as bundle from "#lib/server/apple/bundle.ts";
 import { manifestCounts, selectedBy } from "#lib/server/apple/manifest.ts";
@@ -10,9 +11,11 @@ import { build, device, family, index, key, packageId, path, pinned, ver, verSch
 
 export const getAppleBundle = query(verSchema, bundle.getBundle);
 export const getAppleFile = query(v.object({ ...pinned, path }), (a) => bundle.getFile(a, a.path));
-export const getAppleModemConfig = query(v.object({ ...pinned, path }), (a) =>
-	bundle.getModemConfig(a, a.path),
-);
+/** An override file's modem configuration head; null for a file in Intel's dialect. */
+export const getAppleModemHead = query(v.object({ ...pinned, path }), async (a) => {
+	const config = await bundle.getModemConfig(a, a.path);
+	return config && modemHead(config);
+});
 export const getAlerts = query(v.object(pinned), bundle.getAlerts);
 
 /** The SIM routes to one Apple bundle. */

@@ -1,11 +1,12 @@
 <script lang="ts">
   import type { PrlDecoded, PrlAcqRecord, PrlSysRecord } from "@carrier-explode/decode-qualcomm";
+  import ShowMore from "../ShowMore.svelte";
 
   let { prl }: { prl: PrlDecoded } = $props();
 
   let filter = $state("");
-  let all = $state(false);
-  const LIMIT = 300;
+  const PAGE = 300;
+  let limit = $state(PAGE);
 
   function channels(a: PrlAcqRecord): string {
     const groups: Array<{ head: string; chans: number[] }> = [];
@@ -51,7 +52,7 @@
       ),
     );
   });
-  const shown = $derived(all ? systems : systems.slice(0, LIMIT));
+  const shown = $derived(systems.slice(0, limit));
 </script>
 
 {#each prl.warnings as w, i (i)}<div class="banner err">{w}</div>{/each}
@@ -140,11 +141,7 @@
       </tbody>
     </table>
   </div>
-  {#if systems.length > LIMIT}
-    <button class="btn gap-above" onclick={() => (all = !all)}>
-      {all ? "Show first " + LIMIT : "Show all " + systems.length}
-    </button>
-  {/if}
+  <ShowMore shown={shown.length} total={systems.length} more={() => (limit += PAGE)} />
 </fieldset>
 
 <style>

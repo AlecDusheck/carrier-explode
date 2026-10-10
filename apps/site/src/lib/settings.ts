@@ -143,10 +143,29 @@ const TERMS: Array<[RegExp, string[]]> = [
 	[/^(5g|nr)$/, ["5g", "nr"]],
 ];
 
-/** The filter text itself, plus the key words its feature uses; all lowercase, matched as substrings. */
+const KEY_PATHS = " | ";
+
+/** A filter for the keys a feature is read from, as an Overview's line opens Settings with. */
+export const keyPathFilter = (paths: readonly string[]): string => paths.join(KEY_PATHS);
+
+/** Each `|`-separated part of the filter text, plus the key words its feature uses; all lowercase, matched as substrings. */
 export function searchTerms(filter: string): string[] {
-	const q = filter.trim().toLowerCase();
-	if (!q) return [];
-	const extra = TERMS.find(([re]) => re.test(q))?.[1] ?? [];
-	return [q, ...extra];
+	return filter
+		.split(KEY_PATHS.trim())
+		.map((part) => part.trim().toLowerCase())
+		.filter(Boolean)
+		.flatMap((q) => [q].concat(TERMS.find(([re]) => re.test(q))?.[1] ?? []));
+}
+
+const within = (path: string, key: string): boolean =>
+	path === key || path.startsWith(`${key}.`) || path.startsWith(`${key}[`);
+
+/**
+ * Where a node's `path` sits against a term that is a key path (`TechSettings.IKE.RemoteAddress`): at the key or under
+ * it, above it, or neither. The key shows with all it holds, and the keys above it as the way down.
+ */
+export function onKeyPath(term: string, path: string): "at" | "above" | null {
+	if (!/[.[]/.test(term)) return null;
+	const p = path.toLowerCase();
+	return within(p, term) ? "at" : within(term, p) ? "above" : null;
 }

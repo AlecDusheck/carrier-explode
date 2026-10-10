@@ -7,7 +7,7 @@
   import { linePath, type SourceRef } from "@carrier-explode/schema/types";
   import type { SourceHead } from "#lib/server/head.ts";
   import { visitorDevice } from "#lib/visitor.ts";
-  import { tabView, type TabView } from "#lib/components/views.ts";
+  import { overviewChoice, tabView, type TabView } from "#lib/components/views.ts";
   import { TABS } from "../../../../params.ts";
   import LinePicker from "#lib/components/LinePicker.svelte";
   import Tabs from "#lib/components/Tabs.svelte";
@@ -52,12 +52,15 @@
     <Pane quiet>
       {@const h = await getSourceHead(ver)}
       {@const view = viewOf(h)}
+      {@const OverviewChoice = open === undefined ? overviewChoice(h.ref.platform) : null}
       <LinePicker head={h} href={(line) => lineHref(h.ref, line)} />
       {#if view?.versioned ?? true}
         <VersionPicker timeline={h.timeline} current={h.entry.slug} shipping={h.current} href={(slug) => versionHref({ ...headAt(h), version: slug }, tab)} />
       {/if}
       {#if open && view?.Choice}
         <view.Choice at={headAt(h)} tab={open} />
+      {:else if OverviewChoice}
+        <OverviewChoice at={headAt(h)} />
       {/if}
     </Pane>
   </div>

@@ -5,8 +5,10 @@
   import SourceIcon from "#lib/components/SourceIcon.svelte";
   import FeatureTip from "./FeatureTip.svelte";
   import PixelIcon from "./PixelIcon.svelte";
+  import ToneKey from "./ToneKey.svelte";
   import { atRest, releaseVelocity, rubber, step, type Bounds, type Motion, type Sample } from "./inertia.ts";
-  import { cellWords, toneOf, type Scored } from "./score.ts";
+  import { cellWords, tileTone, TONE_WORDS, toneOf, type Scored } from "./score.ts";
+  import { countedColumns, metCount } from "./view.ts";
 
   /**
    * Carriers down, rules across, panned with a finger or a wheel. Only rows in view are drawn; the header and the
@@ -55,12 +57,26 @@
   const first = $derived(Math.max(0, Math.floor(-y / CELL) - OVERSCAN));
   const last = $derived(Math.min(rows.length, Math.ceil((vh - y) / CELL) + OVERSCAN));
   const drawn = $derived(rows.slice(first, last));
+  // Until first measured, as on the server, every name is drawn with its tiles in words, so a reader without script
+  // has them all. A hidden pane measures 0 later on, which must not draw them all again.
+  let measured = $state(false);
+  $effect(() => {
+    if (vh > 0) measured = true;
+  });
+  const namesFirst = $derived(measured ? first : 0);
+  const names = $derived(measured ? drawn : rows);
 
   const modeOf = (rule: Rule) => reqs.get(rule.id)?.mode ?? "off";
 
-  /** The progress a row shows: the picked columns it meets, or all shown when none are picked. */
-  const counted = $derived(picked ? columns.slice(0, picked) : columns);
-  const progress = (s: Scored): number => counted.filter((c) => s.outcomes[c] === true).length;
+  const counted = $derived(countedColumns(columns, picked));
+  /** A row's counted tiles in words, for whatever reads the page as text; the Markdown view has every column. */
+  const words = (s: Scored): string =>
+    counted
+      .flatMap((c) => {
+        const rule = rules[c];
+        return rule ? [`${rule.name}: ${TONE_WORDS[tileTone(s, c, modeOf(rule))]}`] : [];
+      })
+      .join(" · ");
 
   /** `at`: the cell it explains, so a second tap on it closes it. */
   let tip: { at: string; title: string; tone: string; lines: string[]; left: number; top: number } | null = $state(null);
@@ -294,7 +310,7 @@
           {#each columns as c, k (c)}
             {@const rule = rules[c]}
             {#if rule}
-              <span class="logo feature tile tone-{toneOf(s.outcomes[c] ?? null, modeOf(rule), s.cells[c] ?? 'unknown')}" class:muted={picked > 0 && k >= picked} role="gridcell" style:--icon={iconUrl(rule.icon)}></span>
+              <span class="logo feature tile tone-{tileTone(s, c, modeOf(rule))}" class:muted={picked > 0 && k >= picked} role="gridcell" style:--icon={iconUrl(rule.icon)}></span>
             {/if}
           {/each}
         </div>
@@ -304,15 +320,16 @@
 
   <div class="clip names">
     <div class="layer" style:transform="translate3d(0, {y}px, 0)">
-      {#each drawn as s, i (s.row.entry.key)}
-        {@const got = progress(s)}
-        <div class="name" class:complete={picked > 0 && !s.need && !s.want} style:top="{(first + i) * CELL}px">
+      {#each names as s, i (s.row.entry.key)}
+        {@const got = metCount(s, counted)}
+        <div class="name" class:complete={picked > 0 && !s.need && !s.want} style:top="{(namesFirst + i) * CELL}px">
           <SourceIcon picture={s.row.entry.picture} />
           <span class="who">
             <span class="brand">{s.row.entry.brand}{#if s.row.entry.tag}<span class="dimtext sp">{s.row.entry.tag}</span>{/if}</span>
             <span class="bar" aria-hidden="true"><span class="fill" class:missing={s.need > 0} style:transform="scaleX({counted.length ? got / counted.length : 0})"></span></span>
           </span>
           <span class="count" class:missing={s.need > 0}>{got}/{counted.length}</span>
+          <span class="sr-only"> — {words(s)}</span>
         </div>
       {/each}
     </div>
@@ -333,9 +350,7 @@
     </div>
   </div>
   <div class="corner">
-    <span class="key"><i class="logo tone-met"></i>On</span>
-    <span class="key"><i class="logo tone-offered"></i>Off until turned on</span>
-    <span class="key"><i class="logo tone-unmet"></i>Not given</span>
+    <ToneKey tones={["met", "offered", "unmet"]} />
     <b>Carrier</b>
   </div>
 
@@ -414,19 +429,6 @@
   .tile {
     --logo: 36px;
     margin: 6px;
-  }
-  .key {
-    display: flex;
-    align-items: center;
-    gap: 4px;
-    font-size: 10px;
-    font-weight: normal;
-    line-height: 13px;
-    white-space: nowrap;
-  }
-  .key i {
-    --logo: 10px;
-    background: var(--bg);
   }
   .muted {
     opacity: 0.35;

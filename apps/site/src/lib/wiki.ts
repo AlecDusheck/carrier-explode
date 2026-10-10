@@ -79,7 +79,7 @@ function sectionOf(path: string): Section | null {
 	return section;
 }
 
-const ARTICLES: Article[] = Object.entries(modules)
+export const ARTICLES: Article[] = Object.entries(modules)
 	// oxlint-disable-next-line oxc/no-map-spread -- the frontmatter is the imported module's own object; assigning to it would change the module.
 	.map(([file, m]) => {
 		const path = file.slice("/src/wiki/".length, -".md".length);

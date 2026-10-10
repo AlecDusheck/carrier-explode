@@ -37,11 +37,17 @@ const session = createMiddleware<ApiEnv>(async (c, next) => {
 	await next();
 });
 
+/** The API is data for programs, not pages to list in search results. */
+const noindex = createMiddleware<ApiEnv>(async (c, next) => {
+	await next();
+	c.header("X-Robots-Tag", "noindex");
+});
+
 const READ_ONLY = cors({ origin: "*", allowMethods: ["GET", "HEAD", "OPTIONS"] });
 
 export const api: OpenAPIHono<ApiEnv> = new OpenAPIHono<ApiEnv>();
 
-api.use("*", caching, etag(), canonical, session);
+api.use("*", noindex, caching, etag(), canonical, session);
 api.use("/v1/*", READ_ONLY);
 api.use("/openapi.json", READ_ONLY);
 

@@ -338,6 +338,11 @@ export function seo(id: string | null, p: Params, names: PageNames): Meta {
 					};
 		case "/":
 			return {
+				title: `${deviceWords(RELEASE_PLATFORMS, "and")} carrier settings, decoded`,
+				description: `Carrier settings from ${deviceWords(RELEASE_PLATFORMS, "and")} firmware, decoded and compared: APNs, VoLTE, 5G and Wi-Fi Calling per carrier, and what each build changed.`,
+			};
+		case "/features":
+			return {
 				title: `Carrier features for ${deviceWords(RELEASE_PLATFORMS, "and")}`,
 				description: `Every carrier's 5G SA, VoNR, VoLTE, Wi-Fi Calling, RCS and satellite on your ${deviceWords(RELEASE_PLATFORMS, "or")}, side by side. Pick what you need; see who has it.`,
 			};

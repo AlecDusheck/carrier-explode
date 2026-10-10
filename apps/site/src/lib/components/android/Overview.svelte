@@ -6,6 +6,8 @@
   import CarrierMembers from "../CarrierMembers.svelte";
   import Copies from "../Copies.svelte";
   import Rare from "../Rare.svelte";
+  import SourceFeatures from "../features/SourceFeatures.svelte";
+  import OverviewColumns from "../OverviewColumns.svelte";
   import SelectedBy from "./SelectedBy.svelte";
 
   /** Laid out as the Apple Overview: the file, the SIMs that select it, and what is rare in it. */
@@ -15,31 +17,35 @@
   const rules = $derived(await getAndroidSelectedBy(verArgs(at)));
 </script>
 
-<fieldset class="hgroup">
-  <legend>Carrier settings</legend>
-  <table class="grid fit">
-    <tbody>
-      <tr><td class="k">File</td><td class="mono"><a href={versionHref(at, "files", v.file.path)}>{v.file.path}</a></td></tr>
-      <tr><td class="k">Size</td><td>{humanBytes(v.file.size)}</td></tr>
-    </tbody>
-  </table>
-  <details class="more">
-    <summary>Digest and source</summary>
-    <table class="grid">
-      <tbody><tr><td class="k">SHA-256</td><td class="mono">{v.file.sha}</td></tr></tbody>
+<OverviewColumns>
+  {#snippet side()}<SourceFeatures {at} tabOf={(key) => (key.startsWith("apns[") ? "apns" : "settings")} phones={[at.line]} file={null} />{/snippet}
+
+  <fieldset class="hgroup">
+    <legend>Carrier settings</legend>
+    <table class="grid fit">
+      <tbody>
+        <tr><td class="k">File</td><td class="mono"><a href={versionHref(at, "files", v.file.path)}>{v.file.path}</a></td></tr>
+        <tr><td class="k">Size</td><td>{humanBytes(v.file.size)}</td></tr>
+      </tbody>
     </table>
-    <Copies entry={v.entry} />
-  </details>
-  {#if v.unknownFields}
-    <div class="banner">{v.unknownFields} {v.unknownFields === 1 ? "field" : "fields"} this site's decoder does not know: the file is newer than its proto.</div>
-  {/if}
-</fieldset>
+    <details class="more">
+      <summary>Digest and source</summary>
+      <table class="grid">
+        <tbody><tr><td class="k">SHA-256</td><td class="mono">{v.file.sha}</td></tr></tbody>
+      </table>
+      <Copies entry={v.entry} />
+    </details>
+    {#if v.unknownFields}
+      <div class="banner">{v.unknownFields} {v.unknownFields === 1 ? "field" : "fields"} this site's decoder does not know: the file is newer than its proto.</div>
+    {/if}
+  </fieldset>
 
-<fieldset class="hgroup">
-  <legend>Selected by ({selectionRows(rules).length})</legend>
-  <SelectedBy {rules} list={null} />
-</fieldset>
+  <fieldset class="hgroup">
+    <legend>Selected by ({selectionRows(rules).length})</legend>
+    <SelectedBy {rules} list={null} />
+  </fieldset>
 
-<CarrierMembers {at} />
+  <CarrierMembers {at} />
 
-<Rare {at} />
+  <Rare {at} />
+</OverviewColumns>

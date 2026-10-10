@@ -15,7 +15,12 @@ import {
 	type RarityThresholds,
 } from "@carrier-explode/schema";
 import { sourceKeySchema } from "@carrier-explode/schema/records";
-import { type Platform, type SourceKey, type SourceKind } from "@carrier-explode/schema/types";
+import {
+	type FeatureState,
+	type Platform,
+	type SourceKey,
+	type SourceKind,
+} from "@carrier-explode/schema/types";
 import { every, jsonOf, qualified, run, type IndexDb } from "./db.ts";
 import {
 	baseSettings,
@@ -234,6 +239,29 @@ export async function putBaseRows(db: IndexDb, sha: string, rows: HeadRows["sett
 			)
 		).length > 0
 	);
+}
+
+/** One source head's concepts that are not per phone, and its states on `device`; null when the phone does not read it. */
+export async function headConcepts(
+	db: IndexDb,
+	source: SourceKey,
+	device: string,
+): Promise<{
+	readonly values: ReadonlyArray<{ readonly concept: string; readonly value: string }>;
+	readonly states: Readonly<Record<string, FeatureState>> | null;
+}> {
+	const [values, states] = await Promise.all([
+		db
+			.select({ concept: concepts.concept, value: concepts.value })
+			.from(concepts)
+			.where(eq(concepts.source, source))
+			.orderBy(asc(concepts.concept)),
+		db
+			.select({ states: phoneStates.states })
+			.from(phoneStates)
+			.where(every(eq(phoneStates.source, source), eq(phoneStates.device, device))),
+	]);
+	return { values, states: states[0]?.states ?? null };
 }
 
 /**

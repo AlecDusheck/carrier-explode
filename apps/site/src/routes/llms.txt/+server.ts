@@ -1,6 +1,9 @@
 import { PLATFORMS } from "@carrier-explode/schema/types";
 import { env } from "cloudflare:workers";
 import { SECTION_ARTICLES, SITE_ARTICLES, type Article } from "#lib/wiki.ts";
+import { NONE, PRESETS, RULES } from "#lib/feature-matrix.ts";
+import { PAGE_ROWS } from "#lib/components/matrix/markdown.ts";
+import { MISSES } from "#lib/components/matrix/view.ts";
 
 /** The llms.txt index (llmstxt.org): what the site is, and where an agent should read first. */
 export function GET({ url }) {
@@ -34,9 +37,31 @@ ${SITE_ARTICLES.map(entry).join("\n")}
 ## Data
 
 - [Carriers](${url.origin}/ios/carriers): one platform's carrier sources, \`/<platform>/carriers\` (${platforms})
-- [Carrier features](${url.origin}/), the home page: every carrier against every feature (5G Standalone, Voice over 5G, Wi-Fi Calling, RCS, satellite and more) on one iPhone, Pixel or Galaxy, filtered by required features (\`/?phone=tokay&need=sa,vonr,wfc\`); one feature's carriers at \`/features/<feature>?phone=iPhone19,3\`
+- [Carrier features](${url.origin}/features): every carrier against every feature on one phone, filtered by the features picked; its parameters are below. One feature's carriers are at \`/features/<feature>?phone=iPhone19,3\`
 - [Country bundles](${url.origin}/ios/countries): each one's emergency alerts (\`/ios/countries/<name>/alerts\`), emergency numbers and carriers; \`/android/countries\` lists Android's carriers by country (\`/android/countries/us\`)
 - [Builds](${url.origin}/ios/builds): \`/ios/builds\`, \`/android/builds\` and \`/samsung/builds\`; each build (\`/<platform>/builds/<build>\`) lists the sources it added and changed, and the modems it ships, if any (none for an Exynos Galaxy, whose modem is encrypted) (\`/ios/builds/<build>/<package>\`, \`/android/builds/<build>/<device>\`, \`/samsung/builds/<build>/<model>\`)
+- [Sitemap](${url.origin}/sitemap.xml)
+
+## Carrier features
+
+\`/features\` takes its view from the query. The same query on [\`/features.md\`](${url.origin}/features.md) returns that view in Markdown: a table of the carriers with each feature's state in words, ${PAGE_ROWS} rows a page, and a link for each change.
+
+- \`phone\`: a phone's code (\`iPhone19,7\`, \`tokay\`, \`SM-S942U\`); the newest iPhone when absent
+- \`need\`, \`want\`: features, comma-separated, a carrier must give or that are nice to have; with neither, the ${PRESETS[0].name} preset; \`need=${NONE}\` picks none
+- Features: ${RULES.map((r) => `\`${r.id}\` ${r.name}`).join(", ")}
+- A feature's parameter goes under its id: ${RULES.flatMap((r) => (r.param === null ? [] : [`\`${r.id}=${r.param.kind === "text" ? "<text>" : r.param.options.map(([o]) => o).join("|")}\``])).join(", ")}
+- Presets: ${PRESETS.map(
+		(p) =>
+			`${p.name} (\`${Object.entries({ need: p.need, want: p.want })
+				.flatMap(([k, ids]) => (ids.length ? [`${k}=${ids.join(",")}`] : []))
+				.join("&")}\`)`,
+	).join(", ")}
+- \`miss\`: required features a carrier may miss: ${MISSES.flatMap(([m]) => (m === "0" ? [] : [`\`${m}\``])).join(", ")}; none when absent
+- \`q\`: a carrier or country to find
+- \`all\`: present, every feature has a column, not only those picked
+- \`page\`: the Markdown's page
+
+Examples: [\`caiman\` with 5G SA, VoNR and Wi-Fi Calling required](${url.origin}/features.md?phone=caiman&need=sa,vonr,wfc), [carriers in Japan with VoLTE and Wi-Fi Calling, one miss allowed](${url.origin}/features.md?q=Japan&need=ims,wfc&miss=1), [every column on \`iPhone19,3\`](${url.origin}/features.md?phone=iPhone19,3&all=1)
 
 ## Source pages
 

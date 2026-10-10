@@ -300,8 +300,9 @@ export async function getBasebandDefaults(at: Ver, device?: string): Promise<Mod
 	// Without a phone named, the newest one the release is read against.
 	const phone = device ?? newestProduct(at.line ? [at.line] : v.devices);
 	const m = phone ? v.modems.find((x) => x.devices.includes(phone) && x.kind === "bbfw") : undefined;
-	const [{ opened, files, ref }, s] = await Promise.all([open(at), m ? bbfwSummary(m.package) : null]);
-	if (!phone || !m || !s) return { missing: true, build: v.build };
+	if (!phone || !m) return { missing: true, build: v.build };
+	const [{ opened, files, ref }, s] = await Promise.all([open(at), bbfwSummary(m.package)]);
+	if (!s) return { missing: true, build: v.build };
 
 	const key = sourceKey({ ...ref, platform: "ios" });
 	const tagPlmns = comboTagPlmns(s.bandCombos);

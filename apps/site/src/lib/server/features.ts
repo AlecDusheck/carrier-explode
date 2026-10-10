@@ -3,6 +3,7 @@
 import { error } from "@sveltejs/kit";
 import * as v from "valibot";
 import {
+	headConcepts,
 	scanConcept,
 	statedDevices,
 	statedSourceCounts,
@@ -10,7 +11,7 @@ import {
 	type Page,
 	type ShownDevice,
 } from "@carrier-explode/db";
-import { needs5G, type FeatureSlug } from "@carrier-explode/schema";
+import { needs5G, perPhone, phoneVariantId, profileFor, type FeatureSlug } from "@carrier-explode/schema";
 import {
 	FEATURE_STATES,
 	RELEASE_PLATFORMS,
@@ -24,15 +25,21 @@ import { featurePage } from "#lib/feature-pages.ts";
 import type { ModelChoice } from "#lib/phones.ts";
 import {
 	isSetting,
+	isTreeConcept,
 	phoneConcepts,
 	type MatrixCell,
 	type MatrixConcept,
 	type SettingValue,
+	type TreeConcept,
 } from "#lib/feature-matrix.ts";
+import type { Ver } from "#lib/types.ts";
 import { perRequest } from "./cache";
+import { resolve } from "./catalog";
 import { db, everyPage } from "./db";
-import { getCarriers, type ListEntry } from "./lists";
+import { getCarriers, getCountryCarriers, type ListEntry } from "./lists";
 import { modelChoices } from "./phones";
+import { profileAt } from "./profiles";
+import { overridePlistOf } from "./apple/phones";
 
 /** A phone a features page can show. `covered`: its states come from at least half as many sources as its platform's best-covered phone. */
 export type FeaturePhone = ShownDevice & { readonly covered: boolean };
@@ -205,4 +212,82 @@ export async function getFeatureMatrix(phoneId: string): Promise<FeatureMatrix> 
 			}),
 		})),
 	};
+}
+
+/** What a country's carriers give its platform's newest covered phone, or the one named. */
+export async function getCountryMatrix(
+	platform: ReleasePlatform,
+	iso: string,
+	named: string | undefined,
+): Promise<FeatureMatrix | null> {
+	const phone = await treePhone(platform, named === undefined ? [] : [named]);
+	if (phone === null) return null;
+	const [matrix, carriers] = await Promise.all([
+		getFeatureMatrix(phone.code),
+		getCountryCarriers(platform, iso),
+	]);
+	const keys = new Set(carriers.map((c) => c.key));
+	return { ...matrix, rows: matrix.rows.filter((r) => keys.has(r.entry.key)) };
+}
+
+/** What one source's head gives: a carrier's on `phone`, a country bundle's alone. Only a head has index rows. */
+export type SourceFeatures =
+	| { readonly state: "notHead" }
+	| {
+			readonly state: "judged";
+			readonly phone: FeaturePhone | null;
+			readonly cells: ReadonlyArray<readonly [TreeConcept, MatrixCell]>;
+			/** By concept, the native settings it is read from, as `file:path`; none when the file leaves it unset. */
+			readonly keys: Readonly<Record<string, readonly string[]>>;
+	  };
+
+/** The newest of `candidates` with phone states; with none named, the platform's newest covered phone. */
+async function treePhone(
+	platform: ReleasePlatform,
+	candidates: readonly string[],
+): Promise<FeaturePhone | null> {
+	const phones = (await featurePhones()).filter((p) => p.platform === platform);
+	return (
+		(candidates.length ? phones.find((p) => candidates.includes(p.code)) : phones.find((p) => p.covered)) ??
+		null
+	);
+}
+
+/**
+ * `phones`: the phones the page shows the source for; a carrier none of them has states for gives its settings alone.
+ * `file`: the Apple override file those phones read, as `?file=` names it; each feature's keys are then theirs.
+ */
+export async function getSourceFeatures(
+	at: Ver,
+	phones: readonly string[],
+	file: string | null,
+): Promise<SourceFeatures> {
+	const r = await resolve(at);
+	if (r.entry.sha !== r.source.headSha) return { state: "notHead" };
+	const platform = RELEASE_PLATFORMS.find((p) => p === r.ref.platform);
+	const phone =
+		r.ref.kind === "carrier" && platform !== undefined && phones.length
+			? await treePhone(platform, phones)
+			: null;
+	const head = await headConcepts(await db(), r.key, phone?.code ?? "");
+	const values = new Map(head.values.map((c) => [c.concept, v.parse(settingValue, c.value)]));
+	const states = head.states ?? undefined;
+	const cells =
+		phone === null
+			? [...values].flatMap(([id, value]) =>
+					isTreeConcept(id) && !perPhone(r.ref.kind, id) ? [[id, settingCell(value)] as const] : [],
+				)
+			: phoneConcepts(phone).map(
+					(id) => [id, isSetting(id) ? settingCell(values.get(id)) : phoneState(states, id)] as const,
+				);
+	const profile = await profileAt(r.entry);
+	const seen =
+		profile === null || file === null ? profile : profileFor(profile, phoneVariantId(overridePlistOf(file)));
+	const keys = Object.fromEntries(
+		cells.map(([id]) => {
+			const c = seen?.concepts[id];
+			return [id, c === undefined || c.kind === "unset" ? [] : [...new Set(c.because.map((b) => b.path))]];
+		}),
+	);
+	return { state: "judged", phone, cells, keys };
 }

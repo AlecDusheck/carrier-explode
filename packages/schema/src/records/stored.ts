@@ -209,16 +209,15 @@ export const profileSchema = v.object({
 	),
 }) satisfies v.GenericSchema<unknown, Profile>;
 
-const modemValueSchema: v.GenericSchema<ModemValue> = v.lazy(() =>
-	v.variant("kind", [
-		v.object({ kind: v.literal("number"), value: v.number() }),
-		v.object({ kind: v.picklist(["text", "xml"]), value: str }),
-		v.object({ kind: v.literal("bytes"), hex: v.pipe(str, v.regex(/^(?:[0-9a-f]{2})*$/)) }),
-		v.object({ kind: v.literal("flags"), values: v.array(v.number()) }),
-		v.object({ kind: v.literal("list"), values: v.array(modemValueSchema) }),
-		v.object({ kind: v.literal("fields"), fields: v.record(str, modemValueSchema) }),
-	]),
-);
+const nestedModemValue: v.GenericSchema<ModemValue> = v.lazy(() => modemValueSchema);
+const modemValueSchema: v.GenericSchema<ModemValue> = v.variant("kind", [
+	v.object({ kind: v.literal("number"), value: v.number() }),
+	v.object({ kind: v.picklist(["text", "xml"]), value: str }),
+	v.object({ kind: v.literal("bytes"), hex: v.pipe(str, v.regex(/^(?:[0-9a-f]{2})*$/)) }),
+	v.object({ kind: v.literal("flags"), values: v.array(v.number()) }),
+	v.object({ kind: v.literal("list"), values: v.array(nestedModemValue) }),
+	v.object({ kind: v.literal("fields"), fields: v.record(str, nestedModemValue) }),
+]);
 
 export const modemConfigSchema = v.object({
 	schema: v.picklist(READ_MODEM_SCHEMAS),

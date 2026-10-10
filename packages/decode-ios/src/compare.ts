@@ -171,9 +171,7 @@ export function compareBundles(
 		if (!inA && !inB) continue;
 		const ra = fa.get(path) ?? path,
 			rb = fb.get(path) ?? path;
-		const ea = a.entries[a.prefix + ra],
-			eb = b.entries[b.prefix + rb];
-		if (inA && inB && ea !== undefined && eb !== undefined && bytesEqual(ea, eb)) {
+		if (inA && inB && bytesEqual(a.read(ra), b.read(rb))) {
 			counts.same++;
 			continue;
 		}

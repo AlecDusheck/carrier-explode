@@ -17,6 +17,7 @@ const named = (brand: string, country: string | null): PageNames => ({
 
 const CASES: Array<[string, Parameters<typeof seo>[1]]> = [
 	["/", {}],
+	["/features", {}],
 	["/[platform=platform]/[kind=kind]", { kind: "carriers", platform: "ios" }],
 	["/[platform=platform]/[kind=kind]", { kind: "countries", platform: "ios" }],
 	["/[platform=platform]/[kind=kind]", { kind: "countries", platform: "android" }],

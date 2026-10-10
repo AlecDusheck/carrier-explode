@@ -82,7 +82,7 @@ export function modemSections(
 }
 
 /** A decoder's notes, by the item each names (`efs:/mcfg_ftb: …`); `other` names none. */
-export function itemErrors(config: Pick<ModemConfig, "items" | "errors">): {
+function itemErrors(config: Pick<ModemConfig, "items" | "errors">): {
 	readonly byItem: ReadonlyMap<string, readonly string[]>;
 	readonly other: readonly string[];
 } {
@@ -94,4 +94,103 @@ export function itemErrors(config: Pick<ModemConfig, "items" | "errors">): {
 		else byItem.set(item.id, [...(byItem.get(item.id) ?? []), error]);
 	}
 	return { byItem, other };
+}
+
+/** A configuration without its items, as a page heads it. */
+export interface ModemHead extends Omit<ModemConfig, "items" | "errors"> {
+	/** How many settings it lists. */
+	readonly listed: number;
+	/** The decoder's notes naming no setting; a setting's own come with it. */
+	readonly unplaced: readonly string[];
+}
+
+/** One setting as a configuration's view lists it: its section, and the decoder's notes on it. */
+export interface ListedItem {
+	readonly section: string;
+	readonly item: ModemItem;
+	readonly errors: readonly string[];
+}
+
+/** The settings a configuration lists, by section; an item holding just its name (a Galaxy MCFG's "ATC") says what the picker says. */
+export function listedItems(config: Pick<ModemConfig, "items" | "errors" | "label">): readonly ListedItem[] {
+	const { byItem } = itemErrors(config);
+	const named = (x: ModemItem): boolean => x.value.kind === "text" && x.value.value === config.label;
+	return modemSections(config.items.filter((x) => !named(x))).flatMap(([section, list]) =>
+		list.map((item) => ({ section, item, errors: byItem.get(item.id) ?? [] })),
+	);
+}
+
+export function modemHead({ items, errors, ...head }: ModemConfig): ModemHead {
+	return {
+		...head,
+		listed: listedItems({ items, errors, label: head.label }).length,
+		unplaced: itemErrors({ items, errors }).other,
+	};
+}
+
+export interface SectionCount {
+	readonly title: string;
+	readonly count: number;
+}
+
+export const sectionCounts = (listed: readonly ListedItem[]): readonly SectionCount[] =>
+	[...Map.groupBy(listed, (x) => x.section)].map(([title, xs]) => ({ title, count: xs.length }));
+
+/** How many values an item's value draws. */
+function drawn(v: ModemValue): number {
+	switch (v.kind) {
+		case "list":
+			return v.values.reduce((n, x) => n + drawn(x), 0);
+		case "fields":
+			return Object.values(v.fields).reduce((n, x) => n + drawn(x), 0);
+		case "flags":
+			return v.values.length;
+		default:
+			return 1;
+	}
+}
+
+/** What an item's own line weighs, in drawn values. */
+const LINE = 10;
+
+/** The drawn values a page holds at most, whatever its items hold; an item heavier than that is a page of its own. */
+export const PAGE_VALUES = 1500;
+
+/** One page of listed items, from `from`. */
+export interface ModemItemPage {
+	readonly items: readonly ListedItem[];
+	/** Items the page's views read beside its own (a PLMN category's name), wherever they are listed. */
+	readonly related: readonly ModemItem[];
+	/** The section of the item before the page; null on the first. */
+	readonly previous: string | null;
+	/** Where the next page starts; null on the last. */
+	readonly next: number | null;
+}
+
+/** A run of one section's items on a page. */
+export interface SectionRun {
+	readonly section: string;
+	/** Whether the run starts its section, rather than going on from the page before. */
+	readonly heads: boolean;
+	readonly items: readonly ListedItem[];
+}
+
+export function sectionRuns(page: Pick<ModemItemPage, "items" | "previous">): readonly SectionRun[] {
+	return [...Map.groupBy(page.items, (x) => x.section)].map(([section, items], i) => ({
+		section,
+		heads: i > 0 || section !== page.previous,
+		items,
+	}));
+}
+
+/** The listed items from `from` that fit one page, and where the next starts. */
+export function itemPage(listed: readonly ListedItem[], from: number): Pick<ModemItemPage, "items" | "next"> {
+	let end = from;
+	let load = 0;
+	for (const x of listed.slice(from)) {
+		load += LINE + drawn(x.item.value);
+		if (load > PAGE_VALUES && end > from) break;
+		end++;
+	}
+	return { items: listed.slice(from, end), next: end < listed.length ? end : null };
 }

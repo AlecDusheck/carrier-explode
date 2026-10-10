@@ -3,6 +3,7 @@
 import * as v from "valibot";
 import { query } from "$app/server";
 import { FEATURE_SLUGS } from "@carrier-explode/schema";
+import { RELEASE_PLATFORMS } from "@carrier-explode/schema/types";
 import { carrierMembers, devicesOf } from "#lib/server/catalog.ts";
 import { getComparison as compare } from "#lib/server/compare.ts";
 import * as features from "#lib/server/features.ts";
@@ -72,3 +73,21 @@ export const getFeatureTable = query(v.object({ slug: v.picklist(FEATURE_SLUGS),
 	features.getFeatureTable(a.slug, a.phone),
 );
 export const getFeatureMatrix = query(phone, features.getFeatureMatrix);
+/** A source head's features on the newest of `phones` with states, and the settings behind each in the Apple override `file` they read. */
+export const getSourceFeatures = query(
+	v.object({
+		...ver,
+		phones: v.pipe(v.array(v.pipe(v.string(), v.maxLength(64))), v.maxLength(32)),
+		file: v.nullable(v.pipe(v.string(), v.maxLength(256))),
+	}),
+	(a) => features.getSourceFeatures(a, a.phones, a.file),
+);
+/** A country's carriers' features on a phone: `phone` names one, else the platform's newest. */
+export const getCountryMatrix = query(
+	v.object({
+		platform: v.picklist(RELEASE_PLATFORMS),
+		iso,
+		phone: v.exactOptional(v.pipe(v.string(), v.maxLength(64))),
+	}),
+	(a) => features.getCountryMatrix(a.platform, a.iso, a.phone),
+);

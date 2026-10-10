@@ -1,12 +1,16 @@
 <script lang="ts">
   import type { ComboType } from "@carrier-explode/decode-qualcomm";
   import { comboType, type ComboCell, type ComboRow } from "#lib/combos.ts";
+  import ShowMore from "./ShowMore.svelte";
 
   let { rows }: { rows: readonly ComboRow[] } = $props();
 
   const TYPES: Record<ComboType, string> = { endc: "EN-DC", nr: "NR", lte: "LTE" };
   let query = $state("");
   let type = $state<ComboType | "all">("all");
+  // A list can hold thousands of combos: drawn a page at a time.
+  const PAGE = 100;
+  let limit = $state(PAGE);
 
   const typed = $derived(rows.map((row, n) => ({ row, n, type: comboType(row) })));
 
@@ -36,7 +40,7 @@
   <table class="grid">
     <thead><tr><th>Combo</th><th>Type</th><th>LTE</th><th>NR</th><th class="num">CCs</th><th></th></tr></thead>
     <tbody>
-      {#each shown as { row: r, n, type: rowType } (n)}
+      {#each shown.slice(0, limit) as { row: r, n, type: rowType } (n)}
         <tr>
           <td class="mono">{r.text}</td>
           <td>{rowType ? TYPES[rowType] : ""}</td>
@@ -53,6 +57,7 @@
     </tbody>
   </table>
 </div>
+<ShowMore shown={Math.min(limit, shown.length)} total={shown.length} more={() => (limit += PAGE)} />
 
 <style>
   .combos { max-height: 60vh; overflow-y: auto; --sticky-top: 0; }

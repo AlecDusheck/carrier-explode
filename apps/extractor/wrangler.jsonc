@@ -268,7 +268,17 @@
 			// Workers AI and the Web Search API, for the labels Workflow.
 			"ai": { "binding": "AI" },
 			// PIPELINE_CRONS' (test/tables.test.ts checks).
-			"triggers": { "crons": ["*/20 * * * *", "10,30,50 * * * *", "50 3 * * *", "30 4 * * SUN"] },
+			"triggers": {
+				"crons": [
+					"*/20 * * * *",
+					"10,30,50 * * * *",
+					"5 * * * *",
+					"15 * * * *",
+					"25 * * * *",
+					"50 3 * * *",
+					"30 4 * * SUN",
+				],
+			},
 			"vars": {
 				// What ingest scans (src/scope.ts): the newest `majors` OS majors, each on each family's newest generation
 				// that has a build on it. Changing the families needs a cost estimate and approval.
@@ -322,13 +332,16 @@
 					"model": "@cf/deepseek-ai/deepseek-v4-pro-0813",
 					"perKind": 200,
 				},
-				// triggers.crons, by feed (test/tables.test.ts checks). Of the extracting feeds, only the container builds' during the
-				// backfill, so no other feed's check starts units while it runs. A check tops a container pipeline up to its
-				// CONTAINER_SHARE; Galaxy's minutes are its own, and so are the dataset's. Labels weekly, after Sunday's dataset: names
-				// change slowly, and each costs a search and a model call.
+				// triggers.crons, by feed (test/tables.test.ts checks). A check tops a container pipeline up to its CONTAINER_SHARE,
+				// so the container builds are checked often; Pixel and Apple's OTAs hold no container and ship a few times a month,
+				// so hourly. Each feed has its own minutes. Labels weekly, after Sunday's dataset: names change slowly, and each costs
+				// a search and a model call.
 				"PIPELINE_CRONS": {
 					"ios-build": "*/20 * * * *",
 					"galaxy-build": "10,30,50 * * * *",
+					"pixel-device": "5 * * * *",
+					"pixel-ota": "15 * * * *",
+					"apple-ota": "25 * * * *",
 					"dataset": "50 3 * * *",
 					"labels": "30 4 * * SUN",
 				},

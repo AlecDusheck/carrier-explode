@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
-import { zipSync, unzlibSync } from "fflate";
+import { unzipSync, zipSync, unzlibSync } from "fflate";
 
 import {
 	publishedOn,
@@ -13,7 +13,15 @@ import {
 	parseManifest,
 } from "../src/manifest.ts";
 import { compareVersions } from "../src/versions.ts";
-import { openIpcc, decodeFile, contentTypeOf, decodedPlist, decodedPri } from "../src/bundle.ts";
+import {
+	openIpcc,
+	decodeFile,
+	contentTypeOf,
+	decodedPlist,
+	decodedPri,
+	MemberError,
+	type OpenedBundle,
+} from "../src/bundle.ts";
 import { bytesToBase64 } from "@carrier-explode/binary";
 import { normalizeApplePng, isPng, isCgBI, pngDimensions } from "../src/png.ts";
 import { defined, record } from "./defined.ts";
@@ -23,6 +31,20 @@ const here = dirname(fileURLToPath(import.meta.url));
 const fixture = (n: string) => new Uint8Array(readFileSync(join(here, "fixtures", n)));
 
 const enc = new TextEncoder();
+
+/** A fixture with `extra` added to its bundle. */
+function fixtureWith(name: string, extra: Readonly<Record<string, Uint8Array>>): OpenedBundle {
+	const zip = unzipSync(fixture(name));
+	const root = defined(
+		Object.keys(zip)
+			.map((n) => /^.*?\.bundle\//.exec(n)?.[0])
+			.find((r) => r !== undefined),
+	);
+	return openIpcc(
+		zipSync({ ...zip, ...Object.fromEntries(Object.entries(extra).map(([path, b]) => [root + path, b])) }),
+	);
+}
+
 const dec = new TextDecoder();
 const xmlPlist = (body: string) =>
 	enc.encode(`<?xml version="1.0" encoding="UTF-8"?><plist version="1.0">${body}</plist>`);
@@ -358,18 +380,23 @@ describe("openIpcc", () => {
 		expect(openIpcc(fixture("carrier-att-2009.ipcc")).info.bundleName).toBe("ATT_US");
 	});
 
-	it("records the zip prefix and strips it off every listed path", () => {
+	it("strips the zip prefix off every listed path and reads each file at its listed size", () => {
 		const b = openIpcc(fixture("carrier-att.ipcc"));
-		expect(b.prefix).toBe("Payload/ATT_US.bundle/");
 		for (const f of b.info.files) {
 			expect(f.path.startsWith("Payload/")).toBe(false);
-			expect(b.entries[b.prefix + f.path]).toBeInstanceOf(Uint8Array);
+			expect(b.read(f.path)).toHaveLength(f.size);
 		}
+	});
+
+	it("reads a member only by its bundle-relative path", () => {
+		expect(() => openIpcc(fixture("carrier-att.ipcc")).read("Payload/ATT_US.bundle/carrier.plist")).toThrow(
+			MemberError,
+		);
 	});
 
 	it("excludes directory entries from the file list", () => {
 		const b = openIpcc(fixture("carrier-att.ipcc"));
-		expect(Object.keys(b.entries).some((k) => k.endsWith("/"))).toBe(true);
+		expect(Object.keys(unzipSync(fixture("carrier-att.ipcc"))).some((k) => k.endsWith("/"))).toBe(true);
 		expect(b.info.files.filter((f) => f.path.endsWith("/"))).toEqual([]);
 	});
 
@@ -387,7 +414,7 @@ describe("openIpcc", () => {
 		const b = openIpcc(zip);
 		expect(b.info.bundleName).toBe("Test_xx");
 		expect(b.info.files.map((f) => f.path)).toEqual(["carrier.plist"]);
-		expect(b.info.totalSize).toBe(b.entries["Payload/Test_xx.bundle/carrier.plist"]?.length);
+		expect(b.info.totalSize).toBe(b.read("carrier.plist").length);
 	});
 
 	it("classifies by the lower-cased extension, the same way it picks the content type", () => {
@@ -427,7 +454,6 @@ describe("openIpcc", () => {
 			{ level: 0 },
 		);
 		const b = openIpcc(zip);
-		expect(b.prefix).toBe("");
 		expect(b.info.bundleName).toBe("bundle");
 		expect(b.info.files.map((f) => f.path)).toEqual(["carrier.plist", "nested/a.txt"]);
 		expect(decodedPlist(decodeFile(b, "carrier.plist"))).toEqual({ k: "v" });
@@ -547,8 +573,7 @@ describe("decodeFile", () => {
 	});
 
 	it("falls back to text for an old-style text .strings file", () => {
-		const b = openIpcc(fixture("carrier-att.ipcc"));
-		b.entries[b.prefix + "en.lproj/plain.strings"] = enc.encode('"a" = "b";\n');
+		const b = fixtureWith("carrier-att.ipcc", { "en.lproj/plain.strings": enc.encode('"a" = "b";\n') });
 		const d = decodeFile(b, "en.lproj/plain.strings");
 		expect(d.kind).toBe("strings");
 		expect(decodedPlist(d)).toBeUndefined();
@@ -623,8 +648,7 @@ describe("decodeFile", () => {
 	});
 
 	it("truncates a large opaque blob to 8 KiB and says so", () => {
-		const b = openIpcc(fixture("carrier-att.ipcc"));
-		b.entries[b.prefix + "blob.bin"] = new Uint8Array(20000).fill(7);
+		const b = fixtureWith("carrier-att.ipcc", { "blob.bin": new Uint8Array(20000).fill(7) });
 		const d = decodeFile(b, "blob.bin");
 		expect(d.kind).toBe("binary");
 		expect(hexOf(d)).toHaveLength(8192 * 2);
@@ -632,8 +656,7 @@ describe("decodeFile", () => {
 	});
 
 	it("promotes a small printable binary member to text", () => {
-		const b = openIpcc(fixture("carrier-att.ipcc"));
-		b.entries[b.prefix + "small.bin"] = enc.encode("hello world");
+		const b = fixtureWith("carrier-att.ipcc", { "small.bin": enc.encode("hello world") });
 		const d = decodeFile(b, "small.bin");
 		expect(d.kind).toBe("binary");
 		expect(textOf(d)).toBe("hello world");
@@ -710,17 +733,16 @@ describe("decodeFile", () => {
 	});
 
 	it("still hex-dumps a certificate that really is DER", () => {
-		const b = openIpcc(fixture("carrier-verizon.ipcc"));
-		b.entries[b.prefix + "der.crt"] = new Uint8Array([0x30, 0x82, 0x01, 0x0a, 0x02, 0x01]);
+		const b = fixtureWith("carrier-verizon.ipcc", {
+			"der.crt": new Uint8Array([0x30, 0x82, 0x01, 0x0a, 0x02, 0x01]),
+		});
 		const d = decodeFile(b, "der.crt");
 		expect(d.kind).toBe("certificate");
 		expect(d.view).toEqual({ type: "raw" });
 		expect(d.error).toMatchObject({ reason: "failed", message: expect.any(String) });
 		expect(hexOf(d)).toBe("3082010a0201");
 		// The bytes are PEM.
-		expect(dec.decode(b.entries[b.prefix + "CarrierCA.crt"]).startsWith("-----BEGIN CERTIFICATE-----")).toBe(
-			true,
-		);
+		expect(dec.decode(b.read("CarrierCA.crt")).startsWith("-----BEGIN CERTIFICATE-----")).toBe(true);
 	});
 });
 
@@ -729,26 +751,17 @@ describe("decodeFile error handling", () => {
 		const b = openIpcc(fixture("carrier-verizon.ipcc"));
 		expect(() => decodeFile(b, "nope.plist")).toThrow("no such file in bundle: nope.plist");
 		expect(() => decodeFile(b, "signatures/nope.plist")).toThrow(/no such file in bundle/);
-		expect(() => decodeFile(b, "carrier.plist/")).toThrow(/not a file/);
-	});
-
-	it("falls back to the raw zip key when the path already carries the prefix", () => {
-		const b = openIpcc(fixture("carrier-verizon.ipcc"));
-		const d = decodeFile(b, "Payload/Verizon_LTE_US.bundle/carrier.plist");
-		expect(record(decodedPlist(d)).CarrierName).toBe("Verizon");
-		// The reported path is whatever was asked for, not the bundle-relative one.
-		expect(d.path).toBe("Payload/Verizon_LTE_US.bundle/carrier.plist");
+		expect(() => decodeFile(b, "carrier.plist/")).toThrow(MemberError);
 	});
 
 	it("rejects a directory entry and an empty path", () => {
 		const b = openIpcc(fixture("carrier-verizon.ipcc"));
-		expect(() => decodeFile(b, "signatures/")).toThrow(/not a file/);
-		expect(() => decodeFile(b, "")).toThrow(/not a file/);
+		expect(() => decodeFile(b, "signatures/")).toThrow(MemberError);
+		expect(() => decodeFile(b, "")).toThrow(MemberError);
 	});
 
 	it("degrades a corrupt binary plist to a note plus a hex dump", () => {
-		const b = openIpcc(fixture("carrier-att.ipcc"));
-		b.entries[b.prefix + "broken.plist"] = enc.encode("bplist00garbage");
+		const b = fixtureWith("carrier-att.ipcc", { "broken.plist": enc.encode("bplist00garbage") });
 		const d = decodeFile(b, "broken.plist");
 		expect(d.kind).toBe("plist");
 		expect(decodedPlist(d)).toBeUndefined();
@@ -758,8 +771,7 @@ describe("decodeFile error handling", () => {
 	});
 
 	it("degrades a corrupt .strings member the same way", () => {
-		const b = openIpcc(fixture("carrier-att.ipcc"));
-		b.entries[b.prefix + "en.lproj/broken.strings"] = enc.encode("bplist00truncated");
+		const b = fixtureWith("carrier-att.ipcc", { "en.lproj/broken.strings": enc.encode("bplist00truncated") });
 		const d = decodeFile(b, "en.lproj/broken.strings");
 		expect(d.kind).toBe("strings");
 		expect(d.error?.reason).toBe("failed");
@@ -767,8 +779,7 @@ describe("decodeFile error handling", () => {
 	});
 
 	it("does not throw on a .der.pri holding junk", () => {
-		const b = openIpcc(fixture("carrier-att.ipcc"));
-		b.entries[b.prefix + "junk.der.pri"] = new Uint8Array([1, 2, 3, 4, 5]);
+		const b = fixtureWith("carrier-att.ipcc", { "junk.der.pri": new Uint8Array([1, 2, 3, 4, 5]) });
 		expect(() => decodeFile(b, "junk.der.pri")).not.toThrow();
 		expect(decodedPri(decodeFile(b, "junk.der.pri"))).toBeTruthy();
 	});
@@ -779,16 +790,16 @@ describe("decodeFile error handling", () => {
 	// Repro: decodeFile on a ".plist" entry holding [0,1,2,3,250,251] returns
 	//        text " ��" and note undefined.
 	it("flags a .plist member whose content is not a plist at all", () => {
-		const b = openIpcc(fixture("carrier-att.ipcc"));
-		b.entries[b.prefix + "notaplist.plist"] = new Uint8Array([0, 1, 2, 3, 250, 251]);
+		const b = fixtureWith("carrier-att.ipcc", { "notaplist.plist": new Uint8Array([0, 1, 2, 3, 250, 251]) });
 		const d = decodeFile(b, "notaplist.plist");
 		expect(d.error).toEqual({ reason: "unrecognised" });
 		expect(hexOf(d)).toBeDefined();
 	});
 
 	it("still returns plain text for a .strings member in the legacy text format", () => {
-		const b = openIpcc(fixture("carrier-att.ipcc"));
-		b.entries[b.prefix + "en.lproj/legacy.strings"] = enc.encode('"KEY" = "value";\n');
+		const b = fixtureWith("carrier-att.ipcc", {
+			"en.lproj/legacy.strings": enc.encode('"KEY" = "value";\n'),
+		});
 		const d = decodeFile(b, "en.lproj/legacy.strings");
 		expect(textOf(d)).toBe('"KEY" = "value";\n');
 		expect(d.note).toBeNull();
@@ -816,11 +827,12 @@ describe("openIpcc hostile input", () => {
 
 describe("ipcc: assets and packaging leftovers", () => {
 	it("classifies images by extension, case-insensitively", () => {
-		const b = openIpcc(fixture("carrier-att-2009.ipcc"));
-		for (const name of ["a.PNG", "b.jpeg", "c.jpg", "d.gif", "e.tif", "f.tiff", "g.svg"]) {
-			b.entries[b.prefix + name] = new Uint8Array([1, 2, 3]);
-			expect(decodeFile(b, name).kind, name).toBe("image");
-		}
+		const names = ["a.PNG", "b.jpeg", "c.jpg", "d.gif", "e.tif", "f.tiff", "g.svg"];
+		const b = fixtureWith(
+			"carrier-att-2009.ipcc",
+			Object.fromEntries(names.map((name) => [name, new Uint8Array([1, 2, 3])])),
+		);
+		for (const name of names) expect(decodeFile(b, name).kind, name).toBe("image");
 	});
 
 	it("decodes bundle.metadata, which is base64-encoded JSON", () => {
@@ -835,8 +847,9 @@ describe("ipcc: assets and packaging leftovers", () => {
 	});
 
 	it("falls back to text when a .metadata member is not base64 JSON", () => {
-		const b = openIpcc(fixture("watch-redpocket.ipcc"));
-		b.entries[b.prefix + "broken.metadata"] = enc.encode("plainly not base64 json");
+		const b = fixtureWith("watch-redpocket.ipcc", {
+			"broken.metadata": enc.encode("plainly not base64 json"),
+		});
 		const d = decodeFile(b, "broken.metadata");
 		expect(decodedPlist(d)).toBeUndefined();
 		expect(textOf(d)).toBe("plainly not base64 json");
@@ -846,12 +859,13 @@ describe("ipcc: assets and packaging leftovers", () => {
 	it("annotates the opaque binary members it knows about", () => {
 		const vz = openIpcc(fixture("carrier-verizon.ipcc"));
 		expect(decodeFile(vz, "carrier.dmu").kind).toBe("dmu");
-		const b = openIpcc(fixture("carrier-verizon.ipcc"));
-		b.entries[b.prefix + "carrier.prl"] = new Uint8Array([0, 0x57, 0, 3, 3, 0x80]);
+		const b = fixtureWith("carrier-verizon.ipcc", {
+			"carrier.prl": new Uint8Array([0, 0x57, 0, 3, 3, 0x80]),
+			"overrides_N1.mcfopota": new Uint8Array([4, 0, 1, 0, 0x38]),
+		});
 		const prl = decodeFile(b, "carrier.prl");
 		expect(prl.note).toMatch(/Preferred Roaming List/);
 		expect(prl.error?.message).toMatch(/PRL too short/);
-		b.entries[b.prefix + "overrides_N1.mcfopota"] = new Uint8Array([4, 0, 1, 0, 0x38]);
 		expect(decodeFile(b, "overrides_N1.mcfopota").note).toMatch(/OP-OTA/);
 	});
 
@@ -871,7 +885,7 @@ describe("Apple CgBI PNG normalisation", () => {
 		const b = openIpcc(fixture("carrier-att-2009.ipcc"));
 		return b.info.files
 			.filter((f) => f.kind === "image")
-			.map((f) => ({ path: f.path, bytes: defined(b.entries[b.prefix + f.path]) }));
+			.map((f) => ({ path: f.path, bytes: b.read(f.path) }));
 	};
 
 	it("recognises the carrier logos as CgBI PNGs", () => {

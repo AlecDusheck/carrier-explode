@@ -4,7 +4,7 @@
   import { isBigInt, isBlob, isDate, isJsonDict, isUid } from "@carrier-explode/decode-ios";
   import { menuTrigger, copyText, scanMenuItems, type MenuItem } from "#lib/ui-state.svelte.ts";
   import { hexDump, plainJson } from "#lib/format.ts";
-  import { searchTerms } from "#lib/settings.ts";
+  import { onKeyPath, searchTerms } from "#lib/settings.ts";
   import type { KeyBadge, TreeCtx } from "./Tree.svelte";
   import LazyView from "./values/LazyView.svelte";
   import NotUnderstood from "./values/NotUnderstood.svelte";
@@ -20,9 +20,11 @@
     ctx: TreeCtx;
     onfilter: (p: string) => void;
     badges?: KeyBadge[] | undefined;
+    /** An ancestor matches the filter itself, so this node shows whatever it holds. */
+    within?: boolean;
   }
 
-  let { name, value, depth = 0, path, filter, ctx, onfilter, badges }: Props = $props();
+  let { name, value, depth = 0, path, filter, ctx, onfilter, badges, within = false }: Props = $props();
 
   const docs = $derived(ctx.docs);
 
@@ -50,13 +52,18 @@
 
   // The filter text and the key words of the feature it names ("VoNR", "Wi-Fi Calling").
   const terms = $derived(searchTerms(filter));
-  const matches = $derived.by(() => {
-    if (!terms.length) return true;
-    const hit = (s: string) => terms.some((t) => s.toLowerCase().includes(t));
-    if (hit(name)) return true;
-    if (labels?.some((l) => hit(l.label))) return true;
-    return hit(JSON.stringify(value));
-  });
+  const hit = (s: string): boolean => terms.some((t) => s.toLowerCase().includes(t));
+  /** The node itself matches: its key, its meaning, a leaf's value, or a key path at or above it. Then all it holds shows. */
+  const own = $derived(
+    within ||
+      !terms.length ||
+      hit(name) ||
+      !!labels?.some((l) => hit(l.label)) ||
+      (!container && hit(JSON.stringify(value))) ||
+      terms.some((t) => onKeyPath(t, path) === "at"),
+  );
+  /** Something it holds matches, so it shows as the path down to that. */
+  const matches = $derived(own || hit(JSON.stringify(value)) || terms.some((t) => onKeyPath(t, path) === "above"));
 
   function valueText(): string {
     if (isBlob(value)) return value.__text ?? value.__data;
@@ -153,11 +160,11 @@
     <LazyView {view} />
   {:else if isJsonDict(value)}
     {#each Object.entries(value) as [k, v] (k)}
-      <Self name={k} value={v} depth={depth + 1} path={path + "." + k} {filter} {ctx} {onfilter} />
+      <Self name={k} value={v} depth={depth + 1} path={path + "." + k} {filter} {ctx} {onfilter} within={own && !!terms.length} />
     {/each}
   {:else if asArray}
     {#each asArray as v, i (i)}
-      <Self name={"[" + i + "]"} value={v} depth={depth + 1} path={path + "[" + i + "]"} {filter} {ctx} {onfilter} />
+      <Self name={"[" + i + "]"} value={v} depth={depth + 1} path={path + "[" + i + "]"} {filter} {ctx} {onfilter} within={own && !!terms.length} />
     {/each}
   {/if}
 {/snippet}

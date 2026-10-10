@@ -247,37 +247,36 @@ export function overrideMvnoSet(path: string): number | null {
 }
 
 export interface OpenedBundle {
-	info: BundleInfo;
-	entries: Record<string, Uint8Array>;
-	/** Key into `entries` for a given bundle-relative path. */
-	prefix: string;
+	readonly info: BundleInfo;
+	/** A file's bytes by its path in `info.files`, inflated on each read. MemberError for any other path. */
+	readonly read: (path: string) => Uint8Array;
 }
 
+/** Lists the bundle from the zip's central directory: fflate's filter sees each name and size before inflating. */
 export function openIpcc(bytes: Uint8Array): OpenedBundle {
-	const zip = unzipSync(bytes);
-	const names = Object.keys(zip).filter((n) => !n.endsWith("/"));
-	let prefix = "";
-	for (const n of names) {
-		const m = /^(.*?\.bundle\/)/.exec(n);
-		if (m) {
-			prefix = m[1] ?? "";
-			break;
-		}
-	}
+	const sizeOf = new Map<string, number>();
+	unzipSync(bytes, {
+		filter: ({ name, originalSize }) => {
+			if (!name.endsWith("/")) sizeOf.set(name, originalSize);
+			return false;
+		},
+	});
+	const prefix =
+		[...sizeOf.keys()].map((n) => /^(.*?\.bundle\/)/.exec(n)?.[1]).find((p) => p !== undefined) ?? "";
 	const bundleName = (prefix.split("/").findLast(Boolean) ?? "bundle").replace(/\.bundle$/, "");
+
+	const members = new Map<string, number>();
+	for (const [n, size] of sizeOf) {
+		const rel = n.slice(prefix.length);
+		if (!n.startsWith(prefix) || !rel || rel.startsWith("__MACOSX") || rel.endsWith(".DS_Store")) continue;
+		members.set(rel, size);
+	}
 
 	const files: BundleFile[] = [];
 	const locales = new Set<string>();
 	const stems = new Set<string>();
 	let totalSize = 0;
-
-	for (const n of names) {
-		if (prefix && !n.startsWith(prefix)) continue;
-		const rel = prefix ? n.slice(prefix.length) : n;
-		if (!rel || rel.startsWith("__MACOSX") || rel.endsWith(".DS_Store")) continue;
-		const data = zip[n];
-		if (data === undefined) continue;
-		const size = data.length;
+	for (const [rel, size] of members) {
 		totalSize += size;
 		const loc = localeOf(rel);
 		if (loc) locales.add(loc);
@@ -301,8 +300,13 @@ export function openIpcc(bytes: Uint8Array): OpenedBundle {
 			locales: [...locales].toSorted(),
 			deviceStems: [...stems].toSorted(),
 		},
-		entries: zip,
-		prefix,
+		read: (path) => {
+			if (!members.has(path)) throw new MemberError(`no such file in bundle: ${path || "(empty path)"}`);
+			const name = prefix + path;
+			const member = unzipSync(bytes, { filter: (f) => f.name === name })[name];
+			if (member === undefined) throw new Error(`${path}: listed but not inflated`);
+			return member;
+		},
 	};
 }
 
@@ -312,9 +316,7 @@ export class MemberError extends Error {
 }
 
 export function decodeFile(b: OpenedBundle, relPath: string): DecodedFile {
-	if (!relPath || relPath.endsWith("/")) throw new MemberError(`not a file: ${relPath || "(empty path)"}`);
-	const bytes = b.entries[b.prefix + relPath] ?? b.entries[relPath];
-	if (!bytes) throw new MemberError(`no such file in bundle: ${relPath}`);
+	const bytes = b.read(relPath);
 	const boards = overrideBoards(relPath);
 	const base: Base = {
 		path: relPath,
@@ -479,11 +481,9 @@ export async function contentId(b: OpenedBundle): Promise<string> {
 	const enc = new TextEncoder();
 	const paths = b.info.files.map((f) => f.path).toSorted(compareUtf8);
 	const lines = await Promise.all(
-		paths.map(async (path) => {
-			const bytes = b.entries[b.prefix + path];
-			if (bytes === undefined) throw new Error(`${path}: listed but not in the archive`);
-			return concatBytes([enc.encode(path), enc.encode("\0" + (await sha256Hex(bytes)) + "\n")]);
-		}),
+		paths.map(async (path) =>
+			concatBytes([enc.encode(path), enc.encode("\0" + (await sha256Hex(b.read(path))) + "\n")]),
+		),
 	);
 	return sha256Hex(concatBytes(lines));
 }

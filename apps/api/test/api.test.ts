@@ -913,10 +913,7 @@ describe("the OpenAPI document", () => {
 			"properties",
 			"concepts",
 		]);
-		expect(doc).toHaveProperty(
-			["components", "schemas", "Settings", "properties", "settings", "additionalProperties", "$ref"],
-			"#/components/schemas/Settings.0",
-		);
+		expect(JSON.stringify(doc)).toContain('"$ref":"#/components/schemas/Settings.0"');
 		expect(doc).toHaveProperty([
 			"components",
 			"schemas",

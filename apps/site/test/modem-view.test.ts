@@ -1,7 +1,17 @@
 import { describe, expect, it } from "vitest";
 import type { ModemItem } from "@carrier-explode/schema/types";
 import { combinationRows, comboType, qualcommRows } from "../src/lib/combos.ts";
-import { itemMatches, itemNote, itemSection, modemSections, valueText } from "../src/lib/modem.ts";
+import {
+	itemMatches,
+	itemNote,
+	itemPage,
+	itemSection,
+	listedItems,
+	modemSections,
+	PAGE_VALUES,
+	sectionRuns,
+	valueText,
+} from "../src/lib/modem.ts";
 import { matcherKey } from "@carrier-explode/schema/types";
 import { keyRules, simRule } from "../src/lib/settings.ts";
 
@@ -144,6 +154,51 @@ describe("modem sections", () => {
 		expect(modemSections([a, b, c])).toEqual([
 			["efs:/x", [b]],
 			["nv", [a, c]],
+		]);
+	});
+});
+
+const numbers = (n: number): ModemItem["value"] => ({
+	kind: "list",
+	values: Array.from({ length: n }, (_, value) => ({ kind: "number", value })),
+});
+
+describe("item pages", () => {
+	const config = {
+		label: "ATC",
+		errors: ["nv:2: truncated", "header unreadable"],
+		items: [
+			{ ...sectionItem("nv:2", null), value: numbers(PAGE_VALUES) },
+			{ ...sectionItem("efs:/x/a", null), value: { kind: "text", value: "ATC" } },
+			sectionItem("nv:1", null),
+			sectionItem("efs:/x/b", null),
+		] satisfies ModemItem[],
+	} as const;
+
+	it("list items by section, with their own notes, leaving out the one that repeats the label", () => {
+		expect(listedItems(config).map((x) => [x.section, x.item.id, x.errors])).toEqual([
+			["efs:/x", "efs:/x/b", []],
+			["nv", "nv:2", ["nv:2: truncated"]],
+			["nv", "nv:1", []],
+		]);
+	});
+
+	it("end a page before the item that overfills it, and give an overfull item a page of its own", () => {
+		const listed = listedItems(config);
+		const first = itemPage(listed, 0);
+		expect([first.items.length, first.next]).toEqual([1, 1]);
+		const second = itemPage(listed, 1);
+		expect([second.items.length, second.next]).toEqual([1, 2]);
+		expect(itemPage(listed, 2)).toEqual({ items: listed.slice(2), next: null });
+	});
+
+	it("head a section only where it starts", () => {
+		const listed = listedItems(config);
+		expect(
+			sectionRuns({ items: listed.slice(1), previous: "efs:/x" }).map((r) => [r.section, r.heads]),
+		).toEqual([["nv", true]]);
+		expect(sectionRuns({ items: listed.slice(2), previous: "nv" }).map((r) => [r.section, r.heads])).toEqual([
+			["nv", false],
 		]);
 	});
 });

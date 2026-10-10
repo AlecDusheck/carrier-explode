@@ -20,8 +20,8 @@ export const getModemFirmware = query(
 	v.object({ platform: v.picklist(DEVICE_RELEASE_PLATFORMS), build: release, device: phone }),
 	(a) => modems.getModemFirmware(a.platform, a.build, a.device),
 );
-/** A ModemConfig by its sha, which names it as packageId names an artifact. */
-export const getModemConfigBySha = query(packageId, modems.getModemConfigBySha);
+/** A stored ModemConfig's head, by the sha that names it as packageId names an artifact. */
+export const getModemHead = query(packageId, modems.getModemHead);
 /** A ComboSet's list, by its key. */
 export const getModemCombos = query(packageId, modems.getModemCombos);
 export const getAndroidChanges = query(v.object({ ...pinned, against: v.exactOptional(slug) }), (a) =>

@@ -34,6 +34,7 @@ import AndroidModemHead from "./android/modem/Head.svelte";
 import AndroidModemOverview from "./android/modem/Overview.svelte";
 import AppleReleasePicker from "./ios/ReleasePicker.svelte";
 import ApplePhoneChoice from "./ios/PhoneChoice.svelte";
+import AppleOverviewChoice from "./ios/OverviewChoice.svelte";
 import AppleCompare from "./ios/Compare.svelte";
 import AndroidCompare from "./android/Compare.svelte";
 import { tabPhoneRows } from "./ios/phone-rows.ts";
@@ -65,6 +66,8 @@ export type Holds = Readonly<Partial<Record<Tab, number | boolean>>>;
 
 export interface PlatformView {
 	readonly Overview: Component<TabProps>;
+	/** The phone the Overview's features are for, when the line does not name one. */
+	readonly OverviewChoice: Component<{ at: At }> | null;
 	readonly tabs: Readonly<Partial<Record<Tab, TabView>>>;
 	readonly holds: (at: At) => Promise<Holds>;
 }
@@ -81,6 +84,7 @@ const tab = (
 
 const apple: PlatformView = {
 	Overview: AppleOverview,
+	OverviewChoice: AppleOverviewChoice,
 	tabs: {
 		alerts: tab("Emergency alerts", AppleAlerts, { versioned: false }),
 		settings: tab("Settings", AppleSettings, { Choice: ApplePhoneChoice }),
@@ -93,6 +97,7 @@ const apple: PlatformView = {
 
 const android: PlatformView = {
 	Overview: AndroidOverview,
+	OverviewChoice: null,
 	tabs: {
 		settings: tab("Settings", AndroidSettings),
 		apns: tab("APNs", AndroidApns),
@@ -106,6 +111,7 @@ const android: PlatformView = {
 /** A Galaxy pack's tabs: its settings, feature switches and IMS settings; customer.xml's data profiles; its files decoded; its changes. */
 const samsung: PlatformView = {
 	Overview: SamsungOverview,
+	OverviewChoice: null,
 	tabs: {
 		settings: tab("Settings", SamsungSettings),
 		apns: tab("APNs", SamsungApns),
@@ -122,6 +128,9 @@ export const VIEWS = {
 	android,
 	samsung,
 } as const satisfies Record<Platform, PlatformView>;
+
+export const overviewChoice = (platform: Platform): PlatformView["OverviewChoice"] =>
+	VIEWS[platform].OverviewChoice;
 
 export const tabView = (platform: Platform, which: Tab): TabView | undefined => VIEWS[platform].tabs[which];
 

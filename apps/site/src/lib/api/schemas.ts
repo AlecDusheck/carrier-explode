@@ -63,3 +63,25 @@ export const phone = v.pipe(
 	v.string(),
 	v.regex(/^(?:[A-Za-z]+\d+,\d+|[a-z][a-z0-9_]{1,30}|SM-[A-Z0-9]{2,12})$/),
 );
+
+/** Where a modem configuration is read: a stored one by its sha, or an iPhone bundle's override file. */
+const modemConfigRef = v.variant("kind", [
+	v.object({ kind: v.literal("stored"), sha: packageId }),
+	v.object({ kind: v.literal("bundle"), ...pinned, path }),
+]);
+export type ModemConfigRef = v.InferOutput<typeof modemConfigRef>;
+
+/** A modem configuration's settings that match a filter, as typed. */
+export const modemItemsQuery = v.object({
+	ref: modemConfigRef,
+	filter: v.pipe(v.string(), v.maxLength(200)),
+});
+export type ModemItemsQuery = v.InferOutput<typeof modemItemsQuery>;
+
+/** One page of them from the `from`th, in one section (an EFS directory, a module) or all. */
+export const modemPageQuery = v.object({
+	...modemItemsQuery.entries,
+	section: v.nullable(v.pipe(v.string(), v.maxLength(1024))),
+	from: v.pipe(index, v.minValue(0)),
+});
+export type ModemPageQuery = v.InferOutput<typeof modemPageQuery>;

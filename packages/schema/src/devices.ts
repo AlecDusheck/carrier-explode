@@ -10,7 +10,7 @@ export type NamedDevice = Pick<Device, "code" | "released"> & { readonly name: s
 /** What a name says without the model code a Galaxy's carries (`Galaxy S26 Ultra (SM-S948U)`): its U and U1 share it. */
 const baseName = (d: NamedDevice): string => d.name.replace(` (${d.code})`, "");
 
-const byCode = (a: string, b: string): number => a.localeCompare(b, "en", { numeric: true });
+const byCode: (a: string, b: string) => number = new Intl.Collator("en", { numeric: true }).compare;
 
 /**
  * Newest first, models of one name together on the newest of their days, by code; a launch's devices by code, highest

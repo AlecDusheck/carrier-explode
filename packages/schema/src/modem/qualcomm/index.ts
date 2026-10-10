@@ -49,18 +49,17 @@ export const isNrItem = (item: Pick<ModemItem, "id">): boolean => /\/nr5g\//i.te
 const SELECTION = "selection.json";
 const BAND_COMBOS = "band_combos_per_plmn.xml";
 
-const ruleSchema: v.GenericSchema<SelectionRule> = v.lazy(() =>
-	v.variant("kind", [
-		v.object({ kind: v.literal("always") }),
-		v.object({ kind: v.picklist(["any", "all"]), rules: v.array(ruleSchema) }),
-		v.object({
-			kind: v.literal("match"),
-			matcher: v.picklist(SELECTION_MATCHERS),
-			variable: v.string(),
-			values: v.array(v.string()),
-		}),
-	]),
-);
+const nestedRule: v.GenericSchema<SelectionRule> = v.lazy(() => ruleSchema);
+const ruleSchema: v.GenericSchema<SelectionRule> = v.variant("kind", [
+	v.object({ kind: v.literal("always") }),
+	v.object({ kind: v.picklist(["any", "all"]), rules: v.array(nestedRule) }),
+	v.object({
+		kind: v.literal("match"),
+		matcher: v.picklist(SELECTION_MATCHERS),
+		variable: v.string(),
+		values: v.array(v.string()),
+	}),
+]);
 
 const selectionSchema = v.array(
 	v.object({

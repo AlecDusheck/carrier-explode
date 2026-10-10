@@ -1,6 +1,6 @@
 <script lang="ts">
   import { page } from "$app/state";
-  import { getAppleBundle, getAppleFile, getAppleModemConfig } from "#lib/api/apple.remote.ts";
+  import { getAppleBundle, getAppleFile, getAppleModemHead } from "#lib/api/apple.remote.ts";
   import { getBundleOverrides } from "#lib/api/apple.remote.ts";
   import { modemCapabilities } from "@carrier-explode/decode-ios";
   import { modemHref, rawHref, verArgs } from "#lib/format.ts";
@@ -23,7 +23,7 @@
   const sel = $derived(picked.row);
   const phone = $derived(sel?.phones[0]);
   const caps = $derived(phone?.family ? modemCapabilities(phone.family.code) : undefined);
-  const config = $derived(sel?.kind === "file" ? await getAppleModemConfig({ ...args, path: sel.path }) : null);
+  const head = $derived(sel?.kind === "file" ? await getAppleModemHead({ ...args, path: sel.path }) : null);
 </script>
 
 {#if !rows.length}
@@ -49,8 +49,8 @@
       {/if}
     </span>
   </p>
-  {#if config}
-    <ModemConfigView {config} />
+  {#if head}
+    <ModemConfigView ref={{ kind: "bundle", ...args, path: sel.path }} {head} />
   {:else}
     <FileBody
       file={await getAppleFile({ ...args, path: sel.path })}

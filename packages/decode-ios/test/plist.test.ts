@@ -20,12 +20,7 @@ const here = dirname(fileURLToPath(import.meta.url));
 const fixture = (n: string) => new Uint8Array(readFileSync(join(here, "fixtures", n)));
 
 /** Raw bytes of one member of an .ipcc, straight out of the ZIP. */
-const member = (ipcc: string, path: string): Uint8Array => {
-	const opened = openIpcc(fixture(ipcc));
-	const bytes = opened.entries[opened.prefix + path];
-	if (!bytes) throw new Error(`missing fixture member ${ipcc}!${path}`);
-	return bytes;
-};
+const member = (ipcc: string, path: string): Uint8Array => openIpcc(fixture(ipcc)).read(path);
 
 const enc = (s: string) => Array.from(new TextEncoder().encode(s));
 const U8 = (...b: number[]) => new Uint8Array(b);

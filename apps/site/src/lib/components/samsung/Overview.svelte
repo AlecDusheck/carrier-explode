@@ -6,6 +6,8 @@
   import CarrierMembers from "../CarrierMembers.svelte";
   import Copies from "../Copies.svelte";
   import Rare from "../Rare.svelte";
+  import SourceFeatures from "../features/SourceFeatures.svelte";
+  import OverviewColumns from "../OverviewColumns.svelte";
   import SelectionTable from "../SelectionTable.svelte";
 
   /** Laid out as the Apple Overview: the pack, the SIMs that select it, and what is rare in it. */
@@ -15,31 +17,35 @@
   const rules = $derived(v.sims.map(simRule));
 </script>
 
-<fieldset class="hgroup">
-  <legend>Carrier pack</legend>
-  <table class="grid fit">
-    <tbody>
-      <tr><td class="k">omc.info</td><td class="mono">{v.omc}</td></tr>
-      {#if v.line !== null && v.model !== v.line}<tr><td class="k">Built for</td><td class="mono">{v.model}: Samsung reuses packs across models</td></tr>{/if}
-    </tbody>
-  </table>
-  <details class="more">
-    <summary>Digest and source</summary>
-    <table class="grid">
-      <tbody><tr><td class="k">SHA-256</td><td class="mono">{v.sha}</td></tr></tbody>
-    </table>
-    <Copies entry={v.entry} />
-  </details>
-</fieldset>
+<OverviewColumns>
+  {#snippet side()}<SourceFeatures {at} tabOf={(key) => (key.startsWith("customer.xml:Settings.Connections.Profile") ? "apns" : "settings")} phones={[at.line]} file={null} />{/snippet}
 
-{#if rules.length}
   <fieldset class="hgroup">
-    <legend>Selected by ({selectionRows(rules).length})</legend>
-    <p class="dimtext note">omc.info's carrier list: a SIM matching any of these loads the pack.</p>
-    <SelectionTable {rules} />
+    <legend>Carrier pack</legend>
+    <table class="grid fit">
+      <tbody>
+        <tr><td class="k">omc.info</td><td class="mono">{v.omc}</td></tr>
+        {#if v.line !== null && v.model !== v.line}<tr><td class="k">Built for</td><td class="mono">{v.model}: Samsung reuses packs across models</td></tr>{/if}
+      </tbody>
+    </table>
+    <details class="more">
+      <summary>Digest and source</summary>
+      <table class="grid">
+        <tbody><tr><td class="k">SHA-256</td><td class="mono">{v.sha}</td></tr></tbody>
+      </table>
+      <Copies entry={v.entry} />
+    </details>
   </fieldset>
-{/if}
 
-<CarrierMembers {at} />
+  {#if rules.length}
+    <fieldset class="hgroup">
+      <legend>Selected by ({selectionRows(rules).length})</legend>
+      <p class="dimtext note">omc.info's carrier list: a SIM matching any of these loads the pack.</p>
+      <SelectionTable {rules} />
+    </fieldset>
+  {/if}
 
-<Rare {at} />
+  <CarrierMembers {at} />
+
+  <Rare {at} />
+</OverviewColumns>

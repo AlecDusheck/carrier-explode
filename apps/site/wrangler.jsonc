@@ -33,6 +33,13 @@
 				},
 				"LEGACY_REPAIR": true,
 				"API_ORIGIN": "https://carrier-explode-api-dev.simplyalec.workers.dev",
+				// The home page's News box, newest first; empty hides it. `link` names a phrase of `text` and where it leads.
+				"NEWS": [
+					{
+						"text": "carrier-explode 2.0 is out with a much improved backend. We're still working on our decoders, please contribute :)",
+						"link": { "text": "contribute", "href": "https://github.com/AlecDusheck/carrier-explode" },
+					},
+				],
 			},
 			"secrets": { "required": ["PURGE_TOKEN"] },
 		},
@@ -78,6 +85,12 @@
 				"LEGACY_REPAIR": true,
 				// Where the public API (apps/api) answers, as the wiki and llms.txt link it.
 				"API_ORIGIN": "https://api.carrierexplode.com",
+				"NEWS": [
+					{
+						"text": "carrier-explode 2.0 is out with a much improved backend. We're still working on our decoders, please contribute :)",
+						"link": { "text": "contribute", "href": "https://github.com/AlecDusheck/carrier-explode" },
+					},
+				],
 			},
 			// For /internal/purge; set with `wrangler secret put PURGE_TOKEN --env production`.
 			"secrets": { "required": ["PURGE_TOKEN"] },

@@ -78,9 +78,23 @@ export function toneOf(outcome: Outcome, mode: Mode, first: MatrixCell): Tone {
 	return mode === "need" ? "need" : mode === "want" ? "want" : "unmet";
 }
 
+/** The tone of a row's tile for `rules[i]`. */
+export const tileTone = (s: Scored, i: number, mode: Mode): Tone =>
+	toneOf(s.outcomes[i] ?? null, mode, s.cells[i] ?? "unknown");
+
+/** A tone as the legend says it. */
+export const TONE_WORDS = {
+	met: "On",
+	offered: "Off until turned on",
+	unmet: "Not given",
+	need: "Not given",
+	want: "Not given",
+	blank: "No data",
+} as const satisfies Record<Tone, string>;
+
 /** What a cell holds, as the tooltip says it. */
 export function cellWords(cell: MatrixCell): string {
 	if (typeof cell === "string") return STATUS[cell].label;
 	const v = cell.value;
-	return Array.isArray(v) ? v.join(", ") : typeof v === "boolean" ? (v ? "Yes" : "No") : String(v);
+	return Array.isArray(v) ? v.join(", ") || "None" : typeof v === "boolean" ? (v ? "Yes" : "No") : String(v);
 }
