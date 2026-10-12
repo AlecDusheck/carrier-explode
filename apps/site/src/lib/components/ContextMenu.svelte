@@ -47,3 +47,50 @@
     {/each}
   </div>
 {/if}
+
+<style>
+  .ctxmenu {
+    position: fixed;
+    z-index: 100;
+    min-width: 210px;
+    padding: 2px;
+    box-shadow: 3px 3px 0 var(--drop);
+    font-size: 12px;
+  }
+  .ctxmenu .head {
+    padding: 3px 8px;
+    font-family: var(--mono);
+    font-size: 10.5px;
+    color: var(--text-dim);
+    border-bottom: 1px solid var(--shadow);
+    max-width: 320px;
+  }
+  .ctxmenu button {
+    display: block;
+    width: 100%;
+    text-align: left;
+    padding: 4px 10px;
+    color: var(--text);
+  }
+  .ctxmenu button:hover {
+    background: var(--sel);
+    color: var(--sel-text);
+  }
+  .ctxmenu hr {
+    border: 0;
+    border-top: 1px solid var(--shadow);
+    border-bottom: 1px solid var(--light);
+    margin: 2px 0;
+  }
+  @media (max-width: 760px) {
+    .ctxmenu button {
+      padding: 8px 10px;
+    }
+  }
+  /* A finger needs a 32px target; a mouse keeps the compact rows. */
+  @media (pointer: coarse) {
+    .ctxmenu button {
+      min-height: 32px;
+    }
+  }
+</style>

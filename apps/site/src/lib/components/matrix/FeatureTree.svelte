@@ -28,7 +28,7 @@
 </script>
 
 {#snippet line(n: FeatureNode)}
-  <span class="logo feature tone-{n.tone}" style:--icon={featureIconImage(n.icon)}></span>
+  <span class="logo feature tone-{n.tone}" style:--icon={featureIconImage(n.icon, "light")} style:--icon-dark={featureIconImage(n.icon, "dark")}></span>
   <span class="name" class:weak={!n.strong}>{n.name}</span>
   {#if tail}{@render tail(n)}{:else}<span class="value ellipsis" title={n.words}>{n.words}</span>{/if}
 {/snippet}
@@ -57,7 +57,7 @@
   </li>
 {/snippet}
 
-<div class="ftree" style:--lock={featureIconImage("lock")} style:--switch={featureIconImage("toggle")}>
+<div class="ftree" style:--lock={featureIconImage("lock", "light")} style:--lock-dark={featureIconImage("lock", "dark")} style:--switch={featureIconImage("toggle", "light")}>
   {#each groups as g (g.group)}
     <h3>{RULE_GROUP_NAMES[g.group]}</h3>
     <ul>{#each g.roots as r (r.id)}{@render node(r)}{/each}</ul>

@@ -1,0 +1,49 @@
+/* Waiting on the network. Each mark fades in after a moment, so a fast load does not flash. */
+@keyframes busy-in {
+	from {
+		opacity: 0;
+	}
+}
+@keyframes busy-slide {
+	from {
+		background-position: 0 0;
+	}
+	to {
+		background-position: 32px 0;
+	}
+}
+@keyframes busy-spin {
+	to {
+		transform: rotate(1turn);
+	}
+}
+@keyframes busy-pulse {
+	to {
+		opacity: 0.45;
+	}
+}
+.busy-spin {
+	display: inline-block;
+	flex: none;
+	width: 10px;
+	height: 10px;
+	border-radius: 50%;
+	border: 2px solid var(--shadow);
+	border-top-color: var(--dark);
+	animation:
+		busy-in 0s 150ms backwards,
+		busy-spin 0.7s linear infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+	.busy-spin,
+	a[href][aria-busy="true"] {
+		animation: none;
+	}
+}
+a[href][aria-busy="true"] {
+	cursor: progress;
+	animation: busy-pulse 0.5s 150ms ease-in-out infinite alternate;
+}
+.body[aria-busy="true"] {
+	cursor: progress;
+}

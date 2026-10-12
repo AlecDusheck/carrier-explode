@@ -1,5 +1,14 @@
 <script lang="ts">
-  import "#lib/ui.css";
+  import "#lib/styles/tokens.css";
+  import "#lib/styles/base.css";
+  import "#lib/styles/chrome.css";
+  import "#lib/styles/controls.css";
+  import "#lib/styles/tables.css";
+  import "#lib/styles/values.css";
+  import "#lib/styles/marks.css";
+  import "#lib/styles/prose.css";
+  import "#lib/styles/busy.css";
+  import "#lib/styles/helpers.css";
   import { beforeNavigate } from "$app/navigation";
   import { asset } from "$app/paths";
   import { navigating, page } from "$app/state";
@@ -88,3 +97,66 @@
 
 <ContextMenu />
 {#if scan.open}<ScanDialog />{/if}
+
+<style>
+  .menubar {
+    display: flex;
+    flex: none;
+    background: var(--face);
+    border-bottom: 1px solid var(--shadow);
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .menubar::-webkit-scrollbar {
+    display: none;
+  }
+  .menubar a {
+    border: 1px solid transparent;
+    text-decoration: none;
+    padding: 3px 9px;
+    color: var(--text);
+    white-space: nowrap;
+  }
+  .menubar a:hover {
+    border-color: var(--bevel-out);
+  }
+  .menubar a[aria-current="page"] {
+    background: var(--face-hi);
+    font-weight: bold;
+    border-color: var(--bevel-in);
+  }
+  /* A finger needs a 32px target; a mouse keeps the compact rows. */
+  @media (pointer: coarse) {
+    .menubar a {
+      min-height: 32px;
+      display: inline-flex;
+      align-items: center;
+    }
+  }
+  @media (max-width: 760px) {
+    .menubar {
+      flex-wrap: wrap;
+      overflow-x: visible;
+    }
+    /* Six items fit one row at 390px in Verdana, the face iOS draws Tahoma with. */
+    .menubar a {
+      padding: 6px 7px;
+    }
+  }
+  .loadbar {
+    position: absolute;
+    inset: 0 0 auto;
+    height: 3px;
+    z-index: 20;
+    pointer-events: none;
+    background: repeating-linear-gradient(-45deg, var(--sel) 0 8px, var(--info-border) 8px 16px);
+    animation:
+      busy-in 0s 150ms backwards,
+      busy-slide 0.6s linear infinite;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .loadbar {
+      animation: none;
+    }
+  }
+</style>

@@ -1,0 +1,91 @@
+/* Solarized when the system is light, neutral greys when it is dark. */
+:root {
+	color-scheme: light dark;
+	--face: light-dark(#eee8d5, #232323);
+	--face-hi: light-dark(#f5f0df, #2b2b2b);
+	--light: light-dark(#fdf6e3, #3d3d3d);
+	--shadow: light-dark(#b8b09a, #0b0b0b);
+	--dark: light-dark(#7c7a6e, #000000);
+	--text: light-dark(#073642, #dedede);
+	--text-dim: light-dark(#52676e, #9c9c9c);
+	--sel: #1a6aa8;
+	--sel-text: #fdf6e3;
+	--desktop: light-dark(#e4ddc5, #161616);
+	--desktop-hi: light-dark(#eee8d5, #1f1f1f);
+	--desktop-lo: light-dark(#d6cfb6, #101010);
+	--field: light-dark(#fdf6e3, #121212);
+	--bevel-out: var(--light) var(--dark) var(--dark) var(--light);
+	--bevel-in: var(--shadow) var(--light) var(--light) var(--shadow);
+	--bevel-pressed: var(--dark) var(--light) var(--light) var(--dark);
+	--title-bg: light-dark(#073642, #0e0e0e);
+	--title-fg: light-dark(#fdf6e3, #eee8d5);
+	--on-sel-dim: #eee8d5;
+	--on-accent: #fdf6e3;
+	--hover: light-dark(#e6f0f2, #2e2e2e);
+	--link: light-dark(#1a6aa8, #5fb3f0);
+	--grid-line: light-dark(#ddd6c1, #333333);
+	--rule-faint: light-dark(#f3eddb, #1c1c1c);
+	--tree-guide: light-dark(#c9c1a8, #3d3d3d);
+	--zebra: light-dark(#f6f0dd, #1b1b1b);
+	--drop: light-dark(rgb(0 43 54 / 0.25), rgb(0 0 0 / 0.55));
+	--backdrop: light-dark(rgb(0 43 54 / 0.35), rgb(0 0 0 / 0.5));
+	--checker-a: light-dark(#d6cfb6, #3d3d3d);
+	--checker-b: light-dark(#b8b09a, #262626);
+	--tag-bg: light-dark(#f3ecd6, #262626);
+	--tag-border: light-dark(#c9bf9e, #3d3d3d);
+	--notice-bg: light-dark(#fbefc8, #2e3a1c);
+	--flash: light-dark(#f7e3a0, #4a4210);
+	--gold: #b58900;
+	--gold-soft: light-dark(#e8d48a, #5a4c10);
+	/* Selected table row, and decoded meanings next to raw values. */
+	--sel-row: light-dark(#dfe9ea, #0b4258);
+	--meaning: light-dark(#8a5a00, #e3b341);
+	--doc-underline: light-dark(#93a1a1, #6e6e6e);
+	/* Value tree: a value's colour says its type. */
+	--val: light-dark(#4f6a00, #a8c23a);
+	--val-str: light-dark(#b02a2a, #f07a70);
+	--val-num: light-dark(#1a6aa8, #6fb8f0);
+	--val-bool: light-dark(#5a5fb0, #a9a8f0);
+	/* Chip and badge states: good, warn, bad, info. */
+	--good-bg: light-dark(#e4ecc9, #1e3d1a);
+	--good-border: #859900;
+	--good-text: light-dark(#4f5c00, #b5c94a);
+	--warn-bg: light-dark(#f8e8c0, #3b3410);
+	--warn-border: #b58900;
+	--warn-text: light-dark(#7a5800, #e8c050);
+	--info-bg: light-dark(#dceaf2, #0b3a52);
+	--info-border: #268bd2;
+	--info-text: light-dark(#15527e, #8cc4f0);
+	--bad-bg: light-dark(#f6dcd6, #45201f);
+	--bad-border: #dc322f;
+	--bad-bg-soft: light-dark(#fbe6e0, #3a1f20);
+	/* Confidence marks: "likely", and "unverified" / "unnamed". */
+	--conf-med: light-dark(#7a5900, #e3b341);
+	--conf-low: light-dark(#b4301e, #f07a5a);
+	--conf-low-border: light-dark(#e09a88, #a04a3a);
+	/* Modem policy rules. */
+	--policy-action: light-dark(#5f6e00, #a8c23a);
+	--policy-logic: light-dark(#a8460c, #f08a4a);
+	/* Feature matrix badge fills and rims. */
+	--tone-met: light-dark(#e8c040, #b58900);
+	--tone-offered: light-dark(#a8c040, #859900);
+	--tone-need: #dc322f;
+	--tone-want: #cb4b16;
+	--ui: "Tahoma", "Verdana", "DejaVu Sans", "Segoe UI", system-ui, sans-serif;
+	--mono: "DejaVu Sans Mono", "Menlo", "Consolas", ui-monospace, monospace;
+	/* The dropdown arrow of a picker and a select alike: a down triangle drawn as two halves, sized by the control's text. */
+	--caret-w: 0.6em;
+	--caret-h: 0.35em;
+	--caret-gap: 6px;
+	--caret-halves:
+		linear-gradient(to bottom left, currentColor 50%, transparent 50%),
+		linear-gradient(to bottom right, currentColor 50%, transparent 50%);
+}
+/* A dropdown under a finger: an arrow you can see and a box you can hit. */
+@media (max-width: 760px), (pointer: coarse) {
+	:root {
+		--caret-w: 0.85em;
+		--caret-h: 0.5em;
+		--caret-gap: 10px;
+	}
+}

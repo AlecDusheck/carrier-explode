@@ -40,3 +40,30 @@
     {@render children()}
   </div>
 </svelte:boundary>
+
+<style>
+  /* A pane's wrapper takes no box: its children lay out in the pane's parent. */
+  .pane-body {
+    display: contents;
+  }
+  .pane-body > :global(*) {
+    transition: opacity 0.15s;
+  }
+  .pane-body[aria-busy="true"] > :global(:not(.pane-updating)) {
+    opacity: 0.5;
+    cursor: progress;
+    transition-delay: 150ms;
+  }
+  /* Absolute with no offsets: drawn where it would sit, over the stale content, taking no room. */
+  .pane-updating {
+    position: absolute;
+    z-index: 5;
+    padding: 1px 6px;
+    font-size: 11px;
+    pointer-events: none;
+    background: var(--face-hi);
+    border: 1px solid;
+    border-color: var(--bevel-out);
+    animation: busy-in 0s 150ms backwards;
+  }
+</style>

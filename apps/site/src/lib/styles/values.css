@@ -1,0 +1,153 @@
+/* Decoded values: the value tree, its badges and raw code. */
+.tree {
+	font-family: var(--mono);
+	font-size: 11.5px;
+}
+.tree .row {
+	display: flex;
+	align-items: flex-start;
+	gap: 4px;
+	padding: 1px 0;
+}
+.tree .row:hover {
+	background: var(--hover);
+}
+.tree .twist {
+	width: 13px;
+	flex: none;
+	text-align: center;
+	color: var(--text-dim);
+	user-select: none;
+}
+.tree .key {
+	color: var(--info-text);
+	font-weight: bold;
+	text-align: left;
+}
+/* Long camel-case keys break inside the pane instead of running past it. */
+.tree .row > span {
+	min-width: 0;
+}
+/* Where a value came from, or how rare it is, beside its key. */
+.badge {
+	display: inline-block;
+	margin-left: 5px;
+	padding: 0 4px;
+	font: 10px/14px var(--ui);
+	font-weight: normal;
+	border: 1px solid var(--shadow);
+	background: var(--face-hi);
+	color: var(--text-dim);
+	vertical-align: 1px;
+	white-space: nowrap;
+}
+.badge.info {
+	border-color: var(--info-border);
+	background: var(--info-bg);
+	color: var(--info-text);
+}
+.badge.warn {
+	border-color: var(--warn-border);
+	background: var(--warn-bg);
+	color: var(--warn-text);
+}
+.badge.good {
+	border-color: var(--good-border);
+	background: var(--good-bg);
+	color: var(--good-text);
+}
+.tree .val {
+	color: var(--val);
+}
+.tree .val.str {
+	color: var(--val-str);
+}
+.tree .val.num {
+	color: var(--val-num);
+}
+.tree .val.bool {
+	color: var(--val-bool);
+	font-weight: bold;
+}
+.tree .val.nul {
+	color: var(--text-dim);
+	font-style: italic;
+}
+.tree .type {
+	color: var(--text-dim);
+}
+.tree .children {
+	padding-left: 14px;
+	border-left: 1px dotted var(--tree-guide);
+	margin-left: 6px;
+}
+.tree .note {
+	color: var(--text-dim);
+	font-family: var(--ui);
+	font-size: 10.5px;
+	font-style: italic;
+	display: block;
+	padding-left: 18px;
+}
+/* A modem policy rule's terms, coloured by their role in it. */
+.policy-term {
+	font-weight: bold;
+}
+.policy-term:is(.branch, .define) {
+	color: var(--val-bool);
+}
+.policy-term.logic {
+	color: var(--policy-logic);
+}
+.policy-term.condition {
+	color: var(--val-num);
+}
+.policy-term.action {
+	color: var(--policy-action);
+}
+.policy-term.policy {
+	color: var(--info-text);
+}
+/* A raw value's decoded name, and the spellings beside it. */
+.value-label {
+	font-family: var(--ui);
+	color: var(--meaning);
+}
+.value-after {
+	margin-left: 0.5ch;
+}
+.value-before {
+	margin-right: 0.5ch;
+}
+.package {
+	font-size: 14px;
+	margin: 2px 0 6px;
+	overflow-wrap: anywhere;
+}
+.meaning {
+	font-family: var(--ui);
+	font-size: 11px;
+	color: var(--meaning);
+}
+.tag {
+	font-family: var(--ui);
+	font-size: 10.5px;
+	background: var(--tag-bg);
+	border: 1px solid var(--tag-border);
+	padding: 0 4px;
+	margin-left: 6px;
+	white-space: nowrap;
+}
+pre.code {
+	font-family: var(--mono);
+	font-size: 11px;
+	padding: 6px;
+	overflow: auto;
+	max-height: 60vh;
+	white-space: pre-wrap;
+	margin: 4px 0 0;
+}
+pre.code.hex {
+	white-space: pre;
+	word-break: normal;
+}

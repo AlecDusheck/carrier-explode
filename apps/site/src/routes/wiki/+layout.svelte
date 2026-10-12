@@ -45,3 +45,82 @@
     </div>
   </div>
 </div>
+
+<style>
+  .wiki-page {
+    display: flex;
+    gap: 10px;
+    align-items: flex-start;
+  }
+  .wiki-page > .wiki {
+    flex: 1;
+    min-width: 0;
+  }
+  button.wiki-nav-toggle {
+    display: none;
+    width: 100%;
+    justify-content: space-between;
+    align-items: center;
+    text-align: left;
+  }
+  .wiki-nav-toggle .chev {
+    color: var(--text-dim);
+  }
+  .wiki-nav {
+    flex: none;
+    width: 170px;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    font-size: 11.5px;
+    position: sticky;
+    top: 0;
+  }
+  .wiki-nav h2 {
+    font-size: 11px;
+    color: var(--text-dim);
+    margin: 8px 0 2px;
+    font-weight: normal;
+    border-bottom: 1px solid var(--shadow);
+  }
+  .wiki-nav a[aria-current="page"] {
+    font-weight: bold;
+    color: var(--text);
+    text-decoration: none;
+  }
+  .wiki-nav details {
+    margin-top: 8px;
+  }
+  .wiki-nav summary {
+    font-size: 11px;
+    color: var(--text-dim);
+    border-bottom: 1px solid var(--shadow);
+    margin-bottom: 2px;
+  }
+  .wiki-nav details > a {
+    display: block;
+    padding-left: 8px;
+    margin: 2px 0;
+  }
+  @media (max-width: 760px) {
+    /* One button instead of the sidebar; it opens the same list, full width. */
+    .wiki-page {
+      flex-direction: column;
+      align-items: stretch;
+      gap: 6px;
+    }
+    button.wiki-nav-toggle {
+      display: flex;
+    }
+    .wiki-nav {
+      display: none;
+      position: static;
+      width: auto;
+      font-size: 13px;
+      gap: 6px;
+    }
+    .wiki-nav.open {
+      display: flex;
+    }
+  }
+</style>

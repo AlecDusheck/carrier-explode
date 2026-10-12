@@ -1,6 +1,6 @@
 <script lang="ts">
   import { MODE_NAMES, MODES, RULE_GROUP_NAMES, RULE_GROUPS, ruleWhat, type Requirement, type Rule, type RuleId } from "#lib/feature-matrix.ts";
-  import { featureIcon } from "#lib/feature-icons.ts";
+  import FeatureIcon from "#lib/components/FeatureIcon.svelte";
 
   /** Each rule off, nice to have or required, with its parameter when it has one. */
   let {
@@ -23,7 +23,7 @@
     {#each inGroup as rule (rule.id)}
       {@const req = reqs.get(rule.id) ?? off}
       <div class="req" class:on={req.mode !== "off"}>
-        <img src={featureIcon(rule.icon)} alt="" width="16" height="16" />
+        <FeatureIcon name={rule.icon} size={16} />
         <span class="name" title={ruleWhat(rule)}>{rule.name}</span>
         <select name={rule.id} aria-label="{rule.name}: how much it matters" value={req.mode} onchange={(e) => onchange(rule.id, { ...req, mode: MODES.find((m) => m === e.currentTarget.value) ?? "off" })}>
           {#each MODES as m (m)}<option value={m}>{MODE_NAMES[m]}</option>{/each}

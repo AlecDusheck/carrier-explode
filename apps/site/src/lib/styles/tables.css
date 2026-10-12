@@ -1,0 +1,110 @@
+/* Grid tables, and the grouped sections that hold them. */
+table.grid {
+	border-collapse: collapse;
+	font-size: 11.5px;
+	width: 100%;
+	background: var(--field);
+}
+table.grid th,
+table.grid td,
+.wiki th,
+.wiki td {
+	border: 1px solid var(--grid-line);
+	padding: 2px 6px;
+	text-align: left;
+	vertical-align: top;
+}
+table.grid th,
+.wiki th {
+	white-space: nowrap;
+	background: var(--face);
+}
+table.grid th {
+	position: sticky;
+	top: var(--sticky-top, 0);
+	z-index: 2;
+	border-color: var(--light) var(--shadow) var(--shadow) var(--light);
+	border-width: 2px 1px;
+}
+table.grid tbody tr:nth-child(even) {
+	background: var(--zebra);
+}
+table.grid tbody tr:hover {
+	background: var(--hover);
+}
+table.grid td.num,
+table.grid th.num {
+	text-align: right;
+	font-variant-numeric: tabular-nums;
+}
+table.grid td.mono {
+	font-family: var(--mono);
+	font-size: 11px;
+}
+/* A row's name breaks only between words; the page's anywhere-wrap would let a long value squeeze it to a letter a line. */
+table.grid td.k {
+	background: var(--face-hi);
+	font-weight: bold;
+	overflow-wrap: normal;
+}
+table.grid tr.sel td {
+	background: var(--sel-row);
+}
+/* Two-column key/value tables size to their content. */
+table.grid.fit {
+	width: auto;
+}
+/* A value's table, inside a value tree: whole words, scrolled sideways on a phone rather than broken. */
+.tree table.grid {
+	overflow-wrap: normal;
+}
+table.grid.decoded {
+	font-family: var(--ui);
+}
+td.countries {
+	max-width: 360px;
+}
+fieldset.hgroup {
+	border: 1px solid;
+	border-color: var(--bevel-in);
+	margin: 10px 0;
+	padding: 6px 8px 8px;
+	background: var(--face);
+	min-width: 0;
+}
+fieldset.hgroup > legend {
+	font-weight: bold;
+	padding: 0 4px;
+}
+/* Sections linked from a page's toolbar. */
+fieldset.hgroup[id] {
+	scroll-margin-top: 8px;
+}
+/* A section holding several tables: one level of subheading, the same everywhere. */
+fieldset.hgroup h3 {
+	font-size: 12px;
+	margin: 10px 0 4px;
+}
+fieldset.hgroup h3:first-of-type {
+	margin-top: 2px;
+}
+/* Wide tables scroll inside their own box, never the page. A scroll box captures sticky headers,
+   so it becomes one only on narrow screens; on wide ones the header sticks to the pane. */
+.hscroll {
+	max-width: 100%;
+}
+@media (max-width: 760px) {
+	.hscroll {
+		overflow-x: auto;
+		-webkit-overflow-scrolling: touch;
+		--sticky-top: 0;
+	}
+}
+@media (max-width: 760px) {
+	table.grid {
+		font-size: 11px;
+	}
+	td.countries {
+		min-width: 12em;
+	}
+}

@@ -1,0 +1,45 @@
+/* Single-purpose helpers, last so they win over the classes they sit beside. */
+.ellipsis {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.bare {
+	font: inherit;
+	color: inherit;
+	background: none;
+	border: 0;
+	padding: 0;
+}
+.sep {
+	margin: 0 0.5ch;
+}
+.mono {
+	font-family: var(--mono);
+}
+.dimtext {
+	color: var(--text-dim);
+}
+.rowflex {
+	display: flex;
+	gap: 6px;
+	align-items: center;
+	flex-wrap: wrap;
+}
+.rowflex > * {
+	min-width: 0;
+	max-width: 100%;
+}
+.grow {
+	flex: 1;
+	min-width: 0;
+}
+.gap-above {
+	margin-top: 8px;
+}
+.flush {
+	margin: 0;
+}
+.breakall {
+	word-break: break-all;
+}

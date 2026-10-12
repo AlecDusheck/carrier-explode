@@ -29,4 +29,8 @@
     min-width: min(36rem, 80vw);
     padding: 6px; overflow-x: auto;
   }
+  .underline-doc {
+    text-decoration: underline dotted var(--doc-underline);
+    text-underline-offset: 3px;
+  }
 </style>

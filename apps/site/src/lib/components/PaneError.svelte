@@ -18,3 +18,11 @@
     <button class="btn" onclick={reset}>Retry</button>
   </div>
 {/if}
+
+<style>
+  .pane-err {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+  }
+</style>

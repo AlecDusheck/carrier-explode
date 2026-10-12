@@ -22,3 +22,11 @@
 </script>
 
 <span class="busy" role="status"><span class="busy-spin" aria-hidden="true"></span>{busyText(awaiting)}</span>
+
+<style>
+  .busy {
+    display: inline-flex;
+    gap: 6px;
+    align-items: center;
+  }
+</style>

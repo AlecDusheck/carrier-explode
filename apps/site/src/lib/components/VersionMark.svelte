@@ -7,3 +7,10 @@
 </script>
 
 <img class="ios-icon" src={VERSION_MARKS[platform](version)} alt="" width="20" height="20" />
+
+<style>
+  .ios-icon {
+    flex: none;
+    vertical-align: middle;
+  }
+</style>

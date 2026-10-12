@@ -85,4 +85,16 @@
 <style>
   .matte { display: inline-block; padding: 10px; border: 1px solid var(--shadow); }
   img { image-rendering: pixelated; max-width: 100%; display: block; }
+  /* Logos are drawn for both light and dark status bars, so neither a white nor a
+     black backdrop shows all of them. */
+  .checker {
+    background-color: var(--checker-a);
+    background-image:
+      linear-gradient(45deg, var(--checker-b) 25%, transparent 25%, transparent 75%, var(--checker-b) 75%),
+      linear-gradient(45deg, var(--checker-b) 25%, transparent 25%, transparent 75%, var(--checker-b) 75%);
+    background-size: 12px 12px;
+    background-position:
+      0 0,
+      6px 6px;
+  }
 </style>

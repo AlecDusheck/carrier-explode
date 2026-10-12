@@ -1,8 +1,8 @@
 <script lang="ts">
   import type { Attachment } from "svelte/attachments";
   import { MODE_NAMES, ruleWhat, type Requirement, type Rule, type RuleId } from "#lib/feature-matrix.ts";
-  import { asset } from "$app/paths";
-  import { featureIcon, featureIconImage } from "#lib/feature-icons.ts";
+  import { featureIconImage } from "#lib/feature-icons.ts";
+  import FeatureIcon from "#lib/components/FeatureIcon.svelte";
   import SourceIcon from "#lib/components/SourceIcon.svelte";
   import FeatureTip from "./FeatureTip.svelte";
   import ToneKey from "./ToneKey.svelte";
@@ -277,9 +277,9 @@
   style:--cell="{CELL}px"
   style:--head="{HEAD}px"
   style:--cols={columns.length}
-  style:--stipple={`url("${asset("stipple.svg")}")`}
-  style:--lock={featureIconImage("lock")}
-  style:--switch={featureIconImage("toggle")}
+  style:--lock={featureIconImage("lock", "light")}
+  style:--lock-dark={featureIconImage("lock", "dark")}
+  style:--switch={featureIconImage("toggle", "light")}
   bind:this={view}
   bind:clientWidth={vw}
   bind:clientHeight={vh}
@@ -298,7 +298,7 @@
           {#each columns as c, k (c)}
             {@const rule = rules[c]}
             {#if rule}
-              <span class="logo feature tile tone-{tileTone(s, c, modeOf(rule))}" class:muted={picked > 0 && k >= picked} role="gridcell" style:--icon={featureIconImage(rule.icon)}></span>
+              <span class="logo feature tile tone-{tileTone(s, c, modeOf(rule))}" class:muted={picked > 0 && k >= picked} role="gridcell" style:--icon={featureIconImage(rule.icon, "light")} style:--icon-dark={featureIconImage(rule.icon, "dark")}></span>
             {/if}
           {/each}
         </div>
@@ -329,7 +329,7 @@
         {#if rule}
           {@const href = featureHref(rule)}
           <svelte:element this={href ? "a" : "span"} {href} class="col" class:picked={k < picked} class:muted={picked > 0 && k >= picked} style:left="{k * CELL}px" title={rule.name} role="columnheader">
-            <img src={featureIcon(rule.icon)} alt="" width="24" height="24" />
+            <FeatureIcon name={rule.icon} size={24} />
             <span class="short">{rule.short}</span>
           </svelte:element>
         {/if}
@@ -356,7 +356,14 @@
     overscroll-behavior: contain;
     user-select: none;
     -webkit-user-select: none;
-    background: var(--desktop) var(--stipple) 0 0 / 4px 4px;
+    --stipple-hi: conic-gradient(from 270deg at 1px 1px, var(--desktop-hi) 25%, transparent 0);
+    --stipple-lo: conic-gradient(from 270deg at 1px 1px, var(--desktop-lo) 25%, transparent 0);
+    background:
+      var(--stipple-hi) 0 0 / 4px 4px,
+      var(--stipple-hi) 2px 2px / 4px 4px,
+      var(--stipple-lo) 1px 1px / 4px 4px,
+      var(--stipple-lo) 3px 3px / 4px 4px,
+      var(--desktop);
     image-rendering: pixelated;
     border: 2px solid;
     border-color: var(--bevel-in);

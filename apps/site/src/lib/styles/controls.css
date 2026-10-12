@@ -1,0 +1,179 @@
+/* Buttons, fields and selects, and the sizes they grow to under a finger. */
+button.btn,
+a.btn {
+	font: inherit;
+	padding: 3px 10px;
+	background: var(--face);
+	color: var(--text);
+	border: 2px solid;
+	border-color: var(--bevel-out);
+	min-height: 26px;
+	text-decoration: none;
+	display: inline-flex;
+	align-items: center;
+	gap: 5px;
+}
+button.btn:active,
+a.btn:active {
+	border-color: var(--bevel-pressed);
+	padding: 4px 9px 2px 11px;
+}
+button.btn:disabled {
+	color: var(--shadow);
+	text-shadow: 1px 1px 0 var(--light);
+}
+button.btn.on,
+a.btn[aria-current="page"] {
+	border-color: var(--bevel-pressed);
+	background: var(--face-hi);
+	font-weight: bold;
+}
+.sunken,
+.scroll,
+pre.code,
+input[type="text"],
+input[type="search"],
+select {
+	background: var(--field);
+	border: 2px solid;
+	border-color: var(--bevel-in);
+}
+input[type="text"],
+input[type="search"],
+select {
+	font: inherit;
+	padding: 3px 5px;
+	color: var(--text);
+	min-height: 26px;
+	max-width: 100%;
+}
+/* overflow: WebKit otherwise lets a long option's text widen its parent's scroll area, and an iPhone pans sideways. */
+select {
+	appearance: none;
+	padding: 2px calc(var(--caret-w) + 2 * var(--caret-gap)) 2px 4px;
+	text-overflow: ellipsis;
+	overflow: hidden;
+	background-image: var(--caret-halves);
+	background-size: calc(var(--caret-w) / 2) var(--caret-h);
+	background-position:
+		right calc(var(--caret-gap) + var(--caret-w) / 2) center,
+		right var(--caret-gap) center;
+	background-repeat: no-repeat;
+}
+/* Safari on a touch screen zooms the page into a focused field set under 16px. */
+@media (pointer: coarse) {
+	input[type="text"],
+	input[type="search"] {
+		font-size: 16px;
+	}
+}
+/* A finger needs a 32px target; a mouse keeps the compact rows. */
+@media (pointer: coarse) {
+	.titlebar a,
+	.tabs a,
+	.statusbar button,
+	button.btn,
+	a.btn,
+	label.lbl {
+		min-height: 32px;
+	}
+	.titlebar a,
+	.tabs a {
+		display: inline-flex;
+		align-items: center;
+	}
+	.titlebar a {
+		min-width: 32px;
+		justify-content: center;
+	}
+	label.lbl input[type="checkbox"] {
+		inline-size: 20px;
+		block-size: 20px;
+	}
+}
+/* A dropdown under a finger: an arrow you can see and a box you can hit. */
+@media (max-width: 760px), (pointer: coarse) {
+	select {
+		font-size: 16px;
+		min-height: 44px;
+	}
+}
+label.lbl {
+	display: inline-flex;
+	align-items: center;
+	gap: 5px;
+	white-space: nowrap;
+}
+label.lbl select {
+	min-width: 0;
+}
+/* A name that explains itself: tap or click for its note; long-press stays the context menu. */
+button.doc {
+	font-weight: bold;
+	text-decoration: underline dotted var(--doc-underline);
+	text-underline-offset: 3px;
+	cursor: help;
+}
+button.doc.on {
+	text-decoration-style: solid;
+}
+/* Secondary detail folded behind a summary line. */
+details.more {
+	margin-top: 8px;
+}
+details.more > summary {
+	padding: 4px 0;
+}
+/* A filter box with its buttons, above the table or tree it filters. */
+.filters {
+	display: flex;
+	gap: 6px;
+	align-items: center;
+	flex-wrap: wrap;
+	margin-bottom: 6px;
+}
+.filters input[type="search"] {
+	flex: 1;
+	min-width: 120px;
+}
+.picker-tag {
+	margin-left: auto;
+	padding-left: 8px;
+	font-size: 10.5px;
+	color: var(--text-dim);
+	white-space: nowrap;
+}
+.picker-tag + .picker-tag {
+	margin-left: 0;
+	padding-left: 6px;
+}
+.picker-tag.now {
+	color: var(--good-text);
+	font-weight: bold;
+}
+[aria-current="true"] .picker-tag {
+	color: inherit;
+}
+@media (max-width: 760px) {
+	button.btn,
+	a.btn {
+		min-height: 32px;
+	}
+	/* iOS Safari zooms the page when a focused field is under 16px. */
+	input,
+	input[type="text"],
+	input[type="search"] {
+		font-size: 16px;
+		min-height: 32px;
+	}
+	button.doc {
+		padding: 6px 0;
+		margin: -6px 0;
+	}
+}
+.picker-opt {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	min-width: 0;
+}

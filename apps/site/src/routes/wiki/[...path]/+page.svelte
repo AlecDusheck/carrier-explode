@@ -54,3 +54,13 @@
     {#each data.article.contributors as c, i (c.name)}{i ? ", " : ""}{#if c.url}<a href={c.url} rel="author">{c.name}</a>{:else}{c.name}{/if}{/each}.
   </p>
 </footer>
+
+<style>
+  .wiki-meta {
+    margin-top: 18px;
+    padding-top: 6px;
+    border-top: 1px solid var(--shadow);
+    font-size: 11px;
+    color: var(--text-dim);
+  }
+</style>

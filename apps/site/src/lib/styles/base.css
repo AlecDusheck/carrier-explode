@@ -1,0 +1,78 @@
+/* The document, and the shared looks of a few blocks. */
+* {
+	box-sizing: border-box;
+}
+html,
+body,
+#app {
+	height: 100%;
+}
+/* The page is a window: only its panes scroll. On iOS the document would otherwise scroll and rubber-band under the toolbars. */
+html,
+body {
+	overflow: hidden;
+	overscroll-behavior: none;
+}
+/* A double tap on a control is two taps, never a zoom. Not inherited, and a scroll container restarts it, so each control says it. */
+html,
+a,
+button,
+input,
+select,
+summary,
+label,
+[role="button"],
+[role="tab"] {
+	touch-action: manipulation;
+}
+/* A button no class styles takes the theme's colours, not the browser's ButtonFace and ButtonText. */
+button {
+	color: var(--text);
+	background-color: var(--face-hi);
+	border-color: var(--bevel-out);
+}
+/* A control shows a hand; zero specificity, so one that means something else (help) says so. */
+:where(button:enabled, select:enabled, summary) {
+	cursor: pointer;
+}
+body {
+	margin: 0;
+	background: var(--desktop);
+	color: var(--text);
+	font: 12px/1.45 var(--ui);
+	-webkit-text-size-adjust: 100%;
+}
+.source-code {
+	margin-left: 0.5em;
+}
+.prose {
+	margin: 0 0 6px;
+	max-width: 70ch;
+	line-height: 1.45;
+}
+.banner {
+	border: 2px solid;
+	border-color: var(--bevel-in);
+	background: var(--notice-bg);
+	padding: 6px 8px;
+	margin: 6px 0;
+	font-size: 11.5px;
+}
+.banner.err {
+	background: var(--bad-bg-soft);
+	border-color: var(--bad-border);
+}
+a {
+	color: var(--link);
+}
+p.lead {
+	max-width: 74ch;
+}
+p.note {
+	margin: 0 0 6px;
+}
+.raised {
+	background: var(--face);
+	border: 2px solid;
+	border-color: var(--bevel-out);
+}

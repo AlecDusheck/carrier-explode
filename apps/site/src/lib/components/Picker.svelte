@@ -79,3 +79,116 @@
     {/if}
   </div>
 </div>
+
+<style>
+  .picker {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+    max-width: 100%;
+  }
+  .picker.wide,
+  .picker.wide > .picker-btn {
+    width: 100%;
+  }
+  .picker > .lbl {
+    flex: none;
+    white-space: nowrap;
+  }
+  .picker-btn {
+    display: inline-flex;
+    align-items: center;
+    min-width: 0;
+    max-width: 100%;
+    text-align: left;
+  }
+  .picker-btn > :is(.caret, .busy-spin) {
+    margin-left: auto;
+  }
+  .picker-btn .caret {
+    flex: none;
+    width: var(--caret-w);
+    height: var(--caret-h);
+    background-image: var(--caret-halves);
+    background-size: 50% 100%;
+    background-position: left, right;
+    background-repeat: no-repeat;
+  }
+  .picker-find {
+    margin: 6px;
+    width: calc(100% - 12px);
+  }
+  /* On a phone a chosen option's tags go under its name rather than cut it short. */
+  @media (max-width: 760px) {
+    .picker-btn :global(.picker-opt) {
+      flex-wrap: wrap;
+      row-gap: 0;
+    }
+  }
+  .picker-list {
+    margin: 0;
+    padding: 2px;
+    max-height: min(60vh, 420px);
+    overflow: auto;
+    min-width: anchor-size(width);
+    max-width: min(92vw, 520px);
+    background: var(--field);
+    color: inherit;
+    box-shadow: 3px 3px 0 var(--drop);
+    position-area: bottom span-right;
+    position-try-fallbacks: flip-block, flip-inline;
+  }
+  .picker-list > a {
+    display: flex;
+    width: 100%;
+    padding: 4px 8px;
+    border: 0;
+    background: none;
+    font: inherit;
+    color: inherit;
+    text-decoration: none;
+    text-align: left;
+    cursor: pointer;
+  }
+  .picker-section {
+    padding: 6px 8px 2px;
+    font-size: 11px;
+    font-weight: bold;
+    color: var(--text-dim);
+  }
+  .picker-section:not(:first-child) {
+    border-top: 1px solid var(--shadow);
+    margin-top: 2px;
+  }
+  .picker-list > a:hover {
+    background: var(--hover);
+  }
+  .picker-list > a[aria-current="true"] {
+    background: var(--sel);
+    color: var(--sel-text);
+  }
+  .picker-list > a[aria-current="true"] :global(.dimtext) {
+    color: var(--on-sel-dim);
+  }
+  .picker-btn[aria-busy="true"] {
+    cursor: progress;
+  }
+  /* A finger needs a 32px target; a mouse keeps the compact rows. */
+  @media (pointer: coarse) {
+    .picker-list > a {
+      min-height: 32px;
+    }
+  }
+  /* A dropdown under a finger: an arrow you can see and a box you can hit. */
+  @media (max-width: 760px), (pointer: coarse) {
+    .btn.picker-btn {
+      min-height: 44px;
+    }
+  }
+  @media (max-width: 760px) {
+    .picker-list > a {
+      padding: 8px;
+    }
+  }
+</style>

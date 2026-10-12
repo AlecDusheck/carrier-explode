@@ -1,0 +1,332 @@
+/* Swing/Metal-era desktop chrome: window, title bar, tabs, split pane and status bar.
+   Collapses to one column on a phone, where the list is a page of its own. */
+/* dvh follows Safari's toolbars as they collapse and return. */
+.window {
+	height: 100dvh;
+	display: flex;
+	flex-direction: column;
+}
+.frame {
+	flex: 1;
+	min-height: 0;
+	display: flex;
+	flex-direction: column;
+	background: var(--face);
+}
+.titlebar {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	flex: none;
+	background: var(--title-bg);
+	color: var(--title-fg);
+	font-weight: bold;
+	padding: 3px 8px;
+}
+/* The window's icon, as an old OS draws it before the title. */
+.titlebar .app-icon {
+	image-rendering: pixelated;
+	margin-right: -4px;
+}
+.titlebar .home {
+	color: inherit;
+	text-decoration: none;
+}
+.titlebar .spacer {
+	flex: 1;
+}
+.titlebar .sub {
+	font-weight: normal;
+	color: var(--on-sel-dim);
+	font-size: 11px;
+}
+.titlebar .github,
+.titlebar .credits {
+	color: var(--title-fg);
+	font-weight: normal;
+	font-size: 11px;
+}
+.titlebar .btn {
+	min-height: 22px;
+	padding: 1px 10px;
+}
+.tabs {
+	scrollbar-width: none;
+}
+.tabs::-webkit-scrollbar {
+	display: none;
+}
+.toolbar {
+	display: flex;
+	gap: 6px;
+	align-items: center;
+	padding: 4px 6px;
+	flex: none;
+	border-bottom: 1px solid var(--shadow);
+	flex-wrap: wrap;
+}
+/* A token too long for its box (a path, a URL, a build) breaks rather than pushing a table or row past the screen. */
+.body {
+	flex: 1;
+	min-height: 0;
+	display: flex;
+	background: var(--face);
+	overflow-wrap: anywhere;
+	position: relative;
+}
+.view {
+	flex: 1;
+	min-width: 0;
+	min-height: 0;
+	display: flex;
+	flex-direction: column;
+}
+.statusbar {
+	flex: none;
+	display: flex;
+	gap: 4px;
+	padding: 2px 4px;
+	font-size: 11px;
+	color: var(--text-dim);
+	border-top: 1px solid var(--light);
+	align-items: center;
+}
+.statusbar .cell {
+	border: 1px solid;
+	border-color: var(--bevel-in);
+	padding: 1px 6px;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+.statusbar .cell.grow {
+	flex: 1;
+	min-width: 0;
+}
+.split {
+	display: flex;
+	flex: 1;
+	min-height: 0;
+	width: 100%;
+}
+.pane-left {
+	width: 288px;
+	flex: none;
+	min-height: 0;
+	display: flex;
+	flex-direction: column;
+	border-right: 2px solid var(--shadow);
+}
+.pane-right {
+	flex: 1;
+	min-width: 0;
+	min-height: 0;
+	display: flex;
+	flex-direction: column;
+}
+.scroll {
+	flex: 1;
+	min-height: 0;
+	overflow: auto;
+	overscroll-behavior: contain;
+	-webkit-overflow-scrolling: touch;
+}
+/* Sticky headers pin to the content edge; pull them up over the padding so rows cannot show above. */
+.pad {
+	padding: 8px;
+	--sticky-top: -8px;
+}
+.list {
+	list-style: none;
+	margin: 0;
+	padding: 0;
+}
+.list li {
+	border-bottom: 1px solid var(--rule-faint);
+}
+.list li > a {
+	color: inherit;
+	text-decoration: none;
+	padding: 3px 8px;
+	display: flex;
+	gap: 6px;
+	align-items: center;
+}
+.list li.dimtext {
+	padding: 3px 8px;
+}
+.list .dim {
+	color: var(--text-dim);
+	font-size: 11px;
+	margin-left: auto;
+	white-space: nowrap;
+}
+.tabs {
+	display: flex;
+	gap: 2px;
+	padding: 4px 4px 0;
+	flex: none;
+	overflow-x: auto;
+	background: var(--face);
+	/* A row wider than the screen fades out at the edge it continues past; one that fits has no scroll timeline, so no fade. */
+	mask-image: linear-gradient(
+		to right,
+		transparent,
+		#000 var(--tabs-fade-start),
+		#000 calc(100% - var(--tabs-fade-end)),
+		transparent
+	);
+	animation: tabs-fade linear both;
+	animation-timeline: scroll(self inline);
+}
+@property --tabs-fade-start {
+	syntax: "<length>";
+	inherits: false;
+	initial-value: 0px;
+}
+@property --tabs-fade-end {
+	syntax: "<length>";
+	inherits: false;
+	initial-value: 0px;
+}
+@keyframes tabs-fade {
+	from {
+		--tabs-fade-start: 0px;
+		--tabs-fade-end: 24px;
+	}
+	10% {
+		--tabs-fade-start: 24px;
+	}
+	90% {
+		--tabs-fade-end: 24px;
+	}
+	to {
+		--tabs-fade-start: 24px;
+		--tabs-fade-end: 0px;
+	}
+}
+.tabs a {
+	padding: 4px 10px;
+	background: var(--face);
+	text-decoration: none;
+	border: 2px solid;
+	border-color: var(--bevel-out);
+	border-bottom: none;
+	white-space: nowrap;
+	color: var(--text-dim);
+}
+.tabs a[aria-current="page"] {
+	background: var(--face-hi);
+	color: var(--text);
+	font-weight: bold;
+	position: relative;
+	top: -2px;
+	padding-bottom: 6px;
+}
+.pane-msg {
+	margin: 0;
+	padding: 2px 0;
+}
+.tabs-slot {
+	flex: none;
+	min-height: 31px;
+	background: var(--face);
+}
+.bundle-head {
+	display: flex;
+	gap: 8px;
+	padding: 4px 6px;
+	flex: none;
+	border-bottom: 1px solid var(--shadow);
+	align-items: flex-start;
+}
+.bundle-head .ident {
+	display: flex;
+	gap: 6px;
+	align-items: center;
+	flex-wrap: wrap;
+	min-width: 0;
+	padding-top: 3px;
+}
+.bundle-head .picture-slot {
+	display: inline-flex;
+	min-width: 20px;
+	min-height: 20px;
+}
+.bundle-head .versions-slot {
+	margin-left: auto;
+	max-width: 60%;
+	flex: none;
+	min-height: 28px;
+}
+.bundle-head .choices {
+	margin-left: auto;
+	max-width: 70%;
+	display: flex;
+	flex-wrap: wrap;
+	justify-content: flex-end;
+	gap: 6px;
+	min-height: 28px;
+}
+.dialog {
+	width: min(960px, 100% - 24px);
+	max-width: none;
+	max-height: 88vh;
+	padding: 0;
+	color: inherit;
+}
+.dialog[open] {
+	display: flex;
+	flex-direction: column;
+}
+.dialog::backdrop {
+	background: var(--backdrop);
+}
+@media (max-width: 760px) {
+	.pane-left {
+		display: none;
+	}
+	.split.browsing .pane-left {
+		display: flex;
+		width: 100%;
+		border-right: 0;
+		padding-bottom: env(safe-area-inset-bottom);
+	}
+	.split.browsing .pane-right {
+		display: none;
+	}
+	.titlebar .sub {
+		display: none;
+	}
+	.list li > a {
+		padding: 8px;
+	}
+	.dialog {
+		width: 100%;
+		height: 100%;
+		max-height: 100%;
+	}
+	.bundle-head {
+		flex-direction: column;
+		align-items: stretch;
+	}
+	.bundle-head .versions-slot {
+		max-width: 100%;
+		margin: 0;
+	}
+	.bundle-head .choices {
+		max-width: 100%;
+		margin: 0;
+		justify-content: flex-start;
+	}
+}
+.list li > a:hover {
+	background: var(--hover);
+}
+.list li > a[aria-current="page"] {
+	background: var(--sel);
+	color: var(--sel-text);
+}
+.list li > a[aria-current="page"] :is(.dim, .dimtext) {
+	color: var(--on-sel-dim);
+}
