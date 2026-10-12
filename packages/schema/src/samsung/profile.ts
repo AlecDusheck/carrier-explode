@@ -20,19 +20,45 @@ function xmlLeaves(e: XmlElement, path = ""): Array<[string, Json]> {
 	});
 }
 
-/** Every native leaf: `<file>:<path>`, the feature files' by group (`customer[SFR]`) or carrier id (`specific[30490]`). */
-function rawOf(pack: Pack): Record<string, Json> {
+type Keyed = ReadonlyArray<readonly [string, NativeRef]>;
+
+/** The pack's native leaves, each by its key in its file and with its `<file>:<path>`. */
+interface PackRefs {
+	/** customer.xml's, by path below its root. */
+	readonly customer: Keyed;
+	readonly cscFeature: Keyed;
+	/** The CarrierFeatures of each carrier group (`customer[SFR]`). */
+	readonly groups: Keyed;
+	/** The CarrierFeatures of each carrier id (`specific[30490]`). */
+	readonly specific: Keyed;
+}
+
+const keyed = (file: string, prefix: string, leaves: Iterable<readonly [string, Json]>): Keyed =>
+	[...leaves].map(([k, value]) => [k, { path: `${file}:${prefix}${k}`, value }]);
+
+function packRefs(pack: Pack): PackRefs {
+	const features = pack.carrierFeature;
+	return {
+		customer: keyed(
+			PACK_FILES.customer,
+			"",
+			pack.customer === undefined ? [] : xmlLeaves(pack.customer.root),
+		),
+		cscFeature: keyed(PACK_FILES.cscFeature, "", Object.entries(pack.cscFeature?.features ?? {})),
+		groups: (features?.groups ?? []).flatMap((g) =>
+			keyed(PACK_FILES.carrierFeature, `customer[${g.group}].`, Object.entries(g.features)),
+		),
+		specific: (features?.carriers ?? []).flatMap((c) =>
+			keyed(PACK_FILES.carrierFeature, `specific[${c.id}].`, Object.entries(c.features)),
+		),
+	};
+}
+
+/** Every native leaf, by its `<file>:<path>`. */
+function rawOf(pack: Pack, refs: PackRefs): Record<string, Json> {
 	const out: Record<string, Json> = {};
-	for (const [k, v] of pack.customer === undefined ? [] : xmlLeaves(pack.customer.root))
-		out[`${PACK_FILES.customer}:${k}`] = v;
-	for (const [k, v] of Object.entries(pack.cscFeature?.features ?? {}))
-		out[`${PACK_FILES.cscFeature}:${k}`] = v;
-	for (const g of pack.carrierFeature?.groups ?? [])
-		for (const [k, v] of Object.entries(g.features))
-			out[`${PACK_FILES.carrierFeature}:customer[${g.group}].${k}`] = v;
-	for (const c of pack.carrierFeature?.carriers ?? [])
-		for (const [k, v] of Object.entries(c.features))
-			out[`${PACK_FILES.carrierFeature}:specific[${c.id}].${k}`] = v;
+	for (const [, ref] of [...refs.customer, ...refs.cscFeature, ...refs.groups, ...refs.specific])
+		out[ref.path] = ref.value;
 	out[`${PACK_FILES.omcInfo}:version`] = pack.omcInfo.version;
 	for (const [k, v] of Object.entries(pack.omcInfo.catalog)) out[`${PACK_FILES.omcInfo}:catalog.${k}`] = v;
 	return out;
@@ -42,25 +68,13 @@ function rawOf(pack: Pack): Record<string, Json> {
  * The switches the whole pack sets: cscfeature.xml's, then its carrier groups' CarrierFeatures over them, then a
  * per-carrier-id CarrierFeature the groups leave unset, when every carrier id that sets it agrees.
  */
-function packFeatures(pack: Pack): Map<string, NativeRef> {
-	const out = new Map<string, NativeRef>();
-	for (const [k, value] of Object.entries(pack.cscFeature?.features ?? {}))
-		out.set(k, { path: `${PACK_FILES.cscFeature}:${k}`, value });
-	for (const g of pack.carrierFeature?.groups ?? []) {
-		for (const [k, value] of Object.entries(g.features))
-			out.set(k, { path: `${PACK_FILES.carrierFeature}:customer[${g.group}].${k}`, value });
-	}
-	const specific = new Map<string, NativeRef[]>();
-	for (const c of pack.carrierFeature?.carriers ?? []) {
-		for (const [k, value] of Object.entries(c.features))
-			specific.set(k, [
-				...(specific.get(k) ?? []),
-				{ path: `${PACK_FILES.carrierFeature}:specific[${c.id}].${k}`, value },
-			]);
-	}
-	for (const [k, refs] of specific) {
-		const [first] = refs;
-		if (!out.has(k) && first !== undefined && refs.every((r) => r.value === first.value)) out.set(k, first);
+function packFeatures(refs: PackRefs): Map<string, NativeRef> {
+	const out = new Map([...refs.cscFeature, ...refs.groups]);
+	const specific = Map.groupBy(refs.specific, ([k]) => k);
+	for (const [k, entries] of specific) {
+		const [first] = entries;
+		if (!out.has(k) && first !== undefined && entries.every(([, r]) => r.value === first[1].value))
+			out.set(k, first[1]);
 	}
 	return out;
 }
@@ -68,7 +82,8 @@ function packFeatures(pack: Pack): Map<string, NativeRef> {
 export function samsungProfile(pack: Pack, source: SourceRef, sha: string): Profile {
 	const apns = samsungApns(pack.customer?.profiles ?? [], pack.customer?.handles ?? []);
 	const iso = pack.customer?.countryIso;
-	const raw = { ...rawOf(pack), ...imsLeaves(pack.ims) };
+	const refs = packRefs(pack);
+	const raw = { ...rawOf(pack, refs), ...(pack.ims === null ? {} : imsLeaves(pack.ims)) };
 	return {
 		schema: PROFILE_SCHEMA,
 		source,
@@ -77,10 +92,10 @@ export function samsungProfile(pack: Pack, source: SourceRef, sha: string): Prof
 		apns,
 		concepts: samsungConcepts({
 			apns,
-			features: packFeatures(pack),
+			features: packFeatures(refs),
 			ims: ownIms(raw),
 			countryIso: iso,
-			customer: new Map(pack.customer === undefined ? [] : xmlLeaves(pack.customer.root)),
+			customer: new Map(refs.customer),
 		}),
 		raw,
 		variants: [],

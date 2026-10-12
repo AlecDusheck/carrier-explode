@@ -435,8 +435,8 @@ describe("the index queue's consumer", () => {
 		BUCKET: bucket,
 		INDEX_QUEUE: new MemQueue(),
 		PURGE_QUEUE: new MemQueue(),
-		PURGE_ORIGINS: undefined,
-		PURGE_TOKEN: undefined,
+		PURGE_ORIGINS: ["https://site"],
+		PURGE_TOKEN: "t",
 		INDEX_BATCH: productionTuning.INDEX_BATCH,
 		SETTLE_DELAY_S: productionTuning.SETTLE_DELAY_S,
 	});

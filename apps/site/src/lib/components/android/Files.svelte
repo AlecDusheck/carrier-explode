@@ -5,7 +5,6 @@
   import { hexDump, humanBytes, verArgs, versionHref } from "#lib/format.ts";
   import { androidDocs } from "#lib/android/tree-docs.ts";
   import { NO_DOCS } from "#lib/tree-docs.ts";
-  import { sourceKey } from "@carrier-explode/schema/types";
   import type { AndroidFileKind } from "#lib/server/android/settings.ts";
   import type { TabProps } from "#lib/types.ts";
   import { TreeState } from "#lib/ui-state.svelte.ts";
@@ -18,11 +17,11 @@
 
   const ICONS = { settings: "protobuf", vendor: "binary", "carrier-list": "protobuf" } as const satisfies Record<AndroidFileKind, string>;
 
-  const files = $derived(await getAndroidFiles(verArgs(at)));
-  const file = $derived(path ? await getAndroidFile({ ...verArgs(at), path }) : null);
-  const head = $derived(await getSourceHead(verArgs(at)));
+  const [files, file, head] = $derived(
+    await Promise.all([getAndroidFiles(verArgs(at)), path ? getAndroidFile({ ...verArgs(at), path }) : null, getSourceHead(verArgs(at))]),
+  );
   const tree = new TreeState();
-  const ctx = $derived({ platform: at.ref.platform, source: sourceKey(at.ref), cc: head.cc ?? undefined });
+  const ctx = $derived({ platform: at.ref.platform, cc: head.cc });
 </script>
 
 {#if file}

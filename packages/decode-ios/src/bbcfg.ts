@@ -6,6 +6,7 @@
 import { asciiAt, beBigInt, inflateExact, latin1, u32le } from "@carrier-explode/binary";
 import { readTlv, type Tlv } from "./der.ts";
 import { type Confidence, type McfgImage, parseMcfg } from "@carrier-explode/decode-qualcomm";
+import type { Building } from "./building.ts";
 
 const uint = (b: Uint8Array): number => Number(beBigInt(b));
 const trimNul = (s: string): string => s.replace(/\0+$/, "");
@@ -21,17 +22,17 @@ const ctx = (t: Tlv, num: number): boolean => t.cls === 2 && t.num === num;
 const val = (b: Uint8Array, t: Tlv): Uint8Array => b.subarray(t.contentStart, t.contentEnd);
 
 export interface BbcfgMeta {
-	project?: string;
+	readonly project?: string;
 	/** "020A0100" = 2.10.01 */
-	versionHex?: string;
+	readonly versionHex?: string;
 	/** Same as Info.plist Baseband.Version. */
-	version?: string;
-	buildHost?: string;
-	buildUser?: string;
-	field84?: string;
-	field85?: string;
-	buildTime?: string;
-	sourceRevision?: string;
+	readonly version?: string;
+	readonly buildHost?: string;
+	readonly buildUser?: string;
+	readonly field84?: string;
+	readonly field85?: string;
+	readonly buildTime?: string;
+	readonly sourceRevision?: string;
 }
 
 // bbcfg.mbn: header tags 80..87 (82..87 are build-system placeholders)
@@ -47,9 +48,9 @@ const META_KEYS = [
 ] as const;
 
 export interface FileTypeInfo {
-	name: string;
-	confidence: Confidence;
-	note: string;
+	readonly name: string;
+	readonly confidence: Confidence;
+	readonly note: string;
 }
 
 // qdsp6sw.mbn: log table "DFLT_CAL STAT_NV PA_CHAR STAT_CFG RFFE_DEV RFFE_LUT RFC_MMW PROT_NV PROT_PRI PROT SKU", matched by content
@@ -91,23 +92,23 @@ interface BbcfgIndexRecord {
 type BlobFormat = "der" | "mavz" | "bin";
 
 export interface BbcfgBlobRef {
-	index: number;
+	readonly index: number;
 	/** Stored as 40 ASCII hex chars; not a hash of the payload (the modem copies it, as bytes, into /mav/bbcfg_file_hash_*). */
-	digest: string;
-	offset: number;
-	length: number;
-	format: BlobFormat;
+	readonly digest: string;
+	readonly offset: number;
+	readonly length: number;
+	readonly format: BlobFormat;
 }
 
 export interface BbcfgContainer {
 	/** "CFG" (bbcfg.mbn) or "POW" (pt.mbn): the first four bytes reversed. */
-	magic: string;
-	headerVersion: number;
+	readonly magic: string;
+	readonly headerVersion: number;
 	/** Both header size fields; each is the file length - 0x28. */
-	sizes: [number, number];
-	meta: BbcfgMeta;
-	index: BbcfgIndexRecord[];
-	blobs: BbcfgBlobRef[];
+	readonly sizes: [number, number];
+	readonly meta: BbcfgMeta;
+	readonly index: BbcfgIndexRecord[];
+	readonly blobs: BbcfgBlobRef[];
 }
 
 export const isBbcfg = (b: Uint8Array): boolean => b.length > 0x32 && asciiAt(b, 0x28, "BBCFGMBN");
@@ -116,7 +117,7 @@ export const isBbcfg = (b: Uint8Array): boolean => b.length > 0x32 && asciiAt(b,
 export function readBbcfg(b: Uint8Array): BbcfgContainer {
 	if (!isBbcfg(b)) throw new Error("not a BBCFGMBN container");
 	const root = readTlv(b, 0x30);
-	const meta: BbcfgMeta = {};
+	const meta: Building<BbcfgMeta> = {};
 	const index: BbcfgIndexRecord[] = [];
 	const blobs: BbcfgBlobRef[] = [];
 	for (const t of kids(b, root)) {
@@ -187,27 +188,27 @@ export function inflateMavz(p: Uint8Array): Uint8Array {
 }
 
 export interface NvRecord {
-	id: number;
-	value: Uint8Array;
+	readonly id: number;
+	readonly value: Uint8Array;
 	/** 9f8311 and 9f8314, meaning unknown. */
-	f11?: number;
-	f14?: number;
+	readonly f11?: number;
+	readonly f14?: number;
 }
 
 export interface EfsRecord {
-	path: string;
-	data: Uint8Array;
+	readonly path: string;
+	readonly data: Uint8Array;
 	/** 9f8377 and 9f8378, meaning unknown. */
-	f77?: number;
-	f78?: number;
+	readonly f77?: number;
+	readonly f78?: number;
 }
 
 export interface BbcfgBlob extends BbcfgBlobRef {
-	nv: NvRecord[];
-	files: EfsRecord[];
+	readonly nv: NvRecord[];
+	readonly files: EfsRecord[];
 	/** MAVZ payload, inflated. */
-	image?: Uint8Array;
-	mcfg?: McfgImage;
+	readonly image?: Uint8Array;
+	readonly mcfg?: McfgImage;
 }
 
 /** Small integer fields; wider ones are not integers. */
@@ -222,7 +223,7 @@ export function readBlobRecords(p: Uint8Array): { nv: NvRecord[]; files: EfsReco
 		if (ctx(group, 600)) {
 			// bf8458: {9f8310 id, 9f8311, 9f8312 size, 9f8313 value, 9f8314}
 			for (const rec of kids(p, group)) {
-				const r: NvRecord = { id: 0, value: new Uint8Array(0) };
+				const r: Building<NvRecord> = { id: 0, value: new Uint8Array(0) };
 				for (const x of kids(p, rec)) {
 					const v = val(p, x);
 					if (ctx(x, 400)) r.id = uint(v);
@@ -240,7 +241,7 @@ export function readBlobRecords(p: Uint8Array): { nv: NvRecord[]; files: EfsReco
 		} else if (ctx(group, 601)) {
 			// bf8459: {9f8374 path, 9f8375 size, 9f8376 data, 9f8377, 9f8378}
 			for (const rec of kids(p, group)) {
-				const r: EfsRecord = { path: "", data: new Uint8Array(0) };
+				const r: Building<EfsRecord> = { path: "", data: new Uint8Array(0) };
 				for (const x of kids(p, rec)) {
 					const v = val(p, x);
 					if (ctx(x, 500)) r.path = trimNul(latin1(v));

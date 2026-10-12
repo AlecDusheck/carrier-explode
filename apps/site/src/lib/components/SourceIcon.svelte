@@ -10,7 +10,8 @@
 </script>
 
 {#if picture.kind === "flag"}
-  {#if flag(picture.cc)}<span class="flag" aria-hidden="true">{flag(picture.cc)}</span>{/if}
+  {@const shown = picture.cc === null ? undefined : flag(picture.cc)}
+  {#if shown}<span class="flag" aria-hidden="true">{shown}</span>{/if}
 {:else if picture.kind === "logo"}
   <img class="logo" src={asset(`carriers/${picture.slug}.svg`)} alt="" width="20" height="20" loading="lazy" decoding="async" />
 {:else}

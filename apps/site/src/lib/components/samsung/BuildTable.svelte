@@ -1,12 +1,11 @@
 <script lang="ts">
   import { getPhoneNames } from "#lib/api/builds.remote.ts";
   import { buildHref } from "#lib/format.ts";
-  import { releaseLabel } from "#lib/naming.ts";
-  import type { ListedRelease } from "@carrier-explode/db";
+  import { releaseLabel, type ReleaseOf } from "#lib/naming.ts";
   import VersionMark from "../VersionMark.svelte";
 
   /** The Galaxy firmware held, each with its model and how many carrier packs it ships. */
-  let { builds }: { builds: ReadonlyArray<Extract<ListedRelease, { platform: "samsung" }>> } = $props();
+  let { builds }: { builds: readonly ReleaseOf<"samsung">[] } = $props();
 
   const names = $derived(new Map(await getPhoneNames("samsung")));
 </script>

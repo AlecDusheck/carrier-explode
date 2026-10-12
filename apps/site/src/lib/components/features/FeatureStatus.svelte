@@ -9,5 +9,5 @@
   const d = $derived(defaulted === null ? null : defaultNote(defaulted));
 </script>
 
-<span class="chip {s.tone}" title={d?.kind === "hint" ? `${s.hint}\n${d.hint}` : s.hint}>{s.label}</span>
+<span class={["chip", s.tone]} title={d?.kind === "hint" ? `${s.hint}\n${d.hint}` : s.hint}>{s.label}</span>
 {#if d?.kind === "badge"}<span class="dimtext" title={d.hint}>{d.label}</span>{/if}

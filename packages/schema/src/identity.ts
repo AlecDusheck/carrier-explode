@@ -36,7 +36,7 @@ export const isUnnamedRule = (ref: SourceRef, carrierNamed: boolean): boolean =>
 	ref.kind === "carrier" && !carrierNamed && RULE_NAMED[decoderFamily(ref.platform)](ref.name);
 
 /** `link` joins two sources keyed differently; `split` keeps two apart. A split naming an Apple bundle covers its iPad and Watch files too. */
-export const LINK_RULES = ["link", "split"] as const;
+const LINK_RULES = ["link", "split"] as const;
 
 export interface LinkRule {
 	readonly a: SourceKey;

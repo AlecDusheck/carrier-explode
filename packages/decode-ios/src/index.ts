@@ -17,7 +17,6 @@ export {
 	decodeFile,
 	deviceStem,
 	type FileKind,
-	isPlistKind,
 	MemberError,
 	type OpenedBundle,
 	openIpcc,
@@ -41,7 +40,7 @@ export {
 	diffKeyed,
 	type FileDiff,
 } from "./compare.ts";
-export { flatten, flattenBundle } from "./flatten.ts";
+export { flattenBundle } from "./flatten.ts";
 export { describeField, describeValue, type FieldDoc, type ValueLabel } from "./fields.ts";
 export { normalizeApplePng } from "./png.ts";
 export { describeMessageId } from "./cbs.ts";
@@ -86,7 +85,6 @@ export {
 	type BasebandTextFile,
 	basebandSummary,
 	BYTE_FORMATS,
-	CONTENT_FORMATS,
 	isTextFile,
 	TEXT_FORMATS,
 	type ModemConfigSummary,

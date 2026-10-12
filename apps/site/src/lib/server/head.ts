@@ -1,9 +1,14 @@
 /** What every page of a source shows above its tabs: its picture, the open line's version strip and its other lines. */
 
-import { error } from "@sveltejs/kit";
 import { compareVersions, isPrerelease } from "@carrier-explode/decode-ios";
-import { linesOf } from "@carrier-explode/schema";
-import { decoderFamily, MAIN_LINE, type DecoderFamily, type SourceRef } from "@carrier-explode/schema/types";
+import { linesOf, type TimelineEntry } from "@carrier-explode/schema";
+import {
+	decoderFamily,
+	linePlatform,
+	MAIN_LINE,
+	type DecoderFamily,
+	type SourceRef,
+} from "@carrier-explode/schema/types";
 import { readAgainst } from "#lib/apple/phones.ts";
 import { DEVICE_LINE_LABELS, PLATFORM_DEVICES } from "#lib/platforms.ts";
 import type { ModelChoice } from "#lib/phones.ts";
@@ -12,10 +17,10 @@ import {
 	PHONE_IMAGES,
 	canonicalPath,
 	devicesOf,
-	linePlatform,
 	releasesOf,
+	nameVersion,
 	resolve,
-	versionsOf,
+	versionNaming,
 	type Resolved,
 } from "./catalog";
 import { modelChoices } from "./phones";
@@ -101,21 +106,19 @@ const IS_CURRENT = {
 
 export async function getHead(v: Ver): Promise<SourceHead> {
 	const r = await resolve(v);
-	const [timeline, lines] = await Promise.all([versionsOf(r, r.entries), choosableLines(r)]);
-	const find = (s: string | undefined): Version | undefined => timeline.find((e) => e.slug === s);
-	const entry = find(r.entry.slug);
-	if (!entry) error(500, `${r.key}: ${r.entry.slug} is not on its own line`);
-	const head = find(r.latest.slug);
-	const current = head && (await IS_CURRENT[decoderFamily(r.ref.platform)](r, head)) ? head.slug : null;
+	const [naming, lines] = await Promise.all([versionNaming(r), choosableLines(r)]);
+	const name = (e: TimelineEntry): Version => nameVersion(naming, e);
+	const head = name(r.latest);
+	const current = (await IS_CURRENT[decoderFamily(r.ref.platform)](r, head)) ? head.slug : null;
 	return {
 		ref: r.ref,
 		picture: pictureOf(r.ref, r.source),
 		brand: brandOf(r.ref, r.source.carrierName, r.source.cc),
 		cc: r.source.cc,
 		line: r.line,
-		timeline,
-		entry,
-		previous: find(r.previous?.slug) ?? null,
+		timeline: r.entries.map(name),
+		entry: name(r.entry),
+		previous: r.previous === null ? null : name(r.previous),
 		head: r.latest.slug,
 		current,
 		lines,

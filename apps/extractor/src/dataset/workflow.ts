@@ -3,6 +3,7 @@
 import { WorkflowEntrypoint, type WorkflowEvent, type WorkflowStep } from "cloudflare:workers";
 import * as v from "valibot";
 
+import { bytesToHex } from "@carrier-explode/binary";
 import { datasetMetadataSchema, keys, type DatasetMetadata } from "@carrier-explode/storage";
 import type { Env } from "../env.ts";
 import { PIPELINES } from "../pipelines.ts";
@@ -10,13 +11,10 @@ import { queuePurge } from "../queues.ts";
 import { doStep } from "../unit.ts";
 import { buildDataset } from "./build.ts";
 
-const hex = (digest: ArrayBuffer): string =>
-	[...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0")).join("");
-
 async function sha256(blob: Blob): Promise<string> {
 	const digest = new crypto.DigestStream("SHA-256");
 	await blob.stream().pipeTo(digest);
-	return hex(await digest.digest);
+	return bytesToHex(new Uint8Array(await digest.digest));
 }
 
 /** The archive built now, put unless the one held has the same bytes; `date` is the day its contents last changed. */

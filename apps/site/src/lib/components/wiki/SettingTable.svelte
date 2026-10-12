@@ -5,7 +5,8 @@
   import Holders from "./Holders.svelte";
   import Live from "./Live.svelte";
 
-  type Row = { path: string; note?: string; scope?: "carriers" | "countries"; file?: string };
+  type Args = Parameters<typeof getSettingSummary>[0];
+  type Row = Pick<Args, "path"> & Partial<Pick<Args, "file" | "scope">> & { note?: string };
   let { rows }: { rows: readonly Row[] } = $props();
 
   const summary = (r: Row): ReturnType<typeof getSettingSummary> =>

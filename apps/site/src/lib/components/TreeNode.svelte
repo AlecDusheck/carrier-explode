@@ -53,17 +53,19 @@
   // The filter text and the key words of the feature it names ("VoNR", "Wi-Fi Calling").
   const terms = $derived(searchTerms(filter));
   const hit = (s: string): boolean => terms.some((t) => s.toLowerCase().includes(t));
+  const text = $derived(JSON.stringify(value).toLowerCase());
+  const inText = (): boolean => terms.some((t) => text.includes(t));
   /** The node itself matches: its key, its meaning, a leaf's value, or a key path at or above it. Then all it holds shows. */
   const own = $derived(
     within ||
       !terms.length ||
       hit(name) ||
       !!labels?.some((l) => hit(l.label)) ||
-      (!container && hit(JSON.stringify(value))) ||
+      (!container && inText()) ||
       terms.some((t) => onKeyPath(t, path) === "at"),
   );
   /** Something it holds matches, so it shows as the path down to that. */
-  const matches = $derived(own || hit(JSON.stringify(value)) || terms.some((t) => onKeyPath(t, path) === "above"));
+  const matches = $derived(own || inText() || terms.some((t) => onKeyPath(t, path) === "above"));
 
   function valueText(): string {
     if (isBlob(value)) return value.__text ?? value.__data;
@@ -76,7 +78,7 @@
     return {
       title: path,
       items: [
-        ...scanMenuItems(ctx.platform, path, ctx.file, ctx.cc ?? null),
+        ...scanMenuItems(ctx.platform, path, ctx.file, ctx.cc),
         { kind: "separator" },
         { kind: "action", label: "Copy key path", run: () => copyText(path) },
         { kind: "action", label: "Copy value", run: () => copyText(valueText()) },
@@ -88,12 +90,12 @@
 
 {#snippet line()}
   {#if doc}
-    <button type="button" class="key doc" class:on={showNote} aria-expanded={showNote}
+    <button type="button" class="key doc bare" class:on={showNote} aria-expanded={showNote}
       onclick={() => (showNote = !showNote)}>{name}</button>
   {:else}
     <span class="key">{name}</span>
   {/if}
-  {#each badges ?? [] as b (b.text)}<span class="badge {b.tone ?? ''}" title={b.title}>{b.text}</span>{/each}
+  {#each badges ?? [] as b (b.text)}<span class={["badge", b.tone]} title={b.title}>{b.text}</span>{/each}
   {#if reading?.kind === "decoded"}
     <button type="button" class="chip sp" onclick={() => (showRaw = !showRaw)}>{showRaw ? "decoded" : "raw"}</button>
   {/if}
@@ -176,5 +178,5 @@
 <style>
   .unnamed { color: var(--text-dim); white-space: nowrap; }
   .hex { margin-left: 1ch; white-space: nowrap; }
-  .uid { color: #6a2f8a; border: 1px dotted #a98ac0; padding: 0 3px; }
+  .uid { color: var(--val-bool); border: 1px dotted color-mix(in srgb, var(--val-bool) 56%, var(--field)); padding: 0 3px; }
 </style>

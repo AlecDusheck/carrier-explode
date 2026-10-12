@@ -47,12 +47,13 @@ import {
 } from "@carrier-explode/decode-qualcomm";
 import { MODEM_SUMMARY_SCHEMA, modemGeneration } from "./modem.ts";
 import { isPlistDict, parsePlist } from "./plist.ts";
+import type { Building } from "./building.ts";
 
 const td = new TextDecoder();
 
 export const TEXT_FORMATS = ["xml", "text"] as const;
 export const BYTE_FORMATS = ["mdb", "bin"] as const;
-export const CONTENT_FORMATS = [...TEXT_FORMATS, ...BYTE_FORMATS] as const;
+const CONTENT_FORMATS = [...TEXT_FORMATS, ...BYTE_FORMATS] as const;
 export type ContentFormat = (typeof CONTENT_FORMATS)[number];
 type TextFormat = (typeof TEXT_FORMATS)[number];
 type ByteFormat = (typeof BYTE_FORMATS)[number];
@@ -85,9 +86,9 @@ function inflateNv(v: Uint8Array): Uint8Array | undefined {
 }
 
 export interface Variant {
-	platform: number;
-	sku: number;
-	hwRev: number;
+	readonly platform: number;
+	readonly sku: number;
+	readonly hwRev: number;
 }
 
 interface BasebandFileCommon {
@@ -103,14 +104,14 @@ interface BasebandFileCommon {
 }
 
 export interface BasebandTextFile extends BasebandFileCommon {
-	format: TextFormat;
-	text: string;
-	refs?: XmlRefs;
+	readonly format: TextFormat;
+	readonly text: string;
+	readonly refs?: XmlRefs;
 }
 
 export interface BasebandByteFile extends BasebandFileCommon {
-	format: ByteFormat;
-	hex: string;
+	readonly format: ByteFormat;
+	readonly hex: string;
 }
 
 export type BasebandFile = BasebandTextFile | BasebandByteFile;
@@ -120,152 +121,156 @@ export const isTextFile = <F extends { readonly format: ContentFormat }>(
 ): f is Extract<F, { readonly format: TextFormat }> => f.format === "xml" || f.format === "text";
 
 export interface BasebandNvRecord {
-	nv?: number;
-	efs?: string;
-	hex: string;
-	f11?: number;
-	f14?: number;
-	f77?: number;
-	f78?: number;
+	readonly nv?: number;
+	readonly efs?: string;
+	readonly hex: string;
+	readonly f11?: number;
+	readonly f14?: number;
+	readonly f77?: number;
+	readonly f78?: number;
 	/** From the NV/EFS tables, when known (nv.ts). */
-	name?: string;
-	meaning?: string;
+	readonly name?: string;
+	readonly meaning?: string;
 	/** What the value means, for scalar values the tables describe. */
-	label?: string;
-	confidence?: Confidence;
+	readonly label?: string;
+	readonly confidence?: Confidence;
 }
 
 export interface BasebandNvBlob {
-	member: string;
-	blob: number;
-	fileType: number;
-	fileTypeName: string;
-	digest: string;
-	variants: Variant[];
-	records: BasebandNvRecord[];
+	readonly member: string;
+	readonly blob: number;
+	readonly fileType: number;
+	readonly fileTypeName: string;
+	readonly digest: string;
+	readonly variants: Variant[];
+	readonly records: BasebandNvRecord[];
 }
 
 export interface BasebandImage {
-	member: string;
-	blob: number;
-	fileType: number;
-	fileTypeName: string;
-	variants: Variant[];
-	cfgType: string;
-	version: string;
-	trailer?: McfgTrailerSummary;
-	files: string[];
+	readonly member: string;
+	readonly blob: number;
+	readonly fileType: number;
+	readonly fileTypeName: string;
+	readonly variants: Variant[];
+	readonly cfgType: string;
+	readonly version: string;
+	readonly trailer?: McfgTrailerSummary;
+	readonly files: string[];
 }
 
 export interface BasebandContainer {
-	member: string;
-	magic: string;
-	headerVersion: number;
-	meta: BbcfgMeta;
-	records: number;
-	blobs: number;
+	readonly member: string;
+	readonly magic: string;
+	readonly headerVersion: number;
+	readonly meta: BbcfgMeta;
+	readonly records: number;
+	readonly blobs: number;
 	/** Per file type: its name and, for known types, how sure the name is and what the type holds. */
-	fileTypes: Array<{
-		type: number;
-		name: string;
-		confidence?: Confidence;
-		note?: string;
-		blobs: number;
-		records: number;
+	readonly fileTypes: Array<{
+		readonly type: number;
+		readonly name: string;
+		readonly confidence?: Confidence;
+		readonly note?: string;
+		readonly blobs: number;
+		readonly records: number;
 	}>;
 	/** Blobs that failed to decode. */
-	errors?: Array<{ blob: number; error: string }>;
+	readonly errors?: Array<{ readonly blob: number; readonly error: string }>;
 }
 
 export interface BandComboSet {
 	/** sha1 of the band_combos_per_plmn.xml variant (see `files`). */
-	sha1: string;
-	variants: Variant[];
-	carriers: Array<{ tag: string; plmns: string[] } & ComboStats>;
+	readonly sha1: string;
+	readonly variants: Variant[];
+	readonly carriers: Array<{ readonly tag: string; readonly plmns: string[] } & ComboStats>;
 }
 
 export interface ModemConfigSummary {
-	offset: number;
-	container: "zlib" | "plain";
-	length: number;
-	label?: string;
-	cfgType: string;
-	format: number;
-	version: string;
-	trailer?: McfgTrailerSummary;
-	files: string[];
+	readonly offset: number;
+	readonly container: "zlib" | "plain";
+	readonly length: number;
+	readonly label?: string;
+	readonly cfgType: string;
+	readonly format: number;
+	readonly version: string;
+	readonly trailer?: McfgTrailerSummary;
+	readonly files: string[];
 }
 
 export interface BasebandMdb {
-	member: string;
-	path: string;
-	sha1: string;
-	variants?: Variant[];
-	configs?: string[];
-	header?: MdbHeader;
+	readonly member: string;
+	readonly path: string;
+	readonly sha1: string;
+	readonly variants?: Variant[];
+	readonly configs?: string[];
+	readonly header?: MdbHeader;
 	/** mcc2arfcn: NR frequency ranges per country. */
-	scan?: MccScanEntry[];
+	readonly scan?: MccScanEntry[];
 	/** plmn2features: feature id/value pairs per network. */
-	features?: PlmnFeatures[];
-	error?: string;
+	readonly features?: PlmnFeatures[];
+	readonly error?: string;
 }
 
 export interface BasebandModemEfs {
-	member: string;
-	path: string;
-	sha1: string;
-	variants?: Variant[];
-	configs?: string[];
-	hex: string;
-	name: string;
-	value: string;
-	confidence: Confidence;
+	readonly member: string;
+	readonly path: string;
+	readonly sha1: string;
+	readonly variants?: Variant[];
+	readonly configs?: string[];
+	readonly hex: string;
+	readonly name: string;
+	readonly value: string;
+	readonly confidence: Confidence;
 }
 
 export interface BasebandSsgccs {
-	variants?: Variant[];
-	configs?: string[];
+	readonly variants?: Variant[];
+	readonly configs?: string[];
 	/** The files it was read from, with their text. */
-	files: Array<{ path: string; sha1: string; text: string }>;
-	config: SsgccsConfig;
+	readonly files: Array<{ readonly path: string; readonly sha1: string; readonly text: string }>;
+	readonly config: SsgccsConfig;
 }
 
 export interface BasebandSummary {
-	schema: typeof MODEM_SUMMARY_SCHEMA;
-	kind: "bbfw";
-	package: {
-		name?: string;
+	readonly schema: typeof MODEM_SUMMARY_SCHEMA;
+	readonly kind: "bbfw";
+	readonly package: {
+		readonly name?: string;
 		/** "Mav25", from the name (modem.ts). */
-		family?: string;
-		version?: string;
-		chipId?: string;
-		sblVersion?: string;
-		restoreSblVersion?: string;
+		readonly family?: string;
+		readonly version?: string;
+		readonly chipId?: string;
+		readonly sblVersion?: string;
+		readonly restoreSblVersion?: string;
 	};
-	members: Array<{ name: string; size: number }>;
-	containers: BasebandContainer[];
-	files: BasebandFile[];
-	nv: BasebandNvBlob[];
-	images: BasebandImage[];
-	bandCombos: BandComboSet[];
+	readonly members: Array<{ readonly name: string; readonly size: number }>;
+	readonly containers: BasebandContainer[];
+	readonly files: BasebandFile[];
+	readonly nv: BasebandNvBlob[];
+	readonly images: BasebandImage[];
+	readonly bandCombos: BandComboSet[];
 	/** pt.mbn NV 64628: A-MPR network-signalling values per MCC group and LTE band. */
-	amprNs: Array<{ sha1: string; variants: Variant[]; groups: AmprGroup[] }>;
+	readonly amprNs: Array<{
+		readonly sha1: string;
+		readonly variants: Variant[];
+		readonly groups: AmprGroup[];
+	}>;
 	/** Built-in configs of the modem image; undefined when qdsp6sw.mbn was not given. */
-	modemConfigs?: ModemConfigSummary[];
+	readonly modemConfigs?: ModemConfigSummary[];
 	/** /mdb/*.mdb databases and small EFS settings, decoded; undefined when there are none. */
-	mdb?: {
-		databases: BasebandMdb[];
-		settings: BasebandModemEfs[];
+	readonly mdb?: {
+		readonly databases: BasebandMdb[];
+		readonly settings: BasebandModemEfs[];
 	};
 	/** Fake base station detection (SSGCCS), one entry per distinct pair of config files. */
-	ssgccs?: BasebandSsgccs[];
+	readonly ssgccs?: BasebandSsgccs[];
 }
 
 export interface BasebandSummaryOptions {
 	/** Package file name, e.g. "Mav25-2.10.01.Release.bbfw". */
-	name?: string;
+	readonly name?: string;
 	/** Every zip member with its size, when only some are passed in `members`. */
-	listing?: Array<{ name: string; size: number }>;
+	readonly listing?: Array<{ readonly name: string; readonly size: number }>;
 }
 
 // ft 15/17/20 hold the protocol/carrier settings worth listing record by record
@@ -370,7 +375,7 @@ function containerParts(member: string, b: Uint8Array, list: FileList): Containe
 	};
 	for (const r of c.index) tally(r.fileType).records++;
 	for (const t of types.values()) tally(t).blobs++;
-	const container: BasebandContainer = {
+	const container: Building<BasebandContainer> = {
 		member,
 		magic: c.magic,
 		headerVersion: c.headerVersion,
@@ -517,7 +522,7 @@ export function basebandSummary(
 	const family = opts.name && modemGeneration(opts.name);
 	const info = members["Info.plist"];
 	const list = new FileList();
-	const out: BasebandSummary = {
+	const out: Building<BasebandSummary> = {
 		schema: MODEM_SUMMARY_SCHEMA,
 		kind: "bbfw",
 		package: {
@@ -593,7 +598,7 @@ function modemDatabases(
 			if (v) settings.push({ ...where(f), hex: bytesToHex(data), ...v });
 			continue;
 		}
-		const d: BasebandMdb = where(f);
+		const d: Building<BasebandMdb> = where(f);
 		try {
 			const m = readMdb(data);
 			d.header = m.header;

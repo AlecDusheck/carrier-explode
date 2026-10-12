@@ -3,7 +3,6 @@
   import { verArgs } from "#lib/format.ts";
   import { NO_DOCS } from "#lib/tree-docs.ts";
   import { TreeState } from "#lib/ui-state.svelte.ts";
-  import { sourceKey } from "@carrier-explode/schema/types";
   import type { ApnView, At } from "#lib/types.ts";
   import Tree from "./Tree.svelte";
   import TreeToolbar from "./TreeToolbar.svelte";
@@ -13,7 +12,7 @@
 
   const tree = new TreeState();
   const head = $derived(await getSourceHead(verArgs(at)));
-  const ctx = $derived({ platform: at.ref.platform, source: sourceKey(at.ref), file, cc: head.cc ?? undefined, docs: NO_DOCS });
+  const ctx = $derived({ platform: at.ref.platform, file, cc: head.cc, docs: NO_DOCS });
 </script>
 
 <TreeToolbar state={tree} label="filter APN fields" />

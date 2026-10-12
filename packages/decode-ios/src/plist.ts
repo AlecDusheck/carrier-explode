@@ -3,7 +3,7 @@
  * Written from scratch so it runs unmodified on the Workers runtime.
  */
 
-import { asciiAt, b64ToBytes, bytesToHex, maybeText, view } from "@carrier-explode/binary";
+import { asciiAt, b64ToBytes, bytesToHex, decodeXmlEntities, maybeText, view } from "@carrier-explode/binary";
 import { isRecord } from "@carrier-explode/values";
 
 /** A bplist UID (NSKeyedArchiver object reference), kept apart from integers. */
@@ -30,7 +30,7 @@ export type PlistValue =
 	| PlistValue[]
 	| PlistDict;
 
-export type PlistDict = { [k: string]: PlistValue };
+export type PlistDict = { readonly [k: string]: PlistValue };
 
 const td = new TextDecoder();
 const tdUtf16 = new TextDecoder("utf-16be");
@@ -177,36 +177,6 @@ interface Tok {
 	text: string;
 }
 
-function decodeEntities(s: string): string {
-	if (s.indexOf("&") === -1) return s;
-	return s.replace(/&(#x?[0-9a-fA-F]+|amp|lt|gt|quot|apos);/g, (m, e: string) => {
-		switch (e) {
-			case "amp":
-				return "&";
-			case "lt":
-				return "<";
-			case "gt":
-				return ">";
-			case "quot":
-				return '"';
-			case "apos":
-				return "'";
-			default: {
-				const hex = e[1] === "x";
-				const code = parseInt(hex ? e.slice(2) : e.slice(1), hex ? 16 : 10);
-				// Out of range or unparseable: leave the reference literal rather than
-				// throwing away the whole document.
-				if (!Number.isFinite(code) || code < 0 || code > 0x10ffff) return m;
-				try {
-					return String.fromCodePoint(code);
-				} catch {
-					return m;
-				}
-			}
-		}
-	});
-}
-
 function tokenize(xml: string): Tok[] {
 	const toks: Tok[] = [];
 	let i = 0;
@@ -312,7 +282,7 @@ export function parseXmlPlist(xml: string): PlistValue {
 						element(depth + 1);
 						continue;
 					} // unexpected: consume and move on
-					const key = decodeEntities(cur.text);
+					const key = decodeXmlEntities(cur.text);
 					p++;
 					if (closes("key")) p++;
 					out[key] = opensElement() ? element(depth + 1) : null;
@@ -333,7 +303,7 @@ export function parseXmlPlist(xml: string): PlistValue {
 			}
 			case "key":
 			case "string": {
-				const v = decodeEntities(text);
+				const v = decodeXmlEntities(text);
 				skipTo(name);
 				return v;
 			}
@@ -393,18 +363,18 @@ export const isPlistDict = (v: PlistValue | undefined): v is PlistDict => isReco
 
 /* Tagged scalars in toJsonSafe output. */
 export interface JsonBlob {
-	__data: string;
-	__len: number;
-	__text?: string;
+	readonly __data: string;
+	readonly __len: number;
+	readonly __text?: string;
 }
 export interface JsonDate {
-	__date: string;
+	readonly __date: string;
 }
 export interface JsonBigInt {
-	__int: string;
+	readonly __int: string;
 }
 export interface JsonUid {
-	__uid: number;
+	readonly __uid: number;
 }
 
 export const isBlob = (v: unknown): v is JsonBlob =>
@@ -415,6 +385,19 @@ export const isUid = (v: unknown): v is JsonUid => isRecord(v) && typeof v.__uid
 
 const isTagged = (v: unknown): v is JsonBlob | JsonDate | JsonBigInt | JsonUid =>
 	isBlob(v) || isDate(v) || isBigInt(v) || isUid(v);
+
+/** A plist as toJsonSafe writes it. */
+export type PlistJson =
+	| string
+	| number
+	| boolean
+	| null
+	| JsonBlob
+	| JsonDate
+	| JsonBigInt
+	| JsonUid
+	| readonly PlistJson[]
+	| { readonly [k: string]: PlistJson };
 
 /** A dict in toJsonSafe output: a record that is not a tagged scalar. */
 export const isJsonDict = (v: unknown): v is Record<string, unknown> => isRecord(v) && !isTagged(v);
@@ -436,7 +419,7 @@ export function mergeSettings(
  * Serialise a parsed plist to JSON-safe values, tagging binary and dates.
  * Integers beyond 2^53 become `{ __int: "<decimal>" }` and UIDs `{ __uid: n }`.
  */
-export function toJsonSafe(v: PlistValue): unknown {
+export function toJsonSafe(v: PlistValue): PlistJson {
 	if (typeof v === "bigint") return { __int: v.toString() };
 	if (v instanceof PlistUid) return { __uid: v.uid };
 	if (v instanceof Uint8Array) {
@@ -448,7 +431,7 @@ export function toJsonSafe(v: PlistValue): unknown {
 	}
 	if (Array.isArray(v)) return v.map(toJsonSafe);
 	if (isPlistDict(v)) {
-		const out: Record<string, unknown> = {};
+		const out: Record<string, PlistJson> = {};
 		for (const [k, val] of Object.entries(v)) out[k] = toJsonSafe(val);
 		return out;
 	}

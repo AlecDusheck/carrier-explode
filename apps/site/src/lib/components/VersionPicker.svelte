@@ -22,7 +22,7 @@
   {@const tag = versionTag(e, shipping)}
   <span class="picker-opt">
     <VersionMark platform={e.platform} version={e.icon} />
-    <span class="text">{e.label}</span>
+    <span class="ellipsis">{e.label}</span>
     {#if tag}<span class={["picker-tag", { now: tag === "current release" }]}>{tag}</span>{/if}
     {#if !e.changed && e.slug !== current}<span class="picker-tag">same content</span>{/if}
   </span>

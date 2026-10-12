@@ -3,6 +3,9 @@
  * band_combos_per_plmn.xml and A-MPR NS tables.
  */
 
+import { decodeXmlEntities, XML_ATTR } from "@carrier-explode/binary";
+import type { Building } from "./building.ts";
+
 /** Role of a node in a policyman rule. */
 type PolicyKind =
 	| "policy" // <policy>, <policy_list>
@@ -15,12 +18,12 @@ type PolicyKind =
 	| "data"; // everything else: list members, plain config XML
 
 export interface PolicyNode {
-	tag: string;
-	kind: PolicyKind;
-	attrs: Record<string, string>;
+	readonly tag: string;
+	readonly kind: PolicyKind;
+	readonly attrs: Record<string, string>;
 	/** Trimmed text content, when there is any. */
-	text?: string;
-	children: PolicyNode[];
+	readonly text?: string;
+	readonly children: PolicyNode[];
 }
 
 // Element roles from the policyman grammar census (bbcfg.mbn + qdsp6sw.mbn + iOS 27.0 .der.pri XML)
@@ -40,28 +43,14 @@ function kindOf(tag: string, parent?: PolicyNode): PolicyKind {
 	return "data";
 }
 
-const ENTITIES: Record<string, string> = { lt: "<", gt: ">", amp: "&", quot: '"', apos: "'" };
-
-function unescape(s: string): string {
-	return s.replace(/&(#x[0-9a-f]+|#\d+|\w+);/gi, (m, e: string) => {
-		if (e[0] === "#") {
-			const n = e[1] === "x" || e[1] === "X" ? parseInt(e.slice(2), 16) : parseInt(e.slice(1), 10);
-			return Number.isFinite(n) && n <= 0x10ffff ? String.fromCodePoint(n) : m;
-		}
-		return ENTITIES[e] ?? m;
-	});
-}
-
-const ATTR = /([^\s=/>]+)\s*(?:=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+)))?/g;
-
 /** A node list (normally one root), tolerating what firmware files do: trailing NULs, unclosed or stray end tags, bare `&`. */
 export function parsePolicyXml(xml: string): PolicyNode[] {
-	const root: PolicyNode = { tag: "#root", kind: "data", attrs: {}, children: [] };
-	const stack: PolicyNode[] = [root];
+	const root: Building<PolicyNode> = { tag: "#root", kind: "data", attrs: {}, children: [] };
+	const stack: Building<PolicyNode>[] = [root];
 	// Close tags never pop the root, so the stack is never empty.
-	const top = (): PolicyNode => stack.at(-1) ?? root;
+	const top = (): Building<PolicyNode> => stack.at(-1) ?? root;
 	const addText = (s: string) => {
-		const t = unescape(s).trim();
+		const t = decodeXmlEntities(s).trim();
 		if (!t) return;
 		const n = top();
 		n.text = n.text ? `${n.text} ${t}` : t;
@@ -108,8 +97,8 @@ export function parsePolicyXml(xml: string): PolicyNode[] {
 		if (!m) continue;
 		const [opening, tag = ""] = m;
 		const attrs: Record<string, string> = {};
-		for (const [, name = "", dq, sq, bare] of body.slice(opening.length).matchAll(ATTR))
-			attrs[name] = unescape(dq ?? sq ?? bare ?? "");
+		for (const [, name = "", dq, sq, bare] of body.slice(opening.length).matchAll(XML_ATTR))
+			attrs[name] = decodeXmlEntities(dq ?? sq ?? bare ?? "");
 		const parent = top();
 		const node: PolicyNode = {
 			tag,
@@ -132,12 +121,12 @@ export function* walkPolicy(nodes: PolicyNode[]): Generator<PolicyNode> {
 }
 
 export interface ComboComponent {
-	rat: "lte" | "nr";
-	band: number;
+	readonly rat: "lte" | "nr";
+	readonly band: number;
 	/** Downlink bandwidth class, with its MIMO layers when given ("A[4]"). */
-	dl: string;
+	readonly dl: string;
 	/** Uplink class when the component carries uplink. */
-	ul?: string;
+	readonly ul?: string;
 }
 
 /** EN-DC (LTE + NR), NR only, or LTE only. */
@@ -145,17 +134,17 @@ export type ComboType = "endc" | "nr" | "lte";
 
 export interface Combo {
 	/** Undefined when no component parsed. */
-	type?: ComboType;
-	components: ComboComponent[];
+	readonly type?: ComboType;
+	readonly components: ComboComponent[];
 	/** NR-DC (FR1 + FR2): the `-dc` suffix. */
-	nrdc: boolean;
+	readonly nrdc: boolean;
 	/** Uplink Tx switching: the `-swul` suffix. */
-	swul: boolean;
+	readonly swul: boolean;
 }
 
 /** One combo string, e.g. `b66AA-b2A-n77AA-swul`; unknown tokens are skipped. */ // band_combos_per_plmn.xml
 export function parseCombo(s: string): Combo {
-	const out: Combo = { components: [], nrdc: false, swul: false };
+	const out: Building<Combo> = { components: [], nrdc: false, swul: false };
 	for (const tok of s.trim().split("-")) {
 		if (tok === "dc") {
 			out.nrdc = true;
@@ -171,11 +160,17 @@ export function parseCombo(s: string): Combo {
 		const [dl = "", ul] = classes.match(/[A-Z](?:\[[^\]]*\])?/g) ?? [];
 		out.components.push({ rat: rat === "b" ? "lte" : "nr", band: Number(band), dl, ...(ul ? { ul } : {}) });
 	}
-	const lte = out.components.some((x) => x.rat === "lte"),
-		nr = out.components.some((x) => x.rat === "nr");
-	if (lte || nr) out.type = lte && nr ? "endc" : nr ? "nr" : "lte";
+	const type = comboType(
+		out.components.some((x) => x.rat === "lte"),
+		out.components.some((x) => x.rat === "nr"),
+	);
+	if (type !== undefined) out.type = type;
 	return out;
 }
+
+/** A combination with LTE and NR components is EN-DC; undefined with neither. */
+export const comboType = (lte: boolean, nr: boolean): ComboType | undefined =>
+	lte && nr ? "endc" : nr ? "nr" : lte ? "lte" : undefined;
 
 /** "n77 n78" / "B2 B66": band numbers as 3GPP writes them (TS 36.101 / 38.101). */
 export const bandList = (bands: readonly number[], rat: "lte" | "nr"): string =>
@@ -183,10 +178,10 @@ export const bandList = (bands: readonly number[], rat: "lte" | "nr"): string =>
 
 export interface BandComboCarrier {
 	/** Element name, e.g. "ATT", "KDDI-LEGACY". */
-	tag: string;
+	readonly tag: string;
 	/** "310-150" style, as listed in the PLMN-ID element before it. */
-	plmns: string[];
-	combos: string[];
+	readonly plmns: string[];
+	readonly combos: string[];
 }
 
 /** `<PLMN-ID>…</PLMN-ID><TAG>combo;combo;…</TAG>` pairs; comments are dropped. */ // bbcfg.mbn: /policyman/band_combos_per_plmn.xml
@@ -209,28 +204,28 @@ export function parseBandCombos(xml: string): BandComboCarrier[] {
 }
 
 export interface ComboStats {
-	combos: number;
+	readonly combos: number;
 	/** LTE + NR components (EN-DC). */
-	endc: number;
+	readonly endc: number;
 	/** NR-only (SA / NR-CA, single NR bands included). */
-	nr: number;
-	lte: number;
-	nrdc: number;
-	swul: number;
+	readonly nr: number;
+	readonly lte: number;
+	readonly nrdc: number;
+	readonly swul: number;
 	/** Most component carriers in one combo. */
-	maxComponents: number;
+	readonly maxComponents: number;
 	/** NR bands used in a multi-carrier combination: more than one component, or intra-band CA (class B and up). */
-	nrBands: number[];
+	readonly nrBands: number[];
 	/** NR bands that only appear alone at class A: each tag's section ends with the same single-band list. */
-	singleBands: number[];
+	readonly singleBands: number[];
 	/** Multi-carrier NR bands below n257 (FR1). */
-	fr1Bands: number[];
+	readonly fr1Bands: number[];
 	/** Multi-carrier NR bands from n257 up (FR2). */
-	fr2Bands: number[];
+	readonly fr2Bands: number[];
 	/** LTE bands that anchor an EN-DC combo. */
-	lteAnchors: number[];
+	readonly lteAnchors: number[];
 	/** Supplementary-uplink NR bands (n80..n86, n89, n95, n97, n98), when any appear. */
-	sulBands: number[];
+	readonly sulBands: number[];
 }
 
 // TS 38.101-1 Table 5.2-1: SUL operating bands
@@ -269,8 +264,8 @@ export function comboStats(combos: string[]): ComboStats {
 }
 
 export interface AmprGroup {
-	mccs: string[];
-	bands: Array<{ band: number; nsNoCa?: number; nsWithCa?: number }>;
+	readonly mccs: string[];
+	readonly bands: Array<{ readonly band: number; readonly nsNoCa?: number; readonly nsWithCa?: number }>;
 }
 
 const childNumber = (n: PolicyNode, tag: string) => {
@@ -302,10 +297,10 @@ export function parseAmprNs(xml: string): AmprGroup[] {
 }
 
 export interface XmlRefs {
-	policy?: string;
-	carriers?: string[];
-	plmns?: string[];
-	mccs?: string[];
+	readonly policy?: string;
+	readonly carriers?: string[];
+	readonly plmns?: string[];
+	readonly mccs?: string[];
 }
 
 /** Policy name, carrier names, PLMNs and MCCs in the known XML shapes; comments ignored. */
@@ -325,7 +320,7 @@ export function xmlRefs(xml: string): XmlRefs {
 	for (const [, list, id = ""] of x.matchAll(/<mcc_list[^>]*>([^<]*)<|<mcc id="([^"]*)"/g))
 		for (const p of (list ?? id).split(/\s+/)) if (p) mccs.add(p);
 	const policy = /<policy(?:_list)?\b[^>]*\bname\s*=\s*"([^"]*)"/.exec(x)?.[1];
-	const out: XmlRefs = {};
+	const out: Building<XmlRefs> = {};
 	if (policy !== undefined) out.policy = policy;
 	if (carriers.length) out.carriers = carriers;
 	if (plmns.size) out.plmns = [...plmns].toSorted();

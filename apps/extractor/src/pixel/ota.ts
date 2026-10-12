@@ -6,16 +6,18 @@
 import { sha1Hex, sha256Hex } from "@carrier-explode/binary";
 import { decodeCarrierList, decodeCarrierSettings } from "@carrier-explode/decode-android";
 import { fetchWithRetry, HttpError } from "@carrier-explode/http";
-import { pixelOtaFilesSchema, releaseSchema } from "@carrier-explode/schema/records";
+import { pixelTrain } from "@carrier-explode/schema";
+import { pixelOtaFilesSchema } from "@carrier-explode/schema/records";
 import { sourceKey, type PixelOtaFile, type PixelOtaListing } from "@carrier-explode/schema/types";
 import { keys, putJson, putOnce, readRecord } from "@carrier-explode/storage";
 import type { Env } from "../env.ts";
-import { allOrThrow, fanOut } from "../fan-out.ts";
+import { mapLimit } from "../fan-out.ts";
 import { normWriter, storeNormalized } from "../normalize.ts";
 import type { PipelineParams } from "../pipelines.ts";
+import { readRelease } from "../records.ts";
 import { hashed, heldReleases, heldShas, otaPointer, storeObj } from "../store.ts";
 import type { UnitContext } from "../unit.ts";
-import { asks, recency, trainOf } from "./plan.ts";
+import { asks, recency } from "./plan.ts";
 import { PixelError, settingsSource } from "./settings.ts";
 import {
 	askUpdates,
@@ -34,9 +36,8 @@ export async function checkPixelOta(env: Env): Promise<PipelineParams<"pixel-ota
 		(await heldReleases(env.BUCKET, "android")).flatMap((k) => (k.platform === "android" ? [k.id] : [])),
 	);
 	if (!wanted.length) return null;
-	const answers = allOrThrow(
-		"update service",
-		await fanOut(wanted, env.FEED_CONCURRENCY.pixelOta, (a) => askUpdates(a.device, a.train)),
+	const answers = await mapLimit("update service", wanted, env.FEED_CONCURRENCY.pixelOta, (a) =>
+		askUpdates(a.device, a.train),
 	);
 	const snapshot = new TextEncoder().encode(JSON.stringify({ answers } satisfies PixelOtaSnapshot));
 	const sha1 = sha1Hex(snapshot);
@@ -145,11 +146,10 @@ async function heldCarrierList(bucket: R2Bucket, device: string, train: string):
 	const mine = (await heldReleases(bucket, "android"))
 		.flatMap((k) => (k.platform === "android" && k.id[1] === device ? [k.id[0]] : []))
 		.toSorted((a, b) => recency(b).localeCompare(recency(a)));
-	const build = mine.find((b) => trainOf(b) === train) ?? mine[0];
+	const build = mine.find((b) => pixelTrain(b) === train) ?? mine[0];
 	if (build === undefined) throw new PixelError(`${device}: no held build to read its SIM rules from`);
-	const part = await readRecord(bucket, keys.release("android", build, device), releaseSchema);
-	if (part?.platform !== "android")
-		throw new PixelError(`${keys.release("android", build, device)}: not a Pixel release`);
+	const part = await readRelease(bucket, { platform: "android", id: [build, device] });
+	if (part.platform !== "android") throw new PixelError(`${build} ${device}: not a Pixel release`);
 	return part.carrierList;
 }
 

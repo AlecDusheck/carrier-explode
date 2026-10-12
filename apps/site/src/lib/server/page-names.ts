@@ -1,7 +1,8 @@
 /** What a page's head calls the carrier, build and modem its route names: the index's names, not the codes in the URL. */
 
-import { countryName, isPlatform, isReleasePlatform, type ReleasePlatform } from "@carrier-explode/schema";
-import { sourceKey, type KindSegment } from "@carrier-explode/schema/types";
+import type { LayoutParams } from "$app/types";
+import { countryName, isReleasePlatform, type ReleasePlatform } from "@carrier-explode/schema";
+import { sourceKey } from "@carrier-explode/schema/types";
 import { phoneList } from "#lib/apple/phones.ts";
 import { refOf } from "#lib/at.ts";
 import { releaseLabel } from "#lib/naming.ts";
@@ -11,17 +12,10 @@ import { sourceRow } from "./catalog";
 import { brandOf } from "./pictures";
 import { hasPrevious, releaseNamed } from "./releases";
 
-interface NamedParams {
-	readonly kind?: KindSegment | undefined;
-	readonly platform?: string | undefined;
-	readonly name?: string | undefined;
-	readonly build?: string | undefined;
-	readonly modem?: string | undefined;
-}
+type NamedParams = Readonly<LayoutParams<"/">>;
 
 async function sourceNames(p: NamedParams): Promise<PageNames["source"]> {
-	if (p.kind === undefined || p.platform === undefined || !isPlatform(p.platform) || p.name === undefined)
-		return null;
+	if (p.kind === undefined || p.platform === undefined || p.name === undefined) return null;
 	const ref = refOf({ kind: p.kind, platform: p.platform, name: p.name });
 	const s = await sourceRow(sourceKey(ref));
 	return s === undefined

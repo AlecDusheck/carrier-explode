@@ -18,13 +18,15 @@ export { iosModemConfig } from "./ios/modem.ts";
 export { firmwareFamily, modemFamilyName } from "./modem-names.ts";
 export { manifestRoutes } from "./ios/identity.ts";
 export { boardRadios, phoneRadio, type BoardRadios } from "./ios/radio.ts";
+export { cbsRange, emergencyNumberList } from "./ios/readers.ts";
 export { featureWhere } from "./features.ts";
 export { androidProfile } from "./android/profile.ts";
 export { pixelApns, pixelConfigBody } from "./android/aosp.ts";
 export { AOSP_DOCUMENTS, apnElements, carrierConfigElements, profileApns, type AospApn } from "./aosp.ts";
 export { carrierListRoutes } from "./android/identity.ts";
+export { parseRuleName } from "./android/names.ts";
 export { samsungProfile } from "./samsung/profile.ts";
-export { IMS_OPERATOR } from "./samsung/ims.ts";
+export { imsTrees } from "./samsung/ims.ts";
 export {
 	CONFIG_RADIOS,
 	configRadio,
@@ -60,6 +62,7 @@ export {
 	lastChanged,
 	lineOf,
 	linesOf,
+	pixelTrain,
 	releaseSortKey,
 	sourceTimeline,
 	versionOn,
@@ -71,6 +74,7 @@ export {
 } from "./timeline.ts";
 export { releaseChanges, type ReleaseChange, type ShippedCopy } from "./release-changes.ts";
 export {
+	BASE_SOURCES,
 	baseSource,
 	perPhone,
 	phoneHeads,
@@ -89,7 +93,6 @@ export {
 	identityChanged,
 	isTestPlmn,
 	isUnnamedRule,
-	LINK_RULES,
 	linkCarriers,
 	type Carrier,
 	type Linked,

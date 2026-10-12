@@ -1,9 +1,6 @@
 /** SimMatcher normalisation, so both platforms' spellings of one rule give one matcherKey. */
 
-import { matcherKey, ruleKey, type SimMatcher, type SimRule } from "./types.ts";
-
-/** 5 or 6 digits: MCC + 2- or 3-digit MNC. */
-const isMccMnc = (s: string): boolean => /^\d{5,6}$/.test(s);
+import { isMccMnc, matcherKey, ruleKey, type SimMatcher, type SimRule } from "./types.ts";
 
 /** GID files are FF-padded (3GPP TS 31.102), so trailing FF bytes go; an all-FF GID is no rule at all. */
 export function normaliseGid(raw: string): string | undefined {
@@ -14,14 +11,11 @@ export function normaliseGid(raw: string): string | undefined {
 }
 
 /** Build a SimMatcher with only the present fields, normalised. Undefined when mccmnc is malformed. */
-export function simMatcher(fields: {
-	mccmnc: string;
-	gid1?: string | undefined;
-	gid2?: string | undefined;
-	spn?: string | undefined;
-	imsiPrefix?: string | undefined;
-	iccidPrefix?: string | undefined;
-}): SimMatcher | undefined {
+export function simMatcher(
+	fields: Pick<SimMatcher, "mccmnc"> & {
+		readonly [K in Exclude<keyof SimMatcher, "mccmnc">]?: SimMatcher[K] | undefined;
+	},
+): SimMatcher | undefined {
 	const mccmnc = fields.mccmnc.trim();
 	if (!isMccMnc(mccmnc)) return undefined;
 	const gid1 = fields.gid1 === undefined ? undefined : normaliseGid(fields.gid1);
@@ -40,19 +34,17 @@ export function simMatcher(fields: {
 	};
 }
 
-/** One matcher per matcherKey, the first of each. */
-export function uniqueSims(sims: Iterable<SimMatcher>): SimMatcher[] {
-	const byKey = new Map<string, SimMatcher>();
-	for (const m of sims) if (!byKey.has(matcherKey(m))) byKey.set(matcherKey(m), m);
+const firstPerKey = <T>(xs: Iterable<T>, key: (x: T) => string): T[] => {
+	const byKey = new Map<string, T>();
+	for (const x of xs) if (!byKey.has(key(x))) byKey.set(key(x), x);
 	return [...byKey.values()];
-}
+};
+
+/** One matcher per matcherKey, the first of each. */
+export const uniqueSims = (sims: Iterable<SimMatcher>): SimMatcher[] => firstPerKey(sims, matcherKey);
 
 /** One rule per ruleKey, the first of each. */
-export function uniqueRules(rules: Iterable<SimRule>): SimRule[] {
-	const byKey = new Map<string, SimRule>();
-	for (const r of rules) if (!byKey.has(ruleKey(r))) byKey.set(ruleKey(r), r);
-	return [...byKey.values()];
-}
+export const uniqueRules = (rules: Iterable<SimRule>): SimRule[] => firstPerKey(rules, ruleKey);
 
 /** What a SIM states, as someone looking it up gives it: its PLMN, and any of its group IDs, SPN, IMSI and ICCID. */
 export interface SimFacts {

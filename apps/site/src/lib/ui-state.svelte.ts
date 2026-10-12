@@ -4,6 +4,7 @@ import type { Attachment } from "svelte/attachments";
 import { on } from "svelte/events";
 import { opensMenu } from "./keys.ts";
 import { shipsKind, type Platform } from "@carrier-explode/schema/types";
+import type { ScanScope, WholeScope } from "./api/schemas.ts";
 
 export type MenuItem =
 	| { readonly kind: "action"; readonly label: string; readonly run: () => void }
@@ -35,12 +36,9 @@ class ContextMenuState {
 
 export const contextMenu = new ContextMenuState();
 
-/** Which sources a scan reads: every carrier of the platform, one country's carriers, or every iOS country bundle. */
-export type ScanScope = "carriers" | "countries" | `country:${string}`;
-
 /** A scan as the menu offers it (`country` stands for the source's own country), and as the dialog's Scope select names it. */
 interface ScopeChoice {
-	readonly scope: "carriers" | "countries" | "country";
+	readonly scope: WholeScope | "country";
 	readonly menu: (cc: string) => string;
 	readonly option: (cc: string) => string;
 }
@@ -85,7 +83,7 @@ class ScanState {
 export const scan = new ScanState();
 
 /** The dialog lists the whole-platform scopes countries first; one country's carriers only as the menu named it. */
-const OPTION_ORDER = { countries: 0, carriers: 1 } as const;
+const OPTION_ORDER = { countries: 0, carriers: 1 } as const satisfies Record<WholeScope, number>;
 
 /** The dialog's Scope options for a query on `platform` currently scoped to `current`. */
 export function scopeOptions(
@@ -93,7 +91,7 @@ export function scopeOptions(
 	current: ScanScope,
 ): ReadonlyArray<readonly [ScanScope, string]> {
 	const whole = scanScopes(platform)
-		.flatMap((s): Array<readonly ["carriers" | "countries", string]> =>
+		.flatMap((s): Array<readonly [WholeScope, string]> =>
 			s.scope === "country" ? [] : [[s.scope, s.option("")]],
 		)
 		.toSorted(([a], [b]) => OPTION_ORDER[a] - OPTION_ORDER[b]);
@@ -197,20 +195,4 @@ export function menuTrigger(build: () => { title: string; items: MenuItem[] }): 
 	};
 }
 
-export async function copyText(text: string): Promise<void> {
-	try {
-		await navigator.clipboard.writeText(text);
-	} catch {
-		const ta = document.createElement("textarea");
-		ta.value = text;
-		ta.style.position = "fixed";
-		ta.style.opacity = "0";
-		document.body.appendChild(ta);
-		ta.select();
-		try {
-			document.execCommand("copy");
-		} finally {
-			ta.remove();
-		}
-	}
-}
+export const copyText = (text: string): Promise<void> => navigator.clipboard.writeText(text);

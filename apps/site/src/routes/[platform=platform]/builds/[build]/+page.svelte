@@ -30,8 +30,9 @@
     <Pane>
       {@const r = await getRelease({ platform: data.platform, build: params.build })}
       {@const view = RELEASE_VIEWS[r.release.platform]}
+      {@const Name = (await view.Name()).default}
       <div class="filters">
-        <view.Name release={r.release} />
+        <Name release={r.release} />
         {#if r.previous}
           <span class="dimtext">since</span>
           <a class="picker-opt" href={buildHref(r.previous.platform, r.previous.id)}><VersionMark platform={r.previous.platform} version={r.previous.version} />{releaseLabel(r.previous)} <span class="mono dimtext">{r.previous.id}</span></a>

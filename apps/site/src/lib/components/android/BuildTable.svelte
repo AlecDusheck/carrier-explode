@@ -1,12 +1,11 @@
 <script lang="ts">
   import { getCarriersShipped, getPhoneNames } from "#lib/api/builds.remote.ts";
   import { buildHref } from "#lib/format.ts";
-  import { releaseLabel } from "#lib/naming.ts";
-  import type { ListedRelease } from "@carrier-explode/db";
+  import { releaseLabel, type ReleaseOf } from "#lib/naming.ts";
   import VersionMark from "../VersionMark.svelte";
 
   /** The Pixel builds held, each with its phones and how many of the carrier list's carriers it ships. */
-  let { builds }: { builds: ReadonlyArray<Extract<ListedRelease, { platform: "android" }>> } = $props();
+  let { builds }: { builds: readonly ReleaseOf<"android">[] } = $props();
 
   const names = $derived(new Map(await getPhoneNames("android")));
   const carriers = $derived(new Map(await getCarriersShipped("android")));

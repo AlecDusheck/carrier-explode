@@ -7,31 +7,32 @@
 
 import { asciiAt, latin1, u32le } from "@carrier-explode/binary";
 import { MODEM_SUMMARY_SCHEMA, modemGeneration } from "./modem.ts";
+import type { Building } from "./building.ts";
 
 export interface FtabEntry {
-	tag: string;
-	offset: number;
-	size: number;
+	readonly tag: string;
+	readonly offset: number;
+	readonly size: number;
 }
 
 export interface FtabBuild {
 	/** "240.3431000025000000.5941" */
-	build?: string;
+	readonly build?: string;
 	/** BBFW:3.01.03 */
-	version?: string;
+	readonly version?: string;
 	/** date:2026 8 13, as 2026-08-13 */
-	date?: string;
+	readonly date?: string;
 	/** "c4000v59" */
-	chip?: string;
+	readonly chip?: string;
 	/** chip_revision_b0 */
-	chipRevision?: string;
+	readonly chipRevision?: string;
 }
 
 export interface FtabSummary {
-	schema: typeof MODEM_SUMMARY_SCHEMA;
-	kind: "ftab";
-	package: FtabBuild & { name?: string; family?: string; bver?: string };
-	entries: FtabEntry[];
+	readonly schema: typeof MODEM_SUMMARY_SCHEMA;
+	readonly kind: "ftab";
+	readonly package: FtabBuild & { readonly name?: string; readonly family?: string; readonly bver?: string };
+	readonly entries: FtabEntry[];
 }
 
 export function parseFtab(b: Uint8Array): FtabEntry[] {
@@ -53,7 +54,7 @@ export function parseFtab(b: Uint8Array): FtabEntry[] {
 
 /** "240.…|24.0.0.0|BBFW:3.01.03|date:2026 8 13|c4000v59|chip_revision_b0" */
 export function parseBver(s: string): FtabBuild {
-	const out: FtabBuild = {};
+	const out: Building<FtabBuild> = {};
 	const parts = s.trim().split("|");
 	const [build = ""] = parts;
 	if (/^[\d.]+$/.test(build)) out.build = build;

@@ -24,30 +24,25 @@ import {
 	type VersionLookup,
 } from "@carrier-explode/schema";
 import {
-	decoderFamily,
+	linePlatform,
 	MAIN_LINE,
-	parseSourceKey,
-	sourceKey,
+	sourceOf as refOf,
 	sourcePath,
 	versionPath,
-	type DecoderFamily,
 	type EntryRef,
 	type Platform,
 	type ReleasePlatform,
 	type SourceKey,
 	type SourceRef,
 } from "@carrier-explode/schema/types";
+import { keys } from "@carrier-explode/storage";
 import { trainVersions } from "#lib/android/naming.ts";
 import { NAMING } from "#lib/naming.ts";
+import { PLATFORM_NAMES } from "#lib/platforms.ts";
 import type { Ver, Version, VersionCopy } from "#lib/types.ts";
 import { cached, perRequest } from "./cache";
 import { db, everyPage, indexVersion } from "./db";
-
-/** Whose devices a family's lines are: Apple's models are iPhones, as its images are. */
-const LINE_DEVICES = { apple: "ios", android: "android", samsung: "samsung" } as const satisfies Record<
-	DecoderFamily,
-	ReleasePlatform
->;
+import { readBytes } from "./store";
 
 /** The OS images whose devices are a platform's phones: iPads and watches ship in none. */
 export const PHONE_IMAGES = {
@@ -68,9 +63,6 @@ export const deviceNames = perRequest(
 	async (platform: ReleasePlatform): Promise<ReadonlyMap<string, string>> =>
 		new Map((await devicesOf(platform)).map((d) => [d.code, d.name])),
 );
-
-/** The platform whose devices a platform's lines are. */
-export const linePlatform = (platform: Platform): ReleasePlatform => LINE_DEVICES[decoderFamily(platform)];
 
 /** The order a platform's lines are listed in: its devices, newest first. */
 export const deviceOrder = async (platform: Platform): Promise<DeviceOrder> =>
@@ -95,10 +87,12 @@ export const shippedModems = perRequest(
 		modemsOf(await db(), platform, build),
 );
 
-/** A source as its header shows it; undefined when the index lacks it. */
-export const sourceRow = perRequest(async (key: SourceKey) => sourceOf(await db(), key));
+type SourceHeader = NonNullable<Awaited<ReturnType<typeof sourceOf>>>;
 
-type SourceHeader = NonNullable<Awaited<ReturnType<typeof sourceRow>>>;
+/** A source as its header shows it; undefined when the index lacks it. */
+export const sourceRow = perRequest(async (key: SourceKey): Promise<SourceHeader | undefined> =>
+	sourceOf(await db(), key),
+);
 
 export const isIndexed = async (key: SourceKey): Promise<boolean> => (await sourceRow(key)) !== undefined;
 
@@ -122,30 +116,22 @@ export interface Located {
 	readonly copies: readonly OrderedCopy[];
 }
 
-/** `key` is untrusted: it comes from a URL or a query argument. */
-export const locate = perRequest(async (key: string): Promise<Located> => {
-	const ref = parseSourceKey(key);
-	if (!ref) error(400, `Not a source key: ${key}`);
-	const typed = sourceKey(ref);
+export const locate = perRequest(async (key: SourceKey): Promise<Located> => {
+	const ref = refOf(key);
 	const [source, timeline, order, copies] = await Promise.all([
-		sourceRow(typed),
-		db().then((d) => entriesOf(d, typed)),
+		sourceRow(key),
+		db().then((d) => entriesOf(d, key)),
 		deviceOrder(ref.platform),
-		db().then((d) => copiesOf(d, typed, ref.platform)),
+		db().then((d) => copiesOf(d, key, ref.platform)),
 	]);
 	if (!source) error(404, `No ${ref.name} on ${ref.platform}.`);
-	return { key: typed, ref, source, timeline, order, copies };
+	return { key, ref, source, timeline, order, copies };
 });
 
-/** A Ver from the strings a per-request cache keys by, where "" is a missing line or version. */
-export const verFrom = (source: string, line: string, slug: string): Ver => ({
-	source,
-	...(line ? { line } : {}),
-	...(slug ? { slug } : {}),
-});
+export const verKey = (v: Ver): string => `${v.source}\0${v.line ?? ""}\0${v.slug ?? ""}`;
 
 /** A resolved version as query args again: Apple's main line has no line segment. */
-export const verAt = (source: string, at: EntryRef): Ver =>
+export const verAt = (source: SourceKey, at: EntryRef): Ver =>
 	at.line === MAIN_LINE ? { source, slug: at.slug } : { source, line: at.line, slug: at.slug };
 
 export interface Resolved extends Located {
@@ -197,37 +183,93 @@ export const copiesOfEntry = (copies: readonly OrderedCopy[], e: TimelineEntry):
 /** An image copy's OS: an iOS release's label (`27.2 beta 2`), else its version. */
 const imageOs = (r: OrderedRelease): string => r.label ?? r.version;
 
-/** Entries named by their copies' releases, as pages show them. */
-export async function versionsOf(r: Located, entries: readonly TimelineEntry[]): Promise<Version[]> {
+/** What names a source's versions: its copies, and the OS an OTA listing's train stands for. */
+export interface VersionNaming {
+	readonly platform: Platform;
+	readonly copies: readonly OrderedCopy[];
+	readonly otaOs: ReadonlyMap<string, string>;
+}
+
+export async function versionNaming(r: Located): Promise<VersionNaming> {
 	const { platform } = r.ref;
-	const { copies } = r;
-	const naming = NAMING[platform];
 	// Apple lists an OTA file under OS versions already; a Pixel under build trains.
 	const otaOs =
 		platform === "android" ? trainVersions(await releasesOf("android")) : new Map<string, string>();
-	return entries.map((e) => {
-		const mine = copiesOfEntry(copies, e);
-		const shipped = mine
-			.flatMap((c) => (c.kind === "release" ? [c.release] : []))
-			.toSorted((a, b) => a.sortKey.localeCompare(b.sortKey));
-		const files = mine.flatMap((c) => (c.kind === "ota" ? [c] : []));
-		const carried = {
-			images: shipped.map(imageOs),
-			ota: files.flatMap((c) => c.os.map((os) => otaOs.get(os) ?? os)),
-			version: e.version,
-		};
-		const held: VersionCopy[] = [
-			...(shipped.length
-				? [{ kind: "release" as const, releases: shipped.map((s) => s.id).toReversed() }]
-				: []),
-			...files.map((c) => ({ kind: "ota" as const, url: c.file.url, published: c.file.published, os: c.os })),
-		];
-		return { ...e, platform, label: naming.label(carried), icon: naming.icon(carried), copies: held };
-	});
+	return { platform, copies: r.copies, otaOs };
 }
 
-export async function versionOf(r: Located, entry: TimelineEntry): Promise<Version> {
-	const [v] = await versionsOf(r, [entry]);
-	if (!v) error(500, `no version for ${entry.slug}`);
-	return v;
+/** An entry named by its copies' releases, as pages show it. */
+export function nameVersion({ platform, copies, otaOs }: VersionNaming, e: TimelineEntry): Version {
+	const naming = NAMING[platform];
+	const mine = copiesOfEntry(copies, e);
+	const shipped = mine
+		.flatMap((c) => (c.kind === "release" ? [c.release] : []))
+		.toSorted((a, b) => a.sortKey.localeCompare(b.sortKey));
+	const files = mine.flatMap((c) => (c.kind === "ota" ? [c] : []));
+	const carried = {
+		images: shipped.map(imageOs),
+		ota: files.flatMap((c) => c.os.map((os) => otaOs.get(os) ?? os)),
+		version: e.version,
+	};
+	const held: VersionCopy[] = [
+		...(shipped.length
+			? [{ kind: "release" as const, releases: shipped.map((s) => s.id).toReversed() }]
+			: []),
+		...files.map((c) => ({ kind: "ota" as const, url: c.file.url, published: c.file.published, os: c.os })),
+	];
+	return { ...e, platform, label: naming.label(carried), icon: naming.icon(carried), copies: held };
+}
+
+export const versionOf = async (r: Located, entry: TimelineEntry): Promise<Version> =>
+	nameVersion(await versionNaming(r), entry);
+
+/** A version with its file decoded. */
+interface DecodedVersion<T> extends Resolved {
+	readonly file: T;
+	readonly sha: string;
+	readonly size: number;
+}
+
+type ReadVersion<T> = (v: Ver) => Promise<DecodedVersion<T>>;
+
+/** A platform's versions read from the bucket and decoded, each once per request. */
+export function decodedVersion<T>(platform: Platform, decode: (bytes: Uint8Array) => T): ReadVersion<T> {
+	return perRequest(async (v: Ver): Promise<DecodedVersion<T>> => {
+		const r = await resolve(v);
+		if (r.ref.platform !== platform) error(400, `${v.source} is not a ${PLATFORM_NAMES[platform]} source.`);
+		const bytes = await readBytes(keys.obj(r.entry.sha));
+		if (!bytes) error(404, `Version ${r.entry.slug} is not in the bucket.`);
+		return { ...r, file: decode(bytes), sha: r.entry.sha, size: bytes.length };
+	}, verKey);
+}
+
+/** Two versions and what tells their files apart. */
+export type VersionChanges<D> = { readonly a: Version | null; readonly b: Version } & D;
+
+interface ChangeReaders<D> {
+	/** A version against the one before it on its line, or against `against` on that line. */
+	readonly changes: (v: Ver, against?: string) => Promise<VersionChanges<D>>;
+	/** Any two versions; with no `a`, `b` against nothing. */
+	readonly comparison: (av: Ver | null, bv: Ver) => Promise<VersionChanges<D>>;
+}
+
+export function versionChanges<T, D>(read: ReadVersion<T>, diff: (a: T | null, b: T) => D): ChangeReaders<D> {
+	const named = async (v: Ver): Promise<Version> => {
+		const r = await resolve(v);
+		return versionOf(r, r.entry);
+	};
+	const comparison = async (av: Ver | null, bv: Ver): Promise<VersionChanges<D>> => {
+		const [a, b, va, vb] = await Promise.all([
+			av ? read(av) : null,
+			read(bv),
+			av ? named(av) : null,
+			named(bv),
+		]);
+		return { a: va, b: vb, ...diff(a === null ? null : a.file, b.file) };
+	};
+	const changes = async (v: Ver, against?: string): Promise<VersionChanges<D>> => {
+		const aSlug = against ?? (await resolve(v)).previous?.slug;
+		return comparison(aSlug === undefined ? null : { ...v, slug: aSlug }, v);
+	};
+	return { changes, comparison };
 }

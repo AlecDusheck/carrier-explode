@@ -6,12 +6,16 @@ const CUTOVER = "2026-10-05";
 
 export const SCOPE: Scope = {
 	ios: {
-		devices: { releasedSince: "2020-10" },
+		devices: { by: "released", releasedSince: "2020-10" },
 		everythingSince: CUTOVER,
 		backfill: "releases",
 		minMajor: 18,
 	},
-	android: { devices: { releasedSince: "2020-10" }, everythingSince: CUTOVER, backfill: "quarterly" },
+	android: {
+		devices: { by: "released", releasedSince: "2020-10" },
+		everythingSince: CUTOVER,
+		backfill: "quarterly",
+	},
 	samsung: {
 		families: ["Galaxy S", "Galaxy Z Flip"],
 		exclude: [" FE"],

@@ -2,7 +2,7 @@
   import { page } from "$app/state";
   import { getBasebandDiff } from "#lib/api/apple.remote.ts";
   import { getBuilds } from "#lib/api/builds.remote.ts";
-  import { withParams } from "#lib/format.ts";
+  import { diffCounts, withParams } from "#lib/format.ts";
   import type { ModemProps } from "../../views.ts";
   import BuildPicker from "../../BuildPicker.svelte";
   import Pane from "../../Pane.svelte";
@@ -27,7 +27,8 @@
       </div>
       <Pane awaiting={{ kind: "diff", name: modem }}>
         {@const d = await getBasebandDiff({ a: against, b: build, family: modem })}
-        <p class="dimtext note">{d.counts.changed} changed, {d.counts.added} added, {d.counts.removed} removed.</p>
+        {@const said = diffCounts(d.counts)}
+        {#if said}<p class="dimtext note">{said}.</p>{/if}
         <BasebandDiff parts={d.parts} />
       </Pane>
     {/if}

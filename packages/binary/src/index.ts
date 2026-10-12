@@ -24,10 +24,12 @@ export {
 	bytesToBase64,
 	bytesToHex,
 	colonHex,
+	decodeXmlEntities,
 	hexToBytes,
 	latin1,
 	maybeText,
 	u32Hex,
+	XML_ATTR,
 } from "./text.ts";
 export { crc32, sha1Hex, sha256Hex, sha384Hex, toArrayBuffer } from "./digest.ts";
 export { packedVarints, ProtobufError, wireFields, type WireField } from "./protobuf.ts";

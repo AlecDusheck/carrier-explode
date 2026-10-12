@@ -23,7 +23,7 @@
   .flags { display: flex; flex-wrap: wrap; gap: 2px; margin-bottom: 3px; }
   .flag {
     font: 10px/16px var(--mono); width: 20px; text-align: center; color: var(--text-dim);
-    border: 1px solid #c9c5bd; background: var(--field);
+    border: 1px solid var(--grid-line); background: var(--field);
   }
   .flag.set { background: var(--good-bg); border-color: var(--good-border); color: var(--text); font-weight: bold; }
   .flag.odd { background: var(--warn-bg); border-color: var(--warn-border); }

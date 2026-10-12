@@ -2,7 +2,7 @@
 
 import type { OrderedCopy, ShownDevice } from "@carrier-explode/db";
 import type { TimelineEntry } from "@carrier-explode/schema";
-import type { Platform, SourceRef } from "@carrier-explode/schema/types";
+import type { Platform, SourceKey, SourceRef } from "@carrier-explode/schema/types";
 import type { LogoSlug } from "#lib/carrierlogos.ts";
 
 /** The names a page's head reads for the codes in its URL; null where the route names none or the index has none. */
@@ -20,7 +20,7 @@ export interface PageNames {
 
 /** A version as a URL names it: source, line, and version (absent: the line's head). */
 export interface Ver {
-	readonly source: string;
+	readonly source: SourceKey;
 	readonly line?: string;
 	readonly slug?: string;
 }
@@ -37,7 +37,7 @@ export interface At {
 /** How a source is pictured: its carrier's logo, its country's flag, or the initials of its brand. */
 export type Picture =
 	| { readonly kind: "logo"; readonly slug: LogoSlug }
-	| { readonly kind: "flag"; readonly cc: string | undefined }
+	| { readonly kind: "flag"; readonly cc: string | null }
 	| { readonly kind: "initials"; readonly brand: string };
 
 /** A phone as pages name it. */
@@ -61,10 +61,10 @@ export interface Version extends TimelineEntry {
 }
 
 /** What a version's tab body receives: the page and version, and the file a tab that takes one is on ("" for none). */
-export interface TabProps {
+export type TabProps = {
 	readonly at: At;
 	readonly path: string;
-}
+};
 
 /** One APN as the APNs tab shows it: its name, the APN, what it serves, and its fields as its file writes them at `root`. */
 export interface ApnView {

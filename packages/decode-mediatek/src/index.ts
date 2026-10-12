@@ -44,11 +44,6 @@ export function decodeNwOta(bytes: Uint8Array): McfFile {
 	return decodeAs(bytes, "NW-OTA");
 }
 
-/** `.mcfota`: settings for every SIM, laid out like OP-OTA with unconditioned records. */
-export function decodeOta(bytes: Uint8Array): McfFile {
-	return decodeAs(bytes, "OTA");
-}
-
 /** The item table of an uncompressed `md/modem-bundle.img` as it streams: only its md1rom segment is held, and nothing after it read. */
 export async function bundleItemTable(bundle: AsyncIterable<Uint8Array>): Promise<ItemTable> {
 	return readItemTable(await bundleSegment(bundle, "md1rom"));

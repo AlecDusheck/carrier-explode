@@ -6,10 +6,15 @@
   let { params } = $props();
 
   // The load function has turned away a tab the platform does not have.
-  const Body = $derived(tabView(params.platform, params.tab)?.body);
+  const body = $derived(tabView(params.platform, params.tab)?.body);
   const at = $derived(atOf(params));
 </script>
 
 <div class="scroll pad">
-  {#if Body}<Pane awaiting={{ kind: "decode", name: params.path.split("/").pop() || at.ref.name }}><Body {at} path={params.path} /></Pane>{/if}
+  {#if body}
+    <Pane awaiting={{ kind: "decode", name: params.path.split("/").pop() || at.ref.name }}>
+      {@const Body = (await body()).default}
+      <Body {at} path={params.path} />
+    </Pane>
+  {/if}
 </div>

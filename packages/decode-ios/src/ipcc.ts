@@ -18,7 +18,28 @@ export interface UnpackedBundle {
 }
 
 /** Files Finder leaves behind, which neither the packager nor content ids count. */
-export const isJunk = (path: string): boolean => path === ".DS_Store" || path.endsWith("/.DS_Store");
+export const isJunk = (path: string): boolean =>
+	path.startsWith("__MACOSX") || path === ".DS_Store" || path.endsWith("/.DS_Store");
+
+export interface BundleMembers {
+	/** The zip path of the `<Name>.bundle/` directory, with its trailing slash. */
+	readonly root: string;
+	/** Without `.bundle`: `TMobile_us`, `UnitedStates`. */
+	readonly name: string;
+	/** Its files' paths inside it. */
+	readonly paths: readonly string[];
+}
+
+/** The first `<Name>.bundle/` directory among a zip's member names; the whole zip, as `bundle`, when it has none. */
+export function bundleMembers(names: readonly string[]): BundleMembers {
+	const [, root = "", name = "bundle"] =
+		names.map((n) => /^(.*?([^/]+)\.bundle\/)/.exec(n)).find((m) => m !== null) ?? [];
+	const paths = names
+		.filter((n) => n.startsWith(root) && !n.endsWith("/"))
+		.map((n) => n.slice(root.length))
+		.filter((path) => path !== "" && !isJunk(path));
+	return { root, name, paths };
+}
 
 export function packIpcc(b: UnpackedBundle): Uint8Array {
 	const entries = new Map<string, Uint8Array>();
@@ -33,14 +54,12 @@ export function packIpcc(b: UnpackedBundle): Uint8Array {
 /** The first `<Name>.bundle/` directory's files, as openIpcc finds it. */
 export function unpackIpcc(bytes: Uint8Array): UnpackedBundle {
 	const zip = unzipSync(bytes);
-	const [, root, name] =
-		Object.keys(zip)
-			.map((n) => /^(.*?([^/]+)\.bundle\/)/.exec(n))
-			.find((m) => m !== null) ?? [];
-	if (root === undefined || name === undefined) throw new Error("ipcc has no .bundle directory");
-	const files = Object.entries(zip)
-		.filter(([n]) => n.startsWith(root) && !n.endsWith("/") && !isJunk(n.slice(root.length)))
-		.map(([n, data]) => ({ path: n.slice(root.length), bytes: data }))
+	const { root, name, paths } = bundleMembers(Object.keys(zip));
+	const files = paths
+		.flatMap((path) => {
+			const data = zip[root + path];
+			return data === undefined ? [] : [{ path, bytes: data }];
+		})
 		.toSorted((x, y) => compareUtf8(x.path, y.path));
 	return { name, files };
 }

@@ -1,9 +1,10 @@
 import { resolve } from "$app/paths";
+import * as v from "valibot";
 import type { ReadonlyURL } from "$app/state";
 import type { Path } from "$app/types";
 import { isBigInt, isUid } from "@carrier-explode/decode-ios";
 import type { Shipped } from "@carrier-explode/db";
-import { isRecord, type DiffKind } from "@carrier-explode/values";
+import { isRecord, type DiffCounts, type DiffKind } from "@carrier-explode/values";
 import {
 	buildPath,
 	buildsPath,
@@ -14,7 +15,7 @@ import {
 	type ReleasePlatform,
 	type SourceRef,
 } from "@carrier-explode/schema";
-import type { At, Version } from "#lib/types.ts";
+import type { At, Ver, Version } from "#lib/types.ts";
 
 export function humanBytes(n: number): string {
 	if (n < 1024) return n + " B";
@@ -57,29 +58,33 @@ function writeJson(x: unknown): string | undefined {
 }
 
 /** JSON with plist integers beyond 2^53 written as bare digits and UIDs as UID(n). */
-export function plainJson(v: unknown): string {
-	return writeJson(v) ?? String(v);
+export function plainJson(value: unknown): string {
+	return writeJson(value) ?? String(value);
 }
 
-export function shortValue(v: unknown, max = 160): string {
-	if (v === undefined) return "absent";
-	if (v === null) return "null";
-	const s = typeof v === "string" ? v : plainJson(v);
+export function shortValue(value: unknown, max = 160): string {
+	if (value === undefined) return "absent";
+	if (value === null) return "null";
+	const s = typeof value === "string" ? value : plainJson(value);
 	return s.length > max ? s.slice(0, max) + "…" : s;
 }
 
 /** A diff's counts as a legend says them, the kinds with none left out: "3 changed, 11 removed". */
-export const diffCounts = (counts: Readonly<Record<"changed" | "added" | "removed", number>>): string =>
+export const diffCounts = (counts: Readonly<DiffCounts>): string =>
 	(["changed", "added", "removed"] as const)
 		.flatMap((k) => (counts[k] ? [`${counts[k]} ${k}`] : []))
 		.join(", ");
 
+const TONES = ["good", "warn", "bad", "info"] as const;
+/** The class a chip or badge takes for its state. */
+export type Tone = (typeof TONES)[number];
+
 /** Chip class for each kind of difference. */
-export const DIFF_CHIP: Record<DiffKind, string> = {
+export const DIFF_CHIP: Readonly<Record<DiffKind, Tone | null>> = {
 	added: "good",
 	removed: "bad",
 	changed: "warn",
-	same: "",
+	same: null,
 };
 
 const seg = encodeURIComponent;
@@ -121,7 +126,7 @@ export interface CompareSide {
 }
 
 /** /compare's query for two sides (`a=ios:carrier:ATT_US&av=72.0`, `b=android:carrier:att_us&bl=tokay&bv=79000000034`), narrowed to a file or not. */
-export function compareHref(a: CompareSide | null, b: CompareSide | null, file?: string | null): string {
+export function compareHref(a: CompareSide | null, b: CompareSide | null, file: string | null): string {
 	const q = new URLSearchParams();
 	for (const [p, s] of [
 		["a", a],
@@ -137,7 +142,7 @@ export function compareHref(a: CompareSide | null, b: CompareSide | null, file?:
 }
 
 /** The query args naming a version. */
-export const verArgs = (at: At): { source: string; line?: string; slug: string } =>
+export const verArgs = (at: At): Ver & { readonly slug: string } =>
 	at.line === MAIN_LINE
 		? { source: sourceKey(at.ref), slug: at.version }
 		: { source: sourceKey(at.ref), line: at.line, slug: at.version };
@@ -146,19 +151,25 @@ export const verArgs = (at: At): { source: string; line?: string; slug: string }
 export const rawHref = (at: At, path: string): string =>
 	link(`/raw${versionPath(at.ref, { line: at.line, slug: at.version })}/${segs(path)}`);
 
-/** A property of anything, an Error or a framework's error object included. */
-const field = (v: unknown, key: string): unknown =>
-	typeof v === "object" && v !== null && key in v ? Reflect.get(v, key) : undefined;
+const said = v.fallback(v.optional(v.string()), undefined);
+/** What an Error or a framework's error object says; anything else says nothing. */
+const thrownSchema = v.fallback(
+	v.object({
+		status: v.fallback(v.optional(v.number()), undefined),
+		message: said,
+		body: v.fallback(v.optional(v.object({ message: said })), undefined),
+	}),
+	{},
+);
 
 /** The zone's rate limit answers with Cloudflare's own page, which has nothing a pane can show. */
 const RATE_LIMITED = "Too many requests... please wait a bit.";
 
 export function errorMessage(e: unknown): string {
-	if (field(e, "status") === 429) return RATE_LIMITED;
-	const said = [field(field(e, "body"), "message"), field(e, "message")].find(
-		(m): m is string => typeof m === "string",
-	);
-	if (said) return said;
+	const { status, message, body } = v.parse(thrownSchema, e);
+	if (status === 429) return RATE_LIMITED;
+	const told = body?.message ?? message;
+	if (told) return told;
 	// String() on a bare object gives "[object Object]", which says nothing.
 	let shape: string;
 	try {
@@ -166,8 +177,7 @@ export function errorMessage(e: unknown): string {
 	} catch {
 		shape = String(e);
 	}
-	const status = field(e, "status");
-	return typeof status === "number" && status ? `HTTP ${status} · ${shape}` : `Unexpected error: ${shape}`;
+	return status ? `HTTP ${status} · ${shape}` : `Unexpected error: ${shape}`;
 }
 
 /** The first 32 bytes of a hex string; some defaults are whole tables, and the name says what they are. */
@@ -192,8 +202,8 @@ export function hexDump(hex: string, withOffsets = false): string {
 /** Same URL with some search params changed; empty values are dropped. */
 export function withParams(url: ReadonlyURL, changes: Record<string, string | null>): string {
 	const next = new URLSearchParams(url.search);
-	for (const [k, v] of Object.entries(changes)) {
-		if (v) next.set(k, v);
+	for (const [k, value] of Object.entries(changes)) {
+		if (value) next.set(k, value);
 		else next.delete(k);
 	}
 	const q = next.toString();

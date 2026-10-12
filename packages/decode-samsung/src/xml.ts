@@ -1,5 +1,7 @@
 /** A small XML reader for OMC's files: elements, attributes and text; comments, declarations and DOCTYPEs skipped. */
 
+import { decodeXmlEntities, XML_ATTR } from "@carrier-explode/binary";
+
 export class XmlError extends Error {
 	override name = "XmlError";
 }
@@ -11,18 +13,6 @@ export interface XmlElement {
 	/** The element's own text, trimmed; "" when it has children only. */
 	readonly text: string;
 }
-
-const ENTITIES: Readonly<Record<string, string>> = { amp: "&", lt: "<", gt: ">", quot: '"', apos: "'" };
-
-function unescape(s: string): string {
-	return s.replace(/&(#x[\da-f]+|#\d+|\w+);/gi, (whole, e: string) => {
-		if (e.startsWith("#x") || e.startsWith("#X")) return String.fromCodePoint(parseInt(e.slice(2), 16));
-		if (e.startsWith("#")) return String.fromCodePoint(parseInt(e.slice(1), 10));
-		return ENTITIES[e] ?? whole;
-	});
-}
-
-const ATTR = /([\w:.-]+)\s*=\s*(?:"([^"]*)"|'([^']*)')/g;
 
 interface Open {
 	readonly name: string;
@@ -54,7 +44,7 @@ export function parseXml(xml: string): XmlElement {
 		const top = stack.at(-1);
 		if (lt < 0 || lt > at) {
 			const text = xml.slice(at, lt < 0 ? xml.length : lt);
-			if (top) top.text += unescape(text);
+			if (top) top.text += decodeXmlEntities(text);
 			else if (text.trim()) throw new XmlError(`text outside the root element at ${at}`);
 			if (lt < 0) break;
 		}
@@ -85,8 +75,8 @@ export function parseXml(xml: string): XmlElement {
 			const name = /^[\w:.-]+/.exec(body)?.[0];
 			if (name === undefined) throw new XmlError(`a tag without a name at ${lt}`);
 			const attrs: Record<string, string> = {};
-			for (const m of body.slice(name.length).matchAll(ATTR))
-				attrs[m[1] ?? ""] = unescape(m[2] ?? m[3] ?? "");
+			for (const [, attr = "", dq, sq, bare] of body.slice(name.length).matchAll(XML_ATTR))
+				attrs[attr] = decodeXmlEntities(dq ?? sq ?? bare ?? "");
 			const open: Open = { name, attrs, children: [], text: "" };
 			if (!selfClosing) stack.push(open);
 			else if (top) top.children.push(close(open));

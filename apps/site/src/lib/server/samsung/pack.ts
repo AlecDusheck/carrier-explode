@@ -13,40 +13,15 @@ import {
 	type Pack,
 	type XmlElement,
 } from "@carrier-explode/decode-samsung";
-import { IMS_OPERATOR } from "@carrier-explode/schema";
+import { imsTrees } from "@carrier-explode/schema";
 import type { Json, SimMatcher, SourceRef } from "@carrier-explode/schema/types";
-import { keys } from "@carrier-explode/storage";
 import { diffValues, summariseDiff, type DiffCounts, type DiffRow } from "@carrier-explode/values";
 import { leafCount } from "#lib/settings.ts";
 import type { ApnView, Ver, Version } from "#lib/types.ts";
-import { perRequest } from "../cache";
-import { resolve, verFrom, versionOf, type Resolved } from "../catalog";
+import { decodedVersion, resolve, versionChanges, versionOf, type VersionChanges } from "../catalog";
 import { mustProfile } from "../profiles";
-import { readBytes } from "../store";
 
-interface Decoded extends Resolved {
-	readonly pack: Pack;
-	readonly sha: string;
-	readonly size: number;
-}
-
-const decodedOnce = perRequest(async (source: string, line: string, slug: string): Promise<Decoded> => {
-	const r = await resolve(verFrom(source, line, slug));
-	if (r.ref.platform !== "samsung") error(400, `${source} is not a Samsung source.`);
-	const bytes = await readBytes(keys.obj(r.entry.sha));
-	if (!bytes) error(404, `Version ${r.entry.slug} is not in the bucket.`);
-	return { ...r, pack: openOmc(bytes), sha: r.entry.sha, size: bytes.length };
-});
-const decoded = (v: Ver): Promise<Decoded> => decodedOnce(v.source, v.line ?? "", v.slug ?? "");
-
-/** The operator's entries and the defaults under them, one value tree per IMS service file, keyed as profiles' raw leaves are. */
-function imsFiles(ims: ImsOperator): Record<string, Json> {
-	return {
-		"imsswitch.json": { [IMS_OPERATOR]: ims.switches, defaultswitch: ims.defaults.switches },
-		"imsprofile.json": { [IMS_OPERATOR]: ims.profile === null ? [] : [ims.profile] },
-		"globalsettings.json": { [IMS_OPERATOR]: ims.settings, defaultsetting: ims.defaults.settings },
-	};
-}
+const decoded = decodedVersion("samsung", openOmc);
 
 /** The pack as value trees, one per file: what the Settings tab shows and the Changes tab diffs. */
 function settingsOf(pack: Pack): Record<string, Json> {
@@ -61,7 +36,7 @@ function settingsOf(pack: Pack): Record<string, Json> {
 	}
 	const { version, model, catalog } = pack.omcInfo;
 	out[PACK_FILES.omcInfo] = { version, model, catalog };
-	return pack.ims ? { ...out, ...imsFiles(pack.ims) } : out;
+	return pack.ims ? { ...out, ...imsTrees(pack.ims) } : out;
 }
 
 /**
@@ -94,7 +69,7 @@ const group = (title: string, file: string, values: Json | undefined): SamsungSe
 const imsGroup = (ims: ImsOperator): SamsungSettingGroup => ({
 	kind: "ims",
 	mno: ims.mno,
-	files: Object.entries(imsFiles(ims)).map(([file, values]) => ({ file, values })),
+	files: Object.entries(imsTrees(ims)).map(([file, values]) => ({ file, values })),
 });
 
 /** The pack as the Settings tab reads it: customer.xml's settings, the feature switches, and the operator's IMS settings. */
@@ -168,11 +143,12 @@ export interface SamsungVersion {
 }
 
 export async function getSamsung(v: Ver): Promise<SamsungVersion> {
-	const d = await decoded(v);
-	const [entry, previous, profile] = await Promise.all([
-		versionOf(d, d.entry),
-		d.previous ? versionOf(d, d.previous) : null,
-		mustProfile(d.entry),
+	const r = await resolve(v);
+	const [d, entry, previous, profile] = await Promise.all([
+		decoded(v),
+		versionOf(r, r.entry),
+		r.previous ? versionOf(r, r.previous) : null,
+		mustProfile(r.entry),
 	]);
 	return {
 		source: d.key,
@@ -180,14 +156,14 @@ export async function getSamsung(v: Ver): Promise<SamsungVersion> {
 		line: d.line,
 		entry,
 		previous,
-		omc: d.pack.omcInfo.version,
-		model: d.pack.omcInfo.model,
-		files: [...d.pack.files].map(([path, bytes]) => ({ path, size: bytes.length })),
+		omc: d.file.omcInfo.version,
+		model: d.file.omcInfo.model,
+		files: [...d.file.files].map(([path, bytes]) => ({ path, size: bytes.length })),
 		sims: profile.identity.sims,
 		counts: {
-			settings: leafCount(settingGroups(d.pack).flatMap(groupValues)),
-			apns: apnsOf(d.pack.customer).length,
-			files: d.pack.files.size,
+			settings: leafCount(settingGroups(d.file).flatMap(groupValues)),
+			apns: apnsOf(d.file.customer).length,
+			files: d.file.files.size,
 		},
 		sha: d.sha,
 		size: d.size,
@@ -195,11 +171,11 @@ export async function getSamsung(v: Ver): Promise<SamsungVersion> {
 }
 
 export async function getSamsungSettings(v: Ver): Promise<SamsungSettingGroup[]> {
-	return settingGroups((await decoded(v)).pack);
+	return settingGroups((await decoded(v)).file);
 }
 
 export async function getSamsungApns(v: Ver): Promise<ApnView[]> {
-	return apnsOf((await decoded(v)).pack.customer);
+	return apnsOf((await decoded(v)).file.customer);
 }
 
 export interface SamsungFile {
@@ -210,29 +186,22 @@ export interface SamsungFile {
 
 export async function getSamsungFile(v: Ver, path: string): Promise<SamsungFile> {
 	const d = await decoded(v);
-	const bytes = d.pack.files.get(path);
+	const bytes = d.file.files.get(path);
 	if (!bytes) error(404, `${d.ref.name} ${d.entry.slug} has no file ${path}.`);
 	const text = decodeOmcText(bytes);
 	return { path, text: path.endsWith(".json") ? JSON.stringify(JSON.parse(text), null, 2) : text };
 }
 
-export interface SamsungChanges {
-	readonly a: Version | null;
-	readonly b: Version;
+export type SamsungChanges = VersionChanges<{
 	readonly rows: readonly DiffRow[];
 	readonly counts: DiffCounts;
-}
+}>;
 
-/** A version against the one before it on its model's line, or against `against` on that line. */
-export async function getSamsungChanges(v: Ver, against?: string): Promise<SamsungChanges> {
-	const aSlug = against ?? (await decoded(v)).previous?.slug;
-	return getSamsungComparison(aSlug === undefined ? null : { ...v, slug: aSlug }, v);
-}
-
-/** Any two Samsung versions, file by file and key by key: what /compare shows for two packs. */
-export async function getSamsungComparison(av: Ver | null, bv: Ver): Promise<SamsungChanges> {
-	const [a, b] = await Promise.all([av ? decoded(av) : null, decoded(bv)]);
-	const [vb, va] = await Promise.all([versionOf(b, b.entry), a ? versionOf(a, a.entry) : null]);
-	const rows = diffValues(a ? settingsOf(a.pack) : {}, settingsOf(b.pack));
-	return { a: va, b: vb, rows, counts: summariseDiff(rows) };
-}
+/** File by file and key by key: what the Changes tab and /compare show for two packs. */
+export const { changes: getSamsungChanges, comparison: getSamsungComparison } = versionChanges(
+	decoded,
+	(a: Pack | null, b: Pack) => {
+		const rows = diffValues(a ? settingsOf(a) : {}, settingsOf(b));
+		return { rows, counts: summariseDiff(rows) };
+	},
+);

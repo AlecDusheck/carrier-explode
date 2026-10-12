@@ -18,16 +18,32 @@ export function androidIso(canonical: string): string[] {
 }
 
 /** others.pb names a carrier it has no name for by carrier_list.pb's spelling of the SIM rule that selects it. */
-const RULE_NAME = /^\d{5,6}(?:(?:SPN|IMSI|GID1|ICCID)=.+)?$/;
+const RULE_NAME = /^(\d{3})(\d{2,3})(?:(SPN|IMSI|GID1|ICCID)=(.+))?$/;
 
-export const isRuleNamed = (canonical: string): boolean => RULE_NAME.test(canonical);
+/** A rule name's network and, past the network alone, the SIM field it matches: `311140SPN=SPROCKET`. */
+export interface RuleName {
+	readonly mcc: string;
+	readonly mnc: string;
+	readonly match: { readonly selector: string; readonly value: string } | null;
+}
+
+/** The rule a carrier is named by; undefined for a carrier with a name. */
+export function parseRuleName(canonical: string): RuleName | undefined {
+	const parts = RULE_NAME.exec(canonical);
+	if (parts === null) return undefined;
+	const [, mcc = "", mnc = "", selector, value] = parts;
+	return { mcc, mnc, match: selector === undefined || value === undefined ? null : { selector, value } };
+}
+
+export const isRuleNamed = (canonical: string): boolean => parseRuleName(canonical) !== undefined;
 
 /**
  * The brand an SPN rule's name gives: its SPN. carrier_list.pb writes most in capitals; one with a word of five or more is a
  * name, title-cased but for words of up to three (`TELENOR SE` -> "Telenor SE"); shorter ones may be acronyms (`PTCI`).
  */
 export function spnBrand(canonical: string): string | undefined {
-	const spn = /^\d{5,6}SPN=(.+)$/.exec(canonical)?.[1];
+	const match = parseRuleName(canonical)?.match;
+	const spn = match?.selector === "SPN" ? match.value : undefined;
 	if (spn === undefined || /\p{Ll}/u.test(spn) || !/\S{5}/u.test(spn)) return spn;
 	return spn.replace(/\S{4,}/gu, (word) => word.charAt(0) + word.slice(1).toLowerCase());
 }

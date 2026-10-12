@@ -121,13 +121,13 @@
 				// Apple OTA files for its own phones only.
 				"SCOPE": {
 					"ios": {
-						"devices": { "codes": ["iPhone18,1", "iPhone17,1"] },
+						"devices": { "by": "codes", "codes": ["iPhone18,1", "iPhone17,1"] },
 						"everythingSince": "2026-09-28",
 						"backfill": "newest",
 						"minMajor": 18,
 					},
 					"android": {
-						"devices": { "codes": ["frankel", "komodo"] },
+						"devices": { "by": "codes", "codes": ["frankel", "komodo"] },
 						"everythingSince": "2026-08-01",
 						"backfill": "newest",
 					},
@@ -286,13 +286,13 @@
 					// Phones by the feeds' release days. everythingSince is the cutover: every build from then on; before it, iOS takes
 					// each release and the newest major's betas, a Pixel its newest build of each train.
 					"ios": {
-						"devices": { "releasedSince": "2023-09" },
+						"devices": { "by": "released", "releasedSince": "2023-09" },
 						"everythingSince": "2026-10-05",
 						"backfill": "releases",
 						"minMajor": 18,
 					},
 					"android": {
-						"devices": { "releasedSince": "2020-10" },
+						"devices": { "by": "released", "releasedSince": "2020-10" },
 						"everythingSince": "2026-10-05",
 						"backfill": "quarterly",
 					},

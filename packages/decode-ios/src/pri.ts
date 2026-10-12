@@ -26,12 +26,13 @@ import {
 	describeNv,
 } from "@carrier-explode/decode-qualcomm";
 import { describeIntelKey, intelTree, type IntelTree } from "./intel.ts";
+import type { Building } from "./building.ts";
 
 const td = new TextDecoder();
 
 export interface PriLeaf {
-	tag: string;
-	value: Uint8Array;
+	readonly tag: string;
+	readonly value: Uint8Array;
 }
 
 export interface DerLeaves {
@@ -98,14 +99,14 @@ export function nvTag(n: number): string {
 type PriTagKind = "name" | "path" | "value" | "ccm" | "nv-list" | "schema" | "meta" | "nv";
 
 export interface PriTagInfo {
-	name: string;
-	kind: PriTagKind;
+	readonly name: string;
+	readonly kind: PriTagKind;
 	/** Value tag that follows a name/path tag. */
-	pairsWith?: string;
+	readonly pairsWith?: string;
 	/** Legacy NV item this tag carries. */
-	nv?: number;
-	note?: string;
-	confidence: Confidence;
+	readonly nv?: number;
+	readonly note?: string;
+	readonly confidence: Confidence;
 }
 
 /**
@@ -335,27 +336,29 @@ const PRI_FORMATS = ["der.pri", "der.gri", "der.tri"] as const;
 export type PriFormat = (typeof PRI_FORMATS)[number];
 
 export interface PriDecoded {
-	kind: PriFormat;
-	dialect: PriDialect;
-	header: Record<string, string>;
-	named: PriPair[];
-	efs: PriPathEntry[];
-	featureGroups: PriFeatureGroup[];
-	/** Legacy NV item list (tag 9fa708): uint16-LE item numbers. */
-	nvItems: number[];
-	/** `nvItems` with names, and whether this file carries a value for each. */
-	nvListed: PriNvListed[];
+	readonly kind: PriFormat;
+	readonly dialect: PriDialect;
+	readonly header: Record<string, string>;
+	readonly named: PriPair[];
+	readonly efs: PriPathEntry[];
+	readonly featureGroups: PriFeatureGroup[];
+	/** Legacy NV item list (tag 9fa708, uint16-LE item numbers) with names, and whether this file carries a value for each. */
+	readonly nvListed: PriNvListed[];
 	/** Legacy NV item values, one per NV-value tag, in file order. */
-	nv: PriNvEntry[];
+	readonly nv: PriNvEntry[];
 	/** Schema index of the NV paths the PRI format knows; not overrides this file assigns. */
-	schema: { source: "MAVZ" | "raw" | "none"; count: number; paths: string[] };
+	readonly schema: {
+		readonly source: "MAVZ" | "raw" | "none";
+		readonly count: number;
+		readonly paths: string[];
+	};
 	/** Every leaf not consumed as a pair, CCM group, list, schema or NV value, aggregated by tag. */
-	unknown: PriUnknown[];
-	leafCount: number;
+	readonly unknown: PriUnknown[];
+	readonly leafCount: number;
 	/** Intel-dialect keys (tag 9fae72) as groups, record tables and lists with decoded values; `efs` keeps them flat. */
-	intel?: IntelTree;
+	readonly intel?: IntelTree;
 	/** What could not be read: DER that stops early (everything before it is decoded), a corrupt schema index. */
-	errors: string[];
+	readonly errors: string[];
 }
 
 const HEADER_KEYS = new Set(["Carrier ID", "PRI Revision", "PRI Name", "GRI Revision"]);
@@ -374,8 +377,12 @@ function annotate(path: string, v: PriValue, raw: Uint8Array): Omit<PriPathEntry
 
 const NO_SCHEMA: PriDecoded["schema"] = { source: "none", count: 0, paths: [] };
 
+type SchemaRead =
+	| { readonly kind: "read"; readonly schema: PriDecoded["schema"] }
+	| { readonly kind: "failed"; readonly error: string };
+
 /** The schema index, or why it could not be read. */
-function decodeSchema(value: Uint8Array): PriDecoded["schema"] | { error: string } {
+function decodeSchema(value: Uint8Array): SchemaRead {
 	let raw: Uint8Array;
 	let source: "MAVZ" | "raw";
 	// "MAVZ" + uint32-LE uncompressed length + zlib stream.
@@ -384,19 +391,19 @@ function decodeSchema(value: Uint8Array): PriDecoded["schema"] | { error: string
 		try {
 			raw = inflateMavz(value);
 		} catch (e) {
-			return { error: `MAVZ schema index: ${errorMessage(e)}` };
+			return { kind: "failed", error: `MAVZ schema index: ${errorMessage(e)}` };
 		}
 	} else if (value[0] === 0x2f /* '/' */) {
 		source = "raw";
 		raw = value;
 	} else {
-		return NO_SCHEMA;
+		return { kind: "read", schema: NO_SCHEMA };
 	}
 	const paths = td
 		.decode(raw)
 		.split("\0")
 		.filter((s) => s.length > 0);
-	return { source, count: paths.length, paths };
+	return { kind: "read", schema: { source, count: paths.length, paths } };
 }
 
 function ccmGroup(tag: string, info: PriTagInfo, nv: number, value: Uint8Array): PriFeatureGroup {
@@ -422,14 +429,13 @@ function ccmGroup(tag: string, info: PriTagInfo, nv: number, value: Uint8Array):
 }
 
 export function decodePri(buf: Uint8Array, kind: PriFormat = "der.pri"): PriDecoded {
-	const out: PriDecoded = {
+	const out: Building<PriDecoded> = {
 		kind,
 		dialect: "unknown",
 		header: {},
 		named: [],
 		efs: [],
 		featureGroups: [],
-		nvItems: [],
 		nvListed: [],
 		nv: [],
 		schema: NO_SCHEMA,
@@ -453,6 +459,7 @@ export function decodePri(buf: Uint8Array, kind: PriFormat = "der.pri"): PriDeco
 	}
 
 	const unknownAgg = new Map<string, PriUnknown>();
+	const nvItems: number[] = [];
 	const seenNv = new Set<number>();
 
 	for (let i = 0, leaf = leaves[0]; leaf !== undefined; leaf = leaves[++i]) {
@@ -486,14 +493,14 @@ export function decodePri(buf: Uint8Array, kind: PriFormat = "der.pri"): PriDeco
 		}
 
 		if (info?.kind === "nv-list") {
-			for (let k = 0; k + 1 < value.length; k += 2) out.nvItems.push(u16le(value, k));
+			for (let k = 0; k + 1 < value.length; k += 2) nvItems.push(u16le(value, k));
 			continue;
 		}
 
 		if (info?.kind === "schema") {
 			const schema = decodeSchema(value);
-			if ("error" in schema) out.errors.push(schema.error);
-			else out.schema = schema;
+			if (schema.kind === "failed") out.errors.push(schema.error);
+			else out.schema = schema.schema;
 			continue;
 		}
 
@@ -528,9 +535,10 @@ export function decodePri(buf: Uint8Array, kind: PriFormat = "der.pri"): PriDeco
 
 	const cps = out.efs.filter((e) => e.tag === "9fae72");
 	if (cps.length) out.intel = intelTree(cps.map((e) => ({ key: e.path, value: e.value })));
-	out.nvListed = out.nvItems.map((n) => {
-		const name = describeNv(n)?.name;
-		return { item: n, ...(name !== undefined ? { name } : {}), set: seenNv.has(n) };
+	out.nvListed = nvItems.map((item): PriNvListed => {
+		const name = describeNv(item)?.name;
+		const set = seenNv.has(item);
+		return name === undefined ? { item, set } : { item, name, set };
 	});
 	out.unknown = [...unknownAgg.values()].toSorted((a, b) => b.count - a.count);
 	return out;

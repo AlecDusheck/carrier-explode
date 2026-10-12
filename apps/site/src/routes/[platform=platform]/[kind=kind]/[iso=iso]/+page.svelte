@@ -2,7 +2,7 @@
   import { getCountryCarriers, getRuleSources } from "#lib/api/sources.remote.ts";
   import { OTHER_RULES } from "#lib/android/naming.ts";
   import { link } from "#lib/format.ts";
-  import { flag, repeated } from "#lib/names.ts";
+  import { repeated } from "#lib/names.ts";
   import { PLATFORM_NAMES } from "#lib/platforms.ts";
   import Pane from "#lib/components/Pane.svelte";
   import RuleRows from "#lib/components/RuleRows.svelte";
@@ -17,7 +17,7 @@
 
 <div class="bundle-head">
   <span class="ident">
-    {#if flag(params.iso)}<span class="flag" aria-hidden="true">{flag(params.iso)}</span>{/if}
+    <SourceIcon picture={{ kind: "flag", cc: params.iso }} />
     <b>{name}</b>
   </span>
 </div>

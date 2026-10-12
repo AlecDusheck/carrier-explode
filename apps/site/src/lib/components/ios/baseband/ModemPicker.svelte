@@ -22,7 +22,7 @@
   {#snippet option(x)}
     <span class="picker-opt">
       <PhoneImage platform="ios" name={newestNamed(x.devices)} />
-      <span class="text">{x.family.name} <span class="dimtext">{phoneList(x.devices)}</span></span>
+      <span class="ellipsis">{x.family.name} <span class="dimtext">{phoneList(x.devices)}</span></span>
     </span>
   {/snippet}
 </Picker>

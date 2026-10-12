@@ -6,7 +6,6 @@
   import { modemHref, rawHref, verArgs } from "#lib/format.ts";
   import { phoneList, pickPhoneRow, rowKey } from "#lib/apple/phones.ts";
   import { APPLE_DOCS } from "#lib/apple/tree-docs.ts";
-  import { sourceKey } from "@carrier-explode/schema/types";
   import type { TabProps } from "#lib/types.ts";
   import FileBody from "../FileBody.svelte";
   import ModemDefaults from "../ModemDefaults.svelte";
@@ -16,9 +15,7 @@
   let { at }: TabProps = $props();
 
   const args = $derived(verArgs(at));
-  const bundle = $derived(await getAppleBundle(args));
-  const ov = $derived(await getBundleOverrides(args));
-  const rows = $derived(await tabPhoneRows(at, "modem"));
+  const [bundle, ov, rows] = $derived(await Promise.all([getAppleBundle(args), getBundleOverrides(args), tabPhoneRows(at, "modem")]));
   const picked = $derived(pickPhoneRow(rows, page.url.searchParams.get("file")));
   const sel = $derived(picked.row);
   const phone = $derived(sel?.phones[0]);
@@ -54,7 +51,7 @@
   {:else}
     <FileBody
       file={await getAppleFile({ ...args, path: sel.path })}
-      ctx={{ platform: at.ref.platform, source: sourceKey(at.ref), file: sel.path, cc: bundle.cc, docs: APPLE_DOCS }}
+      ctx={{ platform: at.ref.platform, file: sel.path, cc: bundle.cc, docs: APPLE_DOCS }}
       raw={rawHref(at, sel.path)}
       devices={false}
     />

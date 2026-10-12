@@ -7,7 +7,7 @@
   import { linePath, type SourceRef } from "@carrier-explode/schema/types";
   import type { SourceHead } from "#lib/server/head.ts";
   import { guessedVariant } from "#lib/guess.ts";
-  import { visitorGuess } from "#lib/visitor.ts";
+  import { visitor } from "#lib/visitor.svelte.ts";
   import { overviewChoice, tabView, type TabView } from "#lib/components/views.ts";
   import { TABS } from "../../../../params.ts";
   import LinePicker from "#lib/components/LinePicker.svelte";
@@ -29,11 +29,12 @@
 
   // A URL naming no line shows the default line; at its head, the guessed phone's line, where the source has it, is a better default.
   $effect(() => {
-    if (page.params.line !== undefined) return;
+    const g = visitor.guess;
+    if (page.params.line !== undefined || g === null) return;
     const head = getSourceHead(ver);
     const from = page.url.href;
     void (async () => {
-      const [h, g] = await Promise.all([head, visitorGuess()]);
+      const h = await head;
       const line = guessedVariant(h.lines, g)?.code;
       const better = line !== undefined && line !== h.line && h.entry.slug === h.head;
       if (better && page.url.href === from) await goto(lineHref(h.ref, line), { replace: true });
@@ -54,15 +55,17 @@
     <Pane quiet>
       {@const h = await getSourceHead(ver)}
       {@const view = viewOf(h)}
-      {@const OverviewChoice = open === undefined ? overviewChoice(h.ref.platform) : null}
+      {@const overview = open === undefined ? overviewChoice(h.ref.platform) : null}
       <LinePicker head={h} href={(line) => lineHref(h.ref, line)} />
       {#if view?.versioned ?? true}
         <VersionPicker timeline={h.timeline} current={h.entry.slug} shipping={h.current} href={(slug) => versionHref({ ...headAt(h), version: slug }, tab)} />
       {/if}
       {#if open && view?.Choice}
-        <view.Choice at={headAt(h)} tab={open} />
-      {:else if OverviewChoice}
-        <OverviewChoice at={headAt(h)} />
+        {@const Choice = (await view.Choice()).default}
+        <Choice at={headAt(h)} tab={open} />
+      {:else if overview}
+        {@const Choice = (await overview()).default}
+        <Choice at={headAt(h)} />
       {/if}
     </Pane>
   </div>

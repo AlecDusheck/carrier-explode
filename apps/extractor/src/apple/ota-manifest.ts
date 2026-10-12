@@ -9,7 +9,6 @@ import {
 } from "@carrier-explode/decode-ios";
 import {
 	APPLE_PLATFORMS,
-	parseSourceKey,
 	sourceKey,
 	type ApplePlatform,
 	type Digests,
@@ -18,6 +17,7 @@ import {
 import type { Scope } from "../scope.ts";
 
 export interface Entry {
+	readonly platform: ApplePlatform;
 	readonly url: string;
 	readonly version: string;
 	readonly digests: Digests;
@@ -44,27 +44,30 @@ export function manifestEntries(tables: ManifestTables): Entry[] {
 	const carriers = Object.entries(tables.refs).flatMap(([name, refs]) =>
 		refs.map((r): Entry => {
 			const model = r.productType?.includes(",") ? r.productType : undefined;
+			const platform = platformOf(r);
 			return {
+				platform,
 				url: r.url,
 				version: r.build,
 				digests: digestsOf(r),
 				listing: {
-					source: sourceKey({ platform: platformOf(r), kind: "carrier", name }),
+					source: sourceKey({ platform, kind: "carrier", name }),
 					os: r.os,
 					...(model === undefined ? {} : { model }),
 				},
 			};
 		}),
 	);
-	const countries = tables.index.countries.map((c): Entry => ({
-		url: c.url,
-		version: c.version,
-		digests: {},
-		listing: {
-			source: sourceKey({ platform: c.family === "Watch" ? "watchos" : "ios", kind: "country", name: c.id }),
-			os: c.minOS ?? null,
-		},
-	}));
+	const countries = tables.index.countries.map((c): Entry => {
+		const platform = c.family === "Watch" ? "watchos" : "ios";
+		return {
+			platform,
+			url: c.url,
+			version: c.version,
+			digests: {},
+			listing: { source: sourceKey({ platform, kind: "country", name: c.id }), os: c.minOS ?? null },
+		};
+	});
 	return [...carriers, ...countries];
 }
 
@@ -124,7 +127,7 @@ export function scopedEntries(scope: Scope, entries: readonly Entry[]): Entry[] 
 		APPLE_PLATFORMS.flatMap((p) =>
 			taken(
 				scope.appleOta[p],
-				entries.filter((e) => parseSourceKey(e.listing.source)?.platform === p),
+				entries.filter((e) => e.platform === p),
 			),
 		),
 	);

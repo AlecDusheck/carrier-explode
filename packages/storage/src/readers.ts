@@ -78,11 +78,21 @@ export function applyPolicy(headers: Headers, policy: CachePolicy): void {
 	}
 }
 
+/** Whether `authorization` is `Bearer <token>`, compared in constant time; never when there is no token. */
+export function bearerMatches(authorization: string | null, token: string | undefined): boolean {
+	const given = authorization?.match(/^Bearer (.+)$/)?.[1];
+	if (!token || given === undefined) return false;
+	const enc = new TextEncoder();
+	const a = enc.encode(given);
+	const b = enc.encode(token);
+	let diff = a.byteLength ^ b.byteLength;
+	for (const [i, byte] of a.entries()) diff |= byte ^ (b[i] ?? 0);
+	return diff === 0;
+}
+
 /** A purge's bearer as the endpoint checks it: null when it is the shared PURGE_TOKEN, else why not. */
-export const purgeRefusal = (
-	authorization: string | null | undefined,
-	token: string | undefined,
-): string | null => (token && authorization === `Bearer ${token}` ? null : "bad or missing purge token");
+export const purgeRefusal = (authorization: string | null, token: string | undefined): string | null =>
+	bearerMatches(authorization, token) ? null : "bad or missing purge token";
 
 /** The Workers cache, as a purge uses it. */
 interface PurgeableCache {

@@ -80,8 +80,4 @@
 
 <style>
   .serves { margin-top: 4px; }
-  td.countries { max-width: 360px; }
-  @media (max-width: 760px) {
-    td.countries { min-width: 12em; }
-  }
 </style>

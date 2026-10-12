@@ -30,7 +30,7 @@ export interface Phone extends Pick<Device, "code" | "boards"> {
 export type PhoneProfile = Pick<Profile, "source" | "concepts" | "variants" | "apns" | "raw">;
 
 /** The source a family's carrier files are read over, by the phone that ships both: a Pixel build's default.pb. */
-const BASE_SOURCES = {
+export const BASE_SOURCES = {
 	apple: null,
 	android: "android:default:default",
 	samsung: null,

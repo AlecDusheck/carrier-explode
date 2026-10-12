@@ -7,8 +7,8 @@ import type { Holding, ModemConfigRow, ModemRow, OtaFileRow, ReleaseRows } from 
 import { firmwareFamily, releaseSortKey, type DeviceOrder } from "@carrier-explode/schema";
 import { otaFilesSchema, pixelOtaFilesSchema, releaseSchema } from "@carrier-explode/schema/records";
 import {
-	isSourceKey,
 	MAIN_LINE,
+	sourceEntries,
 	type AndroidArtifact,
 	type AndroidModem,
 	type Release,
@@ -49,14 +49,6 @@ export async function readHeld<T>(
 	return record;
 }
 
-/** A record's sources, keyed as its schema checked them. */
-function bySource<T>(record: Readonly<Record<string, T>>): Array<readonly [SourceKey, T]> {
-	return Object.entries(record).map(([key, value]) => {
-		if (!isSourceKey(key)) throw new Error(`${key}: not a source key`);
-		return [key, value] as const;
-	});
-}
-
 const same = (a: unknown, b: unknown): boolean => JSON.stringify(a) === JSON.stringify(b);
 
 const recordKey = (k: ReleaseKey): string => keys.release(k.platform, ...k.id);
@@ -76,7 +68,7 @@ export async function readRelease(bucket: R2Bucket, k: ReleaseKey): Promise<Rele
 
 /** Copies with every device an artifact names as its own line. */
 const deviceCopies = (sources: Readonly<Record<string, readonly AndroidArtifact[]>>): Holding["copies"] =>
-	bySource(sources).flatMap(([source, artifacts]) =>
+	sourceEntries(sources).flatMap(([source, artifacts]) =>
 		artifacts.flatMap((a) => a.devices.map((line) => ({ source, line, sha: a.sha, version: a.version }))),
 	);
 
@@ -114,7 +106,7 @@ export function releaseFacts(r: Release, order: DeviceOrder): ReleaseFacts {
 	};
 	switch (r.platform) {
 		case "ios": {
-			const sources = bySource(r.sources);
+			const sources = sourceEntries(r.sources);
 			return {
 				rows: {
 					release: {

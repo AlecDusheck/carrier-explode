@@ -14,7 +14,8 @@
 	"dependencies": {
 		"@carrier-explode/binary": "workspace:*",
 		"@carrier-explode/values": "workspace:*",
-		"fflate": "^0.8.2"
+		"fflate": "^0.8.2",
+		"valibot": "^1.5.0"
 	},
 	"devDependencies": {
 		"@carrier-explode/tsconfig": "workspace:*",

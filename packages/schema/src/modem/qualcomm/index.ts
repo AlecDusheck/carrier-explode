@@ -324,7 +324,7 @@ function mcfgItem(
 }
 
 /** A version TLV's bytes as the u32 they hold. */
-const u32Hex = (hex: string): string => `0x${(hex.match(/../g) ?? []).toReversed().join("")}`;
+const leHex32 = (hex: string): string => `0x${(hex.match(/../g) ?? []).toReversed().join("")}`;
 
 /** A trailer field as a fact: what the config was built for, not what selects it. The label is the config's own. */
 function trailerFact(f: McfgTrailer["fields"][number]): Array<{ label: string; value: string }> {
@@ -335,11 +335,11 @@ function trailerFact(f: McfgTrailer["fields"][number]): Array<{ label: string; v
 		case "trailerVersion":
 			return [{ label: "Trailer version", value: f.hex }];
 		case "version":
-			return [{ label: "Version", value: u32Hex(f.hex) }];
+			return [{ label: "Version", value: leHex32(f.hex) }];
 		case "baseVersion":
-			return [{ label: "Base version", value: u32Hex(f.hex) }];
+			return [{ label: "Base version", value: leHex32(f.hex) }];
 		case "capability":
-			return [{ label: "Capability id", value: u32Hex(f.hex) }];
+			return [{ label: "Capability id", value: leHex32(f.hex) }];
 		case "iins":
 			return [{ label: "Built for IINs", value: `${f.iins.join(", ") || "none listed"} (flag ${f.flag})` }];
 		case "plmns": {

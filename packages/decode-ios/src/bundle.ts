@@ -14,6 +14,7 @@ import {
 	maybeText,
 	sha256Hex,
 } from "@carrier-explode/binary";
+import { bundleMembers } from "./ipcc.ts";
 import { parsePlist, toJsonSafe } from "./plist.ts";
 import { decodePri, type PriDecoded, type PriFormat } from "./pri.ts";
 import { decodeTri, type TriDecoded } from "./tri.ts";
@@ -139,22 +140,22 @@ const noteFor = (ext: string): string | null => KIND_NOTES[ext] ?? null;
 
 export interface BundleFile {
 	/** Path relative to the .bundle root. */
-	path: string;
-	size: number;
-	kind: FileKind;
+	readonly path: string;
+	readonly size: number;
+	readonly kind: FileKind;
 	/** lproj locale when the file lives in a localisation folder. */
-	locale?: string;
+	readonly locale?: string;
 	/** The boards an overrides_* file is for, as its name lists them; which phone each is, is the device records' to say. */
-	boards?: string[];
+	readonly boards?: string[];
 }
 
 export interface BundleInfo {
-	bundleName: string;
-	files: BundleFile[];
+	readonly bundleName: string;
+	readonly files: BundleFile[];
 	/** Total uncompressed bytes. */
-	totalSize: number;
-	locales: string[];
-	deviceStems: string[];
+	readonly totalSize: number;
+	readonly locales: string[];
+	readonly deviceStems: string[];
 }
 
 /** CMS SignedData envelope of a signed profile, without its content. */
@@ -204,7 +205,7 @@ const PLIST_KINDS: ReadonlySet<FileKind> = new Set<PlistKind>([
 	"pri-plain",
 	"metadata",
 ]);
-export const isPlistKind = (k: FileKind): k is PlistKind => PLIST_KINDS.has(k);
+const isPlistKind = (k: FileKind): k is PlistKind => PLIST_KINDS.has(k);
 
 /** The value tree of a decoded member, when it has one. */
 export const decodedPlist = (d: DecodedFile): unknown => (d.view.type === "tree" ? d.view.plist : undefined);
@@ -248,7 +249,7 @@ export function overrideMvnoSet(path: string): number | null {
 
 export interface OpenedBundle {
 	readonly info: BundleInfo;
-	/** A file's bytes by its path in `info.files`, inflated on each read. MemberError for any other path. */
+	/** A file's bytes by its path in `info.files`, inflated on its first read. MemberError for any other path. */
 	readonly read: (path: string) => Uint8Array;
 }
 
@@ -261,17 +262,15 @@ export function openIpcc(bytes: Uint8Array): OpenedBundle {
 			return false;
 		},
 	});
-	const prefix =
-		[...sizeOf.keys()].map((n) => /^(.*?\.bundle\/)/.exec(n)?.[1]).find((p) => p !== undefined) ?? "";
-	const bundleName = (prefix.split("/").findLast(Boolean) ?? "bundle").replace(/\.bundle$/, "");
+	const { root, name: bundleName, paths } = bundleMembers([...sizeOf.keys()]);
+	const members = new Map(
+		paths.flatMap((path) => {
+			const size = sizeOf.get(root + path);
+			return size === undefined ? [] : [[path, size] as const];
+		}),
+	);
 
-	const members = new Map<string, number>();
-	for (const [n, size] of sizeOf) {
-		const rel = n.slice(prefix.length);
-		if (!n.startsWith(prefix) || !rel || rel.startsWith("__MACOSX") || rel.endsWith(".DS_Store")) continue;
-		members.set(rel, size);
-	}
-
+	const inflated = new Map<string, Uint8Array>();
 	const files: BundleFile[] = [];
 	const locales = new Set<string>();
 	const stems = new Set<string>();
@@ -302,9 +301,10 @@ export function openIpcc(bytes: Uint8Array): OpenedBundle {
 		},
 		read: (path) => {
 			if (!members.has(path)) throw new MemberError(`no such file in bundle: ${path || "(empty path)"}`);
-			const name = prefix + path;
-			const member = unzipSync(bytes, { filter: (f) => f.name === name })[name];
+			const name = root + path;
+			const member = inflated.get(name) ?? unzipSync(bytes, { filter: (f) => f.name === name })[name];
 			if (member === undefined) throw new Error(`${path}: listed but not inflated`);
+			inflated.set(name, member);
 			return member;
 		},
 	};

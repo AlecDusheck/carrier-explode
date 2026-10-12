@@ -10,6 +10,8 @@ const str = v.pipe(v.string(), v.minLength(1));
 const count = v.pipe(v.number(), v.integer(), v.minValue(1));
 /** YYYY-MM-DD. */
 const day = v.pipe(v.string(), v.regex(/^\d{4}-\d{2}-\d{2}$/));
+/** A Samsung sales code: `XAA`. */
+export const salesCodeSchema = v.pipe(v.string(), v.regex(/^[A-Z0-9]{3}$/));
 
 /** How builds before a family's cutoff are thinned. */
 const BACKFILLS = ["releases", "quarterly", "newest"] as const;
@@ -22,9 +24,12 @@ type Backfill = (typeof BACKFILLS)[number];
 const OTA_TAKES = ["all", "current", "none"] as const;
 
 /** Phones by the day the feeds say they came out (YYYY-MM or YYYY-MM-DD, compared as text), or a list of codes. */
-const devicesSchema = v.union([
-	v.object({ releasedSince: v.pipe(v.string(), v.regex(/^\d{4}-\d{2}(-\d{2})?$/)) }),
-	v.object({ codes: v.pipe(v.array(str), v.minLength(1)) }),
+const devicesSchema = v.variant("by", [
+	v.object({
+		by: v.literal("released"),
+		releasedSince: v.pipe(v.string(), v.regex(/^\d{4}-\d{2}(-\d{2})?$/)),
+	}),
+	v.object({ by: v.literal("codes"), codes: v.pipe(v.array(str), v.minLength(1)) }),
 ]);
 
 const familySchema = <B extends Backfill>(backfills: readonly [B, ...B[]]) =>
@@ -53,7 +58,7 @@ export const scopeSchema = v.object({
 	samsung: v.object({
 		families: v.pipe(v.array(str), v.minLength(1)),
 		exclude: v.array(str),
-		salesCodes: v.pipe(v.array(v.pipe(v.string(), v.regex(/^[A-Z0-9]{3}$/))), v.minLength(1)),
+		salesCodes: v.pipe(v.array(salesCodeSchema), v.minLength(1)),
 		releasedSince: v.pipe(v.string(), v.regex(/^\d{4}-\d{2}$/)),
 		majors: count,
 		builds: v.union([v.literal("all"), count]),
@@ -80,7 +85,7 @@ export interface DatedDevice {
 }
 
 const inSet = (set: DeviceSet, d: DatedDevice): boolean =>
-	"codes" in set ? set.codes.includes(d.code) : d.released >= set.releasedSince;
+	set.by === "codes" ? set.codes.includes(d.code) : d.released >= set.releasedSince;
 
 /** The iOS feed scans iPhones. */
 export const iosInScope = (scope: Scope, d: DatedDevice): boolean =>

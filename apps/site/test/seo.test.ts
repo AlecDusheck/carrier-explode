@@ -1,3 +1,4 @@
+import type { RouteId } from "$app/types";
 import { describe, it, expect } from "vitest";
 import { seo } from "../src/lib/seo.ts";
 import { errorMessage } from "../src/lib/format.ts";
@@ -15,14 +16,17 @@ const named = (brand: string, country: string | null): PageNames => ({
 	release: null,
 });
 
-const CASES: Array<[string, Parameters<typeof seo>[1]]> = [
+const CASES: Array<[RouteId, Parameters<typeof seo>[1]]> = [
 	["/", {}],
 	["/features", {}],
 	["/[platform=platform]/[kind=kind]", { kind: "carriers", platform: "ios" }],
 	["/[platform=platform]/[kind=kind]", { kind: "countries", platform: "ios" }],
 	["/[platform=platform]/[kind=kind]", { kind: "countries", platform: "android" }],
 	["/[platform=platform]/[kind=kind]", { kind: "carriers", platform: "watchos" }],
-	["/[platform=platform]/[kind=kind]/[name]", { kind: "carriers", platform: "ios", name: "ATT_US" }],
+	[
+		"/[platform=platform]/[kind=kind]/[name]/[[line=line]]",
+		{ kind: "carriers", platform: "ios", name: "ATT_US" },
+	],
 	[
 		"/[platform=platform]/[kind=kind]/[name]/[[line=line]]/[version=version]",
 		{ kind: "carriers", platform: "ios", name: "ATT_US", version: "72.0" },
@@ -50,15 +54,15 @@ const CASES: Array<[string, Parameters<typeof seo>[1]]> = [
 	["/[platform=platform]/builds/[build]/[modem]", { platform: "ios", build: "24B5089g", modem: "c4020" }],
 	["/[platform=platform]/builds/[build]/[modem]", { platform: "ios", build: "24A437", modem: "ICE19" }],
 	[
-		"/[platform=platform]/[kind=kind]/[name]",
+		"/[platform=platform]/[kind=kind]/[name]/[[line=line]]",
 		{ kind: "carriers", platform: "watchos", name: "Verizon_LTE_US" },
 	],
 	[
-		"/[platform=platform]/[kind=kind]/[name]",
+		"/[platform=platform]/[kind=kind]/[name]/[[line=line]]",
 		{ kind: "carriers", platform: "ios", name: "Verizon_Core_Visible_LTE_US" },
 	],
 	[
-		"/[platform=platform]/[kind=kind]/[name]",
+		"/[platform=platform]/[kind=kind]/[name]/[[line=line]]",
 		{ kind: "countries", platform: "ios", name: "SaintHelenaAscensionAndTristanDaCunha" },
 	],
 	[
@@ -135,12 +139,12 @@ describe("seo", () => {
 	});
 
 	it("titles a bundle with its file name and the brand people search for", () => {
-		const p = { kind: "carriers", platform: "ios", name: "ATT_US", version: "72.0" };
+		const p = { kind: "carriers", platform: "ios", name: "ATT_US", version: "72.0" } as const;
 		const title = (id: Parameters<typeof seo>[0], params: Parameters<typeof seo>[1]) =>
 			seo(id, params, ATT).title;
 		for (const t of ["ATT_US", "AT&T", "United States"])
 			expect(
-				title("/[platform=platform]/[kind=kind]/[name]", {
+				title("/[platform=platform]/[kind=kind]/[name]/[[line=line]]", {
 					kind: "carriers",
 					platform: "ios",
 					name: "ATT_US",
@@ -160,7 +164,7 @@ describe("seo", () => {
 		for (const t of ["UnitedStates", "United States"])
 			expect(
 				seo(
-					"/[platform=platform]/[kind=kind]/[name]",
+					"/[platform=platform]/[kind=kind]/[name]/[[line=line]]",
 					{ kind: "countries", platform: "ios", name: "UnitedStates" },
 					named("United States", "United States"),
 				).title,
@@ -169,7 +173,7 @@ describe("seo", () => {
 
 	it("carries both spellings of the name and the settings people search for", () => {
 		const d = seo(
-			"/[platform=platform]/[kind=kind]/[name]",
+			"/[platform=platform]/[kind=kind]/[name]/[[line=line]]",
 			{ kind: "carriers", platform: "ios", name: "RelianceJio_in" },
 			named("Jio", "India"),
 		).description;
@@ -195,7 +199,7 @@ describe("seo", () => {
 
 	it("names Android settings by their file, not an iPhone bundle", () => {
 		const d = seo(
-			"/[platform=platform]/[kind=kind]/[name]",
+			"/[platform=platform]/[kind=kind]/[name]/[[line=line]]",
 			{ kind: "carriers", platform: "android", name: "tmobile_us" },
 			named("T-Mobile", "United States"),
 		).description;
@@ -205,8 +209,8 @@ describe("seo", () => {
 	});
 
 	it("says a code nothing names once, with its country", () => {
-		const p = { kind: "carriers", platform: "android", name: "20209" };
-		const head = seo("/[platform=platform]/[kind=kind]/[name]", p, named("20209", "Greece"));
+		const p = { kind: "carriers", platform: "android", name: "20209" } as const;
+		const head = seo("/[platform=platform]/[kind=kind]/[name]/[[line=line]]", p, named("20209", "Greece"));
 		expect(head.title).toBe("20209 — Greece Pixel carrier settings");
 		expect(head.description).toMatch(/^Greece Pixel carrier settings from 20209/);
 		const version = seo(
@@ -219,7 +223,7 @@ describe("seo", () => {
 
 	it("keeps the brand when a long bundle name crowds the title", () => {
 		const title = seo(
-			"/[platform=platform]/[kind=kind]/[name]",
+			"/[platform=platform]/[kind=kind]/[name]/[[line=line]]",
 			{ kind: "carriers", platform: "ios", name: "TMobile_MetroPCS_US" },
 			named("Metro by T-Mobile", "United States"),
 		).title;
@@ -228,7 +232,7 @@ describe("seo", () => {
 	});
 
 	it("names each tab and each kind of version", () => {
-		const p = { kind: "carriers", platform: "ios", name: "ATT_US", version: "64.1@23a341" };
+		const p = { kind: "carriers", platform: "ios", name: "ATT_US", version: "64.1@23a341" } as const;
 		const TAB = "/[platform=platform]/[kind=kind]/[name]/[[line=line]]/[version=version]/[tab=tab]/[...path]";
 		expect(
 			seo("/[platform=platform]/[kind=kind]/[name]/[[line=line]]/[version=version]", p, ATT).description,

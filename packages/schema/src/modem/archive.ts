@@ -2,7 +2,7 @@
 
 import * as v from "valibot";
 
-import { errorMessage } from "@carrier-explode/binary";
+import { compareUtf8, errorMessage } from "@carrier-explode/binary";
 
 import { MODEM_SCHEMA, type ModemConfig } from "../types.ts";
 import type { ComboSource } from "./combos.ts";
@@ -14,6 +14,10 @@ export function member(files: ArchiveFiles, name: string): Uint8Array {
 	if (bytes === undefined) throw new Error(`modem-config archive: no ${name}`);
 	return bytes;
 }
+
+/** The members whose names match `name`, in byte order of name. */
+export const members = (files: ArchiveFiles, name: RegExp): Array<[string, Uint8Array]> =>
+	[...files].filter(([n]) => name.test(n)).toSorted(([a], [b]) => compareUtf8(a, b));
 
 export function jsonMember<S extends v.GenericSchema>(
 	files: ArchiveFiles,

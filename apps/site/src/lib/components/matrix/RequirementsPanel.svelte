@@ -25,17 +25,17 @@
       <div class="req" class:on={req.mode !== "off"}>
         <img src={featureIcon(rule.icon)} alt="" width="16" height="16" />
         <span class="name" title={ruleWhat(rule)}>{rule.name}</span>
-        <select aria-label="{rule.name}: how much it matters" value={req.mode} onchange={(e) => onchange(rule.id, { ...req, mode: MODES.find((m) => m === e.currentTarget.value) ?? "off" })}>
+        <select name={rule.id} aria-label="{rule.name}: how much it matters" value={req.mode} onchange={(e) => onchange(rule.id, { ...req, mode: MODES.find((m) => m === e.currentTarget.value) ?? "off" })}>
           {#each MODES as m (m)}<option value={m}>{MODE_NAMES[m]}</option>{/each}
         </select>
         {#if req.mode !== "off" && rule.param}
           <span class="param">
             {#if rule.param.kind === "choice"}
-              <select aria-label="{rule.name}: which" value={req.param} onchange={(e) => onchange(rule.id, { ...req, param: e.currentTarget.value })}>
+              <select name="{rule.id}-param" aria-label="{rule.name}: which" value={req.param} onchange={(e) => onchange(rule.id, { ...req, param: e.currentTarget.value })}>
                 {#each rule.param.options as [value, label] (value)}<option {value}>{label}</option>{/each}
               </select>
             {:else}
-              <input type="text" aria-label="{rule.name}: equals" value={req.param} onchange={(e) => onchange(rule.id, { ...req, param: e.currentTarget.value })} />
+              <input type="text" name="{rule.id}-param" aria-label="{rule.name}: equals" value={req.param} onchange={(e) => onchange(rule.id, { ...req, param: e.currentTarget.value })} />
             {/if}
           </span>
         {/if}

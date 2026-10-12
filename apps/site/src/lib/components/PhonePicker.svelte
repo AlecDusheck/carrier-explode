@@ -14,7 +14,7 @@
 </script>
 
 {#snippet option(c: PhoneChoice)}
-  <span class="picker-opt"><PhoneImage {platform} id={c.id} name={c.name} /><span class="text">{c.label}</span></span>
+  <span class="picker-opt"><PhoneImage {platform} id={c.id} name={c.name} /><span class="ellipsis">{c.label}</span></span>
 {/snippet}
 
 {#if choices.length > 1}

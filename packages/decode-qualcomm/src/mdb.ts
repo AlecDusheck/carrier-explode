@@ -5,6 +5,7 @@
 
 import { byteAt, bytesToHex, inflateExact, latin1, leUint, u16le, u32le } from "@carrier-explode/binary";
 import type { Confidence } from "./confidence.ts";
+import type { Building } from "./building.ts";
 
 /** A declared database or record size past this is refused, so a corrupt header cannot allocate gigabytes. */
 const MDB_CAP = 16 << 20;
@@ -17,13 +18,13 @@ const cstr = (b: Uint8Array): string => {
 const inflate = (b: Uint8Array, n: number): Uint8Array => inflateExact(b, n, MDB_CAP, "mdb");
 
 export interface MdbHeader {
-	version: number;
+	readonly version: number;
 	/** 3 = one blob, 1 = index + records. */
-	layout: number;
+	readonly layout: number;
 	/** "Maverick" (Apple) or "Qualcomm". */
-	creator: string;
+	readonly creator: string;
 	/** Build time, when set. */
-	built?: string;
+	readonly built?: string;
 }
 
 interface MdbRecord {
@@ -179,24 +180,24 @@ function bandsHolding(lo: number, hi: number, uplink: boolean): number[] {
 }
 
 export interface ArfcnRange {
-	lo: number;
-	hi: number;
-	loMHz: number;
-	hiMHz: number;
-	uplink: boolean;
+	readonly lo: number;
+	readonly hi: number;
+	readonly loMHz: number;
+	readonly hiMHz: number;
+	readonly uplink: boolean;
 	/** Per-range u32, meaning unknown (2 for n77, 24 for n258, 1 for n28). */
-	x: number;
+	readonly x: number;
 }
 
 export interface MccScanEntry {
 	/** Undefined = any country (4095). */
-	mcc?: string;
+	readonly mcc?: string;
 	/** Second key, meaning unknown; not a band number. */
-	key: number;
-	flags: number;
-	ranges: ArfcnRange[];
+	readonly key: number;
+	readonly flags: number;
+	readonly ranges: ArfcnRange[];
 	/** The one NR band holding every range, when exactly one does. */
-	band?: number;
+	readonly band?: number;
 }
 
 /**
@@ -242,13 +243,13 @@ export function parseMcc2Arfcn(blob: Uint8Array): MccScanEntry[] {
 }
 
 export interface PlmnFeatures {
-	plmns: string[];
+	readonly plmns: string[];
 	/** u32 tag of the record (0x303 NR, 0x37f LTE). */
-	tag: number;
+	readonly tag: number;
 	/** [feature id, value]; the ids are not bands and are not named anywhere in the firmware. */
-	features?: Array<[number, number]>;
+	readonly features?: Array<[number, number]>;
 	/** Record bytes past the tag, trailing zeros cut, when they are not a feature list. */
-	hex?: string;
+	readonly hex?: string;
 }
 
 const trimZeros = (b: Uint8Array) => {
@@ -264,7 +265,7 @@ export function parsePlmnFeatures(f: MdbFile): PlmnFeatures[] {
 		// A record shorter than its tag reads the bytes it has.
 		const d = r.data,
 			tag = leUint(d.subarray(0, 4)) ?? 0;
-		const out: PlmnFeatures = { plmns: r.keys.map(plmnFromKey), tag };
+		const out: Building<PlmnFeatures> = { plmns: r.keys.map(plmnFromKey), tag };
 		const n = d.length >= 16 && u32le(d, 8) === 0x102 ? u32le(d, 12) : -1;
 		if (n >= 0 && 16 + 4 * n <= d.length) {
 			out.features = [];
@@ -306,10 +307,10 @@ export function parsePlmnCombos(f: MdbFile): PlmnCombos[] {
 }
 
 export interface ModemEfsValue {
-	name: string;
+	readonly name: string;
 	/** Decoded value, in words. */
-	value: string;
-	confidence: Confidence;
+	readonly value: string;
+	readonly confidence: Confidence;
 }
 
 // qdsp6sw.mbn: mmode device_mode enum (MSSS / DSDS / DSDA configs)

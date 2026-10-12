@@ -25,16 +25,22 @@ export async function cached<T>(key: string, fn: () => Promise<T>): Promise<T> {
 	return value;
 }
 
-/** `fn` at most once per request and arguments. Keyed by `locals`, which remote calls share with their page. */
-export function perRequest<A extends string[], T>(
+/** `fn` at most once per request and arguments, told apart by `keyOf`. Keyed by `locals`, which remote calls share with their page. */
+export function perRequest<A extends string[], T>(fn: (...args: A) => Promise<T>): (...args: A) => Promise<T>;
+export function perRequest<A extends unknown[], T>(
 	fn: (...args: A) => Promise<T>,
-): (...args: A) => Promise<T> {
+	keyOf: (...args: A) => string,
+): (...args: A) => Promise<T>;
+export function perRequest<T>(
+	fn: (...args: unknown[]) => Promise<T>,
+	keyOf: (...args: unknown[]) => string = (...args) => args.join("\0"),
+): (...args: unknown[]) => Promise<T> {
 	const scopes = new WeakMap<App.Locals, Map<string, Promise<T>>>();
 	return (...args) => {
 		const { locals } = getRequestEvent();
 		let scope = scopes.get(locals);
 		if (!scope) scopes.set(locals, (scope = new Map()));
-		const key = args.join("\0");
+		const key = keyOf(...args);
 		let p = scope.get(key);
 		if (!p) scope.set(key, (p = fn(...args)));
 		return p;

@@ -27,12 +27,7 @@
   }
   .key i {
     --logo: 10px;
-    background: var(--bg);
-  }
-  .tone-blank {
-    box-shadow: none;
-    outline: 1px dashed var(--shadow);
-    outline-offset: -1px;
+    background: var(--tone-fill);
   }
   .line {
     display: flex;

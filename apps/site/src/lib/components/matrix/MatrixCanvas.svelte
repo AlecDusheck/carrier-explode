@@ -7,8 +7,7 @@
   import FeatureTip from "./FeatureTip.svelte";
   import ToneKey from "./ToneKey.svelte";
   import { atRest, releaseVelocity, rubber, step, type Bounds, type Motion, type Sample } from "./inertia.ts";
-  import { cellWords, tileTone, TONE_WORDS, toneOf, type Scored } from "./score.ts";
-  import { countedColumns, metCount } from "./view.ts";
+  import { cellWords, tileTone, toneOf, type Scored, type Tone } from "./score.ts";
 
   /**
    * Carriers down, rules across, panned with a finger or a wheel. Only rows in view are drawn; the header and the
@@ -42,7 +41,8 @@
 
   let vw = $state(0);
   let vh = $state(0);
-  const nameW = $derived(vw < 560 ? 132 : 240);
+  // The names' width is the stylesheet's, so the server renders it too.
+  let nameW = $state(0);
   const bx: Bounds = $derived([Math.min(0, vw - nameW - columns.length * CELL), 0]);
   const by: Bounds = $derived([Math.min(0, vh - HEAD - rows.length * CELL), 0]);
 
@@ -57,29 +57,15 @@
   const first = $derived(Math.max(0, Math.floor(-y / CELL) - OVERSCAN));
   const last = $derived(Math.min(rows.length, Math.ceil((vh - y) / CELL) + OVERSCAN));
   const drawn = $derived(rows.slice(first, last));
-  // Until first measured, as on the server, every name is drawn with its tiles in words, so a reader without script
-  // has them all. A hidden pane measures 0 later on, which must not draw them all again.
-  let measured = $state(false);
-  $effect(() => {
-    if (vh > 0) measured = true;
-  });
-  const namesFirst = $derived(measured ? first : 0);
-  const names = $derived(measured ? drawn : rows);
 
   const modeOf = (rule: Rule) => reqs.get(rule.id)?.mode ?? "off";
 
-  const counted = $derived(countedColumns(columns, picked));
-  /** A row's counted tiles in words, for whatever reads the page as text; the Markdown view has every column. */
-  const words = (s: Scored): string =>
-    counted
-      .flatMap((c) => {
-        const rule = rules[c];
-        return rule ? [`${rule.name}: ${TONE_WORDS[tileTone(s, c, modeOf(rule))]}`] : [];
-      })
-      .join(" · ");
+  /** The progress a row shows: the picked columns it meets, or all shown when none are picked. */
+  const counted = $derived(picked ? columns.slice(0, picked) : columns);
+  const progress = (s: Scored): number => counted.filter((c) => s.outcomes[c] === true).length;
 
   /** `at`: the cell it explains, so a second tap on it closes it. */
-  let tip: { at: string; title: string; tone: string; lines: string[]; left: number; top: number } | null = $state(null);
+  let tip: { at: string; title: string; tone: Tone; lines: string[]; left: number; top: number } | null = $state(null);
   const spot = (at: { r: number; c: number | null }): string => `${at.r}:${at.c ?? "name"}`;
   let view: HTMLElement | undefined = $state();
 
@@ -197,11 +183,11 @@
 
   function onpointermove(e: PointerEvent & { currentTarget: HTMLElement }) {
     if (drag?.id !== e.pointerId) {
-      // A mouse hovering shows what is under it; a finger has no hover.
+      // A mouse hovering explains the cell under it; a carrier opens only on a click, and a finger has no hover.
       if (e.pointerType === "mouse" && !drag) {
         const { px, py } = local(e);
         const at = hit(px, py);
-        if (at) show(at);
+        if (at && at.c !== null) show(at);
         else tip = null;
       }
       return;
@@ -288,7 +274,9 @@
   aria-label="Carriers by requirement"
   aria-rowcount={rows.length}
   tabindex="0"
-  style:--name-w="{nameW}px"
+  style:--cell="{CELL}px"
+  style:--head="{HEAD}px"
+  style:--cols={columns.length}
   style:--stipple={`url("${asset("stipple.svg")}")`}
   style:--lock={featureIconImage("lock")}
   style:--switch={featureIconImage("toggle")}
@@ -318,18 +306,17 @@
     </div>
   </div>
 
-  <div class="clip names">
+  <div class="clip names" bind:offsetWidth={nameW}>
     <div class="layer" style:transform="translate3d(0, {y}px, 0)">
-      {#each names as s, i (s.row.entry.key)}
-        {@const got = metCount(s, counted)}
-        <div class="name" class:complete={picked > 0 && !s.need && !s.want} style:top="{(namesFirst + i) * CELL}px">
+      {#each drawn as s, i (s.row.entry.key)}
+        {@const got = progress(s)}
+        <div class="name" class:complete={picked > 0 && !s.need && !s.want} style:top="{(first + i) * CELL}px">
           <SourceIcon picture={s.row.entry.picture} />
           <span class="who">
-            <span class="brand">{s.row.entry.brand}{#if s.row.entry.tag}<span class="dimtext sp">{s.row.entry.tag}</span>{/if}</span>
+            <span class="ellipsis">{s.row.entry.brand}{#if s.row.entry.tag}<span class="dimtext sp">{s.row.entry.tag}</span>{/if}</span>
             <span class="bar" aria-hidden="true"><span class="fill" class:missing={s.need > 0} style:transform="scaleX({counted.length ? got / counted.length : 0})"></span></span>
           </span>
           <span class="count" class:missing={s.need > 0}>{got}/{counted.length}</span>
-          <span class="sr-only"> — {words(s)}</span>
         </div>
       {/each}
     </div>
@@ -359,8 +346,8 @@
 
 <style>
   .mx {
-    --cell: 48px;
-    --head: 66px;
+    --name-w: 240px;
+    container-type: inline-size;
     position: relative;
     flex: 1;
     min-height: 0;
@@ -372,7 +359,7 @@
     background: var(--desktop) var(--stipple) 0 0 / 4px 4px;
     image-rendering: pixelated;
     border: 2px solid;
-    border-color: var(--shadow) var(--light) var(--light) var(--shadow);
+    border-color: var(--bevel-in);
     contain: strict;
     outline: none;
   }
@@ -383,6 +370,13 @@
   .clip {
     position: absolute;
     overflow: hidden;
+  }
+  /* Narrow, the names take what the columns leave, from 132px up to the usual 240px. */
+  @container (width < 560px) {
+    .clip,
+    .corner {
+      --name-w: clamp(132px, 100cqw - var(--cols) * var(--cell), 240px);
+    }
   }
   .cells {
     inset: var(--head) 0 0 var(--name-w);
@@ -442,25 +436,21 @@
     width: var(--name-w);
     height: var(--cell);
     padding: 0 6px;
-    border-bottom: 1px solid #f0eee9;
+    border-bottom: 1px solid var(--rule-faint);
+    cursor: pointer;
   }
   /* Meeting every requirement earns a gold frame. */
   .name.complete {
-    background: #fff8e0;
+    background: var(--notice-bg);
     box-shadow:
-      inset 3px 0 0 #e0b030,
-      inset 0 0 0 1px #e8d49a;
+      inset 3px 0 0 var(--gold),
+      inset 0 0 0 1px var(--gold-soft);
   }
   .who {
     flex: 1;
     min-width: 0;
     display: grid;
     gap: 3px;
-  }
-  .brand {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
   }
   .bar {
     height: 6px;
@@ -470,7 +460,7 @@
   .fill {
     display: block;
     height: 100%;
-    background: #e0b030;
+    background: var(--gold);
     transform-origin: left;
   }
   .fill.missing {
@@ -478,7 +468,7 @@
   }
   .count {
     font: bold 11px var(--mono);
-    color: #6b4a00;
+    color: var(--warn-text);
   }
   .count.missing {
     color: var(--text-dim);

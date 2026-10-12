@@ -5,7 +5,7 @@ import * as v from "valibot";
 import type { Extractor } from "./container.ts";
 import { FEED_NAMES, type ContainerPipeline, type PipelineParams } from "./pipelines.ts";
 import type { IndexMessage } from "./indexing.ts";
-import type { PurgeMessage, PurgeVars } from "./queues.ts";
+import type { PurgeMessage } from "./queues.ts";
 import { scopeSchema } from "./scope.ts";
 
 const positive = v.pipe(v.number(), v.integer(), v.minValue(1));
@@ -24,6 +24,8 @@ export const tuningSchema = v.object({
 		model: v.pipe(v.string(), v.minLength(1)),
 		perKind: positive,
 	}),
+	/** The readers' origins, each purged at PURGE_PATH with PURGE_TOKEN. */
+	PURGE_ORIGINS: v.array(v.pipe(v.string(), v.url())),
 	/** When each scheduled feed is checked; it is the Worker's `triggers.crons` (test/tables.test.ts checks). */
 	PIPELINE_CRONS: v.record(v.picklist(FEED_NAMES), v.pipe(v.string(), v.minLength(1))),
 	/** How long a platform's facts must stop arriving before it is derived again. */
@@ -56,7 +58,7 @@ export const tuningSchema = v.object({
 
 type Tuning = v.InferOutput<typeof tuningSchema>;
 
-export interface Env extends PurgeVars, Tuning {
+export interface Env extends Tuning {
 	readonly BUCKET: R2Bucket;
 	/** The index (packages/db), written by the index queue's consumer, the feed checks (devices, their names) and the labels Workflow (names). */
 	readonly DB: D1Database;
@@ -78,4 +80,6 @@ export interface Env extends PurgeVars, Tuning {
 	readonly AI: Ai;
 	/** Bearer token for /run and /runs. */
 	readonly RUN_TOKEN: string;
+	/** The readers' purge bearer. */
+	readonly PURGE_TOKEN: string;
 }

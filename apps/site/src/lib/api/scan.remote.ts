@@ -2,19 +2,14 @@
 
 import * as v from "valibot";
 import { query } from "$app/server";
-import { ISO_CODE } from "@carrier-explode/schema/types";
 import * as scan from "#lib/server/scan.ts";
-import { path, platform } from "./schemas";
+import { path, platform, scanScope } from "./schemas";
 
-const oneCountry = v.custom<`country:${string}`>(
-	(s) => typeof s === "string" && s.startsWith("country:") && ISO_CODE.test(s.slice("country:".length)),
-	"not a country scope",
-);
 const scanArgs = v.object({
 	platform,
 	path,
 	file: path,
-	scope: v.union([v.picklist(["carriers", "countries"]), oneCountry]),
+	scope: scanScope,
 });
 
 /** One setting across every source in scope. */

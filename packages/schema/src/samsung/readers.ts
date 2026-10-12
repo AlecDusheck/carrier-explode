@@ -9,6 +9,7 @@ import { readConcepts, type Readers } from "../concepts.ts";
 import type { Apn, ConceptValue, Fidelity, Json, NativeRef } from "../types.ts";
 import {
 	bool,
+	convertedReading,
 	mmsProxyAddress,
 	num,
 	sipUri,
@@ -32,7 +33,7 @@ export interface SamsungView {
 	/** customer.xml's GeneralInfo.CountryISO. */
 	readonly countryIso: string | undefined;
 	/** customer.xml's leaves by path below its root, repeated elements indexed: `Settings.Main.Network.SOSNumber[1]`. */
-	readonly customer: ReadonlyMap<string, Json>;
+	readonly customer: ReadonlyMap<string, NativeRef>;
 }
 
 /** What the IMS readers read: the operator's entries, or (for phone states) its entries over the service's defaults. */
@@ -77,11 +78,13 @@ function imsProfile<T extends Json>(
 	convert: (v: unknown) => T | undefined,
 	fidelity: Fidelity = "exact",
 ): (v: ImsReading) => ValueReading<T> | Unset {
-	return ({ ims }) => {
-		const r = ims?.profile(key);
-		const value = r === undefined ? undefined : convert(r.value);
-		return r === undefined || value === undefined ? unset : valueReading(value, [r], fidelity);
-	};
+	return ({ ims }) =>
+		convertedReading(
+			ims?.profile(key),
+			(r) => convert(r.value),
+			(r) => r,
+			fidelity,
+		);
 }
 
 /** imsprofile.json's `timer`: `1:2000,2:16000,4:17000,A:2000,B:128000,…`, RFC 3261's T1, T2, T4 and A–K, in ms. */
@@ -122,13 +125,13 @@ function customer<T extends Json>(
 	convert: (v: string) => T | undefined,
 	fidelity: Fidelity = "exact",
 ): (v: SamsungView) => ValueReading<T> | Unset {
-	return ({ customer: leaves }) => {
-		const raw = leaves.get(path);
-		const value = typeof raw === "string" ? convert(raw) : undefined;
-		return raw === undefined || value === undefined
-			? unset
-			: valueReading(value, [{ path: `customer.xml:${path}`, value: raw }], fidelity);
-	};
+	return ({ customer: leaves }) =>
+		convertedReading(
+			leaves.get(path),
+			(ref) => (typeof ref.value === "string" ? convert(ref.value) : undefined),
+			(ref) => ref,
+			fidelity,
+		);
 }
 
 /** A customer.xml leaf, else a CarrierFeature: packs set the MMS identity in one or the other. */
@@ -137,9 +140,11 @@ function customerOrFeature(path: string, feature: string): (v: SamsungView) => V
 	return (v) => {
 		const c = fromCustomer(v);
 		if (c.kind !== "unset") return c;
-		const ref = v.features.get(feature);
-		const value = text(ref?.value);
-		return ref === undefined || value === undefined ? unset : valueReading(value, [ref]);
+		return convertedReading(
+			v.features.get(feature),
+			(ref) => text(ref.value),
+			(ref) => ref,
+		);
 	};
 }
 
@@ -169,9 +174,7 @@ const AUTO_DOWNLOAD: ReadonlyMap<string, boolean> = new Map([
 const emergencyNumbers = ({ customer: leaves }: SamsungView): ValueReading<string[]> | Unset => {
 	const refs = [...leaves]
 		.filter(([k]) => /^Settings\.Main\.Network\.SOSNumber(\[\d+\])?$/.test(k))
-		.flatMap(([k, v]): NativeRef[] =>
-			typeof v === "string" ? [{ path: `customer.xml:${k}`, value: v }] : [],
-		);
+		.flatMap(([, ref]) => (typeof ref.value === "string" ? [ref] : []));
 	return refs.length === 0
 		? unset
 		: valueReading(stringSet(refs.map((r) => String(r.value))), refs, "approx");
@@ -183,11 +186,13 @@ function imsSetting<T extends Json>(
 	convert: (v: unknown) => T | undefined,
 	fidelity: Fidelity = "exact",
 ): (v: ImsReading) => ValueReading<T> | Unset {
-	return ({ ims }) => {
-		const r = ims?.setting(key);
-		const value = r === undefined ? undefined : convert(r.value);
-		return r === undefined || value === undefined ? unset : valueReading(value, [r], fidelity);
-	};
+	return ({ ims }) =>
+		convertedReading(
+			ims?.setting(key),
+			(r) => convert(r.value),
+			(r) => r,
+			fidelity,
+		);
 }
 
 /** ss_domain_setting: `CS`/`CS_ALWAYS` never use Ut; `PS`, `PS_ALWAYS` and the PS-only-when-registered modes use XCAP. */

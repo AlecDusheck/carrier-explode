@@ -2,12 +2,13 @@
 
 import * as v from "valibot";
 
-const code = v.pipe(v.string(), v.regex(/^[A-Z0-9]{3}$/));
+import { salesCodeSchema } from "../scope.ts";
+import type { GalaxyPhone } from "./phones.ts";
 
 /** Under each sales code asked: the package of the newest build listed, or the day nothing was. */
 const answersSchema = v.record(
-	code,
-	v.union([v.object({ package: code }), v.object({ refused: v.pipe(v.string(), v.isoDate()) })]),
+	salesCodeSchema,
+	v.union([v.object({ package: salesCodeSchema }), v.object({ refused: v.pipe(v.string(), v.isoDate()) })]),
 );
 type Answers = v.InferOutput<typeof answersSchema>;
 
@@ -24,9 +25,7 @@ export const NO_PROBES: ModelProbes = { oldest: null, answers: {} };
 export const mayLaunchSince = (probes: ModelProbes, since: string): boolean =>
 	probes.oldest === null || probes.oldest >= since;
 
-interface Lined {
-	readonly line: { readonly family: string; readonly generation: number };
-}
+type Lined = Pick<GalaxyPhone, "line">;
 
 /**
  * A family's generations launch in order, so once one model of a generation is seen older than the scope, every model

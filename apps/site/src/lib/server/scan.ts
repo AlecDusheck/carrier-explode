@@ -13,7 +13,7 @@ import { RARITY, rarityFile } from "@carrier-explode/schema";
 import { jsonSchema } from "@carrier-explode/schema/records";
 import { canonical } from "@carrier-explode/values";
 import type { Json, Platform, SourceKey, SourceKind } from "@carrier-explode/schema/types";
-import type { ScanScope } from "#lib/ui-state.svelte.ts";
+import type { ScanScope } from "#lib/api/schemas.ts";
 import type { Ver } from "#lib/types.ts";
 import { cached } from "./cache";
 import { resolve } from "./catalog";
@@ -58,7 +58,7 @@ interface ScanBucket {
 export interface ScanResult {
 	readonly path: string;
 	readonly file: string;
-	readonly scope: string;
+	readonly scope: ScanScope;
 	/** Sources in scope. */
 	readonly scanned: number;
 	/** Of those, how many set the key, and how many read it from their build's default.pb. */

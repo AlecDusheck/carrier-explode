@@ -12,7 +12,7 @@ import {
 } from "@carrier-explode/decode-ios";
 
 import { modemConfigOf } from "../modem/archive.ts";
-import { lastPerId, modemValue, qualcommItem } from "../modem/qualcomm/items.ts";
+import { CERTAINTY, lastPerId, modemValue, qualcommItem } from "../modem/qualcomm/items.ts";
 import type { ModemConfig, ModemItem, ModemValue } from "../types.ts";
 
 /** The Intel-dialect key tag: not a Qualcomm EFS path. */
@@ -104,11 +104,6 @@ function priFacts(pri: PriDecoded): ModemConfig["facts"][number][] {
 	return [...(modem === undefined ? [] : [{ label: "Dialect", value: modem }]), ...header];
 }
 
-const CERTAINTY = { high: "high", med: "medium", low: "low" } as const satisfies Record<
-	NonNullable<TriField["confidence"]>,
-	ModemItem["certainty"]
->;
-
 const plmnList = (plmns: readonly string[]): ModemValue => ({
 	kind: "list",
 	values: plmns.map((p): ModemValue => ({ kind: "text", value: p })),
@@ -158,38 +153,35 @@ function triItem(f: Exclude<TriField, { kind: "version" }>): ModemItem {
 	}
 }
 
-function triConfig(tri: TriDecoded, path: string, sha: string): ModemConfig {
-	const facts = tri.fields.flatMap((f) =>
-		f.kind === "version" ? [{ label: f.name ?? "Version", value: f.version }] : [],
-	);
-	const items = tri.fields.flatMap((f) => (f.kind === "version" ? [] : [triItem(f)]));
-	return modemConfigOf({
-		family: "qualcomm",
-		sha,
-		label: path,
-		scope: "carrier",
-		selection: [],
-		facts,
-		items,
-		base: null,
-		combos: [],
-		errors: [...tri.errors],
-	});
-}
-
-const failed = (label: string, sha: string, error: string): ModemConfig =>
+/** An override file's config, labelled by its path: the bundle, not a SIM rule, selects it. */
+const iosConfig = (
+	label: string,
+	sha: string,
+	{ facts, items, errors }: Pick<ModemConfig, "facts" | "items" | "errors">,
+): ModemConfig =>
 	modemConfigOf({
 		family: "qualcomm",
 		sha,
 		label,
 		scope: "carrier",
 		selection: [],
-		facts: [],
-		items: [],
+		facts,
+		items,
 		base: null,
 		combos: [],
-		errors: [error],
+		errors,
 	});
+
+function triConfig(tri: TriDecoded, path: string, sha: string): ModemConfig {
+	const facts = tri.fields.flatMap((f) =>
+		f.kind === "version" ? [{ label: f.name ?? "Version", value: f.version }] : [],
+	);
+	const items = tri.fields.flatMap((f) => (f.kind === "version" ? [] : [triItem(f)]));
+	return iosConfig(path, sha, { facts, items, errors: [...tri.errors] });
+}
+
+const failed = (label: string, sha: string, error: string): ModemConfig =>
+	iosConfig(label, sha, { facts: [], items: [], errors: [error] });
 
 /**
  * One override file, labelled by its path; the bundle, not a SIM rule, selects it. Null for an Intel-dialect file
@@ -207,16 +199,9 @@ export function iosModemConfig(bundle: OpenedBundle, path: string, sha: string):
 		);
 	if (pri.dialect === "intel") return null;
 	const intel = pri.efs.filter((e) => e.tag === INTEL_KEY).length;
-	return modemConfigOf({
-		family: "qualcomm",
-		sha,
-		label: path,
-		scope: "carrier",
-		selection: [],
+	return iosConfig(path, sha, {
 		facts: priFacts(pri),
 		items: priItems(pri),
-		base: null,
-		combos: [],
 		errors: [...pri.errors, ...(intel ? [`${intel} Intel-dialect keys not shown`] : [])],
 	});
 }

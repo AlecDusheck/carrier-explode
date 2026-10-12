@@ -88,22 +88,18 @@ const config = (image: McfgImage, name: string) => ({ name, image });
 describe("pairSelection", () => {
 	it("pairs a config with the records that select its carrier index", () => {
 		const p = pairSelection([config(dcm, "DCM")], db);
-		expect(p.paired.map((x) => [x.config.name, x.records.map((r) => r.carrierName)])).toEqual([
-			["DCM", ["DCM"]],
-		]);
+		expect(p.map((x) => [x.config.name, x.records.map((r) => r.carrierName)])).toEqual([["DCM", ["DCM"]]]);
 	});
 
 	it("splits a shared carrier index by the trailer's IINs and PLMNs", () => {
 		const shared: SelectionDb = { records: [...db.records, { ...defined(db.records[1]), carrierIndex: 13 }] };
 		const other = { ...dcm, trailer: { fields: [] } };
 		const p = pairSelection([config(dcm, "DCM"), config(other, "no lists")], shared);
-		expect(p.paired.map((x) => [x.config.name, x.records.map((r) => r.carrierName)])).toEqual([
-			["DCM", ["DCM"]],
-		]);
+		expect(p.map((x) => [x.config.name, x.records.map((r) => r.carrierName)])).toEqual([["DCM", ["DCM"]]]);
 	});
 
 	it("leaves out a config no record selects", () => {
-		expect(pairSelection([config({ ...dcm, muxdCarrierIndex: 99 }, "orphan")], db).paired).toEqual([]);
+		expect(pairSelection([config({ ...dcm, muxdCarrierIndex: 99 }, "orphan")], db)).toEqual([]);
 	});
 });
 
@@ -138,9 +134,9 @@ describe.skipIf(!existsSync(MBN))("Pixel 5a vendor mbn directory", () => {
 		expect(sel.records).toHaveLength(125);
 
 		const p = pairSelection(sw, sel);
-		const unpaired = sw.filter((m) => !p.paired.some((x) => x.config === m));
+		const unpaired = sw.filter((m) => !p.some((x) => x.config === m));
 		const unused = sel.records.filter((r) => !sw.some((m) => m.image.muxdCarrierIndex === r.carrierIndex));
-		expect([p.paired.length, unpaired.length, unused.length]).toEqual([115, 2, 4]);
+		expect([p.length, unpaired.length, unused.length]).toEqual([115, 2, 4]);
 		expect(unpaired.map((m) => `${m.path} ${m.image.muxdCarrierIndex}`)).toEqual([
 			"mcfg_sw/generic/Pixel/common/WildCard_IMS/pixel_WildCard_IMS/mcfg_sw.mbn 246",
 			"mcfg_sw/generic/common/Default/Default/mcfg_sw.mbn 0",

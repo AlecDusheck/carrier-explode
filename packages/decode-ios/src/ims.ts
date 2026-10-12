@@ -3,6 +3,8 @@
  * stack uses when the bundle omits it; also legacy renames, enum values and the default call end-reason maps.
  */
 
+import type { Building } from "./building.ts";
+
 // Recovered by emulating libIPTelephony.dylib's ImsDefaultPrefs::addDefaultPrefs (add{Bool,Int,String,InterpolatedString,Dict,Array,Enum}Key) in the iOS 27.0 dyld cache.
 
 /** b boolean, i integer, s string, x string with ${VAR} / $var placeholders, e enum (string), d dict, a array (comma list default). */
@@ -10,17 +12,17 @@ type ImsTypeCode = "b" | "i" | "s" | "x" | "e" | "d" | "a";
 type Row = readonly [key: string, type: ImsTypeCode, dflt?: string | number | boolean | null, note?: string];
 
 export interface ImsSetting {
-	key: string;
+	readonly key: string;
 	/** Registry section, e.g. "Signaling" or "Signaling/SipTimers" (bundle path IMSConfig.Signaling.SipTimers). */
-	section: string;
-	type: ImsTypeCode;
+	readonly section: string;
+	readonly type: ImsTypeCode;
 	/** Compiled-in value used when the key is absent. Undefined for dicts. */
-	default?: string | number | boolean;
-	note?: string;
+	readonly default?: string | number | boolean;
+	readonly note?: string;
 	/** Allowed values of an enum key, in declaration order. */
-	values?: readonly string[];
+	readonly values?: readonly string[];
 	/** Set when the looked-up key is a legacy name that the stack still accepts. */
-	renamedFrom?: string;
+	readonly renamedFrom?: string;
 }
 
 /** Allowed values of the enum-typed keys, in declaration order ('' = off / unset). */
@@ -1060,7 +1062,7 @@ function build(): Map<string, ImsSetting[]> {
 	const m = new Map<string, ImsSetting[]>();
 	for (const [section, rows] of Object.entries(SECTIONS)) {
 		for (const [key, type, dflt, note] of rows) {
-			const s: ImsSetting = { key, section, type };
+			const s: Building<ImsSetting> = { key, section, type };
 			if (dflt !== undefined && dflt !== null) s.default = dflt;
 			if (note) s.note = note;
 			const values = IMS_ENUMS[key];

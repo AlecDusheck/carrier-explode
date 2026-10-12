@@ -5,5 +5,5 @@ export { decodeCarrierSettings, splitMultiCarrierSettings } from "./carrier-sett
 export { decodeCarrierList } from "./carrier-list.ts";
 export { MissingFieldError } from "./errors.ts";
 export { configDoc, type ConfigDoc, type ConfigType } from "./docs.ts";
-export { ACCESS_NETWORKS, NET_CAPABILITIES, NR_STATES, readConfigValue } from "./config-values.ts";
+export { readConfigValue } from "./config-values.ts";
 export type * from "./config-values.ts";

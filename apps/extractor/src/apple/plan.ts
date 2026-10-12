@@ -3,19 +3,18 @@
 import { compareProducts, compareVersions, isPrerelease, newestProduct } from "@carrier-explode/decode-ios";
 import type { PipelineParams } from "../pipelines.ts";
 import { iosInScope, type DatedDevice, type Scope } from "../scope.ts";
-import type { AppleDbEntry, Firmware, IpswRef } from "./check.ts";
+import type { AppleDbEntry, Firmware } from "./check.ts";
 
 export type IosBuild = PipelineParams<"ios-build">;
 
+/** One IPSW file and a phone it installs. */
+export type IpswRef = Readonly<IosBuild["ipsws"][number]>;
+
 /** One IPSW a catalogue lists for one phone, with what its build is planned with. */
-export interface ListedIpsw extends IpswRef {
-	readonly build: string;
-	readonly major: number;
-	readonly version: string;
-	readonly label: string;
-	readonly prerelease: boolean;
-	readonly released?: string;
-}
+export type ListedIpsw = IpswRef &
+	Readonly<Pick<IosBuild, "build" | "version" | "label" | "prerelease" | "released">> & {
+		readonly major: number;
+	};
 
 /** `27.1`, `27.1 beta 2` -> 27. */
 const majorOf = (version: string): number => Number.parseInt(version, 10);

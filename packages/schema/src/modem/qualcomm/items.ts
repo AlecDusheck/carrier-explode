@@ -13,7 +13,7 @@ import {
 
 import type { Certainty, ModemItem, ModemValue } from "../../types.ts";
 
-const CERTAINTY = { high: "high", med: "medium", low: "low" } as const satisfies Record<
+export const CERTAINTY = { high: "high", med: "medium", low: "low" } as const satisfies Record<
 	Confidence,
 	Certainty
 >;

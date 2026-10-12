@@ -10,7 +10,6 @@ import type {
 	Rule,
 	RuleId,
 } from "#lib/feature-matrix.ts";
-import { fold } from "#lib/names.ts";
 import type { MatrixRow } from "#lib/server/features.ts";
 
 export interface Scored {
@@ -22,7 +21,6 @@ export interface Scored {
 	/** Required rules it misses, then nice-to-haves. */
 	readonly need: number;
 	readonly want: number;
-	readonly text: string;
 }
 
 const reader =
@@ -35,7 +33,6 @@ export function score(
 	columns: readonly MatrixConcept[],
 	rules: readonly Rule[],
 	reqs: ReadonlyMap<RuleId, Requirement>,
-	country: (cc: string) => string,
 ): Scored[] {
 	const index = new Map(columns.map((id, i) => [id, i]));
 	const modes = rules.map((r) => reqs.get(r.id) ?? { mode: "off", param: "" });
@@ -51,7 +48,6 @@ export function score(
 				if (o === false && req?.mode === "want") want++;
 				return o;
 			});
-			const e = row.entry;
 			const cells = rules.map((rule) => read(rule.reads[0]));
 			return {
 				row,
@@ -59,7 +55,6 @@ export function score(
 				cells,
 				need,
 				want,
-				text: fold(`${e.brand} ${e.name} ${e.cc === undefined ? "" : country(e.cc)}`),
 			};
 		})
 		.toSorted(

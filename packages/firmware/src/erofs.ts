@@ -18,6 +18,8 @@ import {
 } from "./fs.ts";
 import { readPieces, type RangeSource } from "./source.ts";
 
+const utf8 = new TextDecoder();
+
 const SUPERBLOCK_AT = 1024;
 const SUPERBLOCK_SIZE = 128;
 const EROFS_MAGIC = 0xe0f5e1e2;
@@ -193,7 +195,7 @@ class ErofsStore implements InodeStore<Inode> {
 				if (start > end || end > block.length)
 					throw this.bad(dir.nid, `dirent ${i} in block at ${at} has name bounds ${start}-${end}`);
 				while (end > start && u8(block, end - 1) === 0) end--;
-				const name = new TextDecoder().decode(block.subarray(start, end));
+				const name = utf8.decode(block.subarray(start, end));
 				if (name !== "." && name !== "..")
 					out.push({
 						name,

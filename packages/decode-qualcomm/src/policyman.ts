@@ -6,14 +6,14 @@
 import type { Confidence } from "./confidence.ts";
 
 export interface PolicyElementDoc {
-	kind: "root" | "block" | "condition" | "action" | "value";
+	readonly kind: "root" | "block" | "condition" | "action" | "value";
 	/** One line: what the element does. */
-	note: string;
+	readonly note: string;
 	/** Attribute notes; common ones (name, list, subs, base, ns) come from POLICY_ATTRS. */
-	attrs?: Record<string, string>;
+	readonly attrs?: Record<string, string>;
 	/** Accepted text values, when the firmware lists them. */
-	values?: string[];
-	confidence: Confidence;
+	readonly values?: string[];
+	readonly confidence: Confidence;
 }
 
 type D = PolicyElementDoc;

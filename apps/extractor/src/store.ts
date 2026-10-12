@@ -8,6 +8,7 @@ import { missingProfiles, type IndexDb } from "@carrier-explode/db";
 import type { ReleasePlatform } from "@carrier-explode/schema/types";
 import {
 	keys,
+	listing,
 	otaPointerSchema,
 	parseRecord,
 	putObj,
@@ -30,25 +31,18 @@ export const CONNECTIONS = 6;
 const MODEM_BATCH = 8;
 
 /** The object at `key`, which an earlier step or unit wrote. */
-export async function readBytes(bucket: R2Bucket, key: string): Promise<Uint8Array> {
+export async function readObject(bucket: R2Bucket, key: string): Promise<R2ObjectBody> {
 	const o = await bucket.get(key);
 	if (o === null) throw new DataError(`${key}: missing`);
-	return new Uint8Array(await o.arrayBuffer());
+	return o;
 }
+
+export const readBytes = async (bucket: R2Bucket, key: string): Promise<Uint8Array> =>
+	new Uint8Array(await (await readObject(bucket, key)).arrayBuffer());
 
 /** The JSON record at `key`, which an earlier step or unit wrote. */
 export const readJson = async (bucket: R2Bucket, key: string): Promise<unknown> =>
-	parseRecord(key, new TextDecoder().decode(await readBytes(bucket, key)));
-
-/** Every object a listing names, a page read only once the one before it is consumed. */
-export async function* listing(bucket: R2Bucket, options: R2ListOptions): AsyncGenerator<R2Object> {
-	let cursor: string | undefined;
-	do {
-		const page = await bucket.list({ ...options, ...(cursor === undefined ? {} : { cursor }) });
-		yield* page.objects;
-		cursor = page.truncated ? page.cursor : undefined;
-	} while (cursor !== undefined);
-}
+	parseRecord(key, await (await readObject(bucket, key)).text());
 
 /** Every object under `prefix`. */
 export async function listKeys(

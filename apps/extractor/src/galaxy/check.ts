@@ -8,7 +8,7 @@ import { fetchWithRetry, HttpError } from "@carrier-explode/http";
 import { releaseSchema } from "@carrier-explode/schema/records";
 import { keys, putJson, readRecord } from "@carrier-explode/storage";
 import type { Env } from "../env.ts";
-import { allOrThrow, chunks, fanOut } from "../fan-out.ts";
+import { chunks, mapLimit } from "../fan-out.ts";
 import { devicesSynced } from "../queues.ts";
 import type { Scope } from "../scope.ts";
 import { heldReleases } from "../store.ts";
@@ -146,12 +146,14 @@ async function openPhones(
 	env: Env,
 ): Promise<Array<{ readonly phone: GalaxyPhone; readonly probes: ModelProbes }>> {
 	const scope = env.SCOPE.samsung;
-	const phones = allOrThrow(
+	const phones = await mapLimit(
 		"Galaxy models",
-		await fanOut(await fetchPhones(scope), env.FEED_CONCURRENCY.galaxyReads, async (phone) => ({
+		await fetchPhones(scope),
+		env.FEED_CONCURRENCY.galaxyReads,
+		async (phone) => ({
 			phone,
 			probes: (await readRecord(env.BUCKET, keys.galaxyModel(phone.model), modelProbesSchema)) ?? NO_PROBES,
-		})),
+		}),
 	);
 	const bound = new LaunchBound(scope.releasedSince);
 	return phones
@@ -203,14 +205,11 @@ export async function checkGalaxy(env: Env, today: string, steps: Steps): Promis
 	const held = new Set(
 		await steps("held", async () => (await heldReleases(env.BUCKET, "samsung")).map((k) => k.id[0])),
 	);
-	const known = await steps("known firmware", async () =>
-		allOrThrow(
-			"firmware",
-			await fanOut(candidates(listed, today), env.FEED_CONCURRENCY.galaxyReads, async (fw) => ({
-				fw,
-				known: await knownFirmware(env, held, fw, today),
-			})),
-		),
+	const known = await steps("known firmware", () =>
+		mapLimit("firmware", candidates(listed, today), env.FEED_CONCURRENCY.galaxyReads, async (fw) => ({
+			fw,
+			known: await knownFirmware(env, held, fw, today),
+		})),
 	);
 	const read = known.flatMap((k) => (typeof k.known === "object" ? [k.known] : []));
 	// One at a time: FUS blocks a burst. A firmware still failing once its step's retries are spent waits for the next

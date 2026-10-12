@@ -10,6 +10,6 @@
 
 <Picker {label} items={builds} selected={builds.find((b) => b.id === current)} key={(b) => b.id} {href}>
   {#snippet option(b)}
-    <span class="picker-opt"><VersionMark platform={b.platform} version={b.version} /><span class="text">{releaseLabel(b)} <span class="mono dimtext">{b.id}</span></span></span>
+    <span class="picker-opt"><VersionMark platform={b.platform} version={b.version} /><span class="ellipsis">{releaseLabel(b)} <span class="mono dimtext">{b.id}</span></span></span>
   {/snippet}
 </Picker>

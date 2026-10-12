@@ -131,8 +131,7 @@ function javaFormat(template: string, args: readonly string[]): string {
  * The app formats the list's template with its version, and the settings template with the product (Build.PRODUCT,
  * a Pixel's codename, when the product_alias flag is empty, as it always is), the carrier and the version.
  */
-function urlOf(template: string | undefined, device: string, name: string, version: string): string {
-	if (template === undefined) throw new UpdateServiceError(`the answer lists ${name} without a URL template`);
+function urlOf(template: string, device: string, name: string, version: string): string {
 	const url =
 		name === "carrier_list" ? javaFormat(template, [version]) : javaFormat(template, [device, name, version]);
 	if (new URL(url).origin !== ORIGIN) throw new UpdateServiceError(`${url} is not on ${ORIGIN}`);
@@ -147,6 +146,8 @@ export function updateFiles(config: ReadonlyMap<string, string>, device: string)
 			if (!/^\d+$/.test(version))
 				throw new UpdateServiceError(`${name}'s version ${version} is not a number`);
 			const template = config.get(name === "carrier_list" ? "carrier_list_url" : "carrier_settings_url");
+			if (template === undefined)
+				throw new UpdateServiceError(`the answer lists ${name} without a URL template`);
 			return [{ name, version, url: urlOf(template, device, name, version) }];
 		})
 		.toSorted((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));

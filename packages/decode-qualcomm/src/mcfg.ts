@@ -14,6 +14,7 @@ import {
 	u32le,
 } from "@carrier-explode/binary";
 import { itemLayout } from "./layouts.ts";
+import type { Building } from "./building.ts";
 
 const trimNul = (s: string): string => s.replace(/\0+$/, "");
 
@@ -30,6 +31,7 @@ const TEXT_TLVS = { 3: "label" } as const;
 type HexKind = (typeof HEX_TLVS)[keyof typeof HEX_TLVS];
 type TextKind = (typeof TEXT_TLVS)[keyof typeof TEXT_TLVS];
 const HEX_KINDS: readonly string[] = Object.values(HEX_TLVS);
+const TEXT_KINDS: readonly string[] = Object.values(TEXT_TLVS);
 const isTlvOf = <T extends object>(table: T, t: number): t is Extract<keyof T, number> => t in table;
 
 /** A PLMN as MCFG stores it, as numbers: a 2-digit MNC reads the same as its zero-padded 3-digit form. */
@@ -110,13 +112,14 @@ export type McfgTrailerSummary = Readonly<Partial<Record<HexKind | TextKind, str
 export function summarizeTrailer(t: McfgTrailer): McfgTrailerSummary {
 	const out: Partial<Record<HexKind | TextKind, string>> = {};
 	for (const f of t.fields) {
-		if ("text" in f) out[f.kind] = f.text;
+		if (isTextField(f)) out[f.kind] = f.text;
 		else if (isHexField(f)) out[f.kind] = f.hex;
 	}
 	return out;
 }
 
 const isHexField = (f: McfgTrailerField): f is FieldOf<HexKind> => HEX_KINDS.includes(f.kind);
+const isTextField = (f: McfgTrailerField): f is FieldOf<TextKind> => TEXT_KINDS.includes(f.kind);
 
 /** Payload bounds within the image passed to parseMcfg. */
 interface McfgSpan {
@@ -133,7 +136,7 @@ interface McfgItemBase {
 }
 
 /** Where a type 12 item stands in its group, by its fourth byte: ATT's 0, 1, 2, 3 and Rogers' 0, 2, 3. */
-export const MCFG_BRANCHES = ["if", "else if", "else", "end"] as const;
+const MCFG_BRANCHES = ["if", "else if", "else", "end"] as const;
 export type McfgBranch = (typeof MCFG_BRANCHES)[number];
 
 /**
@@ -192,18 +195,18 @@ function branchOf(
 
 export interface McfgImage {
 	/** Where the MCFG segment starts in the image (non-zero inside an ELF). */
-	segmentOffset: number;
-	format: number;
-	cfgType: number;
-	cfgTypeName: string;
-	numItems: number;
-	muxdCarrierIndex: number;
-	versionId: number;
-	version: string;
-	items: McfgItem[];
-	trailer?: McfgTrailer;
+	readonly segmentOffset: number;
+	readonly format: number;
+	readonly cfgType: number;
+	readonly cfgTypeName: string;
+	readonly numItems: number;
+	readonly muxdCarrierIndex: number;
+	readonly versionId: number;
+	readonly version: string;
+	readonly items: McfgItem[];
+	readonly trailer?: McfgTrailer;
 	/** Bytes from the segment start to the end of the last item. */
-	length: number;
+	readonly length: number;
 }
 
 /** The PT_LOAD segment that starts with "MCFG", or `img` itself for a bare segment. */ // ELF32 program headers
@@ -263,7 +266,7 @@ export function parseMcfg(img: Uint8Array, maxItems = 4096): McfgImage | undefin
 	if (s === undefined || s + 20 > img.length) return undefined;
 	const ct = u16le(img, s + 6);
 	const vlen = u16le(img, s + 18);
-	const out: McfgImage = {
+	const out: Building<McfgImage> = {
 		segmentOffset: s,
 		format: u16le(img, s + 4),
 		cfgType: ct,
@@ -345,15 +348,15 @@ export function mcfgSetting(
 export const itemPaths = (m: McfgImage): string[] =>
 	m.items.flatMap((it) => (it.kind === "file" ? [it.path] : []));
 
-export interface ModemConfig {
+export interface BuiltInConfig {
 	/** Offset in the modem image of the zlib stream or the plain MCFG header. */
-	offset: number;
-	container: "zlib" | "plain";
+	readonly offset: number;
+	readonly container: "zlib" | "plain";
 	/** Inflated length (zlib) or segment length (plain). */
-	length: number;
-	label?: string;
-	image: McfgImage;
-	files: Array<{ path: string; data: Uint8Array }>;
+	readonly length: number;
+	readonly label?: string;
+	readonly image: McfgImage;
+	readonly files: Array<{ readonly path: string; readonly data: Uint8Array }>;
 }
 
 export const isZlibStart = (b: Uint8Array, o: number): boolean =>
@@ -371,15 +374,15 @@ function probeZlib(b: Uint8Array, o: number): Uint8Array | undefined {
 	}
 }
 
-function modemFiles(img: Uint8Array, m: McfgImage): ModemConfig["files"] {
+function modemFiles(img: Uint8Array, m: McfgImage): BuiltInConfig["files"] {
 	return m.items.flatMap((it) =>
 		it.kind === "file" ? [{ path: it.path, data: mcfgItemData(img, it) }] : [],
 	);
 }
 
 /** Built-in MCFG images in the modem ELF: plain segments (found by header), and zlib streams that inflate to an ELF or MCFG image. */ // qdsp6sw.mbn
-export function scanModemConfigs(b: Uint8Array): ModemConfig[] {
-	const out: ModemConfig[] = [];
+export function scanModemConfigs(b: Uint8Array): BuiltInConfig[] {
+	const out: BuiltInConfig[] = [];
 	for (let o = 0; o + 20 <= b.length; o++) {
 		const c = b[o];
 		if (c === 0x4d && asciiAt(b, o, "MCFG") && u16le(b, o + 16) === 0x1383 && u16le(b, o + 6) <= 1) {

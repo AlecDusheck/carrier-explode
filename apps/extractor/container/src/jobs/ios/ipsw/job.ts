@@ -10,7 +10,7 @@ import * as v from "valibot";
 
 import { sourceKey } from "@carrier-explode/schema/types";
 import { keys } from "@carrier-explode/storage";
-import { allOrThrow, fanOut } from "../../../../../src/fan-out.ts";
+import { mapLimit } from "../../../../../src/fan-out.ts";
 import { ipswParamsSchema, packBundle, type IpswOutput } from "../../../../../src/apple/ipsw.ts";
 import { DataError } from "../../../../../src/errors.ts";
 import type { JobContext, JobRunner } from "../../../job.ts";
@@ -31,14 +31,11 @@ async function stageAll(
 	dirs: readonly BundleDir[],
 	concurrency: number,
 ): Promise<Copy[]> {
-	return allOrThrow(
-		`${kind} bundles`,
-		await fanOut(dirs, concurrency, async (dir): Promise<Copy> => {
-			const { bytes, artifact } = await packBundle(await readBundle(dir));
-			await ctx.bucket.putOnce(keys.tmp(instance, artifact.sha), bytes, "application/zip");
-			return { source: sourceKey({ platform: "ios", kind, name: dir.name }), ...artifact };
-		}),
-	);
+	return mapLimit(`${kind} bundles`, dirs, concurrency, async (dir): Promise<Copy> => {
+		const { bytes, artifact } = await packBundle(await readBundle(dir));
+		await ctx.bucket.putOnce(keys.tmp(instance, artifact.sha), bytes, "application/zip");
+		return { source: sourceKey({ platform: "ios", kind, name: dir.name }), ...artifact };
+	});
 }
 
 export const iosIpsw: JobRunner = async (params, ctx): Promise<IpswOutput> => {

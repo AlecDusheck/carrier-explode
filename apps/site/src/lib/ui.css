@@ -2,6 +2,7 @@
    status bar. Collapses to one column on a phone, where the list is a page of its own. */
 
 :root {
+	color-scheme: light;
 	--face: #d8d4cc;
 	--face-hi: #e6e3dc;
 	--light: #ffffff;
@@ -13,11 +14,38 @@
 	--sel-text: #ffffff;
 	--desktop: #4b6785;
 	--field: #ffffff;
+	--bevel-out: var(--light) var(--dark) var(--dark) var(--light);
+	--bevel-in: var(--shadow) var(--light) var(--light) var(--shadow);
+	--bevel-pressed: var(--dark) var(--light) var(--light) var(--dark);
+	--title-bg: #3a5a80;
+	--title-fg: #ffffff;
+	--on-sel-dim: #cfe0f5;
+	--on-accent: #ffffff;
+	--hover: #eef2f7;
+	--link: #123a6d;
+	--grid-line: #c9c5bd;
+	--rule-faint: #f0eee9;
+	--tree-guide: #b9b5ac;
+	--zebra: #f6f5f2;
+	--drop: rgb(0 0 0 / 0.3);
+	--backdrop: rgb(0 0 0 / 0.35);
+	--checker-a: #b8b4ac;
+	--checker-b: #8f8b83;
+	--tag-bg: #f2efe6;
+	--tag-border: #c4bda8;
+	--notice-bg: #fff8e0;
+	--flash: #fff1ad;
+	--gold: #e0b030;
+	--gold-soft: #e8d49a;
 	/* Selected table row, and decoded meanings next to raw values. */
 	--sel-row: #e3ebf5;
 	--meaning: #5b3d0c;
-	--key: #1b3d6b;
 	--doc-underline: #8a93a6;
+	/* Value tree: a value's colour says its type. */
+	--val: #14442a;
+	--val-str: #7a2f2f;
+	--val-num: #1f3f8a;
+	--val-bool: #6a2f8a;
 	/* Chip and badge states: good, warn, bad, info. */
 	--good-bg: #dff0dd;
 	--good-border: #8ab98a;
@@ -30,17 +58,19 @@
 	--info-text: #1e3d6e;
 	--bad-bg: #f6dede;
 	--bad-border: #c08a8a;
+	--bad-bg-soft: #ffe8e8;
 	/* Confidence marks: "likely", and "unverified" / "unnamed". */
 	--conf-med: #7a5a14;
-	--conf-med-border: #d0b36a;
 	--conf-low: #8a3a2a;
 	--conf-low-border: #d19a8a;
 	/* Modem policy rules. */
-	--policy-condition: #1f3f8a;
 	--policy-action: #14632a;
-	--policy-define: #6a2f8a;
-	--policy-branch: #6a2f8a;
 	--policy-logic: #8a4a14;
+	/* Feature matrix badge fills and rims. */
+	--tone-met: #f0cc5c;
+	--tone-offered: #8fcf78;
+	--tone-need: #d23a22;
+	--tone-want: #e0a030;
 	--ui: "Tahoma", "Verdana", "DejaVu Sans", "Segoe UI", system-ui, sans-serif;
 	--mono: "DejaVu Sans Mono", "Menlo", "Consolas", ui-monospace, monospace;
 	/* The dropdown arrow of a picker and a select alike: a down triangle drawn as two halves, sized by the control's text. */
@@ -72,12 +102,15 @@ a,
 button,
 input,
 select,
-textarea,
 summary,
 label,
 [role="button"],
 [role="tab"] {
 	touch-action: manipulation;
+}
+/* A control shows a hand; zero specificity, so one that means something else (help) says so. */
+:where(button:enabled, select:enabled, summary) {
+	cursor: pointer;
 }
 body {
 	margin: 0;
@@ -105,8 +138,8 @@ body {
 	align-items: center;
 	gap: 10px;
 	flex: none;
-	background: #3a5a80;
-	color: #fff;
+	background: var(--title-bg);
+	color: var(--title-fg);
 	font-weight: bold;
 	padding: 3px 8px;
 }
@@ -124,12 +157,12 @@ body {
 }
 .titlebar .sub {
 	font-weight: normal;
-	color: #cddcee;
+	color: var(--on-sel-dim);
 	font-size: 11px;
 }
 .titlebar .github,
 .titlebar .credits {
-	color: #fff;
+	color: var(--title-fg);
 	font-weight: normal;
 	font-size: 11px;
 }
@@ -144,9 +177,13 @@ body {
 	background: var(--face);
 	border-bottom: 1px solid var(--shadow);
 	overflow-x: auto;
+}
+.menubar,
+.tabs {
 	scrollbar-width: none;
 }
-.menubar::-webkit-scrollbar {
+.menubar::-webkit-scrollbar,
+.tabs::-webkit-scrollbar {
 	display: none;
 }
 .menubar a {
@@ -157,12 +194,12 @@ body {
 	white-space: nowrap;
 }
 .menubar a:hover {
-	border-color: var(--light) var(--dark) var(--dark) var(--light);
+	border-color: var(--bevel-out);
 }
 .menubar a[aria-current="page"] {
 	background: var(--face-hi);
 	font-weight: bold;
-	border-color: var(--shadow) var(--light) var(--light) var(--shadow);
+	border-color: var(--bevel-in);
 }
 
 .toolbar {
@@ -203,7 +240,7 @@ body {
 }
 .statusbar .cell {
 	border: 1px solid;
-	border-color: var(--shadow) var(--light) var(--light) var(--shadow);
+	border-color: var(--bevel-in);
 	padding: 1px 6px;
 	white-space: nowrap;
 	overflow: hidden;
@@ -213,17 +250,28 @@ body {
 	flex: 1;
 	min-width: 0;
 }
+.ellipsis {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.bare {
+	font: inherit;
+	color: inherit;
+	background: none;
+	border: 0;
+	padding: 0;
+}
 
 button.btn,
-a.btn,
-summary.btn {
+a.btn {
 	font: inherit;
 	padding: 3px 10px;
 	background: var(--face);
 	color: var(--text);
 	border: 2px solid;
-	border-color: var(--light) var(--dark) var(--dark) var(--light);
-	cursor: pointer;
+	border-color: var(--bevel-out);
 	min-height: 26px;
 	text-decoration: none;
 	display: inline-flex;
@@ -232,30 +280,36 @@ summary.btn {
 }
 button.btn:active,
 a.btn:active {
-	border-color: var(--dark) var(--light) var(--light) var(--dark);
+	border-color: var(--bevel-pressed);
 	padding: 4px 9px 2px 11px;
 }
 button.btn:disabled {
 	color: var(--shadow);
 	text-shadow: 1px 1px 0 var(--light);
-	cursor: default;
 }
 button.btn.on,
 a.btn[aria-current="page"] {
-	border-color: var(--dark) var(--light) var(--light) var(--dark);
+	border-color: var(--bevel-pressed);
 	background: var(--face-hi);
 	font-weight: bold;
 }
 
+.sunken,
+.scroll,
+pre.code,
+input[type="text"],
+input[type="search"],
+select {
+	background: var(--field);
+	border: 2px solid;
+	border-color: var(--bevel-in);
+}
 input[type="text"],
 input[type="search"],
 select {
 	font: inherit;
 	padding: 3px 5px;
-	background: var(--field);
 	color: var(--text);
-	border: 2px solid;
-	border-color: var(--shadow) var(--light) var(--light) var(--shadow);
 	min-height: 26px;
 	max-width: 100%;
 }
@@ -263,7 +317,6 @@ select {
 select {
 	appearance: none;
 	padding: 2px calc(var(--caret-w) + 2 * var(--caret-gap)) 2px 4px;
-	max-width: 100%;
 	text-overflow: ellipsis;
 	overflow: hidden;
 	background-image: var(--caret-halves);
@@ -278,6 +331,34 @@ select {
 	input[type="text"],
 	input[type="search"] {
 		font-size: 16px;
+	}
+}
+/* A finger needs a 32px target; a mouse keeps the compact rows. */
+@media (pointer: coarse) {
+	.titlebar a,
+	.menubar a,
+	.tabs a,
+	.statusbar button,
+	.ctxmenu button,
+	.picker-list > a,
+	button.btn,
+	a.btn,
+	label.lbl {
+		min-height: 32px;
+	}
+	.titlebar a,
+	.menubar a,
+	.tabs a {
+		display: inline-flex;
+		align-items: center;
+	}
+	.titlebar a {
+		min-width: 32px;
+		justify-content: center;
+	}
+	label.lbl input[type="checkbox"] {
+		inline-size: 20px;
+		block-size: 20px;
 	}
 }
 /* A dropdown under a finger: an arrow you can see and a box you can hit. */
@@ -331,9 +412,6 @@ label.lbl select {
 	min-height: 0;
 	overflow: auto;
 	overscroll-behavior: contain;
-	background: var(--field);
-	border: 2px solid;
-	border-color: var(--shadow) var(--light) var(--light) var(--shadow);
 	-webkit-overflow-scrolling: touch;
 }
 /* Sticky headers pin to the content edge; pull them up over the padding so rows cannot show above. */
@@ -348,7 +426,7 @@ label.lbl select {
 	padding: 0;
 }
 .list li {
-	border-bottom: 1px solid #f0eee9;
+	border-bottom: 1px solid var(--rule-faint);
 }
 .list li > a {
 	color: inherit;
@@ -357,16 +435,6 @@ label.lbl select {
 	display: flex;
 	gap: 6px;
 	align-items: center;
-}
-.list li > a:hover {
-	background: #eef2f7;
-}
-.list li > a[aria-current="page"] {
-	background: var(--sel);
-	color: var(--sel-text);
-}
-.list li > a[aria-current="page"] :is(.dim, .dimtext) {
-	color: #cfe0f5;
 }
 .source-code {
 	margin-left: 0.5em;
@@ -380,11 +448,6 @@ label.lbl select {
 	margin-left: auto;
 	white-space: nowrap;
 }
-.list .name {
-	overflow: hidden;
-	text-overflow: ellipsis;
-	white-space: nowrap;
-}
 
 .tabs {
 	display: flex;
@@ -392,18 +455,50 @@ label.lbl select {
 	padding: 4px 4px 0;
 	flex: none;
 	overflow-x: auto;
-	scrollbar-width: none;
 	background: var(--face);
+	/* A row wider than the screen fades out at the edge it continues past; one that fits has no scroll timeline, so no fade. */
+	mask-image: linear-gradient(
+		to right,
+		transparent,
+		#000 var(--tabs-fade-start),
+		#000 calc(100% - var(--tabs-fade-end)),
+		transparent
+	);
+	animation: tabs-fade linear both;
+	animation-timeline: scroll(self inline);
 }
-.tabs::-webkit-scrollbar {
-	display: none;
+@property --tabs-fade-start {
+	syntax: "<length>";
+	inherits: false;
+	initial-value: 0px;
+}
+@property --tabs-fade-end {
+	syntax: "<length>";
+	inherits: false;
+	initial-value: 0px;
+}
+@keyframes tabs-fade {
+	from {
+		--tabs-fade-start: 0px;
+		--tabs-fade-end: 24px;
+	}
+	10% {
+		--tabs-fade-start: 24px;
+	}
+	90% {
+		--tabs-fade-end: 24px;
+	}
+	to {
+		--tabs-fade-start: 24px;
+		--tabs-fade-end: 0px;
+	}
 }
 .tabs a {
 	padding: 4px 10px;
 	background: var(--face);
 	text-decoration: none;
 	border: 2px solid;
-	border-color: var(--light) var(--dark) var(--dark) var(--light);
+	border-color: var(--bevel-out);
 	border-bottom: none;
 	white-space: nowrap;
 	color: var(--text-dim);
@@ -424,15 +519,20 @@ table.grid {
 	background: var(--field);
 }
 table.grid th,
-table.grid td {
-	border: 1px solid #c9c5bd;
+table.grid td,
+.wiki th,
+.wiki td {
+	border: 1px solid var(--grid-line);
 	padding: 2px 6px;
 	text-align: left;
 	vertical-align: top;
 }
-table.grid th {
+table.grid th,
+.wiki th {
 	white-space: nowrap;
 	background: var(--face);
+}
+table.grid th {
 	position: sticky;
 	top: var(--sticky-top, 0);
 	z-index: 2;
@@ -440,10 +540,10 @@ table.grid th {
 	border-width: 2px 1px;
 }
 table.grid tbody tr:nth-child(even) {
-	background: #f6f5f2;
+	background: var(--zebra);
 }
 table.grid tbody tr:hover {
-	background: #eef2f7;
+	background: var(--hover);
 }
 table.grid td.num,
 table.grid th.num {
@@ -478,7 +578,8 @@ table.grid tr.sel td {
 	padding-bottom: 2px;
 	border-bottom: 1px solid var(--shadow);
 }
-.wiki h2 {
+.wiki h2,
+article.consumer h2 {
 	font-size: 16px;
 	font-weight: normal;
 	margin: 18px 0 6px;
@@ -507,7 +608,7 @@ table.grid tr.sel td {
 .wiki pre {
 	font-family: var(--mono);
 	font-size: 11px;
-	background: #f8f8f6;
+	background: var(--zebra);
 	border: 1px dashed var(--shadow);
 	padding: 6px 8px;
 	overflow: auto;
@@ -528,17 +629,6 @@ table.grid tr.sel td {
 }
 .wiki td code {
 	word-break: break-all;
-}
-.wiki th,
-.wiki td {
-	border: 1px solid #c9c5bd;
-	padding: 2px 6px;
-	text-align: left;
-	vertical-align: top;
-}
-.wiki th {
-	white-space: nowrap;
-	background: var(--face);
 }
 .wiki-meta {
 	margin-top: 18px;
@@ -594,7 +684,6 @@ button.wiki-nav-toggle {
 .wiki-nav summary {
 	font-size: 11px;
 	color: var(--text-dim);
-	cursor: pointer;
 	border-bottom: 1px solid var(--shadow);
 	margin-bottom: 2px;
 }
@@ -650,31 +739,23 @@ table.grid.decoded {
 	padding: 1px 0;
 }
 .tree .row:hover {
-	background: #eef2f7;
+	background: var(--hover);
 }
 .tree .twist {
 	width: 13px;
 	flex: none;
 	text-align: center;
-	cursor: pointer;
 	color: var(--text-dim);
 	user-select: none;
-	font: inherit;
-	background: none;
-	border: 0;
-	padding: 0;
-	line-height: inherit;
 }
 .tree .key {
-	color: var(--key);
+	color: var(--info-text);
 	font-weight: bold;
+	text-align: left;
 }
 /* Long camel-case keys break inside the pane instead of running past it. */
 .tree .row > span {
 	min-width: 0;
-}
-.tree .key {
-	text-align: left;
 }
 /* Where a value came from, or how rare it is, beside its key. */
 .badge {
@@ -689,32 +770,32 @@ table.grid.decoded {
 	vertical-align: 1px;
 	white-space: nowrap;
 }
-.badge.phone {
+.badge.info {
 	border-color: var(--info-border);
 	background: var(--info-bg);
 	color: var(--info-text);
 }
-.badge.rare {
+.badge.warn {
 	border-color: var(--warn-border);
 	background: var(--warn-bg);
 	color: var(--warn-text);
 }
-.badge.country {
+.badge.good {
 	border-color: var(--good-border);
 	background: var(--good-bg);
 	color: var(--good-text);
 }
 .tree .val {
-	color: #14442a;
+	color: var(--val);
 }
 .tree .val.str {
-	color: #7a2f2f;
+	color: var(--val-str);
 }
 .tree .val.num {
-	color: #1f3f8a;
+	color: var(--val-num);
 }
 .tree .val.bool {
-	color: #6a2f8a;
+	color: var(--val-bool);
 	font-weight: bold;
 }
 .tree .val.nul {
@@ -726,7 +807,7 @@ table.grid.decoded {
 }
 .tree .children {
 	padding-left: 14px;
-	border-left: 1px dotted #b9b5ac;
+	border-left: 1px dotted var(--tree-guide);
 	margin-left: 6px;
 }
 .tree .note {
@@ -737,8 +818,46 @@ table.grid.decoded {
 	display: block;
 	padding-left: 18px;
 }
+/* A modem policy rule's terms, coloured by their role in it. */
+.policy-term {
+	font-weight: bold;
+}
+.policy-term:is(.branch, .define) {
+	color: var(--val-bool);
+}
+.policy-term.logic {
+	color: var(--policy-logic);
+}
+.policy-term.condition {
+	color: var(--val-num);
+}
+.policy-term.action {
+	color: var(--policy-action);
+}
+.policy-term.policy {
+	color: var(--info-text);
+}
 .sep {
 	margin: 0 0.5ch;
+}
+/* A raw value's decoded name, and the spellings beside it. */
+.value-label {
+	font-family: var(--ui);
+	color: var(--meaning);
+}
+.value-after {
+	margin-left: 0.5ch;
+}
+.value-before {
+	margin-right: 0.5ch;
+}
+.package {
+	font-size: 14px;
+	margin: 2px 0 6px;
+	overflow-wrap: anywhere;
+}
+td.countries {
+	max-width: 360px;
 }
 .meaning {
 	font-family: var(--ui);
@@ -748,8 +867,8 @@ table.grid.decoded {
 .tag {
 	font-family: var(--ui);
 	font-size: 10.5px;
-	background: #f2efe6;
-	border: 1px solid #c4bda8;
+	background: var(--tag-bg);
+	border: 1px solid var(--tag-border);
 	padding: 0 4px;
 	margin-left: 6px;
 	white-space: nowrap;
@@ -758,10 +877,10 @@ table.grid.decoded {
 /* Logos are drawn for both light and dark status bars, so neither a white nor a
    black backdrop shows all of them. */
 .checker {
-	background-color: #b8b4ac;
+	background-color: var(--checker-a);
 	background-image:
-		linear-gradient(45deg, #8f8b83 25%, transparent 25%, transparent 75%, #8f8b83 75%),
-		linear-gradient(45deg, #8f8b83 25%, transparent 25%, transparent 75%, #8f8b83 75%);
+		linear-gradient(45deg, var(--checker-b) 25%, transparent 25%, transparent 75%, var(--checker-b) 75%),
+		linear-gradient(45deg, var(--checker-b) 25%, transparent 25%, transparent 75%, var(--checker-b) 75%);
 	background-size: 12px 12px;
 	background-position:
 		0 0,
@@ -774,18 +893,9 @@ table.grid.decoded {
 .dimtext {
 	color: var(--text-dim);
 }
-/* Not drawn, but read: by screen readers, and by fetchers that turn the page into text. */
-.sr-only {
-	position: absolute;
-	width: 1px;
-	height: 1px;
-	overflow: hidden;
-	clip-path: inset(50%);
-	white-space: nowrap;
-}
 fieldset.hgroup {
 	border: 1px solid;
-	border-color: var(--shadow) var(--light) var(--light) var(--shadow);
+	border-color: var(--bevel-in);
 	margin: 10px 0;
 	padding: 6px 8px 8px;
 	background: var(--face);
@@ -843,7 +953,6 @@ fieldset.hgroup h3:first-of-type {
 	margin-left: 0.6ch;
 }
 button.chip {
-	cursor: pointer;
 	font-family: inherit;
 }
 a.chip {
@@ -855,22 +964,19 @@ a.chip:hover {
 }
 .banner {
 	border: 2px solid;
-	border-color: var(--shadow) var(--light) var(--light) var(--shadow);
-	background: #fff8e0;
+	border-color: var(--bevel-in);
+	background: var(--notice-bg);
 	padding: 6px 8px;
 	margin: 6px 0;
 	font-size: 11.5px;
 }
 .banner.err {
-	background: #ffe8e8;
-	border-color: #c08a8a;
+	background: var(--bad-bg-soft);
+	border-color: var(--bad-border);
 }
 pre.code {
 	font-family: var(--mono);
 	font-size: 11px;
-	background: var(--field);
-	border: 2px solid;
-	border-color: var(--shadow) var(--light) var(--light) var(--shadow);
 	padding: 6px;
 	overflow: auto;
 	max-height: 60vh;
@@ -882,7 +988,7 @@ pre.code.hex {
 	word-break: normal;
 }
 a {
-	color: #123a6d;
+	color: var(--link);
 }
 .rowflex {
 	display: flex;
@@ -897,6 +1003,11 @@ a {
 .grow {
 	flex: 1;
 	min-width: 0;
+}
+.ellipsis {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
 }
 p.lead {
 	max-width: 74ch;
@@ -916,12 +1027,7 @@ p.lead {
 
 /* A name that explains itself: tap or click for its note; long-press stays the context menu. */
 button.doc {
-	font: inherit;
 	font-weight: bold;
-	color: inherit;
-	background: none;
-	border: 0;
-	padding: 0;
 	text-decoration: underline dotted var(--doc-underline);
 	text-underline-offset: 3px;
 	cursor: help;
@@ -939,7 +1045,6 @@ details.more {
 	margin-top: 8px;
 }
 details.more > summary {
-	cursor: pointer;
 	padding: 4px 0;
 }
 p.note {
@@ -1037,15 +1142,18 @@ p.note {
 	color: inherit;
 }
 
+.raised {
+	background: var(--face);
+	border: 2px solid;
+	border-color: var(--bevel-out);
+}
+
 .ctxmenu {
 	position: fixed;
 	z-index: 100;
 	min-width: 210px;
 	padding: 2px;
-	background: var(--face);
-	border: 2px solid;
-	border-color: var(--light) var(--dark) var(--dark) var(--light);
-	box-shadow: 3px 3px 0 rgba(0, 0, 0, 0.3);
+	box-shadow: 3px 3px 0 var(--drop);
 	font-size: 12px;
 }
 .ctxmenu .head {
@@ -1055,32 +1163,17 @@ p.note {
 	color: var(--text-dim);
 	border-bottom: 1px solid var(--shadow);
 	max-width: 320px;
-	overflow: hidden;
-	text-overflow: ellipsis;
-	white-space: nowrap;
 }
 .ctxmenu button {
 	display: block;
 	width: 100%;
 	text-align: left;
-	font: inherit;
-	background: none;
-	border: 0;
 	padding: 4px 10px;
-	cursor: pointer;
 	color: var(--text);
 }
 .ctxmenu button:hover {
 	background: var(--sel);
 	color: var(--sel-text);
-}
-.ctxmenu button:disabled {
-	color: var(--shadow);
-	cursor: default;
-}
-.ctxmenu button:disabled:hover {
-	background: none;
-	color: var(--shadow);
 }
 .ctxmenu hr {
 	border: 0;
@@ -1094,9 +1187,6 @@ p.note {
 	max-width: none;
 	max-height: 88vh;
 	padding: 0;
-	border: 2px solid;
-	border-color: var(--light) var(--dark) var(--dark) var(--light);
-	background: var(--face);
 	color: inherit;
 }
 .dialog[open] {
@@ -1104,7 +1194,7 @@ p.note {
 	flex-direction: column;
 }
 .dialog::backdrop {
-	background: rgba(0, 0, 0, 0.35);
+	background: var(--backdrop);
 }
 
 @media (max-width: 760px) {
@@ -1134,13 +1224,15 @@ p.note {
 	.titlebar .sub {
 		display: none;
 	}
+	td.countries {
+		min-width: 12em;
+	}
 	button.btn,
 	a.btn {
 		min-height: 32px;
 	}
 	/* iOS Safari zooms the page when a focused field is under 16px. */
 	input,
-	textarea,
 	input[type="text"],
 	input[type="search"] {
 		font-size: 16px;
@@ -1190,13 +1282,6 @@ article.consumer h1 {
 	font-weight: normal;
 	margin: 4px 0 8px;
 }
-article.consumer h2 {
-	font-size: 16px;
-	font-weight: normal;
-	margin: 18px 0 6px;
-	padding-bottom: 2px;
-	border-bottom: 1px solid var(--shadow);
-}
 article.consumer h3 {
 	font-size: 13px;
 	margin: 12px 0 2px;
@@ -1243,7 +1328,7 @@ article.consumer ul.others {
 	font-size: 9px;
 	font-weight: bold;
 	line-height: 1;
-	color: #fff;
+	color: var(--on-accent);
 	background: hsl(var(--hue) 45% 42%);
 }
 .flag {
@@ -1278,6 +1363,10 @@ article.consumer ul.others {
 	min-width: 0;
 	max-width: 100%;
 }
+.picker.wide,
+.picker.wide > .picker-btn {
+	width: 100%;
+}
 .picker > .lbl {
 	flex: none;
 	white-space: nowrap;
@@ -1305,7 +1394,6 @@ article.consumer ul.others {
 .picker-find {
 	margin: 6px;
 	width: calc(100% - 12px);
-	box-sizing: border-box;
 }
 .picker-opt {
 	display: inline-flex;
@@ -1313,10 +1401,12 @@ article.consumer ul.others {
 	gap: 6px;
 	min-width: 0;
 }
-.picker-opt .text {
-	overflow: hidden;
-	text-overflow: ellipsis;
-	white-space: nowrap;
+/* On a phone a chosen option's tags go under its name rather than cut it short. */
+@media (max-width: 760px) {
+	.picker-btn .picker-opt {
+		flex-wrap: wrap;
+		row-gap: 0;
+	}
 }
 .picker-list {
 	margin: 0;
@@ -1325,10 +1415,8 @@ article.consumer ul.others {
 	overflow: auto;
 	min-width: anchor-size(width);
 	max-width: min(92vw, 520px);
-	background: var(--light);
-	border: 2px solid;
-	border-color: var(--light) var(--dark) var(--dark) var(--light);
-	box-shadow: 3px 3px 0 rgba(0, 0, 0, 0.3);
+	background: var(--field);
+	box-shadow: 3px 3px 0 var(--drop);
 	position-area: bottom span-right;
 	position-try-fallbacks: flip-block, flip-inline;
 }
@@ -1354,15 +1442,18 @@ article.consumer ul.others {
 	border-top: 1px solid var(--shadow);
 	margin-top: 2px;
 }
+.list li > a:hover,
 .picker-list > a:hover {
-	background: #eef2f7;
+	background: var(--hover);
 }
+.list li > a[aria-current="page"],
 .picker-list > a[aria-current="true"] {
 	background: var(--sel);
 	color: var(--sel-text);
 }
+.list li > a[aria-current="page"] :is(.dim, .dimtext),
 .picker-list > a[aria-current="true"] .dimtext {
-	color: #cfe0f5;
+	color: var(--on-sel-dim);
 }
 .phone-img {
 	flex: none;
@@ -1464,35 +1555,35 @@ a[href][aria-busy="true"] {
 	pointer-events: none;
 	background: var(--face-hi);
 	border: 1px solid;
-	border-color: var(--light) var(--dark) var(--dark) var(--light);
+	border-color: var(--bevel-out);
 	animation: busy-in 0s 150ms backwards;
 }
 
 /* Feature matrix badges, filled as a carrier's is: gold when on, green when offered but off until turned on,
    greyed when not given (ringed red when required, amber when nice to have), empty when nothing says. */
 .tone-met {
-	--bg: #f0cc5c;
-	--rim: var(--shadow);
+	--tone-fill: var(--tone-met);
+	--tone-rim: var(--shadow);
 }
 .tone-offered {
-	--bg: #8fcf78;
-	--rim: var(--shadow);
+	--tone-fill: var(--tone-offered);
+	--tone-rim: var(--shadow);
 }
 .tone-unmet,
 .tone-need,
 .tone-want {
-	--bg: #e6e3dc;
-	--rim: var(--shadow);
+	--tone-fill: var(--face-hi);
+	--tone-rim: var(--shadow);
 }
 .tone-need {
-	--rim: #d23a22;
+	--tone-rim: var(--tone-need);
 }
 .tone-want {
-	--rim: #e0a030;
+	--tone-rim: var(--tone-want);
 }
 .tone-blank {
-	--bg: transparent;
-	--rim: var(--shadow);
+	--tone-fill: transparent;
+	--tone-rim: var(--shadow);
 }
 /* A feature's badge: its icon (--icon) on the tone's fill. Its holder sets --lock and --switch, the corner marks. */
 .logo.feature {
@@ -1500,27 +1591,30 @@ a[href][aria-busy="true"] {
 	--mark: calc(var(--logo) / 3);
 	background:
 		var(--icon) center / var(--glyph) no-repeat,
-		var(--bg);
-	box-shadow: 0 0 0 1px var(--rim);
+		var(--tone-fill);
+	box-shadow: 0 0 0 1px var(--tone-rim);
 	image-rendering: pixelated;
 }
 .logo.feature:is(.tone-need, .tone-want) {
-	box-shadow: 0 0 0 2px var(--rim);
+	box-shadow: 0 0 0 2px var(--tone-rim);
 }
 .logo.feature:is(.tone-unmet, .tone-need, .tone-want) {
 	background:
 		var(--lock) right 2px bottom 2px / var(--mark) no-repeat,
-		linear-gradient(rgb(230 227 220 / 0.7), rgb(230 227 220 / 0.7)),
+		linear-gradient(
+			color-mix(in srgb, var(--face-hi) 70%, transparent),
+			color-mix(in srgb, var(--face-hi) 70%, transparent)
+		),
 		var(--icon) center / var(--glyph) no-repeat,
-		var(--bg);
+		var(--tone-fill);
 }
 .logo.feature.tone-offered {
 	background:
 		var(--switch) right 2px bottom 2px / var(--mark) no-repeat,
 		var(--icon) center / var(--glyph) no-repeat,
-		var(--bg);
+		var(--tone-fill);
 }
-.logo.feature.tone-blank {
+.logo.tone-blank {
 	background: none;
 	box-shadow: none;
 	outline: 1px dashed var(--shadow);

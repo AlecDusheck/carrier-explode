@@ -4,21 +4,34 @@ import { env } from "cloudflare:workers";
 import { indexDb, type IndexDb, type Page } from "@carrier-explode/db";
 import { perRequest } from "./cache";
 
-const session = perRequest(async (): Promise<D1DatabaseSession> => env.DB.withSession());
+/** How long an isolate keys derived values by the bookmark it last read; purges wait longer (PURGE_DELAY_S in apps/extractor/src/queues.ts). */
+const BOOKMARK_MS = 30_000;
 
-export const db = perRequest(async (): Promise<IndexDb> => indexDb(await session()));
+let latest: { readonly bookmark: string; readonly at: number } | null = null;
 
 /**
- * The index's version as this request reads it: D1's bookmark, which every write moves. What is derived from the index
- * under it stays true; the request's later reads are at least as new.
+ * The request's session and the index version it reads at least: a recent bookmark, which the session is opened at so no
+ * replica behind it answers.
  */
-export const indexVersion = perRequest(async (): Promise<string> => {
-	const s = await session();
-	await s.prepare("SELECT 1").run();
-	const bookmark = s.getBookmark();
-	if (bookmark === null) throw new Error("D1 gave no bookmark after a query");
-	return bookmark;
-});
+const opened = perRequest(
+	async (): Promise<{ readonly session: D1DatabaseSession; readonly version: string }> => {
+		const known = latest;
+		if (known !== null && Date.now() - known.at < BOOKMARK_MS) {
+			return { session: env.DB.withSession(known.bookmark), version: known.bookmark };
+		}
+		const session = env.DB.withSession(known?.bookmark ?? "first-unconstrained");
+		await session.prepare("SELECT 1").run();
+		const bookmark = session.getBookmark();
+		if (bookmark === null) throw new Error("D1 gave no bookmark after a query");
+		latest = { bookmark, at: Date.now() };
+		return { session, version: bookmark };
+	},
+);
+
+export const db = perRequest(async (): Promise<IndexDb> => indexDb((await opened()).session));
+
+/** A version the request reads at least as new as: what is derived from the index under it stays true. */
+export const indexVersion = async (): Promise<string> => (await opened()).version;
 
 /** Rows a page of a list holds. */
 const TAKE = 1000;

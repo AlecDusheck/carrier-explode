@@ -7,7 +7,7 @@
   import { NO_DOCS } from "#lib/tree-docs.ts";
   import { TreeState } from "#lib/ui-state.svelte.ts";
   import { mainFile } from "@carrier-explode/schema";
-  import { sourceKey, type Json } from "@carrier-explode/schema/types";
+  import type { Json } from "@carrier-explode/schema/types";
   import type { TabProps } from "#lib/types.ts";
   import Tree from "../Tree.svelte";
   import TreeToolbar from "../TreeToolbar.svelte";
@@ -19,16 +19,21 @@
   // A link from the Overview names the key to show.
   tree.filter = page.url.searchParams.get("filter") ?? "";
 
-  const [groups, head, rare] = $derived(await Promise.all([getSamsungSettings(verArgs(at)), getSourceHead(verArgs(at)), getRare(verArgs(at))]));
-  // Rarity is judged in the main file alone.
-  const badges = $derived(rare.state === "judged" ? rareBadges(rare.rows) : {});
+  const [groups, head, badges] = $derived(
+    await Promise.all([
+      getSamsungSettings(verArgs(at)),
+      getSourceHead(verArgs(at)),
+      // Rarity is judged in the main file alone.
+      getRare(verArgs(at)).then((rare) => (rare.state === "judged" ? rareBadges(rare.rows) : {})),
+    ]),
+  );
   const main = $derived(mainFile(at.ref.platform));
 </script>
 
 {#snippet values(file: string, value: Json)}
   <Tree
     {value}
-    ctx={{ platform: at.ref.platform, source: sourceKey(at.ref), file, cc: head.cc ?? undefined, docs: NO_DOCS }}
+    ctx={{ platform: at.ref.platform, file, cc: head.cc, docs: NO_DOCS }}
     state={tree}
     badges={file === main ? badges : undefined}
   />

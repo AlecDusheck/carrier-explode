@@ -112,7 +112,7 @@ export const runRequestSchema = v.variant("run", [
 	v.object({
 		run: v.picklist(FEED_NAMES),
 		rebuild: v.optional(v.boolean(), false),
-		only: v.exactOptional(v.array(str)),
+		only: v.optional(v.nullable(v.array(str)), null),
 	}),
 	v.object({ run: v.literal("reindex"), target: reindexTargetSchema }),
 	v.object({ run: v.literal("rederive"), platform: v.picklist(RELEASE_PLATFORMS) }),

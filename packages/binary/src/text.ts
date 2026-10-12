@@ -6,10 +6,10 @@ export class EncodingError extends Error {
 	override name = "EncodingError";
 }
 
-/** Lower-case hex, no separators. */
 /** A 32-bit value as 8 lower-case hex digits: how CRC-32s and Shannon item hashes are written. */
 export const u32Hex = (n: number): string => (n >>> 0).toString(16).padStart(8, "0");
 
+/** Lower-case hex, no separators. */
 export function bytesToHex(b: Uint8Array): string {
 	let s = "";
 	for (const x of b) s += x.toString(16).padStart(2, "0");
@@ -95,3 +95,23 @@ export function maybeText(b: Uint8Array, max = 4096): string | undefined {
 	}
 	return utf8.decode(b.subarray(0, end));
 }
+
+const XML_ENTITIES = { amp: "&", lt: "<", gt: ">", quot: '"', apos: "'" } as const;
+
+const isXmlEntity = (name: string): name is keyof typeof XML_ENTITIES => Object.hasOwn(XML_ENTITIES, name);
+
+/** XML's five named entities and its character references; any other, or one out of range, stays as written. */
+export function decodeXmlEntities(s: string): string {
+	if (!s.includes("&")) return s;
+	return s.replace(
+		/&(?:#x([\da-fA-F]+)|#(\d+)|(amp|lt|gt|quot|apos));/g,
+		(whole, hex?: string, dec?: string, name?: string) => {
+			if (name !== undefined && isXmlEntity(name)) return XML_ENTITIES[name];
+			const code = hex === undefined ? Number(dec) : parseInt(hex, 16);
+			return code <= 0x10ffff ? String.fromCodePoint(code) : whole;
+		},
+	);
+}
+
+/** One attribute of a start tag: its name, then its double-quoted, single-quoted or bare value, if it has one. */
+export const XML_ATTR = /([^\s=/>]+)\s*(?:=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+)))?/g;

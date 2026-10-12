@@ -22,7 +22,7 @@ import { keys } from "@carrier-explode/storage";
 import type { PhoneFile } from "#lib/apple/phones.ts";
 import type { Ver } from "#lib/types.ts";
 import { cached, perRequest } from "../cache";
-import { resolve, verFrom, type Resolved } from "../catalog";
+import { resolve, verKey, type Resolved } from "../catalog";
 import { readBytes } from "../store";
 import { withPhones } from "./boards";
 
@@ -66,13 +66,12 @@ async function resolveApple(v: Ver): Promise<Resolved> {
 }
 
 /** A version's bytes and zip index. Several queries of one page read the same bundle, so it is opened once per request. */
-const openOnce = perRequest(async (source: string, line: string, slug: string): Promise<Opened> => {
-	const r = await resolveApple(verFrom(source, line, slug));
+export const open = perRequest(async (v: Ver): Promise<Opened> => {
+	const r = await resolveApple(v);
 	const bytes = await bytesOf(r.entry);
 	const opened = openIpcc(bytes);
 	return { ...r, opened, bytes, files: await withPhones(opened.info.files) };
-});
-export const open = (v: Ver): Promise<Opened> => openOnce(v.source, v.line ?? "", v.slug ?? "");
+}, verKey);
 
 const QUICK = ["carrier.plist", "Info.plist", "version.plist"] as const;
 
@@ -109,13 +108,11 @@ export interface Described extends Resolved {
 }
 
 /** A version without its bytes: what they say is cached under its sha, which they never change under. */
-const describeOnce = perRequest(async (source: string, line: string, slug: string): Promise<Described> => {
-	const v = verFrom(source, line, slug);
+export const describe = perRequest(async (v: Ver): Promise<Described> => {
 	const r = await resolveApple(v);
 	const facts = await cached(`ipcc-facts:v1:${r.entry.sha}`, async () => factsOf(await open(v)));
 	return { ...r, facts, files: await withPhones(facts.info.files) };
-});
-export const describe = (v: Ver): Promise<Described> => describeOnce(v.source, v.line ?? "", v.slug ?? "");
+}, verKey);
 
 /** A member, decoded and cached under its bundle's sha and its path. MemberError when the bundle has no such file. */
 export async function decodedMember(v: Ver, path: string): Promise<DecodedFile> {

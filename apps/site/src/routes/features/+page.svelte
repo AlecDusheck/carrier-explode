@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { untrack } from "svelte";
   import { goto } from "$app/navigation";
   import { page } from "$app/state";
   import { countryName } from "@carrier-explode/schema";
@@ -8,6 +9,7 @@
     presetOf,
     presetRequirements,
     readRequirements,
+    requirementKey,
     requirementParams,
     type Requirement,
     type Rule,
@@ -15,56 +17,58 @@
   } from "#lib/feature-matrix.ts";
   import { featurePage } from "#lib/feature-pages.ts";
   import { link, withParams } from "#lib/format.ts";
-  import { visitorGuess } from "#lib/visitor.ts";
+  import { fold } from "#lib/names.ts";
+  import { visitor } from "#lib/visitor.svelte.ts";
   import FeaturePhonePicker from "#lib/components/features/FeaturePhonePicker.svelte";
   import CarrierTree from "#lib/components/matrix/CarrierTree.svelte";
-  import { MARKDOWN_PATH } from "#lib/components/matrix/markdown.ts";
   import MatrixCanvas from "#lib/components/matrix/MatrixCanvas.svelte";
   import RequirementsPanel from "#lib/components/matrix/RequirementsPanel.svelte";
   import { score, type Scored } from "#lib/components/matrix/score.ts";
-  import {
-    meetsAll,
-    MISSES,
-    NO_PHONE,
-    noneShown,
-    pickedRules,
-    readMiss,
-    searched,
-    showsEverything,
-    shownColumns,
-    tally,
-    withinMisses,
-  } from "#lib/components/matrix/view.ts";
 
   let { data } = $props();
 
+  const MISSES = [
+    ["0", "No misses"],
+    ["1", "1 miss"],
+    ["2", "2 misses"],
+    ["all", "Any misses"],
+  ] as const;
+
   const matrix = $derived(data.matrix);
   const rules = $derived(matrix ? phoneRules(matrix.columns) : []);
-  const reqs = $derived(readRequirements(page.url.searchParams));
-  const picked = $derived(pickedRules(rules, reqs));
-  const miss = $derived(readMiss(page.url.searchParams));
-  const everything = $derived(showsEverything(page.url.searchParams, picked));
+  const reqKey = $derived(requirementKey(page.url.searchParams));
+  const reqs = $derived(readRequirements(new URLSearchParams(reqKey)));
+  const picked = $derived(rules.flatMap((r, i) => ((reqs.get(r.id)?.mode ?? "off") === "off" ? [] : [i])));
+  const miss = $derived(MISSES.find(([m]) => m === page.url.searchParams.get("miss"))?.[0] ?? "0");
+  // Once something is picked, only it is shown unless asked: a sea of tiles hides what was asked for.
+  const everything = $derived(page.url.searchParams.has("all") || picked.length === 0);
 
   const preset = $derived(presetOf(reqs));
-  const scored = $derived(matrix ? score(matrix.rows, matrix.columns, rules, reqs, (cc) => countryName(cc) ?? cc) : []);
+  const scored = $derived(matrix ? score(matrix.rows, matrix.columns, rules, reqs) : []);
+  /** What a search matches in each carrier, by key. */
+  const texts = $derived(
+    new Map((matrix?.rows ?? []).map(({ entry: e }) => [e.key, fold(`${e.brand} ${e.name} ${e.cc === null ? "" : (countryName(e.cc) ?? e.cc)}`)])),
+  );
 
-  // The search the URL names; with none, the visitor's country once known, read after the page has drawn so the
-  // server's page reads no visitor and the edge can keep it.
-  const named = page.url.searchParams.get("q");
-  let find = $state(named ?? "");
-  $effect(() => {
-    if (named !== null) return;
-    void (async () => {
-      const cc = (await visitorGuess()).country;
-      if (find === "" && cc !== null && matrix?.rows.some((r) => r.entry.cc === cc)) find = countryName(cc) ?? "";
-    })();
+  // Untracked: picking another phone keeps the guessed search.
+  let typed = $state(page.url.searchParams.get("q"));
+  const guessed = $derived.by(() => {
+    const cc = visitor.guess?.country ?? null;
+    return cc !== null && untrack(() => matrix?.rows.some((r) => r.entry.cc === cc)) ? (countryName(cc) ?? "") : "";
   });
+  const find = $derived(typed ?? guessed);
   // The count follows the search: the carriers found, and of them those meeting every requirement.
-  const found = $derived(searched(scored, find));
-  const meets = $derived(found.filter(meetsAll).length);
-  const shown = $derived(withinMisses(found, miss));
-  const columns = $derived(shownColumns(rules, picked, everything));
-  const markdown = $derived(link(MARKDOWN_PATH) + page.url.search);
+  const found = $derived.by(() => {
+    const f = fold(find);
+    return f ? scored.filter((s) => texts.get(s.row.entry.key)?.includes(f)) : scored;
+  });
+  const meets = $derived(found.filter((s) => s.need === 0 && s.want === 0).length);
+  const shown = $derived.by(() => {
+    const limit = miss === "all" ? Infinity : Number(miss);
+    return found.filter((s) => s.need <= limit);
+  });
+  // Picked columns lead, so on a phone they are in view without panning.
+  const columns = $derived(everything ? [...picked, ...rules.flatMap((_, i) => (picked.includes(i) ? [] : [i]))] : picked);
 
   // The URL holds the requirements, so a list of them is a link. Shallow routing would change the address but not
   // `page.url`, which they are read from; the load reads only `phone`, so this reruns nothing.
@@ -85,9 +89,6 @@
   const opened = $derived(open === null ? null : (scored.find((s) => s.row.entry.key === open?.row.entry.key) ?? null));
 </script>
 
-<svelte:head><link rel="alternate" type="text/markdown" href={markdown} /></svelte:head>
-
-<a class="sr-only" href={markdown} tabindex="-1">This table as Markdown, with a link for each change</a>
 <div class="split" class:browsing>
   <div class="pane-left">
     <div class="toolbar back">
@@ -100,7 +101,7 @@
     <div class="scroll pad">
       <fieldset class="hgroup">
         <legend>Start from</legend>
-        <select aria-label="Preset" value={preset ?? "custom"} onchange={(e) => {
+        <select name="preset" aria-label="Preset" value={preset ?? "custom"} onchange={(e) => {
           const chosen = PRESETS.find((p) => p.id === e.currentTarget.value);
           if (chosen) set({ ...requirementParams(presetRequirements(chosen)), all: null });
         }}>
@@ -120,8 +121,8 @@
     {#if matrix}
       <div class="toolbar bar">
         <button type="button" class="btn show-reqs" onclick={() => (browsing = true)}>Requirements{picked.length ? ` (${picked.length})` : ""}</button>
-        <input class="grow find" type="search" placeholder="Find a carrier or country" aria-label="Find a carrier or country" bind:value={find} onchange={() => set({ q: find || null })} />
-        <select aria-label="Misses allowed" value={miss} onchange={(e) => set({ miss: e.currentTarget.value === "0" ? null : e.currentTarget.value })}>
+        <input class="grow find" type="search" name="q" placeholder="Find a carrier or country" aria-label="Find a carrier or country" bind:value={() => find, (v) => (typed = v)} onchange={() => set({ q: find || null })} />
+        <select name="miss" aria-label="Misses allowed" value={miss} onchange={(e) => set({ miss: e.currentTarget.value === "0" ? null : e.currentTarget.value })}>
           {#each MISSES as [value, label] (value)}<option {value}>{label}</option>{/each}
         </select>
       </div>
@@ -129,15 +130,15 @@
         <MatrixCanvas rows={shown} {rules} {columns} {reqs} picked={picked.length} onpick={(s) => (open = s)} {featureHref} />
         {#if opened}<CarrierTree scored={opened} {rules} {reqs} onclose={() => (open = null)} />{/if}
         {#if !shown.length}
-          <p class="banner empty">{noneShown(find)}</p>
+          <p class="banner empty">No carrier{find ? " found" : ""} has every required feature. Allow a miss, require less{find ? ", or clear the search" : ""}.</p>
         {/if}
       </div>
       <div class="statusbar">
-        {#key meets}<span class="cell grow" class:pulse={picked.length > 0}>{tally(found, picked.length, find, matrix.phone.name)}</span>{/key}
+        {#key meets}<span class="cell grow" class:pulse={picked.length > 0}>{picked.length ? `${meets} of ${found.length}` : found.length} carriers{find ? ` for “${find}”` : ""}{picked.length ? " meet every requirement" : ""} on the {matrix.phone.name}</span>{/key}
         {#if picked.length}<button type="button" class="cell" onclick={() => set({ all: everything ? null : "1" })}>{everything ? "Picked columns" : "All columns"}</button>{/if}
       </div>
     {:else}
-      <p class="pane-msg dimtext">{NO_PHONE}</p>
+      <p class="pane-msg dimtext">No phone has feature states yet.</p>
     {/if}
   </div>
 </div>
@@ -173,7 +174,7 @@
   }
   @keyframes pulse {
     from {
-      background: #fff1ad;
+      background: var(--flash);
     }
   }
   @media (prefers-reduced-motion: reduce) {
@@ -189,8 +190,21 @@
       display: flex;
       justify-content: space-between;
     }
-    .pane-right :global(.statusbar) {
+    .pane-right .statusbar {
       padding-bottom: max(2px, env(safe-area-inset-bottom));
+    }
+    .pane-right .statusbar .grow {
+      white-space: normal;
+    }
+  }
+  /* Too narrow for the find box between the two controls: it takes a row of its own. */
+  @media (max-width: 359px) {
+    .bar {
+      flex-wrap: wrap;
+    }
+    .find {
+      order: 1;
+      flex-basis: 100%;
     }
   }
 </style>

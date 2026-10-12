@@ -3,10 +3,10 @@
   import { getPhoneChanges } from "#lib/api/apple.remote.ts";
   import { getComparison, getSourceHead } from "#lib/api/sources.remote.ts";
   import { routineReason } from "#lib/apple/routine-changes.ts";
-  import { compareHref, verArgs, versionHref, withParams } from "#lib/format.ts";
+  import { verArgs, versionHref, withParams } from "#lib/format.ts";
   import type { TabProps } from "#lib/types.ts";
+  import ChangesHeader from "../../ChangesHeader.svelte";
   import Pane from "../../Pane.svelte";
-  import VersionPicker from "../../VersionPicker.svelte";
   import BundleCompare from "../BundleCompare.svelte";
   import PhoneChanges from "../PhoneChanges.svelte";
 
@@ -21,16 +21,7 @@
   const older = $derived(slugAt(chosen) >= slugAt(at.version));
 </script>
 
-<div class="rowflex">
-  <VersionPicker
-    label="Compare against"
-    timeline={head.timeline.filter((t) => t.slug !== at.version)}
-    current={chosen}
-    shipping={head.current}
-    href={(slug) => withParams(page.url, { against: slug === head.previous?.slug ? null : slug })}
-  />
-  <a href={compareHref({ source: at.ref, slug: chosen || undefined, line: at.line }, { source: at.ref, slug: at.version, line: at.line }, file)}>Compare with another bundle…</a>
-</div>
+<ChangesHeader {at} {head} {chosen} other="bundle" {file} />
 
 <Pane awaiting={{ kind: "diff", name: at.version }}>
   {@const cmp = await getComparison({

@@ -12,16 +12,19 @@
 			"name": "carrier-explode-site-dev",
 			"workers_dev": true,
 			"assets": { "binding": "ASSETS", "directory": ".svelte-kit/cloudflare" },
-			"r2_buckets": [{ "binding": "BUCKET", "bucket_name": "carrier-explode-ingest-dev" }],
+			"r2_buckets": [{ "binding": "BUCKET", "bucket_name": "carrier-explode-ingest-dev", "remote": true }],
 			"d1_databases": [
 				{
 					"binding": "DB",
 					"database_name": "carrier-explode-index-dev",
 					"database_id": "ae71cafc-0b64-4b70-9dce-a4c0c6eaa12f",
+					"remote": true,
 				},
 			],
 			"cache": { "enabled": true },
 			"vars": {
+				// Rows a list draws above the open source beside it: enough to fill a 4K-at-100% landscape sidebar (27 px rows).
+				"LIST_WINDOW": 70,
 				"CACHE_TTL": {
 					"pinned": 2592000,
 					"latest": 86400,
@@ -67,6 +70,8 @@
 			// src/hooks.server.ts puts on every response. Zone cache settings never apply to what a worker returns.
 			"cache": { "enabled": true },
 			"vars": {
+				// Rows a list draws above the open source beside it: enough to fill a 4K-at-100% landscape sidebar (27 px rows).
+				"LIST_WINDOW": 70,
 				// Seconds, by what a response holds (src/lib/server/cache-policy.ts). A publish purges the pages and data it changes.
 				"CACHE_TTL": {
 					// A pinned version's files never change; its page also lists every version, which a publish's purge refreshes.

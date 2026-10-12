@@ -11,7 +11,7 @@
 <div class="scroll pad">
   <Pane>
     {@const h = await getSourceHead(verOf(params))}
-    {@const Overview = VIEWS[h.ref.platform].Overview}
+    {@const Overview = (await VIEWS[h.ref.platform].Overview()).default}
     <Overview at={headAt(h)} path="" />
   </Pane>
 </div>

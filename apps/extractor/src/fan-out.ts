@@ -1,43 +1,34 @@
-/** Fan-out with a concurrency cap, failures collected per item; and fixed-size batches. */
+/** Fan-out with a concurrency cap, whole or failed; and fixed-size batches. */
 
 import { describe } from "./errors.ts";
 
-export type Settled<O, I = unknown> = { readonly item: I } & (
-	| { readonly ok: true; readonly value: O }
-	| { readonly ok: false; readonly error: string }
-);
-
-export async function fanOut<I, O>(
+/**
+ * `fn` over every item, at most `limit` at once, in `items` order; or, once all have settled, one error naming the
+ * failures: a partial read must not pass as whole.
+ */
+export async function mapLimit<I, O>(
+	what: string,
 	items: readonly I[],
 	limit: number,
 	fn: (item: I) => Promise<O>,
-): Promise<Settled<O, I>[]> {
-	const out: Settled<O, I>[] = [];
+): Promise<O[]> {
+	const out: O[] = [];
+	const failed: string[] = [];
 	// Shared by every worker: each next() claims the next item.
 	const queue = items.entries();
 	const worker = async (): Promise<void> => {
 		for (const [i, item] of queue) {
 			try {
-				out[i] = { item, ok: true, value: await fn(item) };
+				out[i] = await fn(item);
 			} catch (e) {
-				out[i] = { item, ok: false, error: describe(e) };
+				failed[i] = describe(e);
 			}
 		}
 	};
 	await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
+	const errors = Object.values(failed);
+	if (errors.length) throw new Error(`${what}: ${errors.length} failed: ${errors.slice(0, 5).join(" | ")}`);
 	return out;
-}
-
-const succeeded = <O>(results: readonly Settled<O>[]): O[] => results.flatMap((r) => (r.ok ? [r.value] : []));
-
-const failures = <O>(results: readonly Settled<O>[]): string[] =>
-	results.flatMap((r) => (r.ok ? [] : [r.error]));
-
-/** The values, or one error naming the failures: a partial read must not pass as whole. */
-export function allOrThrow<O>(what: string, results: readonly Settled<O>[]): O[] {
-	const failed = failures(results);
-	if (failed.length) throw new Error(`${what}: ${failed.length} failed: ${failed.slice(0, 5).join(" | ")}`);
-	return succeeded(results);
 }
 
 /** `items` in consecutive runs of at most `size`. */

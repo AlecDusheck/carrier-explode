@@ -9,7 +9,7 @@ import {
 	type BundleFile,
 	type OpenedBundle,
 } from "@carrier-explode/decode-ios";
-import { toJson } from "../json.ts";
+import { toJsonLeaf } from "../json.ts";
 import { uniqueSims } from "../sims.ts";
 import {
 	PROFILE_SCHEMA,
@@ -63,8 +63,7 @@ function mapSettings(s: Settings, kind: SourceRef["kind"]): Mapped {
 	return { concepts, apns };
 }
 
-const apnText = (apns: readonly Apn[]): string =>
-	canonical(apns.map((a) => toJson({ ...a, path: "" }) ?? null));
+const apnText = (apns: readonly Apn[]): string => canonical(apns.map((a) => toJsonLeaf({ ...a, path: "" })));
 
 /**
  * The name the bundle shows in the status bar: StatusBarImages maps each name a network broadcasts to one shown, and
@@ -103,7 +102,7 @@ function variant(
 function rawOf(b: OpenedBundle): Record<string, Json> {
 	return Object.fromEntries(
 		Object.entries(flattenBundle(b)).flatMap(([file, flat]) =>
-			Object.entries(flat).map(([path, v]): [string, Json] => [`${file}:${path}`, toJson(v) ?? null]),
+			Object.entries(flat).map(([path, v]): [string, Json] => [`${file}:${path}`, toJsonLeaf(v)]),
 		),
 	);
 }

@@ -59,9 +59,9 @@ export function modemLabel(generation: string, label: string | undefined): strin
 
 export interface ModemCapabilities {
 	/** The package ships its carrier defaults as plaintext files a bundle's .der.pri can be compared against. */
-	plaintextDefaults: boolean;
+	readonly plaintextDefaults: boolean;
 	/** Where the modem's carrier config lives: package defaults the bundle overrides, or the bundle alone. */
-	carrierConfigIn: "package" | "bundle";
+	readonly carrierConfigIn: "package" | "bundle";
 }
 
 const CAPABILITIES: Record<PackageVendor, ModemCapabilities> = {

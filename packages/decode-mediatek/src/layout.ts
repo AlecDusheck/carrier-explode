@@ -5,7 +5,7 @@
 
 import { latin1, u16le, u32le, u8, view } from "@carrier-explode/binary";
 import { McfError } from "./errors.ts";
-import { romString } from "./rom-string.ts";
+import { nulPadded, romString } from "./rom-string.ts";
 import { sbpItemNames } from "./sbp-names.ts";
 
 /** One `[counts](base,stride)` array, or a fixed byte offset, of an item's formula. */
@@ -74,10 +74,9 @@ function formulaAt(
 	at: number,
 ): { readonly itemId: number; readonly text: string } | undefined {
 	if (at < 0 || at + FORMULA_ROW > rom.length) return undefined;
-	const field = rom.subarray(at + 4, at + FORMULA_ROW);
-	const end = field.indexOf(0);
-	if (end <= 0 || field.subarray(end).some((x) => x !== 0)) return undefined;
-	const text = latin1(field.subarray(0, end));
+	const field = nulPadded(rom.subarray(at + 4, at + FORMULA_ROW));
+	if (field === undefined) return undefined;
+	const text = latin1(field);
 	return FORMULA_TEXT.test(text) && ARRAY_TERM.test(text.split("+")[0] ?? "")
 		? { itemId: u32le(rom, at), text }
 		: undefined;

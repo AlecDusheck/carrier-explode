@@ -1,7 +1,6 @@
 /** One diff for /compare and the Changes tabs: two sources of one family natively, across families concept by concept. */
 
-import { error } from "@sveltejs/kit";
-import { decoderFamily, parseSourceKey, type DecoderFamily } from "@carrier-explode/schema/types";
+import { decoderFamily, sourceOf, type DecoderFamily } from "@carrier-explode/schema/types";
 import type { Ver } from "#lib/types.ts";
 import * as android from "./android/settings";
 import * as apple from "./apple/bundle";
@@ -34,11 +33,7 @@ const NATIVE: {
 	samsung: (a, b) => (a === null ? samsung.getSamsungChanges(b) : samsung.getSamsungComparison(a, b)),
 };
 
-function familyOf(s: Side): DecoderFamily {
-	const ref = parseSourceKey(s.source);
-	if (!ref) error(400, `Not a source key: ${s.source}`);
-	return decoderFamily(ref.platform);
-}
+const familyOf = (s: Side): DecoderFamily => decoderFamily(sourceOf(s.source).platform);
 
 const native = async <F extends DecoderFamily>(
 	family: F,

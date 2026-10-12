@@ -10,10 +10,10 @@ import { fetchWithRetry } from "@carrier-explode/http";
 import type { Label } from "@carrier-explode/schema/records";
 import type { Device } from "@carrier-explode/schema/types";
 import type { Env } from "../env.ts";
-import { allOrThrow, fanOut } from "../fan-out.ts";
+import { mapLimit } from "../fan-out.ts";
 import { devicesSynced } from "../queues.ts";
 import { iosInScope } from "../scope.ts";
-import { betaCandidates, listedBetas, listedReleases, planIos, type IosBuild } from "./plan.ts";
+import { betaCandidates, listedBetas, listedReleases, planIos, type IosBuild, type IpswRef } from "./plan.ts";
 
 const IPSW_ME = "https://api.ipsw.me/v4";
 const APPLEDB = "https://api.appledb.dev/ios/";
@@ -24,18 +24,14 @@ async function getJson<S extends v.GenericSchema>(url: string, schema: S): Promi
 	return v.parse(schema, body);
 }
 
-/** YYYY-MM-DD; ipsw.me stamps `2026-09-15T17:05:25Z`. */
-const day = (stamp: string | null | undefined): { released?: string } =>
-	stamp ? { released: stamp.slice(0, 10) } : {};
+/** YYYY-MM-DD, null for none; ipsw.me stamps `2026-09-15T17:05:25Z`. */
+const daySchema = v.pipe(
+	v.nullish(v.string()),
+	v.transform((stamp) => (stamp ? stamp.slice(0, 10) : null)),
+);
 
 /** An ipsw.me firmware entry, with the device it was listed under. */
-export interface Firmware {
-	readonly version: string;
-	readonly build: string;
-	readonly device: string;
-	readonly url: string;
-	readonly released?: string;
-}
+export type Firmware = IpswRef & Readonly<Pick<IosBuild, "version" | "build" | "released">>;
 
 const DEVICES = `${IPSW_ME}/devices`;
 const DeviceList = v.array(v.looseObject({ identifier: v.string(), name: v.string() }));
@@ -45,7 +41,7 @@ const DeviceFirmwares = v.looseObject({
 			version: v.string(),
 			buildid: v.string(),
 			url: v.string(),
-			releasedate: v.nullish(v.string()),
+			releasedate: daySchema,
 		}),
 	),
 });
@@ -85,13 +81,8 @@ async function deviceFirmwares(device: string): Promise<Firmware[]> {
 		build: f.buildid,
 		device,
 		url: f.url,
-		...day(f.releasedate),
+		...(f.releasedate === null ? {} : { released: f.releasedate }),
 	}));
-}
-
-export interface IpswRef {
-	readonly device: string;
-	readonly url: string;
 }
 
 /** AppleDB's index: `iOS;24B5089g`, `watchOS;...`, `iOS;24B5084k-sim`... */
@@ -99,20 +90,17 @@ async function appledbKeys(): Promise<string[]> {
 	return getJson(`${APPLEDB}index.json`, v.array(v.string()));
 }
 
-export interface AppleDbEntry {
-	readonly version: string;
-	readonly build: string;
+export type AppleDbEntry = Readonly<Pick<IosBuild, "version" | "build" | "released">> & {
 	readonly beta: boolean;
-	readonly released?: string;
 	/** iPhone -> IPSW URL, only the iPhones with a link. */
 	readonly ipsws: ReadonlyMap<string, string>;
-}
+};
 
 const AppleDbFirmware = v.looseObject({
 	version: v.string(),
 	build: v.string(),
 	beta: v.optional(v.boolean(), false),
-	released: v.optional(v.string()),
+	released: daySchema,
 	/** device -> { ipsw }, or for an alias a string naming another device. */
 	devices: v.optional(v.record(v.string(), v.unknown()), {}),
 });
@@ -125,7 +113,13 @@ export function appledbEntry(raw: unknown): AppleDbEntry {
 	for (const [device, entry] of Object.entries(e.devices)) {
 		if (device.startsWith("iPhone") && v.is(IpswLink, entry)) ipsws.set(device, entry.ipsw);
 	}
-	return { version: e.version, build: e.build, beta: e.beta, ...day(e.released), ipsws };
+	return {
+		version: e.version,
+		build: e.build,
+		beta: e.beta,
+		...(e.released === null ? {} : { released: e.released }),
+		ipsws,
+	};
 }
 
 async function appledbFirmware(build: string): Promise<AppleDbEntry> {
@@ -203,17 +197,14 @@ export async function checkIos(
 	);
 	await devicesSynced(env, "ios", { devices, names: named + alsoNamed });
 	const phones = records.filter((d) => iosInScope(env.SCOPE, d) && listed.has(d.code)).map((d) => d.code);
-	const releases = allOrThrow(
-		"ipsw.me firmwares",
-		await fanOut(phones, env.FEED_CONCURRENCY.appleCatalogs, deviceFirmwares),
+	const releases = (
+		await mapLimit("ipsw.me firmwares", phones, env.FEED_CONCURRENCY.appleCatalogs, deviceFirmwares)
 	).flat();
-	const betas = allOrThrow(
+	const betas = await mapLimit(
 		"AppleDB records",
-		await fanOut(
-			betaCandidates(await appledbKeys(), releases),
-			env.FEED_CONCURRENCY.appleCatalogs,
-			appledbFirmware,
-		),
+		betaCandidates(await appledbKeys(), releases),
+		env.FEED_CONCURRENCY.appleCatalogs,
+		appledbFirmware,
 	);
 	return planIos(
 		env.SCOPE,

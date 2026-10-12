@@ -12,8 +12,8 @@ export function versionLabel(slug: string): string {
 }
 
 /** A country's flag emoji from its ISO code: the two letters as regional indicator symbols. */
-export function flag(cc: string | undefined): string | undefined {
-	if (cc === undefined || countryName(cc) === undefined) return undefined;
+export function flag(cc: string): string | undefined {
+	if (countryName(cc) === undefined) return undefined;
 	return String.fromCodePoint(...[...cc.toUpperCase()].map((c) => 0x1f1e6 + c.charCodeAt(0) - 65));
 }
 

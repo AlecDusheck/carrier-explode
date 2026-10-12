@@ -36,13 +36,13 @@
 
 <fieldset class="hgroup">
   <legend>Settings ({head.listed})<DecodeNotes errors={head.unplaced} /></legend>
-  <form class="filters" method="get" data-sveltekit-keepfocus data-sveltekit-noscroll>
+  <form class="filters" method="get" data-sveltekit-reset="false">
     {#each kept as [k, v] (k)}<input type="hidden" name={k} value={v} />{/each}
     <input type="search" name="filter" placeholder="filter" aria-label="filter settings" value={filter} />
     {#if filter}<span class="dimtext">{matched} shown</span>{/if}
   </form>
   {#if sections.length > 1}
-    <nav class="rowflex sections" aria-label="sections" data-sveltekit-noscroll>
+    <nav class="rowflex sections" aria-label="sections" data-sveltekit-reset="false">
       <a class="btn" href={withParams(page.url, { section: null })} aria-current={section === null ? "page" : undefined}>All ({matched})</a>
       {#each sections as s (s.title)}
         <a class="btn mono" href={withParams(page.url, { section: s.title })} aria-current={section === s.title ? "page" : undefined}>{s.title} ({s.count})</a>

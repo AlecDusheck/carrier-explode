@@ -21,6 +21,18 @@ export const valueReading = <T extends Json>(
 	fidelity: Fidelity = "exact",
 ): ValueReading<T> => ({ kind: "value", value, because, fidelity });
 
+/** `raw` converted, resting on `because(raw)`; unset when there is no raw or it does not convert. */
+export function convertedReading<R, T extends Json>(
+	raw: R | undefined,
+	convert: (raw: R) => T | undefined,
+	because: (raw: R) => NativeRef,
+	fidelity: Fidelity = "exact",
+): ValueReading<T> | Unset {
+	if (raw === undefined) return unset;
+	const value = convert(raw);
+	return value === undefined ? unset : valueReading(value, [because(raw)], fidelity);
+}
+
 /** Equal readings give equal keys; where a reading came from does not count. */
 export function readingKey(r: ConceptValue): string {
 	if (r.kind === "unset") return "unset";

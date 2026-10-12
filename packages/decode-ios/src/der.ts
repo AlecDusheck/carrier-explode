@@ -4,23 +4,24 @@
  */
 
 import { b64ToBytes, byteAt, colonHex, errorMessage, latin1, u32be } from "@carrier-explode/binary";
+import type { Building } from "./building.ts";
 
 export interface Tlv {
 	/** Identifier octet (low-tag-number form). */
-	tag: number;
-	constructed: boolean;
+	readonly tag: number;
+	readonly constructed: boolean;
 	/** 0 universal, 1 application, 2 context, 3 private. */
-	cls: number;
+	readonly cls: number;
 	/** Tag number within its class. */
-	num: number;
-	start: number;
+	readonly num: number;
+	readonly start: number;
 	/** Offset just past the identifier octets. */
-	tagEnd: number;
+	readonly tagEnd: number;
 	/** Content bounds; for indefinite lengths the end excludes the 00 00 terminator. */
-	contentStart: number;
-	contentEnd: number;
+	readonly contentStart: number;
+	readonly contentEnd: number;
 	/** Offset just past the element, terminator included. */
-	end: number;
+	readonly end: number;
 }
 
 const MAX_DEPTH = 64;
@@ -212,21 +213,21 @@ export function readName(b: Uint8Array, t: Tlv): string {
 }
 
 export interface CertInfo {
-	subject: string;
-	issuer: string;
+	readonly subject: string;
+	readonly issuer: string;
 	/** Serial number as colon-separated hex. */
-	serial: string;
-	notBefore: string;
-	notAfter: string;
-	signatureAlgorithm: string;
-	keyAlgorithm: string;
+	readonly serial: string;
+	readonly notBefore: string;
+	readonly notAfter: string;
+	readonly signatureAlgorithm: string;
+	readonly keyAlgorithm: string;
 	/** RSA modulus size in bits, or the EC curve name. */
-	keySize?: number;
-	curve?: string;
+	readonly keySize?: number;
+	readonly curve?: string;
 	/** Why the key's size or curve could not be read; the rest of the certificate is still summarised. */
-	keyError?: string;
-	selfIssued: boolean;
-	isCA?: boolean;
+	readonly keyError?: string;
+	readonly selfIssued: boolean;
+	readonly isCA?: boolean;
 }
 
 function leadingBits(v: Uint8Array): number {
@@ -253,7 +254,7 @@ export function parseCertificate(b: Uint8Array, off = 0): CertInfo {
 	const [alg, key] = children(b, field(i++, "subjectPublicKeyInfo"));
 	const [keyOid, params] = children(b, requireTlv(alg, "key algorithm"));
 	const keyAlgorithm = oidName(readOid(b, requireTlv(keyOid, "key algorithm OID")));
-	const info: CertInfo = {
+	const info: Building<CertInfo> = {
 		subject,
 		issuer,
 		serial,

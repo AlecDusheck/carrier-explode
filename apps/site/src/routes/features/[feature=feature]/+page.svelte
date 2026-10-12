@@ -2,8 +2,7 @@
   import { page } from "$app/state";
   import { jsonLdScript } from "#lib/seo.ts";
   import { getFeatureModels, getFeaturePhone, getFeaturePhones, getFeatureTable } from "#lib/api/sources.remote.ts";
-  import type { VisitorGuess } from "#lib/guess.ts";
-  import { visitorGuess } from "#lib/visitor.ts";
+  import { visitor } from "#lib/visitor.svelte.ts";
   import { deviceWords, FEATURE_PAGES } from "#lib/feature-pages.ts";
   import { PLATFORM_DEVICES } from "#lib/platforms.ts";
   import type { ReleasePlatform } from "@carrier-explode/schema/types";
@@ -53,11 +52,7 @@
 
   const offers = (state: string) => state === "on" || state === "available";
 
-  // Guessed after mount, so the server's page reads no visitor and the edge can keep it.
-  let guess: VisitorGuess | null = $state(null);
-  $effect(() => {
-    void visitorGuess().then((g) => (guess = g));
-  });
+  const guess = $derived(visitor.guess);
 </script>
 
 <svelte:head>
@@ -86,7 +81,7 @@
             <p class="answer">The {phone.name} has no 5G modem, so {feature.name} is not available on it with any carrier.</p>
           {:else}
             {@const rows = table.rows}
-            {@const yours = guess?.fromNetwork ? rows.find((r) => r.brand === guess?.carrier && r.cc === guess.country) : undefined}
+            {@const yours = guess?.fromNetwork ? rows.find((r) => r.brand === guess?.carrier && guess.country !== null && r.cc === guess.country) : undefined}
             {#if yours}
               <p class="answer">
                 {yours.brand} on the {phone.name}: <FeatureStatus state={yours.state} defaulted={yours.defaulted} />
@@ -111,7 +106,7 @@
               column={feature.name}
             >
               {#snippet filters()}
-                {#if notOffered}<label class="lbl"><input type="checkbox" bind:checked={hideNo} /> Hide carriers that don't offer it</label>{/if}
+                {#if notOffered}<label class="lbl"><input type="checkbox" name="hide-no" bind:checked={hideNo} /> Hide carriers that don't offer it</label>{/if}
               {/snippet}
             </CarrierList>
           {/if}

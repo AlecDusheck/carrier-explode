@@ -24,3 +24,6 @@ export function toJson(v: unknown): Json | undefined {
 	}
 	return undefined;
 }
+
+/** A leaf as Json: toJson's, or null where Json cannot hold it. */
+export const toJsonLeaf = (v: unknown): Json => toJson(v) ?? null;

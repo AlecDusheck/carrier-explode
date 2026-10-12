@@ -80,7 +80,7 @@
           {#each folded as { f, why } (f.path)}
             <tr>
               <td class="mono"><a href={narrowHref(f.path)}>{f.path}</a></td>
-              <td><span class="chip {DIFF_CHIP[f.kind]}">{f.kind}</span></td>
+              <td><span class={["chip", DIFF_CHIP[f.kind]]}>{f.kind}</span></td>
               <td class="dimtext">{ROUTINE_LABEL[why]}</td>
             </tr>
           {/each}
@@ -98,7 +98,7 @@
             <td class="mono">
               <a href="#{anchor(f.path)}" onclick={() => isOpen(f.path) || toggle(f.path)}>{f.path}</a>
             </td>
-            <td><span class="chip {DIFF_CHIP[f.kind]}">{f.kind}</span></td>
+            <td><span class={["chip", DIFF_CHIP[f.kind]]}>{f.kind}</span></td>
             <td class="num">{f.counts.added || ""}</td>
             <td class="num">{f.counts.removed || ""}</td>
             <td class="num">{f.counts.changed || ""}</td>
@@ -112,11 +112,11 @@
     {@const open = isOpen(f.path)}
     <fieldset class="hgroup" class:shut={!open} id={anchor(f.path)}>
       <legend class="rowflex">
-        <button class="twist" aria-expanded={open} aria-label="{open ? 'Collapse' : 'Expand'} {f.path}" onclick={() => toggle(f.path)}>
+        <button class="twist bare" aria-expanded={open} aria-label="{open ? 'Collapse' : 'Expand'} {f.path}" onclick={() => toggle(f.path)}>
           {open ? "▾" : "▸"}
         </button>
         <span class="mono">{f.path}</span>
-        <span class="chip {DIFF_CHIP[f.kind]}">{f.kind}</span>
+        <span class={["chip", DIFF_CHIP[f.kind]]}>{f.kind}</span>
         {#if f.kind === "changed"}<span class="dimtext">{total(f.counts)} {total(f.counts) === 1 ? "row" : "rows"}</span>{/if}
         {#if f.kind !== "added"}{@render sideLink("a", f.path, left)}{/if}
         {#if f.kind !== "removed"}{@render sideLink("b", f.path, right)}{/if}
@@ -151,7 +151,7 @@
   legend.rowflex { gap: 4px; }
   fieldset.shut { padding-bottom: 0; }
   .twist {
-    font: inherit; background: none; border: 0; padding: 0 2px; cursor: pointer;
+    padding: 0 2px;
     color: var(--text-dim); width: 16px;
   }
   .after { margin: 4px 0 0; }

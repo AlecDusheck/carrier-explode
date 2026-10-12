@@ -4,7 +4,7 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 import { Lz4Error } from "@carrier-explode/binary";
-import { decodeLz4, decodeLz4Stream, isSparse, SparseError, sparseRuns, unsparse } from "../src/index.ts";
+import { decodeLz4Stream, SparseError, sparseRuns, wholeImage } from "../src/index.ts";
 
 /** `bytes` in pieces of `size`: what a network stream hands over. */
 async function* pieces(bytes: Uint8Array, size: number): AsyncGenerator<Uint8Array> {
@@ -23,13 +23,8 @@ const plain = (): Uint8Array => {
 	return new TextEncoder().encode(s);
 };
 
-describe("decodeLz4", () => {
-	it("decodes a frame whose matches reach back across linked blocks", () => {
-		const frame = new Uint8Array(readFileSync(new URL("./fixtures/linked.lz4", import.meta.url)));
-		expect(Buffer.from(decodeLz4(frame)).equals(Buffer.from(plain()))).toBe(true);
-	});
-
-	it("decodes the same frame as it streams, in any size of piece", async () => {
+describe("decodeLz4Stream", () => {
+	it("decodes a frame whose matches reach back across linked blocks, in any size of piece", async () => {
 		const frame = new Uint8Array(readFileSync(new URL("./fixtures/linked.lz4", import.meta.url)));
 		for (const size of [1, 7, 4096, frame.length])
 			expect(
@@ -37,10 +32,12 @@ describe("decodeLz4", () => {
 			).toBe(true);
 	});
 
-	it("refuses what is not a frame, or is cut short", () => {
-		expect(() => decodeLz4(new Uint8Array(16))).toThrow(Lz4Error);
+	it("refuses what is not a frame, or is cut short", async () => {
+		await expect(collect(decodeLz4Stream(pieces(new Uint8Array(16), 16)))).rejects.toThrow(Lz4Error);
 		const frame = new Uint8Array(readFileSync(new URL("./fixtures/linked.lz4", import.meta.url)));
-		expect(() => decodeLz4(frame.subarray(0, frame.length - 100))).toThrow();
+		await expect(
+			collect(decodeLz4Stream(pieces(frame.subarray(0, frame.length - 100), 4096))),
+		).rejects.toThrow();
 	});
 });
 
@@ -72,16 +69,15 @@ function sparse(blocks: number, chunks: Array<[number, number, number[]]>): Uint
 	return new Uint8Array(out);
 }
 
-describe("unsparse", () => {
-	it("lays out raw, fill and don't-care chunks, skipping a CRC chunk", () => {
+describe("sparse images", () => {
+	it("lays out raw, fill and don't-care chunks, skipping a CRC chunk", async () => {
 		const img = sparse(4, [
 			[0xcac1, 1, [1, 2, 3, 4]],
 			[0xcac2, 2, [9, 8, 7, 6]],
 			[0xcac3, 1, []],
 			[0xcac4, 0, [0, 0, 0, 0]],
 		]);
-		expect(isSparse(img)).toBe(true);
-		expect([...unsparse(img)]).toEqual([1, 2, 3, 4, 9, 8, 7, 6, 9, 8, 7, 6, 0, 0, 0, 0]);
+		expect([...(await wholeImage(pieces(img, 5)))]).toEqual([1, 2, 3, 4, 9, 8, 7, 6, 9, 8, 7, 6, 0, 0, 0, 0]);
 	});
 
 	it("streams the same image as runs at their offsets, skipping what it does not hold", async () => {
@@ -99,7 +95,11 @@ describe("unsparse", () => {
 		]);
 	});
 
-	it("refuses chunks that do not cover the image", () => {
-		expect(() => unsparse(sparse(4, [[0xcac1, 1, [1, 2, 3, 4]]]))).toThrow(SparseError);
+	it("refuses chunks that do not cover the image", async () => {
+		await expect(wholeImage(pieces(sparse(4, [[0xcac1, 1, [1, 2, 3, 4]]]), 5))).rejects.toThrow(SparseError);
+	});
+
+	it("keeps an image that is not sparse as it is", async () => {
+		expect([...(await wholeImage(pieces(new Uint8Array([1, 2, 3]), 1)))]).toEqual([1, 2, 3]);
 	});
 });

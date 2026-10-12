@@ -46,7 +46,7 @@
 </script>
 
 {#snippet twist()}
-  <button type="button" class="twist" aria-expanded={open} aria-label="{open ? 'Fold' : 'Unfold'} {node.name}" onclick={() => (toggled = !open)}>{open ? "▾" : "▸"}</button>
+  <button type="button" class="twist bare" aria-expanded={open} aria-label="{open ? 'Fold' : 'Unfold'} {node.name}" onclick={() => (toggled = !open)}>{open ? "▾" : "▸"}</button>
 {/snippet}
 
 {#snippet unused(l: IntelList)}
@@ -97,7 +97,7 @@
       {#if node.kind === "leaf" || inlineList}<span class="twist" aria-hidden="true">·</span>{:else}{@render twist()}{/if}
       <span>
         {#if note}
-          <button type="button" class="key doc" class:on={showNote} aria-expanded={showNote} onclick={() => (showNote = !showNote)}>{node.name}</button>
+          <button type="button" class="key doc bare" class:on={showNote} aria-expanded={showNote} onclick={() => (showNote = !showNote)}>{node.name}</button>
         {:else}
           <span class="key">{node.name}</span>
         {/if}

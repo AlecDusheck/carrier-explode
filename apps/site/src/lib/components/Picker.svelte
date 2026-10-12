@@ -2,6 +2,7 @@
   import type { Snippet } from "svelte";
   import { listKeys } from "#lib/keys.ts";
   import { fold } from "#lib/names.ts";
+  import { navigating } from "$app/state";
   import { isNavigatingTo } from "#lib/navigating.ts";
 
   /**
@@ -20,9 +21,10 @@
     section?: ((item: T) => string) | undefined;
     /** For a long list: the text a find box matches each item by. */
     search?: ((item: T) => string) | undefined;
+    wide?: boolean | undefined;
   }
 
-  let { label, items, selected, key, option, href, section, search }: Props = $props();
+  let { label, items, selected, key, option, href, section, search, wide }: Props = $props();
 
   /** A found list shows this many; the box narrows the rest. */
   const SHOWN = 100;
@@ -37,7 +39,7 @@
 
   const isSelected = (item: T) => selected !== undefined && key(item) === key(selected);
   // The list closes on a pick; the button carries on showing that the choice is loading.
-  const loading = $derived(items.some((item) => isNavigatingTo(href(item))));
+  const loading = $derived(navigating.to !== null && items.some((item) => isNavigatingTo(href(item))));
 
   // Opening starts a long list where you are, and the keys there too unless a find box takes them.
   function ontoggle(e: ToggleEvent & { currentTarget: HTMLElement }) {
@@ -51,16 +53,16 @@
   const close = (e: Event & { currentTarget: HTMLElement }) => e.currentTarget.closest<HTMLElement>("[popover]")?.hidePopover();
 </script>
 
-<div class="picker">
+<div class={["picker", { wide }]}>
   {#if label}<span class="lbl" id="{id}-label">{label}</span>{/if}
   <button class="btn picker-btn" popovertarget="{id}-list" aria-labelledby={label ? `${id}-label` : undefined} aria-busy={loading || undefined} style:anchor-name="--{id}">
     {#if selected !== undefined}{@render option(selected)}{:else}<span class="dimtext">Choose</span>{/if}
     <span class={loading ? "busy-spin" : "caret"} aria-hidden="true"></span>
   </button>
-  <div popover id="{id}-list" class="picker-list" {ontoggle} style:position-anchor="--{id}" {@attach listKeys("input, a")}>
+  <div popover id="{id}-list" class="picker-list raised" {ontoggle} style:position-anchor="--{id}" {@attach listKeys("input, a")}>
     {#if search}
       <!-- svelte-ignore a11y_autofocus -->
-      <input class="picker-find" type="search" placeholder="Find" aria-label="Find" bind:value={query} autofocus />
+      <input class="picker-find" type="search" name="find" placeholder="Find" aria-label="Find" bind:value={query} autofocus />
     {/if}
     {#each shown as item, i (key(item))}
       {@const heading = section?.(item)}

@@ -43,7 +43,7 @@
 </script>
 
 <div class="filters">
-  <label class="lbl"><input type="checkbox" bind:checked={showSame} /> Show settings that match</label>
+  <label class="lbl"><input type="checkbox" name="same" bind:checked={showSame} /> Show settings that match</label>
 </div>
 {#each groups as g (g.name)}
   <fieldset class="hgroup">

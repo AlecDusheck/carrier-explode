@@ -3,7 +3,7 @@
 import * as v from "valibot";
 
 import type { LabelCandidate, LabelCandidateKind } from "@carrier-explode/db";
-import { countryName } from "@carrier-explode/schema";
+import { countryName, parseRuleName } from "@carrier-explode/schema";
 
 /**
  * A search for a code's name, and what the code is (for the model). How a result writes the code (`mark`) and what starts
@@ -47,9 +47,6 @@ const inCountry = (iso: string | null): string => {
 	return country === undefined ? "" : ` in ${country}`;
 };
 
-/** Android's carrier list names a carrier it has no name for by the SIM rule that selects it: `311140SPN=SPROCKET`. */
-const SIM_RULE = /^(\d{3})(\d{2,3})(?:(SPN|IMSI|GID1|ICCID)=(.+))?$/;
-
 function carrierSearch({ code, platform, iso }: LabelCandidate): Search {
 	const where = inCountry(iso);
 	switch (platform) {
@@ -61,8 +58,8 @@ function carrierSearch({ code, platform, iso }: LabelCandidate): Search {
 				about: null,
 			};
 		case "android": {
-			const rule = SIM_RULE.exec(code);
-			if (rule === null) {
+			const rule = parseRuleName(code);
+			if (rule === undefined) {
 				const name = code.replace(/_[a-z]{2}$/, "");
 				return {
 					query: `"${name}" mobile carrier${where}`,
@@ -71,9 +68,9 @@ function carrierSearch({ code, platform, iso }: LabelCandidate): Search {
 					about: null,
 				};
 			}
-			const [, mcc = "", mnc = "", selector, value] = rule;
+			const { mcc, mnc, match } = rule;
 			const codes = `MCC ${mcc} MNC ${mnc}`;
-			return selector === undefined || value === undefined
+			return match === null
 				? {
 						query: `${codes} mobile network operator`,
 						what: `the mobile network ${codes}${where}; answer with the operator's brand`,
@@ -82,11 +79,11 @@ function carrierSearch({ code, platform, iso }: LabelCandidate): Search {
 					}
 				: {
 						query:
-							selector === "SPN"
-								? `"${value}" mobile carrier ${codes}`
-								: `${codes} ${selector} ${value} MVNO`,
-						what: `the carrier on mobile network ${codes}${where} whose SIMs have ${selector} ${value}; answer with that carrier's brand`,
-						...(selector === "SPN" ? written(value) : network(mcc, mnc)),
+							match.selector === "SPN"
+								? `"${match.value}" mobile carrier ${codes}`
+								: `${codes} ${match.selector} ${match.value} MVNO`,
+						what: `the carrier on mobile network ${codes}${where} whose SIMs have ${match.selector} ${match.value}; answer with that carrier's brand`,
+						...(match.selector === "SPN" ? written(match.value) : network(mcc, mnc)),
 						about: null,
 					};
 		}

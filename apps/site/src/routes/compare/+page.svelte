@@ -5,6 +5,8 @@
   import { getCarrierMembers, getComparison, getSourceBrands, getSourceHead } from "#lib/api/sources.remote.ts";
   import { headAt } from "#lib/at.ts";
   import { withParams } from "#lib/format.ts";
+  import type { Ver } from "#lib/types.ts";
+  import type { SourceHead } from "#lib/server/head.ts";
   import { PLATFORM_NAMES } from "#lib/platforms.ts";
   import { decoderFamily, isSourceKey, sourceOf, type DecoderFamily, type Platform, type SourceKey } from "@carrier-explode/schema/types";
   import Pane from "#lib/components/Pane.svelte";
@@ -18,7 +20,7 @@
   import { fileChoices, pickPhoneRows, rowKey, type PhoneRow } from "#lib/apple/phones.ts";
   import { suggestedFirst, suggestions } from "#lib/counterparts.ts";
   import { guessedVariant } from "#lib/guess.ts";
-  import { visitorGuess } from "#lib/visitor.ts";
+  import { visitor } from "#lib/visitor.svelte.ts";
 
   const sp = $derived(page.url.searchParams);
   const file = $derived(sp.get("file"));
@@ -31,8 +33,7 @@
   const familyOf = (key: SourceKey): DecoderFamily => decoderFamily(sourceOf(key).platform);
 
   /** A side as the query names it: a source key, and its line and version when picked. */
-  type Side = { readonly source: SourceKey; readonly line?: string; readonly slug?: string };
-  function side(key: "a" | "b"): Side | null {
+  function side(key: "a" | "b"): Ver | null {
     const source = sp.get(key);
     if (!source || !isSourceKey(source)) return null;
     const line = sp.get(`${key}l`);
@@ -40,16 +41,20 @@
     return { source, ...(line ? { line } : {}), ...(slug ? { slug } : {}) };
   }
 
-  const rowsOf = async (s: Side | null): Promise<PhoneRow[]> => {
-    if (!s) return [];
-    const head = await getSourceHead(s);
-    return COMPARE_VIEWS[decoderFamily(head.ref.platform)].variants(headAt(head));
-  };
+  const headOf = (s: Ver | null): Promise<SourceHead> | null => (s ? getSourceHead(s) : null);
+
+  const rowsOf = async (head: SourceHead | null): Promise<PhoneRow[]> =>
+    head ? COMPARE_VIEWS[decoderFamily(head.ref.platform)].variants(headAt(head)) : [];
 
   type SidePhones = { readonly rows: readonly PhoneRow[]; readonly picked: PhoneRow | undefined };
 
-  /** Both sides' phones and the one each is seen by. The picks are arguments: a reactive read after an await is not tracked. */
-  async function sidesPhones(a: Side | null, b: Side | null, ap: string | null, bp: string | null): Promise<{ readonly a: SidePhones; readonly b: SidePhones }> {
+  /** Both sides' phones and the one each is seen by. Heads and picks are arguments: a reactive read after an await is not tracked. */
+  async function sidesPhones(
+    a: SourceHead | null,
+    b: SourceHead | null,
+    ap: string | null,
+    bp: string | null,
+  ): Promise<{ readonly a: SidePhones; readonly b: SidePhones }> {
     const [ra, rb] = await Promise.all([rowsOf(a), rowsOf(b)]);
     const [pa, pb] = pickPhoneRows({ rows: ra, file: ap }, { rows: rb, file: bp });
     return { a: { rows: ra, picked: pa }, b: { rows: rb, picked: pb } };
@@ -58,20 +63,21 @@
   const a = $derived(side("a"));
   const b = $derived(side("b"));
 
-  // A URL naming no left side opens it on the guessed carrier, seen by the guessed phone. Once, as the page opens: a
-  // swap that empties the left side keeps it empty.
+  // A URL naming no left side opens it on the guessed carrier, seen by the guessed phone. Once, when the guess is
+  // known: a swap that empties the left side keeps it empty.
   $effect(() => {
+    const g = visitor.guess;
+    if (g === null) return;
     untrack(() => {
       if (sp.has("a")) return;
       const from = page.url.href;
       void (async () => {
-        const g = await visitorGuess();
         const { bundle } = g;
         if (bundle === null) return;
         const head = await getSourceHead({ source: bundle });
         const line = guessedVariant(head.lines, g)?.code;
         const al = line !== undefined && line !== head.line ? line : null;
-        const rows = await rowsOf({ source: bundle, ...(al ? { line: al } : {}) });
+        const rows = await rowsOf(await getSourceHead({ source: bundle, ...(al ? { line: al } : {}) }));
         const row = rows.find((r) => r.phones.some((p) => p.name === g.phone));
         if (page.url.href === from) await goto(withParams(page.url, { a: bundle, al, ap: row ? rowKey(row) : null }), { replace: true });
       })();
@@ -88,30 +94,35 @@
   /** What a side's picker offers first: the other side's carrier on other platforms. */
   const suggestedOpposite = async (other: typeof a): Promise<SourceKey[]> =>
     other ? suggestions(other.source, await getCarrierMembers(other.source)) : [];
+
+  const [brands, suggestA, suggestB] = $derived(await Promise.all([getSourceBrands(), suggestedOpposite(b), suggestedOpposite(a)]));
+  const sources = $derived(sourceOptions(brands));
+  const itemsA = $derived(suggestedFirst(sources, suggestA));
+  const itemsB = $derived(suggestedFirst(sources, suggestB));
 </script>
 
-{#snippet picker(title: string, key: "a" | "b", chosen: typeof a, sources: readonly SourceOption[], suggested: readonly SourceKey[])}
+{#snippet picker(title: string, key: "a" | "b", chosen: typeof a, items: readonly SourceOption[], suggested: readonly SourceKey[])}
   <fieldset class="hgroup">
     <legend>{title}</legend>
     <div class="rowflex">
       <Picker
-        items={suggestedFirst(sources, suggested)}
-        selected={chosen ? sources.find((s) => s.key === chosen.source) : undefined}
+        {items}
+        selected={chosen ? items.find((s) => s.key === chosen.source) : undefined}
         key={(s) => s.key}
         href={(s) => withParams(page.url, { [key]: s.key, [`${key}l`]: null, [`${key}v`]: null, [`${key}p`]: null })}
         search={(s) => `${s.brand} ${s.name} ${PLATFORM_NAMES[s.platform]}`}
         section={suggested.length ? (s) => (suggested.includes(s.key) ? "Suggested" : "All") : undefined}
       >
         {#snippet option(s)}
-          <span class="picker-opt"><SourceIcon picture={s.picture} /><span class="text">{s.brand}</span></span>
+          <span class="picker-opt"><SourceIcon picture={s.picture} /><span class="ellipsis">{s.brand}</span></span>
           <span class="picker-tag mono">{s.name}</span>
           <span class="picker-tag">{PLATFORM_NAMES[s.platform]}</span>
         {/snippet}
       </Picker>
       {#if chosen}
         <Pane>
-          {@const head = await getSourceHead(chosen)}
-          {@const phones = (await sidesPhones(a, b, sp.get("ap"), sp.get("bp")))[key]}
+          {@const [head, ha, hb] = await Promise.all([getSourceHead(chosen), headOf(a), headOf(b)])}
+          {@const phones = (await sidesPhones(ha, hb, sp.get("ap"), sp.get("bp")))[key]}
           <LinePicker {head} href={(line) => withParams(page.url, { [`${key}l`]: line, [`${key}v`]: null, [`${key}p`]: null })} />
           <VersionPicker
             timeline={head.timeline}
@@ -135,10 +146,8 @@
 <div class="view">
   <div class="scroll pad">
     <Pane>
-      {@const sources = sourceOptions(await getSourceBrands())}
-      {@const [suggestA, suggestB] = await Promise.all([suggestedOpposite(b), suggestedOpposite(a)])}
-      {@render picker("Left", "a", a, sources, suggestA)}
-      {@render picker("Right", "b", b, sources, suggestB)}
+      {@render picker("Left", "a", a, itemsA, suggestA)}
+      {@render picker("Right", "b", b, itemsB, suggestB)}
 
       <div class="rowflex">
         <button class="btn" onclick={swap} disabled={!sp.get("a") && !sp.get("b")}>Swap sides</button>
@@ -159,13 +168,14 @@
 
       {#if a && b}
         <Pane awaiting={{ kind: "diff", name: `${sourceOf(a.source).name}, ${sourceOf(b.source).name}` }}>
-          {@const { a: pa, b: pb } = await sidesPhones(a, b, sp.get("ap"), sp.get("bp"))}
+          {@const [ha, hb] = await Promise.all([headOf(a), headOf(b)])}
+          {@const { a: pa, b: pb } = await sidesPhones(ha, hb, sp.get("ap"), sp.get("bp"))}
           {@const seenBy = (s: typeof a, p: typeof pa) => (p.picked?.kind === "file" ? { ...s, variant: p.picked.path } : s)}
           {@const cmp = await getComparison({ a: seenBy(a, pa), b: seenBy(b, pb), ...(file ? { path: file } : {}) })}
           {#if cmp.by === "concepts"}
             <ConceptCompare comparison={cmp.comparison} left={sideName(cmp.a)} right={sideName(cmp.b)} />
           {:else}
-            {@const native = nativeView(cmp)}
+            {@const native = await nativeView(cmp)}
             <native.View {...native.props} />
           {/if}
         </Pane>

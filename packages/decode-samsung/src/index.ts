@@ -8,14 +8,12 @@ export {
 	CarrierFeatureError,
 	type CscFeature,
 	decodeCarrierFeature,
-	decodeCscFeature,
 	type Features,
 } from "./features.ts";
-export { type Customer, type CustomerProfile, decodeCustomer, type ProfileHandle } from "./customer.ts";
+export { type Customer, type CustomerProfile, type ProfileHandle } from "./customer.ts";
 export { decodeOmcInfo, gidHex, type OmcCarrier, type OmcInfo, omcVersion } from "./omc-info.ts";
 export { decodeOmcText, OmcTextError } from "./omc-text.ts";
 export {
-	IMS_FILES,
 	ImsError,
 	type ImsMaps,
 	imsOperator,

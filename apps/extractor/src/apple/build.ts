@@ -5,7 +5,7 @@ import * as v from "valibot";
 import { compareProducts, unpackIpcc } from "@carrier-explode/decode-ios";
 import type { AppleArtifact, AppleRelease, ImageModem, SourceKey } from "@carrier-explode/schema/types";
 import { keys, parseRecord, putJson } from "@carrier-explode/storage";
-import { allOrThrow, fanOut } from "../fan-out.ts";
+import { mapLimit } from "../fan-out.ts";
 import { normWriter, storeNormalized, type NormWriter } from "../normalize.ts";
 import { iosReleaseMetadata, readBytes } from "../store.ts";
 import type { UnitContext } from "../unit.ts";
@@ -76,13 +76,11 @@ export async function merge(
 		(c) => c.source,
 	);
 	const w = normWriter(u.bucket);
-	const stored = allOrThrow(
+	const stored = await mapLimit(
 		"bundles",
-		await fanOut(
-			[...bySource].toSorted(([a], [b]) => a.localeCompare(b)),
-			concurrency,
-			async ([source, copies]) => [source, await storeSource(u, w, source, copies)] as const,
-		),
+		[...bySource].toSorted(([a], [b]) => a.localeCompare(b)),
+		concurrency,
+		async ([source, copies]) => [source, await storeSource(u, w, source, copies)] as const,
 	);
 	const release: AppleRelease = {
 		platform: "ios",

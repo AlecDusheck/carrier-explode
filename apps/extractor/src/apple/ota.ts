@@ -14,7 +14,7 @@ import {
 import { fetchApple } from "@carrier-explode/http";
 import { otaFilesSchema } from "@carrier-explode/schema/records";
 import type { Digests, OtaFile, OtaListing, SourceKey } from "@carrier-explode/schema/types";
-import { keys, readRecord } from "@carrier-explode/storage";
+import { keys, putJson, putOnce, readRecord } from "@carrier-explode/storage";
 import type { Env } from "../env.ts";
 import { permanent } from "../errors.ts";
 import { normWriter } from "../normalize.ts";
@@ -39,10 +39,7 @@ export async function checkAppleOta(env: Env): Promise<PipelineParams<"apple-ota
 	const manifest = await fetchApple(`${MANIFEST_URL}?t=${Date.now()}`);
 	const sha1 = sha1Hex(manifest);
 	if ((await otaPointer(env.BUCKET, "apple"))?.sha1 === sha1) return null;
-	await env.BUCKET.put(keys.appleOtaManifest(sha1), manifest, {
-		onlyIf: new Headers({ "If-None-Match": "*" }),
-		httpMetadata: { contentType: "application/xml" },
-	});
+	await putOnce(env.BUCKET, keys.appleOtaManifest(sha1), manifest, "application/xml");
 	return { manifest: sha1 };
 }
 
@@ -189,9 +186,9 @@ export async function otaFile(manifest: string, url: string, u: UnitContext): Pr
 	}
 	const live = file.listings.filter((l) => l.live);
 	// Last: the file is held once its record is listed.
-	await u.bucket.put(await keys.otaFile("apple", url), JSON.stringify(file), {
-		httpMetadata: { contentType: "application/json" },
-		customMetadata: { url, listed: listedDigest(live) } satisfies v.InferOutput<typeof heldSchema>,
-	});
+	await putJson(u.bucket, await keys.otaFile("apple", url), file, {
+		url,
+		listed: listedDigest(live),
+	} satisfies v.InferOutput<typeof heldSchema>);
 	return true;
 }

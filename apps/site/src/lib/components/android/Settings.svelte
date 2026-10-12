@@ -6,7 +6,6 @@
   import { rareBadges } from "#lib/settings.ts";
   import { androidDocs } from "#lib/android/tree-docs.ts";
   import { TreeState } from "#lib/ui-state.svelte.ts";
-  import { sourceKey } from "@carrier-explode/schema/types";
   import type { TabProps } from "#lib/types.ts";
   import Tree, { type KeyBadge } from "../Tree.svelte";
   import TreeToolbar from "../TreeToolbar.svelte";
@@ -19,7 +18,7 @@
   tree.filter = page.url.searchParams.get("filter") ?? "";
 
   const [settings, head, rare] = $derived(await Promise.all([getAndroidSettings(verArgs(at)), getSourceHead(verArgs(at)), getRare(verArgs(at))]));
-  const ctx = $derived({ platform: at.ref.platform, source: sourceKey(at.ref), file: "config", cc: head.cc ?? undefined, docs: androidDocs(settings.docs) });
+  const ctx = $derived({ platform: at.ref.platform, file: "config", cc: head.cc, docs: androidDocs(settings.docs) });
 
   /** Status first, then rarity. */
   const badges = $derived.by(() => {

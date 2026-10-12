@@ -71,7 +71,7 @@ const nameOf = new Map(DEVICE_LABELS.map((l) => [l.code, l.value]));
 /** A bundle file with the phones its boards are, named, as the server gives it to pages. */
 export const withPhones = <F extends { readonly boards?: readonly string[] }>(file: F): WithPhones<F> =>
 	file.boards === undefined
-		? file
+		? { ...file, devices: [] }
 		: {
 				...file,
 				devices: boardRefs(file.boards, PRODUCTS).map(({ board, product }) =>

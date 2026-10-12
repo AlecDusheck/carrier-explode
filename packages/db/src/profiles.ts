@@ -189,6 +189,9 @@ export async function scanSetting(
 	>`(SELECT ${entries.version} FROM ${entries} WHERE ${qualified(entries, entries.source)} = ${qualified(sources, sources.key)} AND ${qualified(entries, entries.sha)} = ${qualified(sources, sources.headSha)}
     ORDER BY ${qualified(entries, entries.rank)} LIMIT 1)`;
 	const ofGroup = every(eq(sources.platform, group.platform), eq(sources.kind, group.kind));
+	// `path` is indexed with `[*]` for every array index; a concrete index narrows by `key`.
+	const pattern = path.replaceAll(/\[\d+\]/g, "[*]");
+	const concrete = pattern !== path;
 	const [heads, own, base] = await Promise.all([
 		db.select({ source: sources.key, version }).from(sources).where(ofGroup).orderBy(asc(sources.key)),
 		db
@@ -196,7 +199,12 @@ export async function scanSetting(
 			.from(sources)
 			.innerJoin(
 				settings,
-				every(eq(settings.source, sources.key), eq(settings.file, file), eq(settings.path, path)),
+				every(
+					eq(settings.source, sources.key),
+					eq(settings.file, file),
+					eq(settings.path, pattern),
+					...(concrete ? [eq(settings.key, path)] : []),
+				),
 			)
 			.where(ofGroup)
 			.orderBy(asc(settings.key)),
@@ -208,7 +216,8 @@ export async function scanSetting(
 				every(
 					eq(baseSettings.sha, sources.baseSha),
 					eq(baseSettings.file, file),
-					eq(baseSettings.path, path),
+					eq(baseSettings.path, pattern),
+					...(concrete ? [eq(baseSettings.key, path)] : []),
 				),
 			)
 			.where(ofGroup)

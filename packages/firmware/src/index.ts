@@ -14,11 +14,11 @@ export { openPayload, openPayloadSource, PayloadFormatError, type Payload } from
 export { MissingPartitionError, PartitionError, partitionReader } from "./partition.ts";
 export { openPartition, readSuperMetadata, SuperError } from "./super.ts";
 export { ErofsCompressedError } from "./erofs-z.ts";
-export { decodeLz4, decodeLz4Stream } from "./lz4.ts";
+export { decodeLz4Stream } from "./lz4.ts";
 export { decodeXz, XzError } from "./xz.ts";
 export { StreamEndError } from "./pull.ts";
 export { LzfseError } from "./lzfse.ts";
-export { isSparse, SparseError, sparseRuns, unsparse, type SparseRun } from "./sparse.ts";
+export { SparseError, sparseRuns, wholeImage, type SparseRun } from "./sparse.ts";
 export { FsError, FsNotFoundError, type DirEntry, type Filesystem } from "./fs.ts";
 export { streamFat } from "./fat.ts";
 export { openAea, type PlainStream } from "./aea/aea.ts";

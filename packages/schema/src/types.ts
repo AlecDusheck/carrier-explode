@@ -22,6 +22,13 @@ export type DecoderFamily = (typeof DECODER_FAMILIES)[number];
 export const decoderFamily = (platform: Platform): DecoderFamily =>
 	platform === "android" || platform === "samsung" ? platform : "apple";
 
+/** Each family's lines are its phones': Apple's models are iPhones, as its images are. */
+const LINE_PLATFORM = { apple: "ios", android: "android", samsung: "samsung" } as const satisfies Record<
+	DecoderFamily,
+	ReleasePlatform
+>;
+export const linePlatform = (platform: Platform): ReleasePlatform => LINE_PLATFORM[decoderFamily(platform)];
+
 /** The kinds of source each family ships: Android has no country bundles, only carriers and its defaults (default.pb, no_sim.pb); Samsung only carrier packs. */
 export const FAMILY_KINDS = {
 	apple: ["carrier", "country", "default"],
@@ -68,6 +75,14 @@ export function parseSourceKey(key: string): SourceRef | undefined {
 }
 
 export const isSourceKey = (key: string): key is SourceKey => parseSourceKey(key) !== undefined;
+
+/** A record's entries under its sourceKeys, which its schema checked. */
+export function sourceEntries<T>(record: Readonly<Record<string, T>>): Array<readonly [SourceKey, T]> {
+	return Object.entries(record).map(([key, value]) => {
+		if (!isSourceKey(key)) throw new Error(`${key}: not a source key`);
+		return [key, value] as const;
+	});
+}
 
 export function sourceOf(key: SourceKey): SourceRef {
 	const ref = parseSourceKey(key);
@@ -219,13 +234,16 @@ export function ruleKey(r: SimRule): string {
 
 const isQualifier = (q: string): q is (typeof QUALIFIERS)[number] => QUALIFIERS.some((k) => k === q);
 
+/** 5 or 6 digits: MCC + 2- or 3-digit MNC. */
+export const isMccMnc = (s: string): boolean => /^\d{5,6}$/.test(s);
+
 /** ruleKey the other way, for a key the index stores; undefined for anything else. */
 export function parseRuleKey(key: string): SimRule | undefined {
 	const [, by, value] = /^(iccid|carrierId):(.+)$/.exec(key) ?? [];
 	if (by === "iccid" && value !== undefined) return { by, prefix: value };
 	if (by === "carrierId" && value !== undefined) return { by, id: value };
 	const [mccmnc = "", ...parts] = key.split("|");
-	if (!/^\d{5,6}$/.test(mccmnc)) return undefined;
+	if (!isMccMnc(mccmnc)) return undefined;
 	const sim: Partial<Record<(typeof QUALIFIERS)[number], string>> = {};
 	for (const part of parts) {
 		const [, q = "", v] = /^([^=]+)=(.*)$/.exec(part) ?? [];
@@ -234,6 +252,12 @@ export function parseRuleKey(key: string): SimRule | undefined {
 	}
 	const rule: SimRule = { by: "plmn", sim: { mccmnc, ...sim } };
 	return ruleKey(rule) === key ? rule : undefined;
+}
+
+export function ruleOf(key: string): SimRule {
+	const rule = parseRuleKey(key);
+	if (rule === undefined) throw new Error(`${key}: not a rule key`);
+	return rule;
 }
 
 export const APN_TYPES = [
@@ -403,7 +427,6 @@ export type DeviceReleasePlatform = (typeof DEVICE_RELEASE_PLATFORMS)[number];
 export type DeviceRelease = Extract<Release, { readonly platform: DeviceReleasePlatform }>;
 export const isDeviceReleasePlatform = (platform: string): platform is DeviceReleasePlatform =>
 	DEVICE_RELEASE_PLATFORMS.some((p) => p === platform);
-export const isDeviceRelease = (r: Release): r is DeviceRelease => isDeviceReleasePlatform(r.platform);
 
 export interface AppleRelease extends AppleReleaseHeader {
 	readonly sources: Readonly<Record<SourceKey<"ios">, AppleArtifact>>;

@@ -3,34 +3,33 @@
   import { beforeNavigate } from "$app/navigation";
   import { asset } from "$app/paths";
   import { navigating, page } from "$app/state";
-  import { buildsPath, isPlatform, isReleasePlatform, listPath, RELEASE_PLATFORMS, type Platform } from "@carrier-explode/schema/types";
+  import { buildsPath, isPlatform, isReleasePlatform, listPath, RELEASE_PLATFORMS } from "@carrier-explode/schema/types";
   import { link } from "#lib/format.ts";
   import { shortcuts } from "#lib/keys.ts";
   import { isNavigatingTo } from "#lib/navigating.ts";
   import { PLATFORM_ORDER } from "#lib/platforms.ts";
   import { SITE, seo } from "#lib/seo.ts";
   import { scan } from "#lib/ui-state.svelte.ts";
-  import { visitorPlatform } from "#lib/visitor.ts";
+  import { visitor } from "#lib/visitor.svelte.ts";
   import { busyText } from "#lib/components/Busy.svelte";
   import ContextMenu from "#lib/components/ContextMenu.svelte";
   import ScanDialog from "#lib/components/ScanDialog.svelte";
 
   let { children } = $props();
 
+  // A shallow navigation only rewrites the address: nothing loads. `navigating` lacks the `shallow` its type declares.
+  let shallowNavigation = $state(false);
+  const loading = $derived(navigating.to !== null && !shallowNavigation);
+
   // A link to the page already shown changes nothing, yet following it reruns every load and query,
   // and that refresh hangs Svelte's flush on a pane with nested awaits.
-  beforeNavigate(({ type, to, cancel }) => {
+  beforeNavigate(({ type, to, cancel, shallow }) => {
     if (type === "link" && to?.url.href === page.url.href) cancel();
-  });
-
-  // The guess's platform, once the browser says: what the menu leads to from a page of no platform.
-  let visitor: Platform | null = $state(null);
-  $effect(() => {
-    void visitorPlatform().then((p) => (visitor = p));
+    shallowNavigation = shallow;
   });
 
   /** A platform's pages lead to its own lists and builds. */
-  const platform = $derived(page.params.platform !== undefined && isPlatform(page.params.platform) ? page.params.platform : (visitor ?? PLATFORM_ORDER[0]));
+  const platform = $derived(page.params.platform !== undefined && isPlatform(page.params.platform) ? page.params.platform : (visitor.platform ?? PLATFORM_ORDER[0]));
   const menu = $derived<Array<[string, string]>>([
     [listPath(platform, "carrier"), "Carriers"],
     [listPath(platform, "country"), "Countries"],
@@ -80,8 +79,8 @@
       {/each}
     </nav>
 
-    <div class="body" aria-busy={!!navigating.to || undefined}>
-      {#if navigating.to}<div class="loadbar" role="progressbar" aria-label={busyText({ kind: "page" })}></div>{/if}
+    <div class="body" aria-busy={loading || undefined}>
+      {#if loading}<div class="loadbar" role="progressbar" aria-label={busyText({ kind: "page" })}></div>{/if}
       {@render children()}
     </div>
   </div>

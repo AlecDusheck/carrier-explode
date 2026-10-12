@@ -3,31 +3,20 @@
  * A requirement is judged here because the visitor sets it; the facts it reads are the schema's.
  */
 
-import { conceptById, decoderFamily, expresses, needs5G } from "@carrier-explode/schema";
+import {
+	conceptById,
+	decoderFamily,
+	expresses,
+	FEATURE_SLUGS,
+	needs5G,
+	type FeatureSlug,
+} from "@carrier-explode/schema";
 import type { ReleasePlatform } from "@carrier-explode/schema/types";
+import * as v from "valibot";
 import type { PhoneState } from "#lib/server/features.ts";
 import type { FeatureIcon } from "./feature-icons.ts";
 
 /** States are per phone; settings are read from the carrier's own file, so the same on every phone. */
-const STATES = [
-	"5g",
-	"5g-standalone",
-	"voice-over-5g",
-	"volte",
-	"hd-voice-plus",
-	"visual-voicemail",
-	"wifi-calling",
-	"video-calling",
-	"calls-on-other-devices",
-	"rcs",
-	"rcs-business-messaging",
-	"satellite",
-	"branded-calling",
-	"spam-call-warnings",
-	"esim-transfer",
-	"esim-from-android",
-	"apple-watch-number-sharing",
-] as const;
 const SETTINGS = [
 	"lte-icon",
 	"volte-switch",
@@ -44,13 +33,20 @@ const SETTINGS = [
 	"mmsc",
 	"5g-icon-advanced",
 ] as const;
-const MATRIX_CONCEPTS = [...STATES, ...SETTINGS] as const;
-export type MatrixConcept = (typeof MATRIX_CONCEPTS)[number];
 type Setting = (typeof SETTINGS)[number];
+export type MatrixConcept = FeatureSlug | Setting;
+const MATRIX_CONCEPTS: readonly MatrixConcept[] = [...FEATURE_SLUGS, ...SETTINGS];
 
 export const isSetting = (id: string): id is Setting => SETTINGS.some((s) => s === id);
 
-export type SettingValue = string | number | boolean | readonly (string | number)[];
+const settingValueSchema = v.union([
+	v.string(),
+	v.number(),
+	v.boolean(),
+	v.pipe(v.array(v.union([v.string(), v.number()])), v.readonly()),
+]);
+export type SettingValue = v.InferOutput<typeof settingValueSchema>;
+export const settingValue = v.pipe(v.string(), v.parseJson(), v.nullable(settingValueSchema));
 /** A setting the file leaves unset is "unset"; one we have no file for, "unknown". */
 export type MatrixCell = PhoneState | { readonly value: SettingValue };
 
@@ -68,18 +64,13 @@ type Read = (id: MatrixConcept) => MatrixCell;
 /** null: the requirement does not apply, as when we have no settings for the carrier. */
 export type Outcome = boolean | null;
 
-const offered = (c: MatrixCell): Outcome => (c === "unknown" ? null : c === "on" || c === "available");
-const setting = (c: MatrixCell): SettingValue | null | undefined =>
-	c === "unknown" ? undefined : typeof c === "string" ? null : c.value;
-const isSet = (c: MatrixCell): Outcome => {
-	const v = setting(c);
-	return v === undefined ? null : v !== null;
-};
+export const offered = (c: MatrixCell): Outcome => (c === "unknown" ? null : c === "on" || c === "available");
+/** `test` of a setting's value, null when the file leaves it unset; without a file the test does not apply. */
+const onSetting = (c: MatrixCell, test: (value: SettingValue | null) => boolean): Outcome =>
+	c === "unknown" ? null : test(typeof c === "string" ? null : c.value);
+const isSet = (c: MatrixCell): Outcome => onSetting(c, (value) => value !== null);
 const not = (o: Outcome): Outcome => (o === null ? null : !o);
-const equals = (c: MatrixCell, want: SettingValue): Outcome => {
-	const v = setting(c);
-	return v === undefined ? null : v === want;
-};
+const equals = (c: MatrixCell, want: SettingValue): Outcome => onSetting(c, (value) => value === want);
 
 export const RULE_GROUPS = ["5g", "voice", "wifi-calling", "data", "more", "emergency"] as const;
 export type RuleGroup = (typeof RULE_GROUPS)[number];
@@ -162,7 +153,7 @@ interface RuleDef {
 }
 
 /** A rule that a feature is offered; its id stays the feature's, so `RuleId` lists every rule. */
-const feature = <const Id extends (typeof STATES)[number]>(
+const feature = <const Id extends FeatureSlug>(
 	id: Id,
 	group: RuleGroup,
 	short: string,
@@ -180,7 +171,7 @@ const feature = <const Id extends (typeof STATES)[number]>(
 		test: (read: Read) => offered(read(id)),
 	}) satisfies RuleDef;
 
-export const RULES = [
+const RULES = [
 	{
 		id: "nr",
 		group: "5g",
@@ -230,10 +221,7 @@ export const RULES = [
 			],
 		},
 		// iOS says LTE unless told otherwise.
-		test: (r, p) => {
-			const v = setting(r("lte-icon"));
-			return v === undefined ? null : (v ?? "LTE") === p;
-		},
+		test: (r, p) => onSetting(r("lte-icon"), (value) => (value ?? "LTE") === p),
 	},
 	{
 		id: "ims",
@@ -323,10 +311,7 @@ export const RULES = [
 		reads: ["epdg-address"],
 		param: null,
 		// A templated address is filled in from the SIM.
-		test: (r) => {
-			const v = setting(r("epdg-address"));
-			return v === undefined ? null : v === null || String(v).includes("$");
-		},
+		test: (r) => onSetting(r("epdg-address"), (value) => value === null || String(value).includes("$")),
 	},
 	{
 		id: "sec",
@@ -392,10 +377,8 @@ export const RULES = [
 		under: null,
 		reads: ["apn-internet"],
 		param: { kind: "text", initial: "internet" },
-		test: (r, p) => {
-			const v = setting(r("apn-internet"));
-			return v === undefined ? null : String(v ?? "").toLowerCase() === p.trim().toLowerCase();
-		},
+		test: (r, p) =>
+			onSetting(r("apn-internet"), (value) => String(value ?? "").toLowerCase() === p.trim().toLowerCase()),
 	},
 	{
 		id: "inetProto",
@@ -414,10 +397,7 @@ export const RULES = [
 				["unset", "not set"],
 			],
 		},
-		test: (r, p) => {
-			const v = setting(r("internet-ip"));
-			return v === undefined ? null : (v ?? "unset") === p;
-		},
+		test: (r, p) => onSetting(r("internet-ip"), (value) => (value ?? "unset") === p),
 	},
 	{
 		id: "mms",
@@ -543,7 +523,7 @@ export const presetOf = (reqs: ReadonlyMap<RuleId, Requirement>): PresetId | nul
 	)?.id ?? null;
 
 /** What `need` says when nothing is picked, so an emptied list is not read as the first preset. */
-export const NONE = "none";
+const NONE = "none";
 
 /**
  * Requirements as the URL keeps them: `need` and `want` list rule ids; a rule's own key holds its parameter. A URL with
@@ -584,13 +564,8 @@ export function requirementParams(reqs: ReadonlyMap<RuleId, Requirement>): Recor
 	};
 }
 
-/** Every query parameter the matrix page reads: the requirements and their parameters, misses, search, columns and phone. */
-export const MATRIX_PARAMS: readonly string[] = [
-	"need",
-	"want",
-	...RULES.map((r) => r.id),
-	"miss",
-	"q",
-	"all",
-	"phone",
-];
+const REQUIREMENT_PARAMS: ReadonlySet<string> = new Set(["need", "want", ...RULES.map((r) => r.id)]);
+
+/** The requirement parameters alone, as a string that changes only when they do. */
+export const requirementKey = (params: Pick<URLSearchParams, "entries">): string =>
+	new URLSearchParams([...params.entries()].filter(([k]) => REQUIREMENT_PARAMS.has(k))).toString();

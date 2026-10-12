@@ -6,6 +6,7 @@ import {
 	APN_AUTHS,
 	APN_TYPES,
 	CERTAINTIES,
+	decoderFamily,
 	FEATURE_STATES,
 	FIDELITIES,
 	IP_PROTOCOLS,
@@ -17,6 +18,9 @@ import {
 	PROFILE_SCHEMA,
 	SOURCE_KINDS,
 	type AndroidModem,
+	type Apn,
+	type CarrierFeatures,
+	type ConceptValue,
 	type AndroidRelease,
 	type AppleRelease,
 	type ApplePlatform,
@@ -29,6 +33,7 @@ import {
 	type Profile,
 	type Release,
 	type SamsungRelease,
+	type SimMatcher,
 	type SourceKey,
 } from "../types.ts";
 import { imageModemSchema, jsonSchema, sha256Schema } from "./values.ts";
@@ -41,27 +46,23 @@ const nonEmpty = <S extends v.GenericSchema>(s: S): v.TupleWithRestSchema<[S], S
 /** A key's platform, when it is a sourceKey. */
 const platformOf = (k: string): Platform | undefined => parseSourceKey(k)?.platform;
 
-/** A record keyed by sourceKeys of `platform` (any platform when omitted). */
-const bySource = <S extends v.GenericSchema>(value: S, platform?: Platform) =>
+/** A record keyed by sourceKeys of `platform`. */
+const bySource = <S extends v.GenericSchema>(value: S, platform: Platform) =>
 	v.pipe(
 		v.record(str, value),
 		v.check(
 			(r) =>
 				Object.keys(r).every((k) => {
 					const p = platformOf(k);
-					return p !== undefined && (platform === undefined || p === platform);
+					return p === platform;
 				}),
 			"expected sourceKeys",
 		),
 	);
-const appleKey = v.custom<SourceKey<ApplePlatform>>(
-	(s) =>
-		typeof s === "string" &&
-		platformOf(s) !== undefined &&
-		platformOf(s) !== "android" &&
-		platformOf(s) !== "samsung",
-	"expected an Apple sourceKey",
-);
+const appleKey = v.custom<SourceKey<ApplePlatform>>((s) => {
+	const p = typeof s === "string" ? platformOf(s) : undefined;
+	return p !== undefined && decoderFamily(p) === "apple";
+}, "expected an Apple sourceKey");
 
 const digestsSchema = v.object({ sha1: opt(str), sha384: opt(str) });
 
@@ -156,7 +157,7 @@ const simMatcherSchema = v.object({
 	spn: opt(str),
 	imsiPrefix: opt(str),
 	iccidPrefix: opt(str),
-});
+}) satisfies v.GenericSchema<unknown, SimMatcher>;
 
 const apnSchema = v.object({
 	apn: str,
@@ -175,7 +176,7 @@ const apnSchema = v.object({
 	mtu: opt(v.number()),
 	bearers: opt(v.array(str)),
 	path: str,
-});
+}) satisfies v.GenericSchema<unknown, Apn>;
 
 const reading = {
 	because: v.array(v.object({ path: str, value: jsonSchema })),
@@ -186,7 +187,7 @@ const conceptValueSchema = v.variant("kind", [
 	v.object({ kind: v.literal("state"), state: v.picklist(FEATURE_STATES), ...reading }),
 	v.object({ kind: v.literal("value"), value: jsonSchema, ...reading }),
 	v.object({ kind: v.literal("unset") }),
-]);
+]) satisfies v.GenericSchema<unknown, ConceptValue>;
 
 export const profileSchema = v.object({
 	schema: v.literal(PROFILE_SCHEMA),
@@ -261,7 +262,7 @@ const carrierFeaturesSchema = v.object({
 	maxModulation: v.number(),
 	bandwidth90Mhz: v.boolean(),
 	nonCbLayers: opt(v.number()),
-});
+}) satisfies v.GenericSchema<unknown, CarrierFeatures>;
 
 /** keys.combos: one stored list of band combinations. */
 export const bandCombinationsSchema = v.array(

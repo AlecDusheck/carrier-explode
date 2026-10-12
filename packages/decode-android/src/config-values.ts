@@ -4,11 +4,11 @@
  */
 
 /** AccessNetworkConstants.AccessNetworkType.fromString. */
-export const ACCESS_NETWORKS = ["GERAN", "UTRAN", "EUTRAN", "CDMA2000", "IWLAN", "NGRAN", "UNKNOWN"] as const;
+const ACCESS_NETWORKS = ["GERAN", "UTRAN", "EUTRAN", "CDMA2000", "IWLAN", "NGRAN", "UNKNOWN"] as const;
 export type AccessNetwork = (typeof ACCESS_NETWORKS)[number];
 
 /** DataUtils.getNetworkCapabilityFromString: the capabilities a rule may name. */
-export const NET_CAPABILITIES = [
+const NET_CAPABILITIES = [
 	"MMS",
 	"SUPL",
 	"DUN",
@@ -29,7 +29,7 @@ export const NET_CAPABILITIES = [
 export type NetCapability = (typeof NET_CAPABILITIES)[number];
 
 /** NetworkTypeController.ALL_STATES: the 5G states icons and timers are keyed by. */
-export const NR_STATES = [
+const NR_STATES = [
 	"connected_mmwave",
 	"connected",
 	"connected_rrc_idle",

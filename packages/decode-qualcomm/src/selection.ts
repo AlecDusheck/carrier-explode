@@ -132,25 +132,26 @@ function sharesSim(rec: SelectionRecord, image: McfgImage): boolean {
 	);
 }
 
-/** A config and the records selecting its carrier index; when several configs share it, those whose IINs or PLMNs meet its trailer's. */
 interface SelectionPair<T> {
 	readonly config: T;
 	readonly records: readonly SelectionRecord[];
 }
 
-/** Pairs SW configs with the selection records that select them, through the muxd carrier index; configs no record selects are left out. */
+/**
+ * Pairs SW configs with the selection records that select their muxd carrier index; when several configs share it, those
+ * whose IINs or PLMNs meet the config's trailer. Configs no record selects are left out.
+ */
 export function pairSelection<T extends { readonly image: McfgImage }>(
 	configs: readonly T[],
 	db: SelectionDb,
-): { readonly paired: readonly SelectionPair<T>[] } {
+): readonly SelectionPair<T>[] {
 	const byIndex = new Map<number, number>();
 	for (const c of configs)
 		byIndex.set(c.image.muxdCarrierIndex, (byIndex.get(c.image.muxdCarrierIndex) ?? 0) + 1);
-	const paired = configs.flatMap((config) => {
+	return configs.flatMap((config) => {
 		const sameIndex = db.records.filter((r) => r.carrierIndex === config.image.muxdCarrierIndex);
 		const shared = (byIndex.get(config.image.muxdCarrierIndex) ?? 0) > 1;
 		const records = shared ? sameIndex.filter((r) => sharesSim(r, config.image)) : sameIndex;
 		return records.length ? [{ config, records }] : [];
 	});
-	return { paired };
 }

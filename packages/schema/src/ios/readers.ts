@@ -6,6 +6,7 @@ import { readConcepts, type Readers } from "../concepts.ts";
 import type { Apn, ConceptValue, Fidelity, Json, NativeRef } from "../types.ts";
 import {
 	bool,
+	convertedReading,
 	hasBit,
 	iconLabel,
 	mmsProxyAddress,
@@ -36,11 +37,13 @@ function at<T extends Json>(
 	convert: (raw: unknown) => T | undefined,
 	fidelity: Fidelity = "exact",
 ): Valued<T> {
-	return ({ settings }) => {
-		const r = read(settings, path);
-		const v = r === undefined ? undefined : convert(r.value);
-		return r === undefined || v === undefined ? unset : valueReading(v, [r.ref], fidelity);
-	};
+	return ({ settings }) =>
+		convertedReading(
+			read(settings, path),
+			(r) => convert(r.value),
+			(r) => r.ref,
+			fidelity,
+		);
 }
 
 /** A list at `path`, each member converted; unset when the path is absent. */
@@ -115,27 +118,34 @@ const imsDomains = (raw: unknown): string[] | undefined =>
 			)
 		: undefined;
 
-/** EmergencyCalling.EmergencyNumbers[] and the per-MCC lists of EmergencyNumbers.<mcc>[]. */
+/** The numbers in EmergencyCalling.EmergencyNumbers[] and the per-MCC lists of EmergencyNumbers.<mcc>[]. */
+export const emergencyNumberList = (calling: unknown, byMcc: unknown): string[] =>
+	stringSet(
+		[...members(calling), ...members(byMcc).flatMap(members)].flatMap((e) => text(field("Number")(e)) ?? []),
+	);
+
 const emergencyNumbers: Valued<string[]> = ({ settings }) => {
 	const calling = read(settings, "EmergencyCalling.EmergencyNumbers");
 	const byMcc = read(settings, "EmergencyNumbers");
 	const reads = [calling, byMcc].flatMap((r) => r ?? []);
-	const entries = [...members(calling?.value), ...members(byMcc?.value).flatMap(members)];
-	const numbers = stringSet(entries.flatMap((e) => text(field("Number")(e)) ?? []));
 	return reads.length > 0
 		? valueReading(
-				numbers,
+				emergencyNumberList(calling?.value, byMcc?.value),
 				reads.map((r): NativeRef => r.ref),
 			)
 		: unset;
 };
 
+/** A MessageIDParameters3GPP entry's message ID range; a single ID has no ToServiceID. */
+export const cbsRange = (m: unknown): { readonly from: number; readonly to: number } | undefined => {
+	const from = num(field("FromServiceID")(m));
+	return from === undefined ? undefined : { from, to: num(field("ToServiceID")(m)) ?? from };
+};
+
 /** CellBroadcast.MessageIDParameters3GPP[] as `from-to` ranges (decimal), single ids as `id`. */
-const cbsRange = (m: unknown): string | undefined => {
-	const from = num(field("FromServiceID")(m)),
-		to = num(field("ToServiceID")(m));
-	if (from === undefined) return undefined;
-	return to === undefined || to === from ? String(from) : `${from}-${to}`;
+const cbsChannel = (m: unknown): string | undefined => {
+	const r = cbsRange(m);
+	return r === undefined ? undefined : r.to === r.from ? String(r.from) : `${r.from}-${r.to}`;
 };
 
 /** The first MTU[] entry whose technology-mask covers LTE (bit 3) or NR (bit 4). */
@@ -247,7 +257,7 @@ const IOS_READERS = {
 	"emergency-over-ims": at("IMSConfig.Voice.E911OverIMSSupported", bool),
 	"emergency-numbers": emergencyNumbers,
 	"text-to-emergency": at("SMSSettings.SupportsTextToEmergency", bool, "approx"),
-	"cell-broadcast-channels": list("CellBroadcast.MessageIDParameters3GPP", cbsRange, stringSet),
+	"cell-broadcast-channels": list("CellBroadcast.MessageIDParameters3GPP", cbsChannel, stringSet),
 	"apn-internet": apnName("default"),
 	"apn-mms": apnName("mms"),
 	"apn-ims": apnName("ims"),

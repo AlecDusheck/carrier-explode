@@ -155,7 +155,7 @@ describe("cbsRow against the real UnitedStates bundle", () => {
 		expect(row.intraSimDuplicateDetection).toBeUndefined();
 		expect(row.switchGroupTitle).toBe("Cell Broadcast Alerts");
 		expect(row.languages).toEqual(["de"]);
-		expect(row.emergencyNumbers).toEqual(["112", "110", "124124"]);
+		expect(row.emergencyNumbers).toEqual(["110", "112", "124124"]);
 		expect(row.mappings.map((m) => m.from)).toEqual([4370, 4372, 4383, 4385, 4396, 4398]);
 		expect(row.appleSafetyAlertRanges).toEqual([]);
 	});
@@ -185,12 +185,13 @@ describe("cbsRow against the real UnitedStates bundle", () => {
 });
 
 describe("cbsRow edge cases", () => {
-	it("skips mappings whose service ids are not numbers", () => {
+	it("reads service ids written as numeric strings and skips the rest", () => {
 		const zip = zipSync(
 			{
 				"Payload/B.bundle/carrier.plist": xmlPlist(
 					`<dict><key>CellBroadcast</key><dict><key>MessageIDParameters3GPP</key><array>` +
 						`<dict><key>FromServiceID</key><string>4370</string></dict>` +
+						`<dict><key>FromServiceID</key><string>CMAS</string></dict>` +
 						`<dict><key>FromServiceID</key><integer>4400</integer></dict>` +
 						`</array></dict></dict>`,
 				),
@@ -198,7 +199,10 @@ describe("cbsRow edge cases", () => {
 			{ level: 0 },
 		);
 		const row = rowOf(zip);
-		expect(row.mappings).toEqual([{ from: 4400, to: 4400, alertType: undefined, configuration: undefined }]);
+		expect(row.mappings).toEqual([
+			{ from: 4370, to: 4370, alertType: undefined, configuration: undefined },
+			{ from: 4400, to: 4400, alertType: undefined, configuration: undefined },
+		]);
 	});
 
 	it("keeps a mapping's alert type and configuration", () => {

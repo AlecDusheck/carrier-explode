@@ -17,7 +17,7 @@
 </script>
 
 {#snippet option(c: NamedModemConfig)}
-  <span class="picker-opt" title={c.label}><span class="text">{c.label}{#if c.name} <span class="dimtext">{c.name}</span>{/if}</span></span>
+  <span class="picker-opt" title={c.label}><span class="ellipsis">{c.label}{#if c.name} <span class="dimtext">{c.name}</span>{/if}</span></span>
 {/snippet}
 
 <div class="scroll pad">
@@ -51,6 +51,5 @@
 </div>
 
 <style>
-  .package { font-size: 14px; margin: 2px 0 6px; overflow-wrap: anywhere; }
   .choice { margin: 0 0 8px; }
 </style>

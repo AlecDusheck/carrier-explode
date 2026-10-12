@@ -40,7 +40,7 @@ function priComparable(p: PriDecoded): Record<string, unknown> {
 			(x) => x.name,
 			(x) => x.bits,
 		),
-		nvItems: p.nvItems,
+		nvItems: p.nvListed.map((n) => n.item),
 		schema: p.schema.paths,
 		unknown: byKey(
 			p.unknown,
@@ -80,22 +80,22 @@ export function comparable(d: DecodedFile): unknown {
 }
 
 export interface FileDiff {
-	path: string;
-	kind: DiffKind;
-	rows: DiffRow[];
-	counts: DiffCounts;
+	readonly path: string;
+	readonly kind: DiffKind;
+	readonly rows: DiffRow[];
+	readonly counts: DiffCounts;
 	/** Rows beyond `maxRows` were dropped. */
-	truncated: boolean;
+	readonly truncated: boolean;
 }
 
 export interface BundleDiff {
-	files: FileDiff[];
+	readonly files: FileDiff[];
 	/** File-level counts. */
-	counts: DiffCounts;
+	readonly counts: DiffCounts;
 	/** Paths present in both bundles. */
-	shared: string[];
+	readonly shared: string[];
 	/** A path the diff shows in place of each side's own (a phone's override files), with the file it is on each side. */
-	aliases: Readonly<Record<string, { readonly a?: string; readonly b?: string }>>;
+	readonly aliases: Readonly<Record<string, { readonly a?: string; readonly b?: string }>>;
 }
 
 /** Each side's phone, by the boards in its override files' names (deviceStem); null for none. */
@@ -119,12 +119,18 @@ function shownFiles(o: OpenedBundle, phone: string | null | undefined, phones: b
 }
 
 /** Key-by-key diff of two keyed collections: a key only on one side is added or removed, one on both is diffed as a value. */
-function keyedDiffs(a: Record<string, unknown>, b: Record<string, unknown>, maxRows = 400): FileDiff[] {
+/** `matched`: what a key whose values match counts as. */
+function keyedDiffs(
+	a: Record<string, unknown>,
+	b: Record<string, unknown>,
+	maxRows = 400,
+	matched: DiffKind = "same",
+): FileDiff[] {
 	return [...new Set([...Object.keys(a), ...Object.keys(b)])].toSorted().map((path) => {
 		const inA = Object.hasOwn(a, path),
 			inB = Object.hasOwn(b, path);
 		const rows = inA && inB ? diffValues(a[path], b[path], isJsonDict) : [];
-		const kind: DiffKind = !inA ? "added" : !inB ? "removed" : rows.length ? "changed" : "same";
+		const kind: DiffKind = !inA ? "added" : !inB ? "removed" : rows.length ? "changed" : matched;
 		return {
 			path,
 			kind,
@@ -180,8 +186,7 @@ export function compareBundles(
 		if (inB) vb[path] = inA ? comparable(decodeFile(b, rb)) : null;
 	}
 	// Bytes that differ make a changed file even when the decoded values match.
-	const files = keyedDiffs(va, vb, opts.maxRows);
-	for (const f of files) if (f.kind === "same") f.kind = "changed";
+	const files = keyedDiffs(va, vb, opts.maxRows, "changed");
 	const aliases = Object.fromEntries(
 		[...new Set([...pa, ...pb])].flatMap((path) => {
 			const ra = fa.get(path),

@@ -19,34 +19,16 @@ import {
 	type PairKeys,
 } from "@carrier-explode/values";
 import { base64ToBytes, bytesToHex } from "@carrier-explode/binary";
-import { keys } from "@carrier-explode/storage";
 import type { Json, SourceRef } from "@carrier-explode/schema/types";
 import { configGroup, groupOrder } from "#lib/android/setting-groups.ts";
 import { keyRules, leafCount, type SelectionRule } from "#lib/settings.ts";
 import type { ApnView, Ver, Version } from "#lib/types.ts";
-import { perRequest } from "../cache";
-import { resolve, verFrom, versionOf, type Resolved } from "../catalog";
+import { decodedVersion, resolve, versionChanges, versionOf, type VersionChanges } from "../catalog";
 import { rulesAt } from "../profiles";
-import { readBytes } from "../store";
 import { CARRIER_LIST, carrierListOf, type CarrierListView } from "./carrier-list";
 import { carrierModems } from "./modems";
 
-interface Decoded extends Resolved {
-	readonly settings: CarrierSettings;
-	readonly sha: string;
-	readonly size: number;
-}
-
-/** A version decoded, once per request. */
-const decodedOnce = perRequest(async (source: string, line: string, slug: string): Promise<Decoded> => {
-	const r = await resolve(verFrom(source, line, slug));
-	if (r.ref.platform !== "android") error(400, `${source} is not an Android source.`);
-	const sha = r.entry.sha;
-	const bytes = await readBytes(keys.obj(sha));
-	if (!bytes) error(404, `Version ${r.entry.slug} is not in the bucket.`);
-	return { ...r, settings: decodeCarrierSettings(bytes), sha, size: bytes.length };
-});
-const decoded = (v: Ver): Promise<Decoded> => decodedOnce(v.source, v.line ?? "", v.slug ?? "");
+const decoded = decodedVersion("android", decodeCarrierSettings);
 
 /** A config value as plain JSON: what the Files view and the diff read. */
 function plainConfig(v: CarrierConfigValue): Json {
@@ -92,17 +74,17 @@ export async function getAndroid(v: Ver): Promise<AndroidVersion> {
 		line: d.line,
 		entry,
 		previous,
-		canonicalName: d.settings.canonicalName,
-		version: d.settings.version,
+		canonicalName: d.file.canonicalName,
+		version: d.file.version,
 		counts: {
-			settings: leafCount(plainConfigs(d.settings)),
-			apns: d.settings.apns.length,
+			settings: leafCount(plainConfigs(d.file)),
+			apns: d.file.apns.length,
 			modems: modems.length,
 			// getAndroidFiles' rows: the settings file, its vendor configs and carrier_list.pb.
-			files: vendorRows(d.settings).length + 2,
+			files: vendorRows(d.file).length + 2,
 		},
-		unknownFields: d.settings.unknown.length,
-		file: { path: settingsPath(d.settings), kind: "settings", size: d.size, sha: d.sha },
+		unknownFields: d.file.unknown.length,
+		file: { path: settingsPath(d.file), kind: "settings", size: d.size, sha: d.sha },
 	};
 }
 
@@ -120,7 +102,7 @@ export interface AndroidSettings {
 }
 
 export async function getAndroidSettings(v: Ver): Promise<AndroidSettings> {
-	const { settings } = await decoded(v);
+	const { file: settings } = await decoded(v);
 	const groups = new Map<string, Record<string, Json>>();
 	const docs: Record<string, ConfigDoc> = {};
 	for (const [key, value] of Object.entries(settings.configs).toSorted(([a], [b]) => a.localeCompare(b))) {
@@ -138,7 +120,7 @@ export async function getAndroidSettings(v: Ver): Promise<AndroidSettings> {
 }
 
 export async function getAndroidApns(v: Ver): Promise<ApnView[]> {
-	return (await decoded(v)).settings.apns.map((a, i): ApnView => ({
+	return (await decoded(v)).file.apns.map((a, i): ApnView => ({
 		name: a.name ?? null,
 		apn: a.value ?? null,
 		roles: [...new Set(a.type)],
@@ -148,7 +130,7 @@ export async function getAndroidApns(v: Ver): Promise<ApnView[]> {
 }
 
 /** A version's files, as the Files tab lists them: the CarrierSettings file, its vendor configs, and carrier_list.pb's entries naming it. */
-export type AndroidFileKind = "settings" | "vendor" | "carrier-list";
+export type AndroidFileKind = AndroidFile["kind"];
 
 export interface AndroidFileRow {
 	readonly path: string;
@@ -187,17 +169,17 @@ export async function getAndroidFiles(v: Ver): Promise<AndroidFileRow[]> {
 	const d = await decoded(v);
 	const list = await carrierListOf(d);
 	return [
-		{ path: settingsPath(d.settings), kind: "settings", size: d.size },
-		...vendorRows(d.settings),
+		{ path: settingsPath(d.file), kind: "settings", size: d.size },
+		...vendorRows(d.file),
 		{ path: CARRIER_LIST, kind: "carrier-list", size: list.size },
 	];
 }
 
 export async function getAndroidFile(v: Ver, path: string): Promise<AndroidFile> {
 	const d = await decoded(v);
-	if (path === settingsPath(d.settings)) {
+	if (path === settingsPath(d.file)) {
 		const docs = Object.fromEntries(
-			Object.keys(d.settings.configs).flatMap((k) => {
+			Object.keys(d.file.configs).flatMap((k) => {
 				const doc = configDoc(k);
 				return doc ? [[k, doc]] : [];
 			}),
@@ -205,16 +187,16 @@ export async function getAndroidFile(v: Ver, path: string): Promise<AndroidFile>
 		return {
 			kind: "settings",
 			path,
-			canonicalName: d.settings.canonicalName,
-			version: d.settings.version ?? null,
-			configs: plainConfigs(d.settings),
+			canonicalName: d.file.canonicalName,
+			version: d.file.version ?? null,
+			configs: plainConfigs(d.file),
 			docs,
-			apns: d.settings.apns,
-			vendor: vendorRows(d.settings),
+			apns: d.file.apns,
+			vendor: vendorRows(d.file),
 		};
 	}
 	if (path === CARRIER_LIST) return { kind: "carrier-list", path, ...(await carrierListOf(d)) };
-	const vendor = d.settings.vendorConfigs.find((c) => vendorPath(c.name) === path);
+	const vendor = d.file.vendorConfigs.find((c) => vendorPath(c.name) === path);
 	if (vendor)
 		return {
 			kind: "vendor",
@@ -224,12 +206,10 @@ export async function getAndroidFile(v: Ver, path: string): Promise<AndroidFile>
 	error(404, `${d.ref.name} ${d.entry.slug} has no file ${path}.`);
 }
 
-export interface AndroidChanges {
-	readonly a: Version | null;
-	readonly b: Version;
+export type AndroidChanges = VersionChanges<{
 	readonly configs: { readonly rows: readonly DiffRow[]; readonly counts: DiffCounts };
 	readonly apns: { readonly rows: readonly DiffRow[]; readonly counts: DiffCounts };
-}
+}>;
 
 /** An APN pairs with the APN of its name, else (across carriers) with one of its types; plain values pair by no key. */
 const apnKey =
@@ -243,20 +223,11 @@ const diff = (x: unknown, y: unknown): { rows: DiffRow[]; counts: DiffCounts } =
 	return { rows, counts: summariseDiff(rows) };
 };
 
-/** A version against the one before it on its device line, or against `against` on that line: config keys and APNs. */
-export async function getAndroidChanges(v: Ver, against?: string): Promise<AndroidChanges> {
-	const aSlug = against ?? (await decoded(v)).previous?.slug;
-	return getAndroidComparison(aSlug === undefined ? null : { ...v, slug: aSlug }, v);
-}
-
-/** Any two Android versions, config key by key and APN by APN: what /compare shows for two Pixel files. */
-export async function getAndroidComparison(av: Ver | null, bv: Ver): Promise<AndroidChanges> {
-	const [a, b] = await Promise.all([av ? decoded(av) : null, decoded(bv)]);
-	const [vb, va] = await Promise.all([versionOf(b, b.entry), a ? versionOf(a, a.entry) : null]);
-	return {
-		a: va,
-		b: vb,
-		configs: diff(a ? plainConfigs(a.settings) : {}, plainConfigs(b.settings)),
-		apns: diff(a?.settings.apns ?? [], b.settings.apns),
-	};
-}
+/** Config keys and APNs: what the Changes tab and /compare show for two Pixel files. */
+export const { changes: getAndroidChanges, comparison: getAndroidComparison } = versionChanges(
+	decoded,
+	(a: CarrierSettings | null, b: CarrierSettings) => ({
+		configs: diff(a ? plainConfigs(a) : {}, plainConfigs(b)),
+		apns: diff(a?.apns ?? [], b.apns),
+	}),
+);

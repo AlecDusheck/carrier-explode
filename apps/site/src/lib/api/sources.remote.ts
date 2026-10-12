@@ -4,6 +4,7 @@ import * as v from "valibot";
 import { query } from "$app/server";
 import { FEATURE_SLUGS } from "@carrier-explode/schema";
 import { RELEASE_PLATFORMS } from "@carrier-explode/schema/types";
+import { deviceSchema } from "#lib/device.ts";
 import { carrierMembers } from "#lib/server/catalog.ts";
 import { getComparison as compare } from "#lib/server/compare.ts";
 import * as features from "#lib/server/features.ts";
@@ -11,9 +12,22 @@ import { getHead } from "#lib/server/head.ts";
 import * as lists from "#lib/server/lists.ts";
 import * as scan from "#lib/server/scan.ts";
 import * as visitor from "#lib/server/visitor.ts";
-import { iso, key, kind, path, phone, platform, ver, verSchema } from "./schemas";
+import {
+	iso,
+	key,
+	kind,
+	listGuessQuery,
+	listPageQuery,
+	path,
+	phone,
+	platform,
+	ver,
+	verSchema,
+} from "./schemas";
 
-export const getList = query(v.object({ platform, kind }), (a) => lists.getListRows(a.platform, a.kind));
+export const getListPage = query(listPageQuery, lists.listPage);
+export const getListSize = query(v.object({ platform, kind }), (a) => lists.listSize(a.platform, a.kind));
+export const getListGuess = query(listGuessQuery, lists.listGuess);
 export const getCountryCarriers = query(v.object({ platform, iso }), (a) =>
 	lists.getCountryCarriers(a.platform, a.iso),
 );
@@ -35,10 +49,7 @@ export const getListPlatforms = query(async () =>
 	[...(await lists.listPlatforms())].map(([k, ps]) => [k, [...ps]] as const),
 );
 /** The visitor's best guess, from what their browser reports of their device. */
-export const getVisitorGuess = query(
-	v.object({ platform: v.nullable(platform), model: v.undefinedable(v.pipe(v.string(), v.maxLength(64))) }),
-	visitor.visitorGuess,
-);
+export const getVisitorGuess = query(deviceSchema, visitor.visitorGuess);
 
 /** The source head: the line's versions, the one open and the source's lines. */
 export const getSourceHead = query(verSchema, getHead);

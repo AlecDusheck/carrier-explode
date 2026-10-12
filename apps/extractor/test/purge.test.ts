@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { getPlatformProxy } from "wrangler";
 import { afterAll, afterEach, describe, expect, it, vi } from "vitest";
 
-import { purgeTarget, queue, sendBatches, type QueueEnv } from "../src/queues.ts";
+import { queue, sendBatches, type QueueEnv } from "../src/queues.ts";
 import { batchOf, MemQueue } from "./queues.ts";
 import { productionTuning } from "./wrangler.ts";
 
@@ -17,23 +17,6 @@ describe("sending index messages", () => {
 		expect(sendBatches(Array.from({ length: 250 }, () => ({ kind: "settle" }))).map((b) => b.length)).toEqual(
 			[100, 100, 50],
 		);
-	});
-});
-
-describe("purge configuration", () => {
-	it("purges every reader at its purge path with both, skips with neither, and refuses half", () => {
-		expect(purgeTarget({ PURGE_ORIGINS: ["https://site", "https://api"], PURGE_TOKEN: "t" })).toEqual({
-			purge: "readers",
-			urls: ["https://site/internal/purge", "https://api/internal/purge"],
-			token: "t",
-		});
-		expect(purgeTarget({ PURGE_ORIGINS: undefined, PURGE_TOKEN: undefined })).toEqual({ purge: "off" });
-		expect(purgeTarget({ PURGE_ORIGINS: [], PURGE_TOKEN: undefined })).toEqual({ purge: "off" });
-		expect(() => purgeTarget({ PURGE_ORIGINS: ["https://site"], PURGE_TOKEN: undefined })).toThrow(
-			/PURGE_TOKEN is not/,
-		);
-		expect(() => purgeTarget({ PURGE_ORIGINS: undefined, PURGE_TOKEN: "t" })).toThrow(/PURGE_ORIGINS is not/);
-		expect(() => purgeTarget({ PURGE_ORIGINS: "https://site", PURGE_TOKEN: "t" })).toThrow();
 	});
 });
 

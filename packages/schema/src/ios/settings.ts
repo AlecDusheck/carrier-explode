@@ -1,7 +1,7 @@
 /** A phone's settings as layers (carrier.plist, its override file, an MVNO configuration), merged as CommCenter merges them; each read names the file that set it. */
 
 import { isJsonDict, mergeSettings } from "@carrier-explode/decode-ios";
-import { toJson } from "../json.ts";
+import { toJsonLeaf } from "../json.ts";
 import type { NativeRef } from "../types.ts";
 
 export interface Layer {
@@ -63,7 +63,7 @@ export function read(s: Settings, path: string): Read | undefined {
 	if (!from) return undefined;
 	return {
 		value: hit.value,
-		ref: { path: `${from.file}:${from.prefix}${path}`, value: toJson(hit.value) ?? null },
+		ref: { path: `${from.file}:${from.prefix}${path}`, value: toJsonLeaf(hit.value) },
 	};
 }
 

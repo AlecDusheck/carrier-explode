@@ -64,5 +64,4 @@
   /* A share of the width only where there is width to share; on a phone it would widen the table past the screen. */
   @media (min-width: 761px) { .setting { width: 58%; } }
   .path { font-size: 10.5px; word-break: break-all; }
-  /* Setting names are long snake_case words; let them break so one can't set the column's width. */
 </style>

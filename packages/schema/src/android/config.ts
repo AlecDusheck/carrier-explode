@@ -29,11 +29,10 @@ const COMPUTED_DEFAULTS: Readonly<Record<string, Json>> = {
 	},
 };
 
-/** AOSP's default for a key: its CONFIG_DOCS literal, else a computed one; undefined where AOSP sets none, null included. */
-function aospDefault(key: string): Json | undefined {
+/** AOSP's default for a key: its CONFIG_DOCS literal, else a computed one; null where AOSP sets none, a null literal included. */
+function aospDefault(key: string): Json {
 	const literal = configDoc(key)?.default;
-	if (literal === undefined) return COMPUTED_DEFAULTS[key];
-	return v.parse(jsonSchema, JSON.parse(literal)) ?? undefined;
+	return literal === undefined ? (COMPUTED_DEFAULTS[key] ?? null) : v.parse(jsonSchema, JSON.parse(literal));
 }
 
 /** A config value as plain Json; bundles become objects of their unwrapped members. */
@@ -82,7 +81,7 @@ export function fileConfig(raw: Readonly<Record<string, Json>>): ConfigLookup {
 /** AOSP's default, named `aosp:<key>`. */
 export const aospConfig: ConfigLookup = (key) => {
 	const value = aospDefault(key);
-	return value === undefined ? undefined : { value, ref: { path: `aosp:${key}`, value } };
+	return value === null ? undefined : { value, ref: { path: `aosp:${key}`, value } };
 };
 
 /** Each key from the first lookup that sets it. */

@@ -16,6 +16,7 @@ import {
 } from "../types.ts";
 import {
 	bool,
+	convertedReading,
 	iconLabel,
 	mmsProxyAddress,
 	num,
@@ -46,11 +47,13 @@ function key<T extends Json>(
 	convert: (raw: Json) => T | undefined,
 	fidelity: Fidelity = "exact",
 ): Valued<T> {
-	return ({ config }) => {
-		const r = config(name);
-		const v = r === undefined ? undefined : convert(r.value);
-		return r === undefined || v === undefined ? unset : valueReading(v, [r.ref], fidelity);
-	};
+	return ({ config }) =>
+		convertedReading(
+			config(name),
+			(r) => convert(r.value),
+			(r) => r.ref,
+			fidelity,
+		);
 }
 
 const lower = (raw: Json): string | undefined => text(raw)?.toLowerCase();

@@ -2,7 +2,7 @@
 
 import type { RareRow } from "#lib/server/scan.ts";
 import { isTestPlmn } from "@carrier-explode/schema";
-import { parseRuleKey, type SimMatcher, type SimRule } from "@carrier-explode/schema/types";
+import { ruleOf, type SimMatcher, type SimRule } from "@carrier-explode/schema/types";
 import { isRecord } from "@carrier-explode/values";
 import type { KeyBadge } from "#lib/components/Tree.svelte";
 
@@ -59,13 +59,7 @@ export const ruleRows = (rules: readonly SimRule[]): SelectionRule[] =>
 
 /** SIM rules as the index stores them (schema's ruleKeys), as the selection tables show them. */
 export function keyRules(keys: readonly string[]): SelectionRule[] {
-	return ruleRows(
-		keys.map((key) => {
-			const rule = parseRuleKey(key);
-			if (rule === undefined) throw new Error(`${key} is no SIM rule`);
-			return rule;
-		}),
-	);
+	return ruleRows(keys.map(ruleOf));
 }
 
 const isTestRule = (r: SelectionRule): boolean => r.via === "MCC-MNC" && isTestPlmn(r.key);
@@ -125,7 +119,7 @@ export function rareBadges(rows: readonly RareRow[]): Record<string, KeyBadge[]>
 		if (out[top]) continue;
 		const what = r.rare === "key" ? `${r.path} is set` : `${r.path} = ${r.value}`;
 		const also = r.with.length ? ` (also ${r.with.map((w) => w.key).join(", ")})` : " (no other source)";
-		out[top] = [{ text: "rare", tone: "rare", title: `${what} in ${r.holders} of ${r.of} sources${also}` }];
+		out[top] = [{ text: "rare", tone: "warn", title: `${what} in ${r.holders} of ${r.of} sources${also}` }];
 	}
 	return out;
 }

@@ -23,7 +23,7 @@
     {#each ps as p (p.path)}
       <details class="part" open={ps.length <= 4 && p.rows.length > 0}>
         <summary>
-          <span class="chip {DIFF_CHIP[p.kind]}">{p.kind}</span>
+          <span class={["chip", DIFF_CHIP[p.kind]]}>{p.kind}</span>
           <span class="mono">{p.path}</span>
           {#if p.rows.length}
             {@const n = p.counts.changed + p.counts.added + p.counts.removed}
@@ -45,6 +45,6 @@
 
 <style>
   .part { margin: 2px 0; }
-  .part > summary { cursor: pointer; padding: 3px 0; display: flex; gap: 6px; align-items: baseline; flex-wrap: wrap; }
+  .part > summary { padding: 3px 0; display: flex; gap: 6px; align-items: baseline; flex-wrap: wrap; }
   .more-rows { margin: 2px 0; }
 </style>

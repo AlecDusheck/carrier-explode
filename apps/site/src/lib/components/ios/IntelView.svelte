@@ -88,5 +88,5 @@
 
 <style>
   .reg { margin: 0 0 8px; }
-  .reg > summary { cursor: pointer; padding: 3px 0; font-weight: bold; }
+  .reg > summary { padding: 3px 0; font-weight: bold; }
 </style>

@@ -13,7 +13,7 @@ import type { Named } from "#lib/types.ts";
 export type NamedBoard = BoardRef & { readonly name: string };
 
 /** A bundle file or member with the phones its name's boards are. */
-export type WithPhones<F> = F & { readonly devices?: readonly NamedBoard[] };
+export type WithPhones<F> = F & { readonly devices: readonly NamedBoard[] };
 
 /** A bundle file, an override file with the phones its name's boards are. */
 export type PhoneFile = WithPhones<BundleFile>;
@@ -51,21 +51,21 @@ export const isPri = (f: Pick<BundleFile, "kind">): boolean =>
 
 /** The bundle's modem override files for one phone, by the boards in their `overrides_<stem>` names. */
 export const overridesFor = <F extends FileRef>(files: readonly F[], productType: string): F[] =>
-	files.filter((f) => isPri(f) && f.devices?.some((d) => d.product === productType));
+	files.filter((f) => isPri(f) && f.devices.some((d) => d.product === productType));
 
 /** Whether a copy was made once `productType` existed: an override file names it or a newer model. */
 export const knowsPhone = (files: readonly FileRef[], productType: string): boolean =>
 	files.some(
 		(f) =>
 			isPri(f) &&
-			f.devices?.some((d) => d.product !== undefined && compareProducts(d.product, productType) >= 0),
+			f.devices.some((d) => d.product !== undefined && compareProducts(d.product, productType) >= 0),
 	);
 
 /** An override file's boards that name no phone the device records list: a board newer than the records. */
 const unknownBoards = (f: Pick<PhoneFile, "devices">): string[] =>
-	(f.devices ?? []).filter((d) => d.product === undefined).map((d) => d.board);
+	f.devices.filter((d) => d.product === undefined).map((d) => d.board);
 
-const namesNoPhone = (f: FileRef): boolean => isPri(f) && !f.devices?.some((d) => d.product);
+const namesNoPhone = (f: FileRef): boolean => isPri(f) && !f.devices.some((d) => d.product);
 
 /** Modem files named for no phone: global_setting_*.der.gri, an MVNO set. Not a board the records have yet to list. */
 export const sharedPri = <F extends FileRef>(files: readonly F[]): F[] =>
@@ -96,7 +96,7 @@ export const rowKey = (r: PhoneRow): string => (r.kind === "file" ? r.path : "ca
 
 /** The phones a file's boards name, where the device records list them. */
 const namedPhones = (f: Pick<PhoneFile, "devices">): GroupPhone[] =>
-	(f.devices ?? []).flatMap((d) => (d.product === undefined ? [] : [{ code: d.product, name: d.name }]));
+	f.devices.flatMap((d) => (d.product === undefined ? [] : [{ code: d.product, name: d.name }]));
 
 const newestIn = (f: PhoneRow): string => newestProduct(f.phones.map((p) => p.code)) ?? "";
 /** The carrier's own file (0) before its MVNO sets'. */

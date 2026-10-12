@@ -16,7 +16,7 @@ function labelledLogo(logo: string): LogoSlug {
 
 /** A country bundle by its country's flag; a source the link step has given no carrier yet by its own name. */
 export function pictureOf(ref: SourceRef, s: Pictured): Picture {
-	if (ref.kind === "country") return { kind: "flag", cc: s.cc ?? undefined };
+	if (ref.kind === "country") return { kind: "flag", cc: s.cc };
 	if (s.carrierName === null) return { kind: "initials", brand: ref.name };
 	const slug = s.carrierLogo === null ? brandLogo(s.carrierName) : labelledLogo(s.carrierLogo);
 	return slug === undefined ? { kind: "initials", brand: s.carrierName } : { kind: "logo", slug };

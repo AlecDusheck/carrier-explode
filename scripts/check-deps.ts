@@ -47,7 +47,7 @@ const ALLOWED: Readonly<Record<string, readonly string[]>> = {
 		"decode-mediatek",
 		"decode-samsung",
 	],
-	storage: ["schema", "values"],
+	storage: ["binary", "schema", "values"],
 	db: ["binary", "schema", "values"],
 	networks: ["schema"],
 	tsconfig: [],

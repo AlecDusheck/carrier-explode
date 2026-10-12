@@ -5,10 +5,10 @@ import { canonical, isRecord } from "./canonical.ts";
 export type DiffKind = "added" | "removed" | "changed" | "same";
 
 export interface DiffRow {
-	path: string;
-	kind: DiffKind;
-	a?: unknown;
-	b?: unknown;
+	readonly path: string;
+	readonly kind: DiffKind;
+	readonly a?: unknown;
+	readonly b?: unknown;
 }
 
 export type DiffCounts = Record<DiffKind, number>;

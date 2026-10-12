@@ -478,7 +478,7 @@ describe("decodePri over the whole fixture corpus", () => {
 	it("decodes legacy NV item numbers as uint16 values", () => {
 		let seen = 0;
 		for (const f of files) {
-			for (const n of pri(f.bundle, f.path).nvItems) {
+			for (const { item: n } of pri(f.bundle, f.path).nvListed) {
 				seen++;
 				expect(Number.isInteger(n)).toBe(true);
 				expect(n).toBeGreaterThanOrEqual(0);
@@ -820,18 +820,20 @@ describe("decodePri: NV path schema index", () => {
 describe("decodePri: legacy NV item list", () => {
 	it("decodes the uint16 little-endian item numbers of a real file", () => {
 		const d = pri("carrier-cw-pa.ipcc", "overrides_D10_D11.der.pri");
-		expect(d.nvItems.length).toBe(126);
-		expect(d.nvItems.slice(0, 6)).toEqual([259, 255, 176, 177, 20, 21]);
+		expect(d.nvListed.map((n) => n.item).length).toBe(126);
+		expect(d.nvListed.map((n) => n.item).slice(0, 6)).toEqual([259, 255, 176, 177, 20, 21]);
 		const leaf = defined(
 			leavesOf(raw("carrier-cw-pa.ipcc", "overrides_D10_D11.der.pri")).find((l) => l.tag === "9fa708"),
 		);
-		expect(leaf.value.length).toBe(d.nvItems.length * 2);
+		expect(leaf.value.length).toBe(d.nvListed.map((n) => n.item).length * 2);
 	});
 
 	it("decodes a hand-built item list and drops a trailing odd byte", () => {
-		expect(decodePri(tlv("9fa708", B(1, 0, 2, 0, 3))).nvItems).toEqual([1, 2]);
-		expect(decodePri(tlv("9fa708", B(0xff, 0xff, 0x00, 0x01))).nvItems).toEqual([65535, 256]);
-		expect(decodePri(tlv("9fa708", new Uint8Array())).nvItems).toEqual([]);
+		expect(decodePri(tlv("9fa708", B(1, 0, 2, 0, 3))).nvListed.map((n) => n.item)).toEqual([1, 2]);
+		expect(decodePri(tlv("9fa708", B(0xff, 0xff, 0x00, 0x01))).nvListed.map((n) => n.item)).toEqual([
+			65535, 256,
+		]);
+		expect(decodePri(tlv("9fa708", new Uint8Array())).nvListed.map((n) => n.item)).toEqual([]);
 	});
 
 	it("keeps the NV item list out of efs and unknown", () => {
@@ -876,7 +878,10 @@ describe("decodePri: unidentified tags", () => {
 			}
 			for (const x of d.nv) {
 				expect(x.item, `${f.path} ${x.tag}`).toBe(tagNumber(x.tag));
-				expect(d.nvItems, `${f.path} ${x.tag}`).toContain(x.item);
+				expect(
+					d.nvListed.map((n) => n.item),
+					`${f.path} ${x.tag}`,
+				).toContain(x.item);
 				nv++;
 			}
 		}
@@ -1145,7 +1150,7 @@ describe("malformed and hostile input", () => {
 		expect(d.named).toEqual([]);
 		expect(d.efs).toEqual([]);
 		expect(d.featureGroups).toEqual([]);
-		expect(d.nvItems).toEqual([]);
+		expect(d.nvListed.map((n) => n.item)).toEqual([]);
 		expect(d.unknown).toEqual([]);
 	});
 
@@ -1341,7 +1346,6 @@ describe("decodePri: legacy NV values", () => {
 
 	it("marks which listed items carry a value in nvListed", () => {
 		const d = pri("carrier-cw-pa.ipcc", "overrides_D10_D11.der.pri");
-		expect(d.nvListed.length).toBe(d.nvItems.length);
 		expect(d.nvListed.find((x) => x.item === 946)).toEqual({
 			item: 946,
 			name: "Band preference bits 16-31",
@@ -1379,10 +1383,14 @@ describe("iOS 27.0 fixtures", () => {
 			expect(d.errors, c).toEqual([]);
 			expect(d.schema.source, c).toBe("MAVZ");
 			expect(d.schema.count, c).toBeGreaterThan(300);
-			expect(d.nvItems.length, c).toBe(35);
+			expect(d.nvListed.map((n) => n.item).length, c).toBe(35);
 			expect(defined(d.nv.find((x) => x.item === 62005)).label, c).toBe(d.header["PRI Revision"]);
 			for (const u of d.unknown) expect(u.tag, c).toBe("9fa710");
-			for (const x of d.nv) expect(d.nvItems, `${c} ${x.tag}`).toContain(x.item);
+			for (const x of d.nv)
+				expect(
+					d.nvListed.map((n) => n.item),
+					`${c} ${x.tag}`,
+				).toContain(x.item);
 		}
 	});
 

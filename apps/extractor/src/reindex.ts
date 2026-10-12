@@ -2,15 +2,20 @@
 
 import * as v from "valibot";
 
-import { otaFilesSchema, pixelOtaFilesSchema, sourceKeySchema } from "@carrier-explode/schema/records";
-import { RELEASE_PLATFORMS, type Release, type ReleasePlatform } from "@carrier-explode/schema/types";
-import { keys, OTA_FEEDS, releaseOfKey, type OtaFeed } from "@carrier-explode/storage";
+import { otaFilesSchema, pixelOtaFilesSchema } from "@carrier-explode/schema/records";
+import {
+	RELEASE_PLATFORMS,
+	sourceEntries,
+	type Release,
+	type ReleasePlatform,
+} from "@carrier-explode/schema/types";
+import { keys, listing, OTA_FEEDS, releaseOfKey, type OtaFeed } from "@carrier-explode/storage";
 import { DataError } from "./errors.ts";
 import { chunks } from "./fan-out.ts";
 import type { NormArtifact } from "./normalize.ts";
 import type { PipelineParams } from "./pipelines.ts";
 import { readHeld, readRelease } from "./records.ts";
-import { CONNECTIONS, listing, readJson } from "./store.ts";
+import { CONNECTIONS, readJson } from "./store.ts";
 
 type ReindexTarget = PipelineParams<"reindex">["target"];
 type RecordTarget = Exclude<ReindexTarget, { readonly kind: "all" }>;
@@ -20,8 +25,8 @@ const sourced = (
 	kind: NormArtifact["kind"],
 	sources: Readonly<Record<string, { readonly sha: string } | ReadonlyArray<{ readonly sha: string }>>>,
 ): NormArtifact[] =>
-	Object.entries(sources).flatMap(([key, held]) =>
-		[held].flat().map((a) => ({ kind, sha: a.sha, source: v.parse(sourceKeySchema, key) })),
+	sourceEntries(sources).flatMap(([source, held]) =>
+		[held].flat().map((a) => ({ kind, sha: a.sha, source })),
 	);
 
 const modemConfigs = (r: Extract<Release, { readonly platform: "android" | "samsung" }>): NormArtifact[] =>

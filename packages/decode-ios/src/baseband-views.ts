@@ -11,9 +11,9 @@ export const carriedBy = (f: { variants?: Variant[]; configs?: string[] }): stri
 
 export interface ComboSetRow extends ComboStats {
 	/** The first band_combos_per_plmn.xml variant with these numbers. */
-	sha1: string;
+	readonly sha1: string;
 	/** Every platform whose numbers match. */
-	variants: Variant[];
+	readonly variants: Variant[];
 }
 
 /** One carrier tag's stats across combo sets; platforms with identical stats share a row. */
@@ -84,11 +84,17 @@ export function basebandComparable(s: BasebandSummary): Record<string, Record<st
 }
 
 export interface PriReplacement {
-	efs: string;
+	readonly efs: string;
 	/** Bytes the .der.pri writes. */
-	length: number;
+	readonly length: number;
 	/** The package files at that path, by index into `files`, and whether the .der.pri writes the same text. */
-	baseline: Array<{ i: number; member: string; variants?: Variant[]; configs?: string[]; same: boolean }>;
+	readonly baseline: Array<{
+		readonly i: number;
+		readonly member: string;
+		readonly variants?: Variant[];
+		readonly configs?: string[];
+		readonly same: boolean;
+	}>;
 }
 
 /** The text a PRI EFS entry writes, when it is text. */

@@ -73,7 +73,7 @@ const priBundle = (name: string, pri: Uint8Array): ReturnType<typeof openIpcc> =
 function pixelFiles(mbn: Uint8Array, selDb: string): Map<string, Uint8Array> {
 	const image = parseMcfg(mbn);
 	if (image === undefined) throw new Error("not MCFG");
-	const records = pairSelection([{ image }], parseSelectionDb(selDb)).paired.flatMap((p) => p.records);
+	const records = pairSelection([{ image }], parseSelectionDb(selDb)).flatMap((p) => p.records);
 	return new Map([
 		["mcfg_sw.mbn", mbn],
 		["selection.json", json(records)],

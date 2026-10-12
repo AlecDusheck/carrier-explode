@@ -3,7 +3,7 @@
  * bytes depend on these alone, so firmwares shipping both unchanged share one pack.
  */
 
-import { unzipSync, zipSync, type Zippable } from "fflate";
+import { packFiles, unpackFiles } from "@carrier-explode/binary";
 import { decodeCarrierFeature, decodeCscFeature, type CarrierFeature, type CscFeature } from "./features.ts";
 import { decodeCustomer, type Customer } from "./customer.ts";
 import { decodeImsOperator, type ImsOperator } from "./ims.ts";
@@ -23,19 +23,10 @@ export class PackError extends Error {
 	override name = "PackError";
 }
 
-/** The DOS epoch: a zip entry's time is part of its bytes, and a pack's content must not depend on when it was read. */
-const EPOCH = new Date(1980, 0, 1);
-
 /** `files`: conf/'s, by path under it; `ims`: the pack's operator in the firmware's IMS service, null for none. */
 export function packOmc(files: ReadonlyMap<string, Uint8Array>, ims: ImsOperator | null): Uint8Array {
 	if (files.has(PACK_FILES.ims)) throw new PackError(`conf/ has a ${PACK_FILES.ims} of its own`);
-	const all = new Map([...files, [PACK_FILES.ims, new TextEncoder().encode(JSON.stringify(ims))]]);
-	const zippable: Zippable = {};
-	for (const path of [...all.keys()].toSorted()) {
-		const bytes = all.get(path);
-		if (bytes !== undefined) zippable[path] = [bytes, { mtime: EPOCH, level: 9 }];
-	}
-	return zipSync(zippable);
+	return packFiles(new Map([...files, [PACK_FILES.ims, new TextEncoder().encode(JSON.stringify(ims))]]));
 }
 
 export interface Pack {
@@ -49,7 +40,7 @@ export interface Pack {
 }
 
 export function openOmc(zip: Uint8Array): Pack {
-	const files = new Map(Object.entries(unzipSync(zip)));
+	const files = unpackFiles(zip);
 	const text = (path: string): string | undefined => {
 		const bytes = files.get(path);
 		return bytes === undefined ? undefined : decodeOmcText(bytes);

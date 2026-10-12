@@ -386,6 +386,9 @@ importers:
       fflate:
         specifier: ^0.8.2
         version: 0.8.3
+      valibot:
+        specifier: ^1.5.0
+        version: 1.5.0(typescript@6.0.3)
     devDependencies:
       '@carrier-explode/tsconfig':
         specifier: workspace:*
@@ -560,6 +563,9 @@ importers:
 
   packages/storage:
     dependencies:
+      '@carrier-explode/binary':
+        specifier: workspace:*
+        version: link:../binary
       '@carrier-explode/schema':
         specifier: workspace:*
         version: link:../schema

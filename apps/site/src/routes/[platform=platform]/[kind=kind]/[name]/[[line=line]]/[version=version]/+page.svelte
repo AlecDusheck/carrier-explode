@@ -5,10 +5,12 @@
 
   let { params } = $props();
 
-  const Overview = $derived(VIEWS[params.platform].Overview);
   const at = $derived(atOf(params));
 </script>
 
 <div class="scroll pad">
-  <Pane awaiting={{ kind: "decode", name: at.ref.name }}><Overview {at} path="" /></Pane>
+  <Pane awaiting={{ kind: "decode", name: at.ref.name }}>
+    {@const Overview = (await VIEWS[params.platform].Overview()).default}
+    <Overview {at} path="" />
+  </Pane>
 </div>

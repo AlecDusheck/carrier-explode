@@ -1,6 +1,6 @@
 /** carrier.plist split into the groups a reader looks for, and a phone's override merged in. */
 
-import { isJsonDict, mergeSettings } from "@carrier-explode/decode-ios";
+import { mergeSettings } from "@carrier-explode/decode-ios";
 
 const SETTING_GROUPS: Array<[string, string[]]> = [
 	[
@@ -139,8 +139,6 @@ export function groupSettings(d: Record<string, unknown>): Array<[string, Record
 	if (Object.keys(rest).length) out.push(["Other", rest]);
 	return out;
 }
-
-export const asDict = (v: unknown): Record<string, unknown> | undefined => (isJsonDict(v) ? v : undefined);
 
 /** carrier.plist with a phone's override plist merged in; dictionaries merge key by key, as a per-phone IMSConfig sets only a few keys. */
 export function effective(

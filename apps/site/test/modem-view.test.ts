@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { ModemItem } from "@carrier-explode/schema/types";
-import { combinationRows, comboType, qualcommRows } from "../src/lib/combos.ts";
+import { comboType } from "@carrier-explode/decode-qualcomm";
+import { combinationRows, qualcommRows, type ComboRow } from "../src/lib/combos.ts";
 import {
 	itemMatches,
 	itemNote,
@@ -15,6 +16,8 @@ import {
 import { matcherKey } from "@carrier-explode/schema/types";
 import { keyRules, simRule } from "../src/lib/settings.ts";
 
+const typeOf = (r: ComboRow): ReturnType<typeof comboType> => comboType(r.lte.length > 0, r.nr.length > 0);
+
 describe("combo rows", () => {
 	it("read Qualcomm's strings as before: bands by RAT, NR-DC and SWUL as tags", () => {
 		const [r] = qualcommRows(["b66AA-b2A-n77AA-dc-swul"]);
@@ -27,7 +30,7 @@ describe("combo rows", () => {
 			nr: [{ band: 77, text: "n77A↑A" }],
 			tags: ["NR-DC", "SWUL"],
 		});
-		expect(r && comboType(r)).toBe("endc");
+		expect(r && typeOf(r)).toBe("endc");
 	});
 
 	it("write the neutral model's components in the same notation, with what the family states besides", () => {
@@ -48,7 +51,7 @@ describe("combo rows", () => {
 			tags: [],
 		});
 		expect(nr?.nr).toEqual([{ band: 41, text: "n41C[4]↑A 180MHz 30kHz" }]);
-		expect([lte && comboType(lte), nr && comboType(nr)]).toEqual(["lte", "nr"]);
+		expect([lte && typeOf(lte), nr && typeOf(nr)]).toEqual(["lte", "nr"]);
 	});
 
 	it("refuse a band outside the contract's notation", () => {
@@ -76,7 +79,7 @@ describe("simRule", () => {
 			{ via: "ICCID", key: "8901150…", match: "by SIM card number" },
 			{ via: "Carrier ID", key: "310VZW", match: "CDMA carrier ID" },
 		]);
-		expect(() => keyRules(["310260|carrierId=1"])).toThrow("no SIM rule");
+		expect(() => keyRules(["310260|carrierId=1"])).toThrow("not a rule key");
 	});
 });
 

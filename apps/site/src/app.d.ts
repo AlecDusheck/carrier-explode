@@ -1,3 +1,4 @@
+import type { Meta } from "#lib/seo.ts";
 import type { PageNames } from "#lib/types.ts";
 
 declare global {
@@ -7,7 +8,7 @@ declare global {
 			names: PageNames;
 			/** The root layout's: where the public API answers (wrangler.jsonc vars.API_ORIGIN). */
 			apiOrigin: string;
-			meta?: { title: string; description: string };
+			meta?: Meta;
 			/** A page reachable at several URLs (one file on several Pixels) names the one to index. */
 			canonical?: string;
 		}

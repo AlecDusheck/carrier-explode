@@ -5,11 +5,11 @@ import { mdsvex } from "mdsvex";
 import { defineConfig } from "vitest/config";
 import { headingIds } from "./src/lib/wiki-headings.ts";
 
-export default defineConfig({
+export default defineConfig(({ mode }) => ({
 	plugins: [
 		sveltekit({
-			// `vite dev` binds wrangler.jsonc's local `dev` environment.
-			adapter: adapter({ platformProxy: { environment: "dev" } }),
+			// `vite dev` binds the `dev` environment's remote D1 and R2; tests never reach them.
+			adapter: adapter({ platformProxy: { environment: "dev", remoteBindings: mode !== "test" } }),
 			// Wiki articles (src/wiki/*.md) are markdown compiled to components.
 			extensions: [".svelte", ".md"],
 			preprocess: [
@@ -25,4 +25,4 @@ export default defineConfig({
 	// Workspace packages are TypeScript source: bundle them rather than leave them to Node at build time.
 	ssr: { noExternal: [/^@carrier-explode\//] },
 	test: { include: ["test/**/*.test.ts"] },
-});
+}));

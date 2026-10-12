@@ -30,6 +30,7 @@ const entry = (
 	os: string | null,
 	model?: string,
 ): Entry => ({
+	platform: source.startsWith("ipados:") ? "ipados" : source.startsWith("watchos:") ? "watchos" : "ios",
 	url,
 	version: "1",
 	digests: {},

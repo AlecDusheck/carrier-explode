@@ -7,18 +7,16 @@
 import { concatBytes } from "@carrier-explode/binary";
 import {
 	bytesSource,
-	decodeLz4,
 	decodeLz4Stream,
-	isSparse,
 	openFilesystem,
 	streamFat,
-	unsparse,
+	wholeImage,
 	type Filesystem,
 } from "@carrier-explode/firmware";
 import { DataError } from "../errors.ts";
 import { MODEM_PATHS, qualcommModem, type ExtractedModem } from "../modem/index.ts";
 import type { Firmware } from "./firmware.ts";
-import { collect, tarEntries } from "./tar.ts";
+import { tarEntries } from "./tar.ts";
 
 export class GalaxyError extends DataError {
 	override name = "GalaxyError";
@@ -37,8 +35,7 @@ async function optics(fw: Firmware): Promise<Filesystem> {
 		for await (const e of tarEntries(member)) {
 			names.push(e.name);
 			if (e.name !== OPTICS) continue;
-			const image = decodeLz4(await collect(e.body));
-			return await openFilesystem(bytesSource(isSparse(image) ? unsparse(image) : image));
+			return await openFilesystem(bytesSource(await wholeImage(decodeLz4Stream(e.body))));
 		}
 	} finally {
 		// Optics comes before the member's end; closing the stream closes the download.

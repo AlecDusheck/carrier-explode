@@ -1,6 +1,7 @@
 /** CDMA PRL (IS-683-A, SSPR_P_REV 1) and Extended PRL (SSPR_P_REV 3) decoder, per 3GPP2 C.S0016-D v1.0 §3.5.5. */
 
 import { BitReader, bytesToHex, crc16Ccitt, u16be } from "@carrier-explode/binary";
+import type { Building } from "./building.ts";
 
 interface PrlChannel {
 	/** CDMA band class; absent for records that imply one (cellular, PCS). */
@@ -10,78 +11,78 @@ interface PrlChannel {
 }
 
 export interface PrlAcqRecord {
-	index: number;
-	type: number;
-	typeName: string;
+	readonly index: number;
+	readonly type: number;
+	readonly typeName: string;
 	/** Octets of type-specific data (extended records only). */
-	length?: number;
+	readonly length?: number;
 	/** A_B: cellular system A/B selection. */
-	system?: string;
+	readonly system?: string;
 	/** PRI_SEC: standard channel selection. */
-	channelSelection?: string;
+	readonly channelSelection?: string;
 	/** PCS frequency blocks. */
-	blocks?: string[];
-	channels?: PrlChannel[];
+	readonly blocks?: string[];
+	readonly channels?: PrlChannel[];
 	/** Type-specific bytes for record types without a decoder. */
-	raw?: string;
+	readonly raw?: string;
 }
 
 export interface PrlSysRecord {
-	index: number;
-	type: number;
-	typeName: string;
+	readonly index: number;
+	readonly type: number;
+	readonly typeName: string;
 	/** Record length in octets (extended records only). */
-	length?: number;
+	readonly length?: number;
 	/** PREF_NEG: true = preferred (allowed), false = negative (forbidden). */
-	preferred: boolean;
+	readonly preferred: boolean;
 	/** GEO: true when in the same geographic region as the previous record. */
-	geo: boolean;
+	readonly geo: boolean;
 	/** PRI: true when more desirable than the next record. */
-	priority: boolean;
+	readonly priority: boolean;
 	/** GEO region number, counting from 0. */
-	region: number;
-	acqIndex: number;
-	roamInd?: number;
-	roamIndName?: string;
-	sid?: number;
+	readonly region: number;
+	readonly acqIndex: number;
+	readonly roamInd?: number;
+	readonly roamIndName?: string;
+	readonly sid?: number;
 	/** NID, including the value NID_INCL implies when not stored. */
-	nid?: number;
-	nidIncl?: string;
+	readonly nid?: number;
+	readonly nidIncl?: string;
 	/** HRPD subnet as hex, with its length in bits. */
-	subnet?: string;
-	mcc?: string;
-	mnc?: string;
-	subtype?: string;
-	sids?: number[];
-	sidNids?: Array<{ sid: number; nid: number }>;
-	subnetIds?: string[];
-	association?: { tag: number; pn: boolean; data: boolean };
-	raw?: string;
+	readonly subnet?: string;
+	readonly mcc?: string;
+	readonly mnc?: string;
+	readonly subtype?: string;
+	readonly sids?: number[];
+	readonly sidNids?: Array<{ readonly sid: number; readonly nid: number }>;
+	readonly subnetIds?: string[];
+	readonly association?: { readonly tag: number; readonly pn: boolean; readonly data: boolean };
+	readonly raw?: string;
 }
 
 export interface PrlDecoded {
 	/** "prl" for SSPR_P_REV 1, "extended" for SSPR_P_REV 3. */
-	format: "prl" | "extended";
-	sspPRev: number;
+	readonly format: "prl" | "extended";
+	readonly sspPRev: number;
 	/** PR_LIST_SIZE, in octets including the CRC. */
-	size: number;
-	id: number;
-	prefOnly: boolean;
-	defRoamInd: number;
-	defRoamIndName: string;
-	numAcqRecs: number;
-	numCommonSubnetRecs?: number;
-	numSysRecs: number;
+	readonly size: number;
+	readonly id: number;
+	readonly prefOnly: boolean;
+	readonly defRoamInd: number;
+	readonly defRoamIndName: string;
+	readonly numAcqRecs: number;
+	readonly numCommonSubnetRecs?: number;
+	readonly numSysRecs: number;
 	/** GEO regions in the system table. */
-	regions: number;
-	acquisition: PrlAcqRecord[];
+	readonly regions: number;
+	readonly acquisition: PrlAcqRecord[];
 	/** Common Subnet Table entries (hex), extended PRL only. */
-	commonSubnets?: string[];
-	systems: PrlSysRecord[];
-	crc: { stored: number; computed: number; ok: boolean };
+	readonly commonSubnets?: string[];
+	readonly systems: PrlSysRecord[];
+	readonly crc: { readonly stored: number; readonly computed: number; readonly ok: boolean };
 	/** Reserved bits between the last record and the CRC. */
-	padBits: number;
-	warnings: string[];
+	readonly padBits: number;
+	readonly warnings: string[];
 }
 
 // C.S0016-D Table 3.5.5.2-2 (values 1-9 also Table 3.5.5.2-1)
@@ -196,7 +197,7 @@ function chanList(r: BitReader): PrlChannel[] {
 }
 
 /** Type-specific acquisition fields for types 1-9, identical in both formats bar the reserved padding. */ // §3.5.5.2.1, §3.5.5.2.2
-function acqBody(type: number, r: BitReader, rec: PrlAcqRecord): boolean {
+function acqBody(type: number, r: BitReader, rec: Building<PrlAcqRecord>): boolean {
 	switch (type) {
 		case 1:
 		case 4:
@@ -255,7 +256,7 @@ function decodeLegacy(bytes: Uint8Array): PrlDecoded {
 	const acquisition: PrlAcqRecord[] = [];
 	for (let i = 0; i < numAcqRecs; i++) {
 		const type = r.u(4);
-		const rec: PrlAcqRecord = { index: i, type, typeName: ACQ_TYPES[type] ?? "Reserved" };
+		const rec: Building<PrlAcqRecord> = { index: i, type, typeName: ACQ_TYPES[type] ?? "Reserved" };
 		if (!acqBody(type, r, rec)) throw new Error(`acquisition record ${i}: reserved type ${type}`);
 		acquisition.push(rec);
 	}
@@ -269,7 +270,7 @@ function decodeLegacy(bytes: Uint8Array): PrlDecoded {
 		const geo = r.flag();
 		const priority = preferred ? r.flag() : false;
 		const acqIndex = r.u(9);
-		const rec: PrlSysRecord = {
+		const rec: Building<PrlSysRecord> = {
 			index: i,
 			type: 0,
 			typeName: SYS_TYPES[0] ?? "Reserved",
@@ -331,7 +332,7 @@ function decodeExtended(bytes: Uint8Array): PrlDecoded {
 		const start = r.pos;
 		if (start + length * 8 > end) throw new Error(`acquisition record ${i} overruns the list`);
 		const body = new BitReader(bytes, start, start + length * 8);
-		const rec: PrlAcqRecord = { index: i, type, typeName: ACQ_TYPES[type] ?? "Reserved", length };
+		const rec: Building<PrlAcqRecord> = { index: i, type, typeName: ACQ_TYPES[type] ?? "Reserved", length };
 		if (type === 10 || type === 11) {
 			// §3.5.5.2.2.10-11: LENGTH/2 (BAND_CLASS 5, CHANNEL_NUMBER 11) pairs
 			rec.channels = [];
@@ -374,7 +375,7 @@ function decodeExtended(bytes: Uint8Array): PrlDecoded {
 		const geo = s.flag();
 		const priority = s.flag();
 		const acqIndex = s.u(9);
-		const rec: PrlSysRecord = {
+		const rec: Building<PrlSysRecord> = {
 			index: i,
 			type,
 			typeName: SYS_TYPES[type] ?? "Reserved",

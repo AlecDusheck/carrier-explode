@@ -16,7 +16,7 @@
 <style>
   .conf {
     font-family: var(--ui); font-size: 9.5px; font-style: italic; color: var(--conf-med);
-    border: 1px dashed var(--conf-med-border); padding: 0 3px; margin-left: 5px; white-space: nowrap;
+    border: 1px dashed var(--warn-border); padding: 0 3px; margin-left: 5px; white-space: nowrap;
   }
   .conf.low, .conf.unknown { color: var(--conf-low); border-color: var(--conf-low-border); }
 </style>

@@ -1,6 +1,6 @@
 <script lang="ts">
-  import type { ComboType } from "@carrier-explode/decode-qualcomm";
-  import { comboType, type ComboCell, type ComboRow } from "#lib/combos.ts";
+  import { comboType, type ComboType } from "@carrier-explode/decode-qualcomm";
+  import type { ComboCell, ComboRow } from "#lib/combos.ts";
   import ShowMore from "./ShowMore.svelte";
 
   let { rows }: { rows: readonly ComboRow[] } = $props();
@@ -12,7 +12,7 @@
   const PAGE = 100;
   let limit = $state(PAGE);
 
-  const typed = $derived(rows.map((row, n) => ({ row, n, type: comboType(row) })));
+  const typed = $derived(rows.map((row, n) => ({ row, n, type: comboType(row.lte.length > 0, row.nr.length > 0) })));
 
   // "n77" and "b66" match a band of that RAT, a bare number any band, anything else the string.
   const matches = (r: ComboRow, tok: string) => {

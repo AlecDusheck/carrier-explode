@@ -10,7 +10,7 @@
   let { params } = $props();
 
   let filter = $state("");
-  const country = (cc: string | undefined): string => (cc === undefined ? "" : (countryName(cc) ?? cc.toUpperCase()));
+  const country = (cc: string | null): string => (cc === null ? "" : (countryName(cc) ?? cc.toUpperCase()));
 </script>
 
 <div class="bundle-head">
@@ -23,7 +23,7 @@
     {@const f = fold(filter)}
     {@const shown = f ? all.filter((s) => [s.name, country(s.cc)].some((x) => fold(x).includes(f))) : all}
     <p class="dimtext note">Parts of others.pb named by the SIM rule that selects them, with no carrier name.</p>
-    <input class="grow" type="search" placeholder="filter" aria-label="filter rules" bind:value={filter} />
+    <input class="grow" type="search" name="filter" placeholder="filter" aria-label="filter rules" bind:value={filter} />
     <RuleRows sources={shown} withCountry />
   </Pane>
 </div>

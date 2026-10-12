@@ -4,7 +4,7 @@
 
   let { params, data, children } = $props();
 
-  const Head = $derived(modemView(data.platform).Head);
+  const Head = $derived((await modemView(data.platform).Head()).default);
 </script>
 
 <div class="view">

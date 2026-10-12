@@ -12,7 +12,6 @@ export {
 export {
 	isZlibStart,
 	itemPaths,
-	MCFG_BRANCHES,
 	type McfgBranch,
 	type McfgCondition,
 	type McfgImage,
@@ -51,6 +50,7 @@ export {
 	type ComboComponent,
 	type ComboStats,
 	comboStats,
+	comboType,
 	type ComboType,
 	parseAmprNs,
 	parseBandCombos,

@@ -32,21 +32,16 @@ export interface NormalizedModem {
 
 type KeyedLists = ReadonlyMap<string, readonly BandCombination[]>;
 
+/** A draft with its combinations keyed, named by `sha`, or by its content's for a base, which is no artifact's. */
 async function finish(
-	draft: ConfigDraft,
-	base: string | null,
-): Promise<{ config: ModemConfig; lists: KeyedLists }> {
-	const { sets, lists } = await keyCombos(draft.combos);
-	return { config: modemConfigOf({ ...draft, base, combos: sets }), lists };
-}
-
-async function finishBase(
 	draft: Omit<ConfigDraft, "sha">,
+	base: string | null,
+	sha: string | null,
 ): Promise<{ config: ModemConfig; lists: KeyedLists }> {
 	const { sets, lists } = await keyCombos(draft.combos);
-	const content = { ...draft, base: null, combos: sets };
-	const sha = await sha256Hex(new TextEncoder().encode(JSON.stringify(content)));
-	return { config: modemConfigOf({ ...content, sha }), lists };
+	const content = { ...draft, base, combos: sets };
+	const named = sha ?? (await sha256Hex(new TextEncoder().encode(JSON.stringify(content))));
+	return { config: modemConfigOf({ ...content, sha: named }), lists };
 }
 
 export async function modemConfig(bytes: Uint8Array, sha: string): Promise<NormalizedModem> {
@@ -59,8 +54,8 @@ export async function modemConfig(bytes: Uint8Array, sha: string): Promise<Norma
 
 /** A mapper's config, its base and their combinations keyed. */
 export async function normalizeMapped(mapped: MappedConfig): Promise<NormalizedModem> {
-	const base = mapped.base === null ? null : await finishBase(mapped.base);
-	const own = await finish(mapped.config, base?.config.sha ?? null);
+	const base = mapped.base === null ? null : await finish(mapped.base, null, null);
+	const own = await finish(mapped.config, base?.config.sha ?? null, mapped.config.sha);
 	return {
 		config: own.config,
 		base: base?.config ?? null,

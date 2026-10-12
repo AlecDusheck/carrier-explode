@@ -1,12 +1,14 @@
-/** Leaf-path view of decoded values: `apns[0].type-mask` → 3. Used for cross-bundle lookups; values' lookupAll reads it. */
+/** Leaf-path view of decoded values: `apns[0].type-mask` → 3. */
 
-import type { Flat } from "@carrier-explode/values";
 import { decodeFile, decodedPlist, type OpenedBundle } from "./bundle.ts";
 import { comparable } from "./compare.ts";
 import { isJsonDict } from "./plist.ts";
 
+/** A value's leaves by key path. */
+type Flat = Record<string, unknown>;
+
 /** Leaves only; tagged scalars (data, dates, big integers, UIDs) are leaves, and empty containers are kept so they stay visible. */
-export function flatten(value: unknown, prefix = "", out: Flat = {}): Flat {
+function flatten(value: unknown, prefix = "", out: Flat = {}): Flat {
 	if (Array.isArray(value)) {
 		if (!value.length) out[prefix] = [];
 		value.forEach((v, i) => flatten(v, `${prefix}[${i}]`, out));

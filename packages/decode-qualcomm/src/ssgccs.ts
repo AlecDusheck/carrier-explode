@@ -4,6 +4,7 @@
  */
 
 import type { ConfidenceOrUnknown } from "./confidence.ts";
+import type { Building } from "./building.ts";
 
 interface SsgccsField {
 	name: string;
@@ -14,25 +15,25 @@ interface SsgccsField {
 }
 
 export interface SsgccsLine {
-	key: string;
+	readonly key: string;
 	/** What the line configures. */
-	title: string;
-	fields: SsgccsField[];
-	confidence: ConfidenceOrUnknown;
-	raw: string;
+	readonly title: string;
+	readonly fields: SsgccsField[];
+	readonly confidence: ConfidenceOrUnknown;
+	readonly raw: string;
 }
 
 export interface SsgccsConfig {
 	/** ACTIVE_PLMN_LIST is "ALL". */
-	allNetworks: boolean;
+	readonly allNetworks: boolean;
 	/** The networks ACTIVE_PLMN_LIST names otherwise; empty when it is absent. */
-	plmns: string[];
+	readonly plmns: string[];
 	/** CUSTOM: the detection thresholds. */
-	custom?: SsgccsLine;
+	readonly custom?: SsgccsLine;
 	/** One line per radio technology (GERAN, WCDMA, LTE, NR). */
-	rats: SsgccsLine[];
+	readonly rats: SsgccsLine[];
 	/** Keys the firmware strings do not explain, fields numbered. */
-	other: SsgccsLine[];
+	readonly other: SsgccsLine[];
 }
 
 // qdsp6sw.mbn rodata: countermeasure action words
@@ -61,7 +62,7 @@ function ratField(value: string, i: number, n: number): SsgccsField {
 
 /** Both files' lines; unknown keys keep their values as numbered fields. */ // bbcfg.mbn: /SSGCCS/ssgccs_config.txt, /SSGCCS/ssgccs_int_config.txt
 export function parseSsgccs(...texts: string[]): SsgccsConfig {
-	const out: SsgccsConfig = { allNetworks: false, plmns: [], rats: [], other: [] };
+	const out: Building<SsgccsConfig> = { allNetworks: false, plmns: [], rats: [], other: [] };
 	for (const text of texts) {
 		for (const line of text.replace(/\0+$/, "").split(/\r?\n/)) {
 			const m = /^\s*([A-Z0-9_]+)\s*:\s*(.*?)\s*$/.exec(line);

@@ -14,7 +14,7 @@ import { sourceKey } from "@carrier-explode/schema/types";
 const held: Held = {
 	source: (ref) => isIndexed(sourceKey(ref)),
 	countryFile: async (platform, iso) =>
-		(await getList(platform, "country")).find((e) => e.cc?.toLowerCase() === iso)?.name ?? null,
+		(await getList(platform, "country")).find((e) => e.cc === iso)?.name ?? null,
 	carriersIn: async (platform, iso) => (await getCountryCarriers(platform, iso)).length > 0,
 	build: async (id) => (await releaseNamed("ios", id)) !== null,
 	article: (path) => article(path) !== undefined,

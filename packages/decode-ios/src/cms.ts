@@ -34,15 +34,15 @@ interface CmsSigner {
 
 export interface CmsSignedData {
 	/** eContentType, e.g. "data". */
-	contentType: string;
+	readonly contentType: string;
 	/** Encapsulated content; empty for a detached signature. */
-	content: Uint8Array;
-	detached: boolean;
-	digestAlgorithms: string[];
-	certificates: CertInfo[];
+	readonly content: Uint8Array;
+	readonly detached: boolean;
+	readonly digestAlgorithms: string[];
+	readonly certificates: CertInfo[];
 	/** Embedded certificates that did not parse, by position among the certificates; they are left out of `certificates`. */
-	certificateErrors: string[];
-	signers: CmsSigner[];
+	readonly certificateErrors: string[];
+	readonly signers: CmsSigner[];
 }
 
 const SIGNED_DATA = "1.2.840.113549.1.7.2";

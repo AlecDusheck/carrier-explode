@@ -30,7 +30,7 @@
 {#snippet line(n: FeatureNode)}
   <span class="logo feature tone-{n.tone}" style:--icon={featureIconImage(n.icon)}></span>
   <span class="name" class:weak={!n.strong}>{n.name}</span>
-  {#if tail}{@render tail(n)}{:else}<span class="value" title={n.words}>{n.words}</span>{/if}
+  {#if tail}{@render tail(n)}{:else}<span class="value ellipsis" title={n.words}>{n.words}</span>{/if}
 {/snippet}
 
 {#snippet node(n: FeatureNode)}
@@ -38,7 +38,7 @@
   <li data-fold={folds[n.id]}>
     <div class="row">
       {#if n.children.length}
-        <button type="button" class="twist" aria-label="Fold or unfold {n.name}" onclick={() => twist(n.id)}></button>
+        <button type="button" class="twist bare" aria-label="Fold or unfold {n.name}" onclick={() => twist(n.id)}></button>
       {:else}
         <span class="twist" aria-hidden="true"></span>
       {/if}
@@ -99,17 +99,13 @@
     min-height: 22px;
   }
   .row:hover {
-    background: #eef2f7;
+    background: var(--hover);
   }
   .twist {
     flex: none;
     width: 13px;
-    padding: 0;
-    border: 0;
-    background: none;
     color: var(--text-dim);
     font: 10px var(--ui);
-    cursor: pointer;
   }
   button.twist::before {
     content: "▾";
@@ -134,9 +130,6 @@
     background: none;
     border: 0;
   }
-  button.line {
-    cursor: pointer;
-  }
   a.line:hover .name,
   button.line:hover .name {
     text-decoration: underline;
@@ -157,9 +150,6 @@
     text-align: right;
     font: 11.5px var(--mono);
     color: var(--text-dim);
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
   }
   .detail {
     margin: 1px 0 4px 18px;

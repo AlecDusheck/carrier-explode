@@ -1,5 +1,6 @@
 /** Every key of the carrier-explode-ingest bucket. Nothing else spells a key out. */
 
+import { sha256Hex } from "@carrier-explode/binary";
 import {
 	MODEM_SCHEMA,
 	PREVIOUS_MODEM_SCHEMA,
@@ -63,7 +64,7 @@ export const keys = {
 	/** Listed by planning: a file is held once its record is. */
 	otaFilesPrefix: (feed: OtaFeed): string => `ota/${feed}/files/`,
 	otaFile: async (feed: OtaFeed, url: string): Promise<string> =>
-		`ota/${feed}/files/${await urlHash(url)}${JSON_EXT}`,
+		`ota/${feed}/files/${await sha256Hex(new TextEncoder().encode(url))}${JSON_EXT}`,
 	/** What FUS and its AP member said of a Galaxy firmware a check read: fixed once built, so FUS is asked once. */
 	galaxyFirmware: (build: string): string => `firmware/samsung/${build}${JSON_EXT}`,
 	/** What version.xml has said of a Galaxy model: its oldest build's month, and its answer under each sales code asked. */
@@ -93,10 +94,4 @@ export function releaseOfKey(key: string): ReleaseKey | undefined {
 		default:
 			return undefined;
 	}
-}
-
-/** Lower-case hex SHA-256 of the URL: a file's key, whatever characters its URL holds. */
-async function urlHash(url: string): Promise<string> {
-	const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(url)));
-	return Array.from(digest, (b) => b.toString(16).padStart(2, "0")).join("");
 }

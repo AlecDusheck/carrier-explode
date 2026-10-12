@@ -23,21 +23,21 @@ export type NvType =
 
 export interface NvInfo {
 	/** The path or `NV <n>` this entry was resolved for. */
-	key: string;
+	readonly key: string;
 	/** Legacy NV item number, when the key is one. */
-	item?: number;
-	name: string;
-	meaning: string;
-	type: NvType;
+	readonly item?: number;
+	readonly name: string;
+	readonly meaning: string;
+	readonly type: NvType;
 	/** Enum labels by value. */
-	values?: Record<number, string>;
+	readonly values?: Record<number, string>;
 	/** Bitmask labels by bit index (LSB = 0). */
-	bits?: Record<number, string>;
-	confidence: Confidence;
+	readonly bits?: Record<number, string>;
+	readonly confidence: Confidence;
 	/** Where the finding comes from. */
-	source: string;
+	readonly source: string;
 	/** Set when matched by a path family rather than the exact path. */
-	family?: string;
+	readonly family?: string;
 }
 
 type Entry = Omit<NvInfo, "key" | "item" | "family"> & {
@@ -1604,12 +1604,12 @@ function formatter(pathOrItem: string | number): Entry["format"] {
 }
 
 export interface NvAnnotation {
-	name: string;
+	readonly name: string;
 	/** Omitted when it would only repeat the name. */
-	meaning?: string;
+	readonly meaning?: string;
 	/** What the scalar value means (enum name, set bits, version), when known. */
-	label?: string;
-	confidence: Confidence;
+	readonly label?: string;
+	readonly confidence: Confidence;
 }
 
 /** What an NV item or EFS path is and, given its value, what that value means. */

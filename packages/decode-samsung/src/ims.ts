@@ -4,9 +4,11 @@
  * own operator's, and the defaults.
  */
 
+import * as v from "valibot";
+
 import { gidHex, type OmcInfo } from "./omc-info.ts";
 
-export const IMS_FILES = ["mnomap.json", "imsswitch.json", "imsprofile.json", "globalsettings.json"] as const;
+const IMS_FILES = ["mnomap.json", "imsswitch.json", "imsprofile.json", "globalsettings.json"] as const;
 type ImsFile = (typeof IMS_FILES)[number];
 
 export class ImsError extends Error {
@@ -29,10 +31,20 @@ export function parseJsonc(text: string): unknown {
 	return JSON.parse(text.replace(/("(?:[^"\\]|\\.)*")|\/\/[^\n]*/g, (_, s: string | undefined) => s ?? ""));
 }
 
-const isRecord = (v: unknown): v is ImsRecord => typeof v === "object" && v !== null && !Array.isArray(v);
-const records = (v: unknown, what: string): ImsRecord[] => {
-	if (!Array.isArray(v) || !v.every(isRecord)) throw new ImsError(`${what} is not a list of objects`);
-	return v;
+const imsValueSchema: v.GenericSchema<ImsValue> = v.lazy(() =>
+	v.union([v.string(), v.number(), v.boolean(), v.null(), v.array(imsValueSchema), imsRecordSchema]),
+);
+const imsRecordSchema = v.pipe(
+	v.record(v.string(), imsValueSchema),
+	v.check((r) => !Array.isArray(r), "expected an object"),
+);
+const recordsSchema = v.array(imsRecordSchema);
+
+/** Checked, not parsed: a parsed record would leave out keys such as `constructor`. */
+const isRecord = (x: unknown): x is ImsRecord => v.is(imsRecordSchema, x);
+const records = (x: unknown, what: string): readonly ImsRecord[] => {
+	if (!v.is(recordsSchema, x)) throw new ImsError(`${what} is not a list of objects`);
+	return x;
 };
 const str = (r: ImsRecord, k: string): string => (typeof r[k] === "string" ? r[k] : "");
 
@@ -187,28 +199,25 @@ export function imsOperator(info: OmcInfo, maps: ImsMaps): ImsOperator | null {
 			};
 }
 
+const imsOperatorSchema = v.object({
+	mno: v.string(),
+	switches: imsRecordSchema,
+	profile: v.nullable(imsRecordSchema),
+	settings: imsRecordSchema,
+	defaults: v.object({ switches: imsRecordSchema, settings: imsRecordSchema }),
+}) satisfies v.GenericSchema<unknown, ImsOperator>;
+
 /** An operator as a pack stores it (PACK_FILES.ims): `null` where none of its SIMs has IMS switches. */
 export function decodeImsOperator(bytes: Uint8Array): ImsOperator | null {
 	const doc: unknown = JSON.parse(utf8.decode(bytes));
 	if (doc === null) return null;
-	const defaults = isRecord(doc) ? doc.defaults : undefined;
-	if (
-		!isRecord(doc) ||
-		typeof doc.mno !== "string" ||
-		!isRecord(doc.switches) ||
-		!(doc.profile === null || isRecord(doc.profile)) ||
-		!isRecord(doc.settings) ||
-		!isRecord(defaults) ||
-		!isRecord(defaults.switches) ||
-		!isRecord(defaults.settings)
-	) {
+	if (!v.is(imsOperatorSchema, doc))
 		throw new ImsError("a pack's IMS operator is not {mno, switches, profile, settings, defaults}");
-	}
 	return {
 		mno: doc.mno,
 		switches: doc.switches,
 		profile: doc.profile,
 		settings: doc.settings,
-		defaults: { switches: defaults.switches, settings: defaults.settings },
+		defaults: { switches: doc.defaults.switches, settings: doc.defaults.settings },
 	};
 }

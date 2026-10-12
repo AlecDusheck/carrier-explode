@@ -224,3 +224,6 @@ export const compareReleases = (a: ReleaseVersion, b: ReleaseVersion): number =>
 /** Orders a platform's releases oldest to newest as text: by release day, an undated one oldest; then version by segment, Pixel patch level and id. */
 export const releaseSortKey = (r: ReleaseHeader): string =>
 	[r.released ?? "", dottedKey(r.version), r.platform === "android" ? r.patch : "", r.id].join(" ");
+
+/** A Pixel build's train, the first four characters of its id and all Google's update service reads of it: `CP3A.260905.009` -> `CP3A`. */
+export const pixelTrain = (build: string): string => build.slice(0, 4).toUpperCase();

@@ -1,9 +1,13 @@
+<script lang="ts" module>
+  export type TabLink = readonly [href: string, label: string];
+</script>
+
 <script lang="ts">
   import { page } from "$app/state";
   import { listKeys } from "#lib/keys.ts";
 
   /** A page's tab row: each tab a link. One row, which scrolls sideways when it does not fit. */
-  let { items }: { items: Array<[href: string, label: string]> } = $props();
+  let { items }: { items: readonly TabLink[] } = $props();
 
   // The open tab is the URL's alone: the longest tab address the path is or sits under, else the first (a page with no version shows its head's).
   const current = $derived.by(() => {

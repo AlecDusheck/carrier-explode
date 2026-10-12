@@ -34,6 +34,7 @@ import {
 import { simMatcher, uniqueSims } from "../../sims.ts";
 import {
 	jsonMember,
+	members,
 	member,
 	readOr,
 	type ArchiveFiles,
@@ -437,17 +438,14 @@ function component(c: Component): BandComponent {
 
 /** Each uecap file the archive carries, one source each. */
 function ueCapCombinations(files: ArchiveFiles, errors: string[]): ComboSource[] {
-	return [...files]
-		.filter(([name]) => UECAP.test(name))
-		.toSorted(([a], [b]) => compareUtf8(a, b))
-		.flatMap(([name, bytes]): ComboSource[] => {
-			const f = readOr(errors, name, undefined, () => decodeUeCap(bytes));
-			if (f === undefined || f.kind === "plmn-map") return [];
-			if (f.kind === "lte-ca") return [[name, f.combinations.map((c) => c.map(lteCaComponent))]];
-			const switched = f.combinations.filter((c) => c.components.some((x) => x.srsTxSwitch !== 0)).length;
-			if (switched > 0) errors.push(`${name}: ${switched} combinations set srstxswitch, which is not shown`);
-			return [[name, f.combinations.map((c) => c.components.map(component))]];
-		});
+	return members(files, UECAP).flatMap(([name, bytes]): ComboSource[] => {
+		const f = readOr(errors, name, undefined, () => decodeUeCap(bytes));
+		if (f === undefined || f.kind === "plmn-map") return [];
+		if (f.kind === "lte-ca") return [[name, f.combinations.map((c) => c.map(lteCaComponent))]];
+		const switched = f.combinations.filter((c) => c.components.some((x) => x.srsTxSwitch !== 0)).length;
+		if (switched > 0) errors.push(`${name}: ${switched} combinations set srstxswitch, which is not shown`);
+		return [[name, f.combinations.map((c) => c.components.map(component))]];
+	});
 }
 
 /** `default, endc_common, lte_ca_common`: the base confseqs' layer names, without their scopes. */

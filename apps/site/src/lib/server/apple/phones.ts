@@ -25,7 +25,7 @@ import {
 } from "#lib/apple/phones.ts";
 import type { Named, Ver } from "#lib/types.ts";
 import { cached, perRequest } from "../cache";
-import { PHONE_IMAGES, copiesOfEntry, releasesOf, resolve, verFrom, type Located } from "../catalog";
+import { PHONE_IMAGES, copiesOfEntry, releasesOf, resolve, verKey, type Located } from "../catalog";
 import { mustRelease } from "../releases";
 import { decodedMember, describe, open, type Opened } from "./bytes";
 import { modemViews, packagesOf } from "./modems";
@@ -61,36 +61,31 @@ interface PhoneCopies {
 }
 
 /** Every phone of a version's release, newest family first, with its override files in that version. */
-const phoneCopiesOnce = perRequest(
-	async (source: string, line: string, slug: string): Promise<PhoneCopies | null> => {
-		const described = await describe(verFrom(source, line, slug));
-		const { entry, files } = described;
-		const read = await releaseOf(described, entry);
-		if (!read) return null;
-		const { build } = read;
-		const [release, modems, views] = await Promise.all([
-			mustRelease("ios", build),
-			packagesOf(build),
-			modemViews(build),
-		]);
-		// An image's copy holds the files of the phones it lists and no others; an OTA file's age is guessed from its files.
-		const knows = (code: string): boolean =>
-			read.carried ? release.devices.includes(code) : knowsPhone(files, code);
-		const phones = views.flatMap((m) => m.devices.map((d) => ({ ...d, family: m.family })));
-		const copies = phones.map((p) => {
-			// oxlint-disable-next-line oxc/no-map-spread -- the spreads only leave out absent optional fields; nothing is copied.
-			const mine = overridesFor(files, p.code).map(({ path, kind, devices }): FileRef => ({
-				path,
-				kind,
-				...(devices ? { devices } : {}),
-			}));
-			return { files: mine, known: mine.length > 0 || knows(p.code) };
-		});
-		return { entry, build, devices: release.devices, modems, phones, copies, knows };
-	},
-);
-export const phoneCopies = (v: Ver): Promise<PhoneCopies | null> =>
-	phoneCopiesOnce(v.source, v.line ?? "", v.slug ?? "");
+export const phoneCopies = perRequest(async (v: Ver): Promise<PhoneCopies | null> => {
+	const described = await describe(v);
+	const { entry, files } = described;
+	const read = await releaseOf(described, entry);
+	if (!read) return null;
+	const { build } = read;
+	const [release, modems, views] = await Promise.all([
+		mustRelease("ios", build),
+		packagesOf(build),
+		modemViews(build),
+	]);
+	// An image's copy holds the files of the phones it lists and no others; an OTA file's age is guessed from its files.
+	const knows = (code: string): boolean =>
+		read.carried ? release.devices.includes(code) : knowsPhone(files, code);
+	const phones = views.flatMap((m) => m.devices.map((d) => ({ ...d, family: m.family })));
+	const copies = phones.map((p) => {
+		const mine = overridesFor(files, p.code).map(({ path, kind, devices }): FileRef => ({
+			path,
+			kind,
+			devices,
+		}));
+		return { files: mine, known: mine.length > 0 || knows(p.code) };
+	});
+	return { entry, build, devices: release.devices, modems, phones, copies, knows };
+}, verKey);
 
 export interface BundleOverrides {
 	readonly build: string;
@@ -155,7 +150,7 @@ const isPhonePlist = (f: Pick<BundleFile, "path">): boolean => /^overrides_.+\.p
 
 /** A phone's override files in a copy, by the boards in their names; a board no device record lists goes by its own code. */
 const filesFor = (o: Opened, phone: string): PhoneFile[] =>
-	o.files.filter((f) => f.devices?.some((d) => (d.product ?? d.board) === phone));
+	o.files.filter((f) => f.devices.some((d) => (d.product ?? d.board) === phone));
 
 function fileChange(
 	A: Opened | null,

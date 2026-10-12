@@ -4,11 +4,10 @@
   import { getRare } from "#lib/api/sources.remote.ts";
   import { verArgs, withParams } from "#lib/format.ts";
   import { phoneList, pickPhoneRow } from "#lib/apple/phones.ts";
-  import { asDict, effective, groupSettings } from "#lib/apple/settings.ts";
+  import { effective, groupSettings } from "#lib/apple/settings.ts";
   import { rareBadges } from "#lib/settings.ts";
   import { TreeState } from "#lib/ui-state.svelte.ts";
   import { APPLE_DOCS } from "#lib/apple/tree-docs.ts";
-  import { sourceKey } from "@carrier-explode/schema/types";
   import type { TabProps } from "#lib/types.ts";
   import type { KeyBadge } from "../../Tree.svelte";
   import Tree from "../../Tree.svelte";
@@ -27,15 +26,17 @@
   // A link from the Overview names the key to show.
   tree.filter = page.url.searchParams.get("filter") ?? "";
 
-  const bundle = $derived(await getAppleBundle(args));
-  const carrier = $derived(asDict(bundle.quick["carrier.plist"]));
-  const rows = $derived(await tabPhoneRows(at, "settings"));
+  const [bundle, rows, rare] = $derived(await Promise.all([getAppleBundle(args), tabPhoneRows(at, "settings"), getRare(args)]));
+  const carrier = $derived(bundle.quick["carrier.plist"]);
   const picked = $derived(pickPhoneRow(rows, sp.get("file")));
-  const over = $derived(picked.row?.kind === "file" ? await getOverridePlist({ ...args, path: picked.row.path }) : null);
-  const phoneDict = $derived(asDict(over?.plist));
-  const rare = $derived(await getRare(args));
-  const home = $derived(bundle.home ? await getAppleBundle({ source: bundle.home }) : null);
-  const homeDict = $derived(asDict(home?.quick["carrier.plist"]));
+  const [over, home] = $derived(
+    await Promise.all([
+      picked.row?.kind === "file" ? getOverridePlist({ ...args, path: picked.row.path }) : null,
+      bundle.home ? getAppleBundle({ source: bundle.home }) : null,
+    ]),
+  );
+  const phoneDict = $derived(over?.plist);
+  const homeDict = $derived(home?.quick["carrier.plist"]);
   const phoneName = $derived(picked.row ? phoneList(picked.row.phones) : "");
 
   /** Badges merged per key, in a fixed order: source first, then rarity. */
@@ -43,8 +44,8 @@
     const out: Record<string, KeyBadge[]> = {};
     for (const k of keys) {
       const b: KeyBadge[] = [];
-      if (phone.has(k)) b.push({ text: "phone", tone: "phone", title: `Set by ${phoneName}'s override file` });
-      if (country.has(k)) b.push({ text: "country too", tone: "country", title: "The home country bundle sets this too; which one wins is not documented" });
+      if (phone.has(k)) b.push({ text: "phone", tone: "info", title: `Set by ${phoneName}'s override file` });
+      if (country.has(k)) b.push({ text: "country too", tone: "good", title: "The home country bundle sets this too; which one wins is not documented" });
       b.push(...(rareTop[k] ?? []));
       if (b.length) out[k] = b;
     }
@@ -80,7 +81,7 @@
   {#each groupSettings(shown) as [title, group] (title)}
     <fieldset class="hgroup">
       <legend>{title} ({Object.keys(group).length})</legend>
-      <Tree value={group} ctx={{ platform: at.ref.platform, source: sourceKey(at.ref), file: "carrier.plist", cc: bundle.cc, docs: APPLE_DOCS }} state={tree} {badges} />
+      <Tree value={group} ctx={{ platform: at.ref.platform, file: "carrier.plist", cc: bundle.cc, docs: APPLE_DOCS }} state={tree} {badges} />
     </fieldset>
   {:else}
     <p class="dimtext note">No keys in this view.</p>

@@ -1,24 +1,19 @@
 /** Argument schemas the remote queries share. */
 
 import * as v from "valibot";
-import { sha256Schema } from "@carrier-explode/schema/records";
+import { sha256Schema, sourceKeySchema } from "@carrier-explode/schema/records";
 import {
 	DEVICE_CODE,
 	ISO_CODE,
-	isSourceKey,
 	isVersionSlug,
 	PLATFORMS,
 	RELEASE_ID,
 	SOURCE_KINDS,
-	type SourceKey,
 } from "@carrier-explode/schema/types";
 import type { Ver } from "#lib/types.ts";
 
 /** A source key: `ios:carrier:ATT_US`, as a URL spells it. */
-const source = v.pipe(v.string(), v.check(isSourceKey, "not a source key"));
-
-/** A source key, typed as one. */
-export const key = v.custom<SourceKey>((x) => typeof x === "string" && isSourceKey(x), "not a source key");
+export const key = sourceKeySchema;
 
 /** A version segment: `72.0`, `50.1@2022-04-12`. */
 export const slug = v.pipe(v.string(), v.check(isVersionSlug, "not a version"));
@@ -27,13 +22,25 @@ export const slug = v.pipe(v.string(), v.check(isVersionSlug, "not a version"));
 const line = v.pipe(v.string(), v.regex(DEVICE_CODE));
 
 /** A version as a URL names it; without `slug`, the line's head. */
-export const ver = { source, line: v.exactOptional(line), slug: v.exactOptional(slug) };
+export const ver = { source: key, line: v.exactOptional(line), slug: v.exactOptional(slug) };
 export const verSchema = v.object(ver) satisfies v.GenericSchema<unknown, Ver>;
 
 /** A version a tab is pinned to. */
-export const pinned = { source, line: v.exactOptional(line), slug };
+export const pinned = { source: key, line: v.exactOptional(line), slug };
 
 export const platform = v.picklist(PLATFORMS);
+
+/** The scan scopes that cover a whole platform: every carrier, or every country bundle. */
+const WHOLE_SCOPES = ["carriers", "countries"] as const;
+export type WholeScope = (typeof WHOLE_SCOPES)[number];
+
+const oneCountry = v.custom<`country:${string}`>(
+	(s) => typeof s === "string" && s.startsWith("country:") && ISO_CODE.test(s.slice("country:".length)),
+	"not a country scope",
+);
+/** Which sources a scan reads: a whole platform's, or one country's carriers. */
+export const scanScope = v.union([v.picklist(WHOLE_SCOPES), oneCountry]);
+export type ScanScope = v.InferOutput<typeof scanScope>;
 
 export const kind = v.picklist(SOURCE_KINDS);
 export const iso = v.pipe(v.string(), v.regex(ISO_CODE));
@@ -85,3 +92,28 @@ export const modemPageQuery = v.object({
 	from: v.pipe(index, v.minValue(0)),
 });
 export type ModemPageQuery = v.InferOutput<typeof modemPageQuery>;
+
+const LIST_SORTS = ["newest", "name"] as const;
+export const LIST_PAGE = 100;
+/** A list's `?from=`, which pages it without JavaScript; null, for anything but a row number, opens it around the page open beside it. */
+export const listFrom = v.fallback(v.nullable(v.pipe(v.string(), v.toNumber(), index, v.minValue(0))), null);
+
+/** A page of a list's rows that match `q`, from the `from`th; with no `from`, around the row of `reach`, the page open beside the list. */
+export const listPageQuery = v.object({
+	platform,
+	kind,
+	q: v.pipe(v.string(), v.maxLength(200)),
+	sort: v.picklist(LIST_SORTS),
+	from: v.nullable(v.pipe(index, v.minValue(0))),
+	reach: v.nullable(path),
+});
+export type ListPageQuery = v.InferOutput<typeof listPageQuery>;
+
+/** A visitor's guess as a list's search reads it: the carrier only when it is their network's. */
+export const listGuessQuery = v.object({
+	platform,
+	kind,
+	carrier: v.nullable(v.pipe(v.string(), v.maxLength(200))),
+	country: v.nullable(iso),
+});
+export type ListGuessQuery = v.InferOutput<typeof listGuessQuery>;

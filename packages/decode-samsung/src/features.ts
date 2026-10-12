@@ -4,6 +4,7 @@
  */
 
 import { isRecord } from "@carrier-explode/values";
+import * as v from "valibot";
 
 import { child, childText, parseXml, XmlError } from "./xml.ts";
 
@@ -39,40 +40,27 @@ export class CarrierFeatureError extends Error {
 	override name = "CarrierFeatureError";
 }
 
-function str(o: Readonly<Record<string, unknown>>, k: string): string {
-	const v = o[k];
-	if (typeof v !== "string")
-		throw new CarrierFeatureError(`customer_carrier_feature.json: ${k} is not a string`);
-	return v;
-}
+const featureObject = v.custom<Readonly<Record<string, unknown>>>(isRecord, "expected a feature object");
 
-function features(o: Readonly<Record<string, unknown>>): Features {
-	const f = o.feature;
-	if (!isRecord(f))
-		throw new CarrierFeatureError("customer_carrier_feature.json: an entry without a feature object");
-	return Object.fromEntries(
-		Object.entries(f).map(([k, v]) => [k, typeof v === "string" ? v : JSON.stringify(v)]),
-	);
-}
+const carrierFeatureSchema = v.object({
+	version: v.string(),
+	mapped_cid_version: v.exactOptional(v.string()),
+	customer: v.exactOptional(v.array(v.object({ carrier_group: v.string(), feature: featureObject }))),
+	specific: v.exactOptional(v.array(v.object({ canonical_id: v.string(), feature: featureObject }))),
+});
 
-const entries = (
-	o: Readonly<Record<string, unknown>>,
-	k: string,
-): Array<Readonly<Record<string, unknown>>> => {
-	const v = o[k];
-	if (v === undefined) return [];
-	if (!Array.isArray(v) || !v.every(isRecord))
-		throw new CarrierFeatureError(`customer_carrier_feature.json: ${k} is not a list of objects`);
-	return v;
-};
+const features = (f: Readonly<Record<string, unknown>>): Features =>
+	Object.fromEntries(Object.entries(f).map(([k, x]) => [k, typeof x === "string" ? x : JSON.stringify(x)]));
 
 export function decodeCarrierFeature(json: string): CarrierFeature {
-	const doc: unknown = JSON.parse(json);
-	if (!isRecord(doc)) throw new CarrierFeatureError("customer_carrier_feature.json is not an object");
+	const doc = v.safeParse(carrierFeatureSchema, JSON.parse(json));
+	if (!doc.success)
+		throw new CarrierFeatureError(`customer_carrier_feature.json: ${v.summarize(doc.issues)}`);
+	const { version, mapped_cid_version, customer = [], specific = [] } = doc.output;
 	return {
-		version: str(doc, "version"),
-		...(doc.mapped_cid_version === undefined ? {} : { carrierListVersion: str(doc, "mapped_cid_version") }),
-		groups: entries(doc, "customer").map((e) => ({ group: str(e, "carrier_group"), features: features(e) })),
-		carriers: entries(doc, "specific").map((e) => ({ id: str(e, "canonical_id"), features: features(e) })),
+		version,
+		...(mapped_cid_version === undefined ? {} : { carrierListVersion: mapped_cid_version }),
+		groups: customer.map((e) => ({ group: e.carrier_group, features: features(e.feature) })),
+		carriers: specific.map((e) => ({ id: e.canonical_id, features: features(e.feature) })),
 	};
 }

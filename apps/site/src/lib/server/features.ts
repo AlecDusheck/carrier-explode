@@ -27,6 +27,7 @@ import {
 	isSetting,
 	isTreeConcept,
 	phoneConcepts,
+	settingValue,
 	type MatrixCell,
 	type MatrixConcept,
 	type SettingValue,
@@ -163,12 +164,6 @@ async function statesBySource(
 const phoneState = (states: Readonly<Record<string, FeatureState>> | undefined, slug: string): PhoneState =>
 	states === undefined ? "unknown" : (states[slug] ?? "unset");
 
-const settingValue = v.pipe(
-	v.string(),
-	v.parseJson(),
-	v.nullable(v.union([v.string(), v.number(), v.boolean(), v.array(v.union([v.string(), v.number()]))])),
-);
-
 const settingCell = (value: SettingValue | null | undefined): MatrixCell =>
 	value === undefined ? "unknown" : value === null ? "unset" : { value };
 
@@ -185,36 +180,38 @@ export interface FeatureMatrix {
 }
 
 /** What every carrier gives one phone: its feature states, and the settings its own file makes. */
-export async function getFeatureMatrix(phoneId: string): Promise<FeatureMatrix> {
-	const phone = await mustPhone(phoneId);
-	const columns = phoneConcepts(phone);
-	const group = { platform: phone.platform, kind: "carrier" } as const;
-	const d = await db();
-	const [list, states, settings] = await Promise.all([
-		getCarriers(phone.platform),
-		statesBySource(phone.code),
-		Promise.all(
-			columns.filter(isSetting).map(async (id) => {
-				const scanned = await scanConcept(d, group, id, phone.code);
-				return [id, new Map(scanned.map((s) => [s.source, v.parse(settingValue, s.value)]))] as const;
-			}),
-		),
-	]);
-	const byId = new Map<MatrixConcept, ReadonlyMap<SourceKey, SettingValue | null>>(settings);
-	return {
-		phone,
-		columns,
-		rows: list.map((entry) => ({
-			entry,
-			cells: columns.map((id) => {
-				const setting = byId.get(id);
-				return setting === undefined
-					? phoneState(states.get(entry.key), id)
-					: settingCell(setting.get(entry.key));
-			}),
-		})),
-	};
-}
+export const getFeatureMatrix = perRequest(async (phoneId: string): Promise<FeatureMatrix> =>
+	cached(`feature-matrix:v2:${phoneId}:${await indexVersion()}`, async () => {
+		const phone = await mustPhone(phoneId);
+		const columns = phoneConcepts(phone);
+		const group = { platform: phone.platform, kind: "carrier" } as const;
+		const d = await db();
+		const [list, states, settings] = await Promise.all([
+			getCarriers(phone.platform),
+			statesBySource(phone.code),
+			Promise.all(
+				columns.filter(isSetting).map(async (id) => {
+					const scanned = await scanConcept(d, group, id, phone.code);
+					return [id, new Map(scanned.map((s) => [s.source, v.parse(settingValue, s.value)]))] as const;
+				}),
+			),
+		]);
+		const byId = new Map<MatrixConcept, ReadonlyMap<SourceKey, SettingValue | null>>(settings);
+		return {
+			phone,
+			columns,
+			rows: list.map((entry) => ({
+				entry,
+				cells: columns.map((id) => {
+					const setting = byId.get(id);
+					return setting === undefined
+						? phoneState(states.get(entry.key), id)
+						: settingCell(setting.get(entry.key));
+				}),
+			})),
+		};
+	}),
+);
 
 /** What a country's carriers give its platform's newest covered phone, or the one named. */
 export async function getCountryMatrix(

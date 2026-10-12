@@ -1,6 +1,7 @@
 /** A record value read by its item's shape: little-endian unsigned numbers, or the bytes kept with why. */
 
 import { leUint, u16le, u32le, u8 } from "@carrier-explode/binary";
+import { nulPadded } from "./rom-string.ts";
 import type { ItemShape } from "./shapes.ts";
 
 /** The table records widths, not signedness, so numbers are read unsigned. */
@@ -26,10 +27,8 @@ const READERS: ReadonlyMap<number, (b: Uint8Array, at: number) => number> = new 
 
 /** Printable ASCII, then one or more NULs to the end. */
 function cString(b: Uint8Array): string | null {
-	const end = b.indexOf(0);
-	if (end <= 0 || b.subarray(end).some((x) => x !== 0)) return null;
-	const head = b.subarray(0, end);
-	return head.every((x) => x >= 0x20 && x < 0x7f) ? String.fromCharCode(...head) : null;
+	const head = nulPadded(b);
+	return head?.every((x) => x >= 0x20 && x < 0x7f) ? String.fromCharCode(...head) : null;
 }
 
 function bitValue(bytes: Uint8Array, bits: number): McfValue {

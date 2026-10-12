@@ -9,7 +9,7 @@ import { decodeCarrierSettings, type CarrierSettings } from "@carrier-explode/de
 import {
 	AOSP_DOCUMENTS,
 	apnElements,
-	baseSource,
+	BASE_SOURCES,
 	carrierConfigElements,
 	pixelApns,
 	pixelConfigBody,
@@ -19,7 +19,7 @@ import { profileSchema, sha256Schema, sourceKeySchema } from "@carrier-explode/s
 import {
 	buildsPath,
 	listPath,
-	parseRuleKey,
+	ruleOf,
 	PLATFORMS,
 	RELEASE_PLATFORMS,
 	shipsKind,
@@ -64,8 +64,12 @@ const pageSchema = v.looseObject({
 	next: v.nullable(v.object({ url: v.string() })),
 });
 
-/** A paged list read whole: its first page's answer, with every page's items and no next. */
-async function whole(api: Api, path: string): Promise<{ readonly text: string; readonly items: unknown[] }> {
+/** A paged list read whole: its first page's answer, with every page's items and no next, as served; and the items as `item` reads them. */
+async function whole<S extends v.GenericSchema>(
+	api: Api,
+	path: string,
+	item: S,
+): Promise<{ readonly text: string; readonly items: readonly v.InferOutput<S>[] }> {
 	let url: string | null = `${path}?limit=${PAGE}`;
 	let first: v.InferOutput<typeof pageSchema> | undefined;
 	const items: unknown[] = [];
@@ -76,7 +80,7 @@ async function whole(api: Api, path: string): Promise<{ readonly text: string; r
 		const next = page.next === null ? null : new URL(page.next.url);
 		url = next === null ? null : next.pathname + next.search;
 	}
-	return { text: JSON.stringify({ ...first, items, next: null }), items };
+	return { text: JSON.stringify({ ...first, items, next: null }), items: v.parse(v.array(item), items) };
 }
 
 const sourceAnswer = v.object({
@@ -89,11 +93,7 @@ const headAnswer = v.object({
 
 function rulesOf(path: string, text: string): SimRule[] {
 	const { selectedBy } = parsed(sourceAnswer, path, text);
-	return [...new Set([...selectedBy.claimed, ...selectedBy.routed])].map((key) => {
-		const rule = parseRuleKey(key);
-		if (rule === undefined) throw new Error(`GET ${path}: ${key} is not a rule key`);
-		return rule;
-	});
+	return [...new Set([...selectedBy.claimed, ...selectedBy.routed])].map(ruleOf);
 }
 
 /** The AOSP documents, open while the API's answers are written. */
@@ -169,32 +169,33 @@ export async function buildDataset(env: Pick<Env, "API" | "BUCKET">): Promise<Bl
 	xml.pixelConfig.write(AOSP_DOCUMENTS.carrierConfigList.head);
 	xml.galaxyApns.write(AOSP_DOCUMENTS.apnsConf.head);
 
-	const base = baseSource("android");
-	if (base === null) throw new Error("android: no base source");
-	const baseRef = sourceOf(base);
+	const baseRef = sourceOf(BASE_SOURCES.android);
 	const baseHead = await headOf(env.API, baseRef);
 	const baseSettings = await pixelSettings(env, `/v1${sourcePath(baseRef)}${HEAD}`, baseHead);
 	xml.pixelConfig.write(carrierConfigElements(baseRef.name, "every SIM", pixelConfigBody(baseSettings)));
 
 	for (const name of ["platforms", "concepts"]) put(`v1/${name}.json`, await answer(env.API, `/v1/${name}`));
 	for (const name of ["carriers", "countries", "devices"])
-		put(`v1/${name}.json`, (await whole(env.API, `/v1/${name}`)).text);
+		put(`v1/${name}.json`, (await whole(env.API, `/v1/${name}`, v.unknown())).text);
 
 	const read = new Set<string>();
 	for (const platform of RELEASE_PLATFORMS) {
-		const builds = await whole(env.API, `/v1${buildsPath(platform)}`);
+		const builds = await whole(env.API, `/v1${buildsPath(platform)}`, buildItem);
 		put(`v1${buildsPath(platform)}.json`, builds.text);
-		for (const b of builds.items) for (const d of v.parse(buildItem, b).devices) read.add(d);
+		for (const b of builds.items) for (const d of b.devices) read.add(d);
 	}
 	for (const code of [...read].toSorted())
-		put(`v1/devices/${code}/features.json`, (await whole(env.API, `/v1/devices/${code}/features`)).text);
+		put(
+			`v1/devices/${code}/features.json`,
+			(await whole(env.API, `/v1/devices/${code}/features`, v.unknown())).text,
+		);
 
 	for (const platform of PLATFORMS)
 		for (const kind of SOURCE_KINDS) {
 			if (!shipsKind(platform, kind)) continue;
-			const list = await whole(env.API, `/v1${listPath(platform, kind)}`);
+			const list = await whole(env.API, `/v1${listPath(platform, kind)}`, listItem);
 			put(`v1${listPath(platform, kind)}.json`, list.text);
-			const refs = list.items.map((i) => sourceOf(v.parse(listItem, i).key));
+			const refs = list.items.map((i) => sourceOf(i.key));
 			for (const batch of chunks(refs, CONNECTIONS))
 				for (const s of await Promise.all(batch.map((ref) => sourceFiles(env, ref)))) {
 					for (const [path, text] of s.files) put(path, text);

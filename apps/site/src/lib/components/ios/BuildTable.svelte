@@ -1,11 +1,10 @@
 <script lang="ts">
   import { buildHref, modemHref } from "#lib/format.ts";
-  import { releaseLabel } from "#lib/naming.ts";
-  import type { ListedRelease } from "@carrier-explode/db";
+  import { releaseLabel, type ReleaseOf } from "#lib/naming.ts";
   import VersionMark from "../VersionMark.svelte";
 
   /** The iOS images held, each with the modem packages that changed since the image before. */
-  let { builds }: { builds: ReadonlyArray<Extract<ListedRelease, { platform: "ios" }>> } = $props();
+  let { builds }: { builds: readonly ReleaseOf<"ios">[] } = $props();
 </script>
 
 <fieldset class="hgroup">

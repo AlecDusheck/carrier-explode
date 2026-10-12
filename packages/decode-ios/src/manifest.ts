@@ -3,7 +3,10 @@
  * the air, and the SIM tables that pick one.
  */
 
+import * as v from "valibot";
+
 import { bytesToHex } from "@carrier-explode/binary";
+import { isRecord } from "@carrier-explode/values";
 import { isJsonDict, isPlistDict, parsePlist, type PlistDict, type PlistValue } from "./plist.ts";
 import { compareVersions } from "./versions.ts";
 
@@ -12,17 +15,17 @@ export const MANIFEST_URL =
 
 export interface BundleRef {
 	/** iOS version key this entry is published under, "legacy", or "<family> <n>" for a CarrierBundles entry. */
-	os: string;
-	build: string;
-	url: string;
+	readonly os: string;
+	readonly build: string;
+	readonly url: string;
 	/** SHA-1 of the file, hex. Absent where the entry only carries a long digest. */
-	digest?: string;
+	readonly digest?: string;
 	/** SHA-384, hex. Newer entries put it under Digest3; Watch and country entries put it under the plain Digest key, so it is routed by length. */
-	digest3?: string;
+	readonly digest3?: string;
 	/** Present for ByProductType entries: "iPad", "iPod", or one model ("iPhone7,1"). */
-	productType?: string;
+	readonly productType?: string;
 	/** Present for CarrierBundles entries, which are keyed by device family. */
-	family?: "iPhone" | "Watch";
+	readonly family?: "iPhone" | "Watch";
 }
 
 interface ManifestCountry {
@@ -54,27 +57,39 @@ export interface ManifestIndex {
 
 type Dict = PlistDict;
 
-/** `v` when it is a dictionary, else an empty one. */
-const dict = (v: PlistValue | undefined): Dict => (isPlistDict(v) ? v : {});
+/** `x` when it is a dictionary, else an empty one. */
+const dict = (x: PlistValue | undefined): Dict => (isPlistDict(x) ? x : {});
 /** The dictionary-valued entries of `d`. */
 const dicts = (d: Dict): Array<[string, Dict]> =>
-	Object.entries(d).flatMap(([k, v]) => (isPlistDict(v) ? [[k, v]] : []));
-const text = (v: PlistValue | undefined): string => (v === undefined || v === null ? "" : String(v));
+	Object.entries(d).flatMap(([k, x]) => (isPlistDict(x) ? [[k, x]] : []));
+const text = (x: unknown): string => (x === undefined || x === null ? "" : String(x));
+
+/** A field the manifest gives another type counts as absent, as one it leaves out. */
+const maybe = <S extends v.GenericSchema>(
+	s: S,
+): v.SchemaWithFallback<v.OptionalSchema<S, undefined>, undefined> => v.fallback(v.optional(s), undefined);
+
+const entrySchema = v.looseObject({
+	BundleURL: v.string(),
+	BuildVersion: maybe(v.string()),
+	Digest: maybe(v.instance(Uint8Array)),
+	Digest3: maybe(v.instance(Uint8Array)),
+});
 
 function refFromEntry(
 	os: string,
-	e: Dict,
+	entry: Dict,
 	from: Pick<BundleRef, "productType" | "family"> = {},
 ): BundleRef | null {
-	const url = e.BundleURL;
-	if (typeof url !== "string") return null;
-	const plain = e.Digest instanceof Uint8Array ? e.Digest : undefined;
-	const long = e.Digest3 instanceof Uint8Array ? e.Digest3 : undefined;
-	const digest3 = long ?? (plain?.length === 48 ? plain : undefined);
+	const parsed = v.safeParse(entrySchema, entry);
+	if (!parsed.success) return null;
+	const e = parsed.output;
+	const plain = e.Digest;
+	const digest3 = e.Digest3 ?? (plain?.length === 48 ? plain : undefined);
 	return {
 		os,
-		build: typeof e.BuildVersion === "string" ? e.BuildVersion : text(e.BundleVersion),
-		url,
+		build: e.BuildVersion ?? text(e.BundleVersion),
+		url: e.BundleURL,
 		...(plain?.length === 20 ? { digest: bytesToHex(plain) } : {}),
 		...(digest3 ? { digest3: bytesToHex(digest3) } : {}),
 		...from,
@@ -98,12 +113,12 @@ export function carrierRefs(root: Dict, name: string): BundleRef[] {
 	const add = (r: BundleRef | null): void => {
 		if (r) out.push(r);
 	};
-	for (const [os, v] of dicts(dict(dict(root.MobileDeviceCarrierBundlesByProductVersion)[name]))) {
+	for (const [os, entry] of dicts(dict(dict(root.MobileDeviceCarrierBundlesByProductVersion)[name]))) {
 		if (os !== "ByProductType") {
-			add(refFromEntry(os, v));
+			add(refFromEntry(os, entry));
 			continue;
 		}
-		for (const [pt, versions] of dicts(v))
+		for (const [pt, versions] of dicts(entry))
 			for (const [pos, pe] of dicts(versions)) add(refFromEntry(pos, pe, { productType: pt }));
 	}
 	const legacy = dict(root.MobileDeviceCarrierBundles)[name];
@@ -112,14 +127,16 @@ export function carrierRefs(root: Dict, name: string): BundleRef[] {
 	// Watch and newer-format carrier bundles: keyed by an opaque id, named by BundleID.
 	const cb = dict(root.CarrierBundles);
 	for (const family of ["Watch", "iPhone"] as const) {
-		for (const [key, v] of dicts(dict(dict(cb[family]).Bundles))) {
-			if (v.BundleID !== name) continue;
-			const r = refFromEntry(`${family} ${key.split("_").pop() ?? key}`, v, { family });
-			if (r) out.push({ ...r, build: text(v.BundleVersion) || r.build });
+		for (const [key, entry] of dicts(dict(dict(cb[family]).Bundles))) {
+			if (entry.BundleID !== name) continue;
+			const r = refFromEntry(`${family} ${key.split("_").pop() ?? key}`, entry, { family });
+			if (r) out.push({ ...r, build: text(entry.BundleVersion) || r.build });
 		}
 	}
 	return out;
 }
+
+const slotOsSchema = v.looseObject({ Min: v.string() });
 
 /** Country bundles of one family, with the OS.Min of the BundleMappings slot that routes to each. */
 function manifestCountries(fam: Dict, family: ManifestCountry["family"]): ManifestCountry[] {
@@ -127,18 +144,18 @@ function manifestCountries(fam: Dict, family: ManifestCountry["family"]): Manife
 	for (const [, slots] of dicts(dict(fam.BundleMappings))) {
 		for (const [, slot] of dicts(slots)) {
 			const target = text(slot.BundleMatchEntry);
-			const os = slot.OS;
-			if (target && isPlistDict(os) && typeof os.Min === "string") minOsFor.set(target, os.Min);
+			const os = v.safeParse(slotOsSchema, slot.OS);
+			if (target && os.success) minOsFor.set(target, os.output.Min);
 		}
 	}
-	return dicts(dict(fam.Bundles)).flatMap(([key, v]): ManifestCountry[] => {
-		if (typeof v.BundleURL !== "string") return [];
+	return dicts(dict(fam.Bundles)).flatMap(([key, entry]): ManifestCountry[] => {
+		if (!v.is(entrySchema, entry)) return [];
 		const minOS = minOsFor.get(key);
 		return [
 			{
-				id: text(v.BundleID) || key,
-				version: text(v.BundleVersion),
-				url: v.BundleURL,
+				id: text(entry.BundleID) || key,
+				version: text(entry.BundleVersion),
+				url: entry.BundleURL,
 				...(minOS ? { minOS } : {}),
 				family,
 			},
@@ -156,7 +173,7 @@ export function buildIndex(root: Dict): ManifestIndex {
 		].map(([k]) => k),
 	);
 	const watchCarriers = new Set(
-		dicts(dict(dict(dict(root.CarrierBundles).Watch).Bundles)).map(([, v]) => text(v.BundleID)),
+		dicts(dict(dict(dict(root.CarrierBundles).Watch).Bundles)).map(([, entry]) => text(entry.BundleID)),
 	);
 	const countryBundles = dict(root.CountryBundles);
 	const countries = [
@@ -187,15 +204,25 @@ interface MccMncEntry {
 }
 
 export interface MccMncTable {
-	entries: MccMncEntry[];
-	carrierIds: Array<[string, string]>;
-	iccids: Array<[string, string]>;
+	readonly entries: MccMncEntry[];
+	readonly carrierIds: Array<[string, string]>;
+	readonly iccids: Array<[string, string]>;
 }
 
-function mvnoRule(m: Dict): MvnoRule {
-	const pick = (k: "ICCID" | "GID1" | "GID2"): string | undefined =>
-		typeof m[k] === "string" ? m[k] : undefined;
-	const [iccid, gid1, gid2] = [pick("ICCID"), pick("GID1"), pick("GID2")];
+/** An MVNO's qualifiers, each a string or absent. */
+const qualifiersSchema = v.looseObject({
+	ICCID: maybe(v.string()),
+	GID1: maybe(v.string()),
+	GID2: maybe(v.string()),
+});
+
+const carrierSchema = v.looseObject({
+	BundleName: maybe(v.string()),
+	MVNOs: v.fallback(v.array(v.unknown()), []),
+});
+
+function mvnoRule(m: Readonly<Record<string, unknown>>): MvnoRule {
+	const { ICCID: iccid, GID1: gid1, GID2: gid2 } = v.parse(qualifiersSchema, m);
 	return {
 		bundle: text(m.BundleName),
 		...(iccid ? { iccid } : {}),
@@ -207,19 +234,20 @@ function mvnoRule(m: Dict): MvnoRule {
 /** String-valued entries of a table, sorted by key. */
 const stringPairs = (d: Dict): Array<[string, string]> =>
 	Object.entries(d)
-		.flatMap(([k, v]): Array<[string, string]> => (typeof v === "string" ? [[k, v]] : []))
+		.flatMap(([k, x]): Array<[string, string]> => (typeof x === "string" ? [[k, x]] : []))
 		.toSorted((a, b) => a[0].localeCompare(b[0]));
 
 export function buildMccMnc(root: Dict): MccMncTable {
 	// oxlint-disable-next-line oxc/no-map-spread -- the spreads only leave out absent optional fields; nothing is copied.
-	const entries = Object.entries(dict(root.MobileDeviceCarriersByMccMnc)).map(([plmn, v]): MccMncEntry => {
-		const e = dict(v);
-		const mvnos = Array.isArray(e.MVNOs) ? e.MVNOs.filter(isPlistDict).map(mvnoRule) : [];
+	const entries = Object.entries(dict(root.MobileDeviceCarriersByMccMnc)).map(([plmn, x]): MccMncEntry => {
+		const e = dict(x);
+		const { BundleName, MVNOs } = v.parse(carrierSchema, e);
+		const mvnos = MVNOs.filter(isRecord).map(mvnoRule);
 		return {
 			plmn,
 			mcc: plmn.slice(0, 3),
 			mnc: plmn.slice(3),
-			...(typeof e.BundleName === "string" ? { bundle: e.BundleName } : {}),
+			...(BundleName === undefined ? {} : { bundle: BundleName }),
 			mvnos,
 		};
 	});
@@ -242,40 +270,45 @@ export interface WatchRoute {
 	readonly iccid?: string;
 }
 
-const record = (v: unknown): Readonly<Record<string, unknown>> => (isJsonDict(v) ? v : {});
-const str = (v: unknown): string | undefined => (typeof v === "string" ? v : undefined);
+const record = (x: unknown): Readonly<Record<string, unknown>> => (isJsonDict(x) ? x : {});
+
+const watchRuleSchema = v.looseObject({
+	BundleMapKey: maybe(v.string()),
+	MVNOs: v.fallback(v.array(v.unknown()), []),
+});
+const watchMvnoSchema = v.looseObject({ ...qualifiersSchema.entries, BundleMapKey: maybe(v.string()) });
+const mappingSchema = v.looseObject({ BundleMatchEntry: maybe(v.string()) });
+const bundleIdSchema = v.looseObject({ BundleID: maybe(v.string()) });
 
 /** CarrierBundles.Watch: IMSI rules name a BundleMappings key, whose entries (one per minimum watchOS) name Bundles entries. */
 export function buildWatchRoutes(root: Dict): WatchRoute[] {
 	const watch = record(record(root.CarrierBundles).Watch);
 	const bundles = record(watch.Bundles),
 		mappings = record(watch.BundleMappings);
-	const bundlesOf = (mapKey: unknown): string[] => {
-		const key = str(mapKey);
+	const bundlesOf = (key: string | undefined): string[] => {
 		if (key === undefined) return [];
 		return [
 			...new Set(
 				Object.values(record(mappings[key])).flatMap((e) => {
-					const entry = str(record(e).BundleMatchEntry);
-					return (entry === undefined ? undefined : str(record(bundles[entry]).BundleID)) ?? [];
+					const entry = v.parse(mappingSchema, record(e)).BundleMatchEntry;
+					return (
+						(entry === undefined ? undefined : v.parse(bundleIdSchema, record(bundles[entry])).BundleID) ?? []
+					);
 				}),
 			),
 		];
 	};
-	return Object.entries(record(watch.IMSI)).flatMap(([plmn, v]) => {
-		const rule = record(v);
-		const mvnos = Array.isArray(rule.MVNOs) ? rule.MVNOs.map(record) : [];
+	return Object.entries(record(watch.IMSI)).flatMap(([plmn, x]) => {
+		const rule = v.parse(watchRuleSchema, record(x));
+		const mvnos = rule.MVNOs.map((m) => v.parse(watchMvnoSchema, record(m)));
 		return bundlesOf(rule.BundleMapKey)
 			.map((bundle): WatchRoute => ({ plmn, bundle }))
 			.concat(
 				mvnos.flatMap((m) => {
-					const gid1 = str(m.GID1),
-						gid2 = str(m.GID2),
-						iccid = str(m.ICCID);
 					const qualifiers = {
-						...(gid1 !== undefined ? { gid1 } : {}),
-						...(gid2 !== undefined ? { gid2 } : {}),
-						...(iccid !== undefined ? { iccid } : {}),
+						...(m.GID1 !== undefined ? { gid1: m.GID1 } : {}),
+						...(m.GID2 !== undefined ? { gid2: m.GID2 } : {}),
+						...(m.ICCID !== undefined ? { iccid: m.ICCID } : {}),
 					};
 					// oxlint-disable-next-line oxc/no-map-spread -- each route has its own copy of the MVNO's qualifiers.
 					return bundlesOf(m.BundleMapKey).map((bundle) => ({ plmn, bundle, ...qualifiers }));
@@ -285,16 +318,16 @@ export function buildWatchRoutes(root: Dict): WatchRoute[] {
 }
 
 export function parseManifest(bytes: Uint8Array): Dict {
-	const v = parsePlist(bytes);
-	if (!isPlistDict(v)) throw new Error("manifest is not a dictionary");
-	return v;
+	const root = parsePlist(bytes);
+	if (!isPlistDict(root)) throw new Error("manifest is not a dictionary");
+	return root;
 }
 
 /** Everything a reader takes off the manifest: the lists, each bundle's refs, and the PLMN table. */
 export interface ManifestTables {
-	index: ManifestIndex;
-	refs: Record<string, BundleRef[]>;
-	plmn: MccMncTable;
+	readonly index: ManifestIndex;
+	readonly refs: Record<string, BundleRef[]>;
+	readonly plmn: MccMncTable;
 }
 
 export function manifestTables(root: Dict): ManifestTables {

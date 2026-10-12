@@ -27,13 +27,8 @@ import { cbsRow, type CbsRow } from "./cbs";
 import { withPhones } from "./boards";
 import { decodedMember, describe, open, upstream, verify, type BundleFacts, type Digested } from "./bytes";
 
-/** A carrier bundle's home country bundle, by HomeBundleIdentifier ("com.apple.UnitedStates"), when the index has it. */
-async function homeCountry(
-	platform: Platform,
-	carrier: Readonly<Record<string, unknown>> | undefined,
-): Promise<SourceKey | null> {
-	const home = carrier?.HomeBundleIdentifier;
-	if (typeof home !== "string") return null;
+/** A carrier bundle's home country bundle, by its HomeBundleIdentifier ("com.apple.UnitedStates"), when the index has it. */
+async function homeCountry(platform: Platform, home: string): Promise<SourceKey | null> {
 	const name = home.replace(/^com\.apple\./, "");
 	const key = sourceKey({ platform, kind: "country", name });
 	return (await isIndexed(key)) ? key : null;
@@ -42,7 +37,7 @@ async function homeCountry(
 export interface IosBundle {
 	readonly source: string;
 	readonly ref: SourceRef;
-	readonly cc: string | undefined;
+	readonly cc: string | null;
 	readonly countryName: string | undefined;
 	readonly line: string;
 	readonly entry: Version;
@@ -63,17 +58,18 @@ export interface IosBundle {
 export async function getBundle(v: Ver): Promise<IosBundle> {
 	const d = await describe(v);
 	const { entry, facts } = d;
+	const homeId = facts.quick["carrier.plist"]?.HomeBundleIdentifier;
 	const [current, previous, cc, home] = await Promise.all([
 		versionOf(d, entry),
 		d.previous ? versionOf(d, d.previous) : null,
 		countryOf(d.key),
-		d.ref.kind === "carrier" ? homeCountry(d.ref.platform, facts.quick["carrier.plist"]) : null,
+		d.ref.kind === "carrier" && typeof homeId === "string" ? homeCountry(d.ref.platform, homeId) : null,
 	]);
 	const copies = copiesOfEntry(d.copies, entry);
 	return {
 		source: d.key,
 		ref: d.ref,
-		cc: cc ?? undefined,
+		cc,
 		countryName: cc === null ? undefined : countryName(cc),
 		line: d.line,
 		entry: current,

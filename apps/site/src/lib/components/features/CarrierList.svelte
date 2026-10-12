@@ -2,7 +2,7 @@
   import type { Snippet } from "svelte";
   import { link } from "#lib/format.ts";
   import { countryName } from "@carrier-explode/schema";
-  import { flag, fold, repeated } from "#lib/names.ts";
+  import { fold, repeated } from "#lib/names.ts";
   import type { FeatureRow } from "#lib/server/features.ts";
   import SourceIcon from "#lib/components/SourceIcon.svelte";
   import SourceName from "#lib/components/SourceName.svelte";
@@ -25,16 +25,17 @@
   let filter = $state("");
   let everywhere = $state(false);
 
+  const isHome = (row: FeatureRow): boolean => home !== null && row.cc === home;
   const named = $derived(
     rows
-      .map((row) => ({ row, country: row.cc === undefined ? undefined : countryName(row.cc) }))
+      .map((row) => ({ row, country: row.cc === null ? undefined : countryName(row.cc) }))
       .toSorted((a, b) =>
-        Number(b.row.cc === home) - Number(a.row.cc === home) ||
+        Number(isHome(b.row)) - Number(isHome(a.row)) ||
         Number(!a.country) - Number(!b.country) ||
         (a.country ?? "").localeCompare(b.country ?? "", "en") ||
         a.row.brand.localeCompare(b.row.brand, "en")),
   );
-  const local = $derived(named.filter((r) => r.row.cc === home));
+  const local = $derived(named.filter((r) => isHome(r.row)));
   const shown = $derived.by(() => {
     const f = fold(filter);
     if (f) return named.filter((r) => fold(r.row.brand).includes(f) || fold(r.row.name).includes(f) || fold(r.country ?? "").includes(f));
@@ -53,7 +54,7 @@
   <tbody>
     {#each shown as { row: r, country }, i (r.path)}
       {#if i === 0 || shown[i - 1]?.country !== country}
-        <tr class="group"><td colspan="2">{#if flag(r.cc)}<span class="flag" aria-hidden="true">{flag(r.cc)}</span>{/if} {country ?? "Other"}</td></tr>
+        <tr class="group"><td colspan="2"><SourceIcon picture={{ kind: "flag", cc: r.cc }} /> {country ?? "Other"}</td></tr>
       {/if}
       <tr>
         <td>

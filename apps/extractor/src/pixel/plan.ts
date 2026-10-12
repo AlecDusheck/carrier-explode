@@ -1,18 +1,15 @@
 /** Which Pixel OTAs to extract, and which Pixels and trains to ask the update service about. Pure: the checks fetch, this decides. */
 
+import { pixelTrain } from "@carrier-explode/schema";
 import type { PipelineParams } from "../pipelines.ts";
 import { pixelInScope, type DatedDevice, type Scope } from "../scope.ts";
 import type { OtaBuild, OtaDevice } from "./check.ts";
+import type { UpdateAnswer } from "./update-service.ts";
 
 export type PixelDevice = PipelineParams<"pixel-device">;
 
-export interface Ask {
-	readonly device: string;
-	readonly train: string;
-}
-
-/** The first four characters of a build id, which is all the service reads of it: `CP3A`. */
-export const trainOf = (build: string): string => build.slice(0, 4).toUpperCase();
+/** A Pixel and train the update service is asked about. */
+export type Ask = Readonly<Pick<UpdateAnswer, "device" | "train">>;
 
 /** `CP3A.260905.009` -> `260905.009`: a build's date and its number that day, which order a device's builds. */
 export const recency = (build: string): string => build.slice(build.indexOf(".") + 1);
@@ -26,7 +23,7 @@ export function asks(held: ReadonlyArray<readonly [build: string, device: string
 	}
 	return [...newest]
 		.toSorted(([a], [b]) => a.localeCompare(b))
-		.map(([device, build]) => ({ device, train: trainOf(build) }));
+		.map(([device, build]) => ({ device, train: pixelTrain(build) }));
 }
 
 /** Newest first: by patch month, then by the build's own date and number. */
@@ -37,7 +34,9 @@ const newestFirst = (a: OtaBuild, b: OtaBuild): number =>
 function backfill(rule: Scope["android"]["backfill"], builds: readonly OtaBuild[]): OtaBuild[] {
 	const newest = builds.toSorted(newestFirst);
 	if (rule === "newest") return newest.slice(0, 1);
-	return [...Map.groupBy(newest, (b) => trainOf(b.build)).values()].flatMap((ofTrain) => ofTrain.slice(0, 1));
+	return [...Map.groupBy(newest, (b) => pixelTrain(b.build)).values()].flatMap((ofTrain) =>
+		ofTrain.slice(0, 1),
+	);
 }
 
 /** A phone, as the OTA page names it: its heading names a tablet (`Pixel Tablet`) as one. */

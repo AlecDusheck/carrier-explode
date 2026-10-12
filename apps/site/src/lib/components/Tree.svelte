@@ -1,21 +1,20 @@
 <script lang="ts" module>
   import type { Platform } from "@carrier-explode/schema/types";
+  import type { Tone } from "#lib/format.ts";
   import type { TreeDocs } from "#lib/tree-docs.ts";
 
   /** Where a tree's values come from: what its keys are documented by and what "compare across" scans. */
   export interface TreeCtx {
     readonly platform: Platform;
-    /** The source key. */
-    readonly source: string;
     /** The file (iOS member path, or Android `config`) the tree's paths are inside. */
     readonly file: string;
     /** The source's country, for "compare across its carriers". */
-    readonly cc?: string | undefined;
+    readonly cc: string | null;
     /** What documents its keys: Apple's field docs, the CarrierConfig docs a page sent, or nothing. */
     readonly docs: TreeDocs;
   }
   /** A tag beside a top-level key: where its value came from, or how rare it is. */
-  export interface KeyBadge { text: string; tone?: "phone" | "rare" | "country"; title?: string }
+  export interface KeyBadge { readonly text: string; readonly tone?: Tone; readonly title?: string }
 </script>
 
 <script lang="ts">

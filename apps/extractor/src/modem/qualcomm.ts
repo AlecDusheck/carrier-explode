@@ -147,9 +147,7 @@ export async function qualcommModem(images: ModemImages): Promise<ExtractedModem
 			hw.push(await hwConfig(fs, path));
 	const dbXml = hwFile(hw, SELECTION_DB_PATH);
 	const records = new Map<SwConfig, readonly SelectionRecord[]>(
-		dbXml === undefined
-			? []
-			: pairSelection(sw, parseSelectionDb(dbXml)).paired.map((p) => [p.config, p.records]),
+		dbXml === undefined ? [] : pairSelection(sw, parseSelectionDb(dbXml)).map((p) => [p.config, p.records]),
 	);
 	const bandCombos = hwFile(hw, BAND_COMBOS_PATH);
 	const archives = sw.map((c): ModemArchive => {

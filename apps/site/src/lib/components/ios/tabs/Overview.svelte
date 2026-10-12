@@ -3,7 +3,6 @@
   import { page } from "$app/state";
   import { getSelectedBy } from "#lib/api/apple.remote.ts";
   import { humanBytes, verArgs } from "#lib/format.ts";
-  import { asDict } from "#lib/apple/settings.ts";
   import { selectionRows } from "#lib/settings.ts";
   import { PLATFORM_DEVICES } from "#lib/platforms.ts";
   import type { TabProps } from "#lib/types.ts";
@@ -21,13 +20,16 @@
   let { at }: TabProps = $props();
 
   const bundle = $derived(await getAppleBundle(verArgs(at)));
-  const carrier = $derived(asDict(bundle.quick["carrier.plist"]));
-  const info = $derived(asDict(bundle.quick["Info.plist"]));
-  const version = $derived(asDict(bundle.quick["version.plist"]));
+  const carrier = $derived(bundle.quick["carrier.plist"]);
+  const info = $derived(bundle.quick["Info.plist"]);
+  const version = $derived(bundle.quick["version.plist"]);
 </script>
 
 <OverviewColumns>
-  {#snippet side()}<SourceFeatures {at} tabOf={() => "settings"} {...await overviewPhones(at, page.url.searchParams.get("file"))} />{/snippet}
+  {#snippet side()}
+    {@const seen = await overviewPhones(at, page.url.searchParams.get("file"))}
+    <SourceFeatures {at} tabOf={() => "settings"} {...seen} />
+  {/snippet}
 
   <fieldset class="hgroup">
     <legend>Bundle</legend>
@@ -94,7 +96,7 @@
     </fieldset>
   {/if}
 
-  {#if at.ref.kind === "country" && bundle.cc !== undefined}
+  {#if at.ref.kind === "country" && bundle.cc !== null}
     <CountryFeatures platform={at.ref.platform} iso={bundle.cc} />
   {/if}
 

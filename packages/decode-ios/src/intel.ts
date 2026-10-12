@@ -14,6 +14,7 @@ import {
 	parseCombo,
 } from "@carrier-explode/decode-qualcomm";
 import type { PriValue } from "./pri.ts";
+import type { Building } from "./building.ts";
 
 const INTEL_TYPES = ["u", "qu", "s"] as const;
 type IntelType = (typeof INTEL_TYPES)[number];
@@ -25,12 +26,12 @@ interface IntelSeg {
 }
 
 export interface IntelKey {
-	type: IntelType;
+	readonly type: IntelType;
 	/** Declared byte size of a `%qu[N]` / `%s[N]` string. */
-	size?: number;
+	readonly size?: number;
 	/** Dotted path without the type prefix. */
-	path: string;
-	segs: [IntelSeg, ...IntelSeg[]];
+	readonly path: string;
+	readonly segs: [IntelSeg, ...IntelSeg[]];
 }
 
 // "%u:" values are uint32, "%qu[N]:" NUL-padded N-byte strings; the modem's rkos resolves them against NVM structures.
@@ -103,14 +104,14 @@ const regionName = (prefix: string): string =>
 
 export interface IntelCombo {
 	/** As written, e.g. `1A_18A_n3A`. */
-	combo: string;
-	components: ComboComponent[];
+	readonly combo: string;
+	readonly components: ComboComponent[];
 	/** The part after `/`: a sub-combination of `combo`. */
-	fallback?: {
-		combo: string;
-		components: ComboComponent[];
+	readonly fallback?: {
+		readonly combo: string;
+		readonly components: ComboComponent[];
 		/** Every fallback carrier is in the combo at the same or a lower bandwidth class. */
-		subset: boolean;
+		readonly subset: boolean;
 	};
 }
 
@@ -123,13 +124,13 @@ type IntelDecoded =
 
 export interface IntelValue {
 	/** The value as stored (decimal for integers). */
-	raw: string;
-	int?: number;
+	readonly raw: string;
+	readonly int?: number;
 	/** `%qu` values are `label:value`; this is the label. */
-	label?: string;
+	readonly label?: string;
 	/** The value after the label (equals `raw` when there is none). */
-	text: string;
-	decoded?: IntelDecoded;
+	readonly text: string;
+	readonly decoded?: IntelDecoded;
 }
 
 /** Band bitmaps are stored as u32 words. */
@@ -212,7 +213,7 @@ function isSubset(sub: ComboComponent[], of: ComboComponent[]): boolean {
 
 /** Decode one leaf value from its field name and path. */
 function intelValue(key: IntelKey, name: string, raw: string, int?: number): IntelValue {
-	const v: IntelValue = { raw, text: raw, ...(int !== undefined ? { int } : {}) };
+	const v: Building<IntelValue> = { raw, text: raw, ...(int !== undefined ? { int } : {}) };
 	const lv = /^([A-Za-z_][\w]*):(.*)$/.exec(raw);
 	if (key.type === "qu" && lv) {
 		const [, label = "", text = ""] = lv;
@@ -273,14 +274,14 @@ interface IntelListItem {
 }
 
 export interface IntelList {
-	kind: "list";
-	name: string;
-	path: string;
-	items: IntelListItem[];
+	readonly kind: "list";
+	readonly name: string;
+	readonly path: string;
+	readonly items: IntelListItem[];
 	/** Items before a run of trailing zeros: the slots of a fixed-size array that are in use. */
-	used: number;
+	readonly used: number;
 	/** The whole list read as one value (a multi-word band bitmap); `raw` joins the items. */
-	value?: IntelValue;
+	readonly value?: IntelValue;
 }
 
 export type IntelCell = IntelValue | IntelTable | IntelList;
@@ -297,13 +298,13 @@ interface IntelRow {
 type PlmnEncoding = "decimal" | "bcd" | "packed";
 
 export interface IntelTable {
-	kind: "table";
-	name: string;
-	path: string;
-	columns: string[];
-	rows: IntelRow[];
+	readonly kind: "table";
+	readonly name: string;
+	readonly path: string;
+	readonly columns: string[];
+	readonly rows: IntelRow[];
 	/** How mcc / mnc are stored in this table. */
-	plmnEncoding?: PlmnEncoding;
+	readonly plmnEncoding?: PlmnEncoding;
 }
 
 interface IntelGroup {
@@ -338,13 +339,13 @@ interface IntelRegPlmn {
 }
 
 export interface IntelTree {
-	nodes: IntelNode[];
+	readonly nodes: IntelNode[];
 	/** Settings read. */
-	count: number;
+	readonly count: number;
 	/** Keys that did not parse; kept flat. */
-	unparsed: IntelLeaf[];
+	readonly unparsed: IntelLeaf[];
 	/** GRI: allowed bands per country code and per PLMN. */
-	regulatory?: { mcc: IntelRegMcc[]; plmn: IntelRegPlmn[] };
+	readonly regulatory?: { readonly mcc: IntelRegMcc[]; readonly plmn: IntelRegPlmn[] };
 }
 
 // Name-derived notes for top-level groups; matched against the path after the dyn_cps* root.
@@ -422,8 +423,8 @@ function place(root: RawObj, steps: ReadonlyArray<string | number>, leaf: RawLea
 }
 
 export interface IntelEntry {
-	key: string;
-	value: PriValue | string;
+	readonly key: string;
+	readonly value: PriValue | string;
 }
 
 /** Build the tree from key / value pairs in file order. */
@@ -456,7 +457,7 @@ export function intelTree(entries: IntelEntry[]): IntelTree {
 		}
 	}
 	const nodes = [...root.m].map(([k, v]) => toNode(k, k, v));
-	const tree: IntelTree = { nodes: nodes.map(fold), count, unparsed };
+	const tree: Building<IntelTree> = { nodes: nodes.map(fold), count, unparsed };
 	const reg = regulatory(entries);
 	if (reg) tree.regulatory = reg;
 	return tree;
@@ -504,7 +505,7 @@ function arrNode(name: string, path: string, r: Raw): IntelList | IntelTable {
 	}
 	if (leaves.length === els.length) {
 		const items = leaves.map(([index, v]) => ({ index, key: v.full, value: v.value }));
-		const list: IntelList = { kind: "list", name, path, items, used: usedSlots(items) };
+		const list: Building<IntelList> = { kind: "list", name, path, items, used: usedSlots(items) };
 		const decoded = wordBitmap(name, path, items);
 		if (decoded) {
 			const raw = items.map((x) => x.value.raw).join(", ");
@@ -535,7 +536,7 @@ function arrNode(name: string, path: string, r: Raw): IntelList | IntelTable {
 function table(name: string, path: string, rows: IntelRow[]): IntelTable {
 	const columns: string[] = [];
 	for (const r of rows) for (const c of Object.keys(r.cells)) if (!columns.includes(c)) columns.push(c);
-	const t: IntelTable = { kind: "table", name, path, columns, rows };
+	const t: Building<IntelTable> = { kind: "table", name, path, columns, rows };
 	if (columns.includes("mcc")) plmns(t);
 	return t;
 }
@@ -684,7 +685,7 @@ function decodeMnc(n: number, mcc: number, enc: PlmnEncoding): string | undefine
 	return `${m1}${m2}${m3 === 15 ? "" : m3}`;
 }
 
-function plmns(t: IntelTable) {
+function plmns(t: Building<IntelTable>) {
 	const num = (c: IntelCell | undefined) => (c && !isIntelNode(c) ? c.int : undefined);
 	const mccs = t.rows.map((r) => num(r.cells.mcc)).filter((x): x is number => x !== undefined);
 	if (!mccs.length) return;

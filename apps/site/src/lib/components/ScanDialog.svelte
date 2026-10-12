@@ -4,7 +4,8 @@
   import { shortValue } from "#lib/format.ts";
   import { decoderFamily } from "@carrier-explode/schema/types";
   import { SOURCE_NOUNS } from "#lib/platforms.ts";
-  import { scan, copyText, scopeOptions, type ScanScope } from "#lib/ui-state.svelte.ts";
+  import type { ScanScope } from "#lib/api/schemas.ts";
+  import { scan, copyText, scopeOptions } from "#lib/ui-state.svelte.ts";
   import Pane from "./Pane.svelte";
   import SourceChip from "./SourceChip.svelte";
 
@@ -34,7 +35,7 @@
 </script>
 
 <!-- A click on the backdrop lands on the dialog itself. -->
-<dialog class="dialog" aria-label={title} {@attach modal} onclose={close} onclick={(e) => e.target === e.currentTarget && close()}>
+<dialog class="dialog raised" aria-label={title} {@attach modal} onclose={close} onclick={(e) => e.target === e.currentTarget && close()}>
     <div class="titlebar">
       <span>{title}</span>
       <span class="spacer"></span>

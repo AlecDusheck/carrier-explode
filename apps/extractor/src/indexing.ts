@@ -73,19 +73,17 @@ import {
 } from "@carrier-explode/schema";
 import {
 	APPLE_PLATFORMS,
-	decoderFamily,
 	isReleasePlatform,
-	parseSourceKey,
+	linePlatform,
 	PLATFORMS,
 	RELEASE_PLATFORMS,
 	ruleKey,
-	type DecoderFamily,
+	sourceOf as refOf,
 	type Platform,
 	type Release,
 	type ReleasePlatform,
 	type SimRule,
 	type SourceKey,
-	type SourceRef,
 } from "@carrier-explode/schema/types";
 import {
 	modemFactsSchema,
@@ -109,7 +107,7 @@ import {
 	type OtaFacts,
 	type ReleaseFacts,
 } from "./records.ts";
-import { CONNECTIONS } from "./store.ts";
+import { CONNECTIONS, readBytes, readJson, readObject } from "./store.ts";
 
 /**
  * What the index queue carries: a unit's release record or OTA files, whose facts are written; `settle`, sent
@@ -174,12 +172,6 @@ export interface IndexContext {
 	readonly batch: Env["INDEX_BATCH"];
 }
 
-/** Each family's devices are listed under one release platform. */
-const DEVICE_PLATFORM = { apple: "ios", android: "android", samsung: "samsung" } as const satisfies Record<
-	DecoderFamily,
-	ReleasePlatform
->;
-
 /** What one indexing reads more than once, read once. */
 class Reads {
 	readonly #devices = new Map<ReleasePlatform, Promise<ShownDevice[]>>();
@@ -218,21 +210,6 @@ class Reads {
 		return known;
 	}
 }
-
-function refOf(key: SourceKey): SourceRef {
-	const ref = parseSourceKey(key);
-	if (ref === undefined) throw new Error(`${key}: not a source key`);
-	return ref;
-}
-
-async function readObject(bucket: R2Bucket, key: string): Promise<R2ObjectBody> {
-	const o = await bucket.get(key);
-	if (o === null) throw new Error(`${key}: missing; its unit writes it before its record`);
-	return o;
-}
-
-const readNorm = async (bucket: R2Bucket, key: string): Promise<unknown> =>
-	parseRecord(key, await (await readObject(bucket, key)).text());
 
 /** Whether a message wrote to D1, and whether it wrote all of its unit's facts or left the rest to the next. */
 interface FactsWritten {
@@ -297,7 +274,7 @@ async function deriveSource(
 	const ref = refOf(key);
 	const before = await identityOf(db, key);
 	const copies = await copiesOf(db, key, ref.platform);
-	const order = await reads.order(DEVICE_PLATFORM[decoderFamily(ref.platform)]);
+	const order = await reads.order(linePlatform(ref.platform));
 	const timeline = sourceTimeline(copies);
 	const at = head(ref, timeline, order);
 	if (at === undefined) throw new Error(`${key}: no copy left to head it`);
@@ -314,7 +291,7 @@ async function deriveSource(
 	const profiles = new Map(
 		await Promise.all(
 			[...shas].map(
-				async (sha) => [sha, v.parse(profileSchema, await readNorm(bucket, keys.profile(sha)))] as const,
+				async (sha) => [sha, v.parse(profileSchema, await readJson(bucket, keys.profile(sha)))] as const,
 			),
 		),
 	);
@@ -324,7 +301,7 @@ async function deriveSource(
 		(await putBaseRows(
 			db,
 			baseSha,
-			headRows(profiles.get(baseSha) ?? v.parse(profileSchema, await readNorm(bucket, keys.profile(baseSha))))
+			headRows(profiles.get(baseSha) ?? v.parse(profileSchema, await readJson(bucket, keys.profile(baseSha))))
 				.settings,
 		));
 	const sourceChanged = await putSource(db, {
@@ -342,7 +319,7 @@ async function deriveSource(
 		phoneStates(heads, (sha) => profiles.get(sha), phones),
 	);
 	const headProfile =
-		profiles.get(at.sha) ?? v.parse(profileSchema, await readNorm(bucket, keys.profile(at.sha)));
+		profiles.get(at.sha) ?? v.parse(profileSchema, await readJson(bucket, keys.profile(at.sha)));
 	const rowsChanged = await syncHeadRows(db, key, headRows(headProfile));
 
 	const after = await identityOf(db, key);
@@ -359,7 +336,7 @@ function configRadios(bucket: R2Bucket): (sha: string) => Promise<ConfigRadio> {
 	const radioOf = (sha: string): Promise<ConfigRadio> => {
 		const read =
 			known.get(sha) ??
-			readNorm(bucket, keys.modemConfig(sha)).then(async (json) => {
+			readJson(bucket, keys.modemConfig(sha)).then(async (json) => {
 				const config = v.parse(modemFactsSchema, json);
 				return layeredRadio(configRadio(config), config.base === null ? null : await radioOf(config.base));
 			});
@@ -466,7 +443,7 @@ async function indexDerive(
 
 /** Each family's release platform's devices order and match the sources of every platform of that family. */
 const familyPlatforms = (platform: ReleasePlatform): Platform[] =>
-	PLATFORMS.filter((p) => DEVICE_PLATFORM[decoderFamily(p)] === platform);
+	PLATFORMS.filter((p) => linePlatform(p) === platform);
 
 /** A platform derived again, every source and change of it: what its facts and devices (their order moves heads, their boards phone states) say now. */
 async function indexRederive(reads: Reads, platform: ReleasePlatform): Promise<Indexed> {
@@ -496,11 +473,12 @@ async function routePixels(
 		(await neighbours(ctx.db, "android", release.id)).next !== null
 	)
 		return [];
-	const list = await readObject(ctx.bucket, keys.obj(release.carrierList));
 	return syncRoutes(
 		ctx.db,
 		["android"],
-		matchers(carrierListRoutes(decodeCarrierList(new Uint8Array(await list.arrayBuffer())))),
+		matchers(
+			carrierListRoutes(decodeCarrierList(await readBytes(ctx.bucket, keys.obj(release.carrierList)))),
+		),
 	);
 }
 
@@ -577,11 +555,10 @@ async function indexHeld(
 /** Apple's OTA manifest is Apple's routing: the SIM rules it sends each carrier source of iOS, iPadOS and watchOS. */
 async function indexRoutes(reads: Reads, manifest: string): Promise<Indexed> {
 	const { db, bucket } = reads.ctx;
-	const o = await readObject(bucket, keys.appleOtaManifest(manifest));
 	const rerouted = await syncRoutes(
 		db,
 		APPLE_PLATFORMS,
-		matchers(manifestRoutes(parseManifest(new Uint8Array(await o.arrayBuffer())))),
+		matchers(manifestRoutes(parseManifest(await readBytes(bucket, keys.appleOtaManifest(manifest))))),
 	);
 	const linked = rerouted.length > 0 && (await link(db));
 	return { wrote: rerouted.length > 0 || linked, next: null };

@@ -5,6 +5,7 @@
 
 import * as v from "valibot";
 
+import { bearerMatches } from "@carrier-explode/storage";
 import type { Env } from "./env.ts";
 import { describe, RequestError } from "./errors.ts";
 import { runRequestSchema, type RunRequest } from "./pipelines.ts";
@@ -20,15 +21,10 @@ function errorResponse(e: unknown): Response {
 	return Response.json({ error: describe(e) }, { status: 500 });
 }
 
-/** Throws 401 unless the request carries `Authorization: Bearer <RUN_TOKEN>`; compared in constant time. */
+/** Throws 401 unless the request carries `Authorization: Bearer <RUN_TOKEN>`. */
 function authorize(req: Request, env: Env): void {
-	const given = req.headers.get("authorization")?.match(/^Bearer (.+)$/)?.[1];
-	if (!env.RUN_TOKEN || given === undefined) throw new RequestError(401, "bearer token required");
-	const enc = new TextEncoder();
-	const a = enc.encode(given);
-	const b = enc.encode(env.RUN_TOKEN);
-	if (a.byteLength !== b.byteLength || !crypto.subtle.timingSafeEqual(a, b))
-		throw new RequestError(401, "bad token");
+	if (!bearerMatches(req.headers.get("authorization"), env.RUN_TOKEN))
+		throw new RequestError(401, "bad or missing bearer token");
 }
 
 /** A JSON request body validated against `schema`; 400 with valibot's summary otherwise. */
@@ -61,7 +57,7 @@ async function run(body: RunRequest, env: Env): Promise<Response> {
 			return Response.json({ queued: [message] });
 		}
 		default: {
-			const params = { feed: body.run, rebuild: body.rebuild, only: body.only ?? null };
+			const params = { feed: body.run, rebuild: body.rebuild, only: body.only };
 			return Response.json({ check: await startCheck(env, params, new Date()) });
 		}
 	}

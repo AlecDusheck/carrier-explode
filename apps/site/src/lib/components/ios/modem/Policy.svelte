@@ -43,7 +43,7 @@
     {:else}
       <p class="dimtext note">Plaintext EFS files the package writes. A repeated path has one copy per platform or config.</p>
       <div class="hscroll">
-        <table class="grid">
+        <table class="grid files">
           <thead><tr><th>Path</th><th>From</th><th>Serves</th></tr></thead>
           <tbody>
             {#each bb.files.filter(isTextFile) as f (f.i)}
@@ -52,8 +52,8 @@
                   <a class="mono" href={modemHref("ios", build, modem, `policy/${f.i}`)}>{f.path}</a>
                   {#if f.refs?.policy}<span class="tag">{f.refs.policy}</span>{/if}
                 </td>
-                <td class="mono">{f.member}</td>
-                <td><Variants variants={f.variants} configs={f.configs} /></td>
+                <td class="mono member">{f.member}</td>
+                <td><span class="serves"><Variants variants={f.variants} configs={f.configs} /></span></td>
               </tr>
             {/each}
           </tbody>
@@ -62,3 +62,21 @@
     {/if}
   </Pane>
 </div>
+
+<style>
+  .files .member {
+    white-space: nowrap;
+  }
+  @media (max-width: 760px) {
+    .serves {
+      display: flex;
+      flex-wrap: wrap;
+      min-width: 54px;
+      max-width: 84px;
+    }
+    .serves :global(.chip),
+    .files .tag {
+      white-space: normal;
+    }
+  }
+</style>

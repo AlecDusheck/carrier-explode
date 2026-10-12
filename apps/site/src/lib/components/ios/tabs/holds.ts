@@ -11,8 +11,7 @@ export async function appleHolds(at: At): Promise<Holds> {
 	const bundle = await getAppleBundle(verArgs(at));
 	const plist = bundle.quick["carrier.plist"];
 	return {
-		alerts:
-			at.ref.kind === "country" && typeof plist === "object" && plist !== null && "CellBroadcast" in plist,
+		alerts: at.ref.kind === "country" && plist !== undefined && "CellBroadcast" in plist,
 		settings: plist !== undefined && leafCount(plist),
 		modem: at.ref.kind === "carrier" || bundle.info.files.some(isPri),
 		files: bundle.info.files.length,

@@ -7,19 +7,19 @@ import { beBigInt, byteAt, bytesToHex } from "@carrier-explode/binary";
 
 export interface DmuKey {
 	/** Public Key Organization Identifier. */
-	pkoid: number;
-	pkoidName?: string;
+	readonly pkoid: number;
+	readonly pkoidName?: string;
 	/** Public Key Organization Index. */
-	pkoi: number;
-	pkExpansion: number;
+	readonly pkoi: number;
+	readonly pkExpansion: number;
 	/** Algorithm Type and Version. */
-	atv: number;
-	algorithm: string;
-	dmuVersion: number;
+	readonly atv: number;
+	readonly algorithm: string;
+	readonly dmuVersion: number;
 	/** Public exponent, decimal. */
-	exponent: string;
-	modulusBits: number;
-	modulus: string;
+	readonly exponent: string;
+	readonly modulusBits: number;
+	readonly modulus: string;
 }
 
 // RFC 4784 PKOID table (excerpt)

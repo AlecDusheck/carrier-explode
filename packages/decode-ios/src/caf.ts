@@ -1,17 +1,18 @@
 /** Core Audio Format header summary, per Apple's CAF File Specification. */
 
 import { asciiAt, latin1, view } from "@carrier-explode/binary";
+import type { Building } from "./building.ts";
 
 export interface CafInfo {
-	sampleRate: number;
+	readonly sampleRate: number;
 	/** Four-character format ID, e.g. "lpcm", "aac ". */
-	format: string;
-	channels: number;
-	bitsPerChannel: number;
+	readonly format: string;
+	readonly channels: number;
+	readonly bitsPerChannel: number;
 	/** For lpcm: "float" or "int", plus endianness. */
-	encoding?: string;
+	readonly encoding?: string;
 	/** Seconds, when the packet table or constant packet size allows it. */
-	duration?: number;
+	readonly duration?: number;
 }
 
 const fourcc = (b: Uint8Array, off: number) => latin1(b.subarray(off, off + 4));
@@ -23,7 +24,7 @@ export function isCaf(b: Uint8Array): boolean {
 export function decodeCaf(b: Uint8Array): CafInfo {
 	if (!isCaf(b)) throw new Error("not a CAF file");
 	const dv = view(b);
-	let info: CafInfo | undefined;
+	let info: Building<CafInfo> | undefined;
 	let bytesPerPacket = 0,
 		framesPerPacket = 0,
 		dataBytes = -1,

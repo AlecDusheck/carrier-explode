@@ -14,7 +14,7 @@ export async function withPhones<F extends { readonly boards?: readonly string[]
 ): Promise<Array<WithPhones<F>>> {
 	const [products, names] = await Promise.all([boardsNow(), deviceNames("ios")]);
 	return files.map((f): WithPhones<F> => {
-		if (f.boards === undefined) return f;
+		if (f.boards === undefined) return { ...f, devices: [] };
 		const refs = boardRefs(f.boards, products);
 		return {
 			...f,

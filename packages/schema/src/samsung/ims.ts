@@ -1,5 +1,5 @@
 /**
- * A pack's IMS operator as raw leaves, and read back from them: its own entries under IMS_OPERATOR, the IMS service's
+ * A pack's IMS operator as its files' value trees and their raw leaves, and read back from them: its own entries under IMS_OPERATOR, the IMS service's
  * defaults under theirs. Only phone states read the defaults under the entries.
  */
 
@@ -7,15 +7,30 @@ import type { ImsOperator } from "@carrier-explode/decode-samsung";
 import type { Json, NativeRef, Profile } from "../types.ts";
 
 const MNO = "mnomap.json:mnoname";
-const DEFAULT_SWITCH = "imsswitch.json:defaultswitch.";
-const DEFAULT_SETTING = "globalsettings.json:defaultsetting.";
+const SWITCHES = "imsswitch.json";
+const PROFILES = "imsprofile.json";
+const SETTINGS = "globalsettings.json";
+const DEFAULT_SWITCHES = "defaultswitch";
+const DEFAULT_SETTINGS = "defaultsetting";
 
 /** Where an operator's entries sit in each IMS file, whatever its name (mnomap.json:mnoname): so one key scans across packs. */
-export const IMS_OPERATOR = "operator";
+const IMS_OPERATOR = "operator";
 
-const SWITCH = `imsswitch.json:${IMS_OPERATOR}.`;
-const PROFILE = `imsprofile.json:${IMS_OPERATOR}[0].`;
-const SETTING = `globalsettings.json:${IMS_OPERATOR}.`;
+type ImsRecord = ImsOperator["switches"];
+type ImsTree = Readonly<Record<string, ImsRecord | readonly ImsRecord[]>>;
+
+/** The operator's IMS files as value trees, by file name. */
+export const imsTrees = (ims: ImsOperator): Readonly<Record<string, ImsTree>> => ({
+	[SWITCHES]: { [IMS_OPERATOR]: ims.switches, [DEFAULT_SWITCHES]: ims.defaults.switches },
+	[PROFILES]: { [IMS_OPERATOR]: ims.profile === null ? [] : [ims.profile] },
+	[SETTINGS]: { [IMS_OPERATOR]: ims.settings, [DEFAULT_SETTINGS]: ims.defaults.settings },
+});
+
+const SWITCH = `${SWITCHES}:${IMS_OPERATOR}.`;
+const PROFILE = `${PROFILES}:${IMS_OPERATOR}[0].`;
+const SETTING = `${SETTINGS}:${IMS_OPERATOR}.`;
+const DEFAULT_SWITCH = `${SWITCHES}:${DEFAULT_SWITCHES}.`;
+const DEFAULT_SETTING = `${SETTINGS}:${DEFAULT_SETTINGS}.`;
 
 const leaf = (v: unknown): Json =>
 	v === null || typeof v === "string" || typeof v === "number" || typeof v === "boolean"
@@ -25,16 +40,22 @@ const leaf = (v: unknown): Json =>
 const leavesAt = (prefix: string, record: Readonly<Record<string, unknown>>): Array<[string, Json]> =>
 	Object.entries(record).map(([k, v]) => [`${prefix}${k}`, leaf(v)]);
 
-export function imsLeaves(ims: ImsOperator | null): Record<string, Json> {
-	if (ims === null) return {};
-	return Object.fromEntries([
-		[MNO, ims.mno],
-		...leavesAt(SWITCH, ims.switches),
-		...leavesAt(PROFILE, ims.profile ?? {}),
-		...leavesAt(SETTING, ims.settings),
-		...leavesAt(DEFAULT_SWITCH, ims.defaults.switches),
-		...leavesAt(DEFAULT_SETTING, ims.defaults.settings),
-	]);
+const isList = (v: ImsRecord | readonly ImsRecord[]): v is readonly ImsRecord[] => Array.isArray(v);
+
+/** The trees' leaves, `<file>:<key>.<name>`, a list's records indexed: the operator's own, or the defaults. */
+const treeLeaves = (ims: ImsOperator, own: boolean): Array<[string, Json]> =>
+	Object.entries(imsTrees(ims)).flatMap(([file, tree]) =>
+		Object.entries(tree)
+			.filter(([key]) => (key === IMS_OPERATOR) === own)
+			.flatMap(([key, value]) =>
+				isList(value)
+					? value.flatMap((r, i) => leavesAt(`${file}:${key}[${i}].`, r))
+					: leavesAt(`${file}:${key}.`, value),
+			),
+	);
+
+export function imsLeaves(ims: ImsOperator): Record<string, Json> {
+	return Object.fromEntries([[MNO, ims.mno], ...treeLeaves(ims, true), ...treeLeaves(ims, false)]);
 }
 
 /** One IMS value with where it is set; undefined where nothing sets it. */

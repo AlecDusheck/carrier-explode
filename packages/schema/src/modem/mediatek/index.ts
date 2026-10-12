@@ -6,7 +6,7 @@
 import { canonical } from "@carrier-explode/values";
 import * as v from "valibot";
 
-import { bytesToHex, compareUtf8 } from "@carrier-explode/binary";
+import { bytesToHex } from "@carrier-explode/binary";
 import {
 	decodeNwOta,
 	decodeOpOta,
@@ -26,6 +26,7 @@ import { simMatcher, uniqueSims } from "../../sims.ts";
 import { OWNER_SEPARATOR, type ModemItem, type ModemValue } from "../../types.ts";
 import {
 	jsonMember,
+	members,
 	member,
 	readOr,
 	type ArchiveFiles,
@@ -126,12 +127,18 @@ function pathValue(held: readonly PathValue[], asText: boolean): ModemValue {
 
 /** One condition's values: one scalar as itself, else values by array path (`0$1$`, as MCF writes it). */
 function conditionValue(byPath: ReadonlyMap<string, readonly PathValue[]>, asText: boolean): ModemValue {
-	const [only, ...more] = byPath;
-	if (only !== undefined && more.length === 0 && only[0] === "") return pathValue(only[1], asText);
-	return {
-		kind: "fields",
-		fields: Object.fromEntries([...byPath].map(([path, held]) => [path, pathValue(held, asText)])),
-	};
+	return fieldsOrOnly(
+		[...byPath].map(([path, held]) => [path, pathValue(held, asText)] as const),
+		"",
+	);
+}
+
+/** The one value when its key is `bare`, else a value per key. */
+function fieldsOrOnly(entries: ReadonlyArray<readonly [string, ModemValue]>, bare: string): ModemValue {
+	const [only, ...more] = entries;
+	return only !== undefined && more.length === 0 && only[0] === bare
+		? only[1]
+		: { kind: "fields", fields: Object.fromEntries(entries) };
 }
 
 /** The SIM PLMN a record applies under: `466-97`, `466-any`, `any`; segmented conditions keep their raw form. */
@@ -181,11 +188,7 @@ function items(
 		const first = rs[0]?.record;
 		const shape = rs[0]?.shape;
 		const name = first === undefined ? undefined : nameOf(shapes, first.itemId, first.lid);
-		const [only, ...more] = byCondition;
-		const value: ModemValue =
-			only !== undefined && more.length === 0 && only[0] === "any"
-				? only[1]
-				: { kind: "fields", fields: Object.fromEntries(byCondition) };
+		const value = fieldsOrOnly(byCondition, "any");
 		return {
 			id,
 			name: name ?? null,
@@ -219,10 +222,9 @@ export function mediatekConfig(files: ArchiveFiles, sha: string): MappedConfig {
 	const shapes = jsonMember(files, "items.json", itemsSchema);
 	const op = decodeOpOta(member(files, MEDIATEK_OP_OTA));
 	const errors: string[] = [];
-	const nw = [...files]
-		.filter(([name]) => NW_OTA.test(name))
-		.toSorted(([a], [b]) => compareUtf8(a, b))
-		.flatMap(([name, b]) => readOr(errors, name, [], () => decodeNwOta(b).records));
+	const nw = members(files, NW_OTA).flatMap(([name, b]) =>
+		readOr(errors, name, [], () => decodeNwOta(b).records),
+	);
 	const records = [...op.records, ...nw].map((r) => typed(r, shapes));
 	const id = String(sbp.id);
 	const clashes = new Set<string>();

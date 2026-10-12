@@ -55,7 +55,9 @@ export function doStep<T extends Rpc.Serializable<T>>(
 /** A WAF's block of a burst lifts within minutes. */
 const BURST_WAIT = "5 minutes";
 /** One attempt at a unit's step: its output as JSON text, or the burst refusal it met. */
-type Attempt = { readonly output: string } | { readonly refused: string };
+type Attempt =
+	| { readonly kind: "done"; readonly output: string }
+	| { readonly kind: "refused"; readonly refused: string };
 
 /** A step refused a burst runs once more BURST_WAIT on; refused again, it ends the unit. */
 async function pastBurst(
@@ -64,10 +66,10 @@ async function pastBurst(
 	attempt: (name: string) => Promise<Attempt>,
 ): Promise<string> {
 	const first = await attempt(name);
-	if ("output" in first) return first.output;
+	if (first.kind === "done") return first.output;
 	await r.step.sleep(`${name} refused`, BURST_WAIT);
 	const again = await attempt(`${name} again`);
-	if ("output" in again) return again.output;
+	if (again.kind === "done") return again.output;
 	throw new Error(`${REFUSED_TWICE} ${name}: ${again.refused}`);
 }
 
@@ -76,10 +78,10 @@ export function refusableStep(r: UnitRun, name: string, run: () => Promise<strin
 	return pastBurst(r, name, (attempt) =>
 		r.step.do(attempt, stepConfig(r.env), async (): Promise<Attempt> => {
 			try {
-				return { output: await run() };
+				return { kind: "done", output: await run() };
 			} catch (e) {
 				const failure = failureOf(e);
-				if (failure === "burst") return { refused: describe(e) };
+				if (failure === "burst") return { kind: "refused", refused: describe(e) };
 				throw failure === "permanent" ? new NonRetryableError(`${attempt}: ${describe(e)}`) : e;
 			}
 		}),
@@ -112,8 +114,8 @@ export function containerStep(r: UnitRun, name: string, job: ContainerJob): Prom
 			const answer = await r.env.EXTRACTOR.getByName(
 				containerName(r.unit.instance, attempt, ctx.attempt),
 			).run(job);
-			if (answer.ok) return { output: answer.output };
-			if (answer.failure === "burst") return { refused: answer.error };
+			if (answer.ok) return { kind: "done", output: answer.output };
+			if (answer.failure === "burst") return { kind: "refused", refused: answer.error };
 			const message = `${attempt}: ${answer.error}`;
 			throw answer.failure === "permanent" ? new NonRetryableError(message) : new Error(message);
 		}),

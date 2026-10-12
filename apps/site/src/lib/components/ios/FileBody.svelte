@@ -72,9 +72,9 @@
   <div class="banner">
     PNG, {view.width} by {view.height} pixels{#if view.cgbi}; Apple CgBI form, converted to standard PNG when served{/if}
   </div>
-  <span class="checker frame"><img src={raw} alt={file.path} /></span>
+  <span class="checker matte"><img src={raw} alt={file.path} /></span>
 {:else if file.kind === "image"}
-  <span class="checker frame"><img src={raw} alt={file.path} /></span>
+  <span class="checker matte"><img src={raw} alt={file.path} /></span>
 {:else if view.type === "tree"}
   {#if view.signature}<SignatureView sig={view.signature} />{/if}
   <Tree value={view.plist} {ctx} />
@@ -83,6 +83,6 @@
 {/if}
 
 <style>
-  .frame { display: inline-block; padding: 10px; border: 1px solid var(--shadow); }
+  .matte { display: inline-block; padding: 10px; border: 1px solid var(--shadow); }
   img { image-rendering: pixelated; max-width: 100%; display: block; }
 </style>

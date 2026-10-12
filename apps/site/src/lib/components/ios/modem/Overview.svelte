@@ -27,7 +27,3 @@
     {/if}
   </Pane>
 </div>
-
-<style>
-  .package { font-size: 14px; margin: 2px 0 6px; overflow-wrap: anywhere; }
-</style>

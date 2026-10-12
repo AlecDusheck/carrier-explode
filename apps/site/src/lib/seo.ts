@@ -3,9 +3,9 @@
  * for every visitor. Written for what people search: the file's name (`ATT_US.ipcc`) or the brand and a setting.
  */
 
+import type { LayoutParams, RouteId } from "$app/types";
 import { countryName } from "@carrier-explode/schema";
 import {
-	isPlatform,
 	isReleasePlatform,
 	RELEASE_PLATFORMS,
 	shipsKind,
@@ -23,26 +23,12 @@ import type { PageNames } from "./types";
 
 export const SITE = "carrier-explode";
 
-/** The route's params, as SvelteKit types them: any may be absent. */
-type Params = Readonly<
-	Partial<
-		Record<
-			| "kind"
-			| "platform"
-			| "name"
-			| "line"
-			| "version"
-			| "tab"
-			| "path"
-			| "build"
-			| "modem"
-			| "feature"
-			| "iso",
-			string | undefined
-		>
-	>
->;
-type Meta = { title: string; description: string };
+type Params = Readonly<LayoutParams<"/">>;
+/** A page's head. */
+export interface Meta {
+	readonly title: string;
+	readonly description: string;
+}
 
 /** A build page's head, as its platform words it: title candidates longest first, and the terms its description lists when they fit. */
 interface BuildMeta {
@@ -162,8 +148,7 @@ type Who = Device & { readonly name: string; readonly label: string | null; read
 
 function who(p: Params, source: PageNames["source"]): Who {
 	const name = p.name ?? "";
-	const platform: Platform = p.platform !== undefined && isPlatform(p.platform) ? p.platform : "ios";
-	const d: Device = DEVICE[platform];
+	const d: Device = DEVICE[p.platform ?? "ios"];
 	const label = source === null || source.brand === name ? null : source.brand;
 	if (p.kind === "countries")
 		return { ...d, name, label, full: label, noun: "country bundle", terms: COUNTRY_TERMS };
@@ -267,7 +252,7 @@ function bundle(p: Params, source: PageNames["source"]): Meta {
 	};
 }
 
-export function seo(id: string | null, p: Params, names: PageNames): Meta {
+export function seo(id: RouteId | null, p: Params, names: PageNames): Meta {
 	if (p.name) return bundle(p, names.source);
 
 	if (p.feature) {
@@ -304,7 +289,7 @@ export function seo(id: string | null, p: Params, names: PageNames): Meta {
 		};
 	}
 
-	const platform: Platform = p.platform !== undefined && isPlatform(p.platform) ? p.platform : "ios";
+	const platform: Platform = p.platform ?? "ios";
 	if (id === "/[platform=platform]/builds" && isReleasePlatform(platform)) return BUILD_SEO[platform].index;
 	const device = PLATFORM_DEVICES[platform];
 	switch (id) {

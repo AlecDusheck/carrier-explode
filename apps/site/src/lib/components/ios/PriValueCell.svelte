@@ -12,17 +12,11 @@
   <XmlValue xml={v.text} />
 {:else if v.kind === "int"}
   <!-- The stored bytes stay a hover away; hex is shown only where it reads better than decimal (bitmaps). -->
-  <span class="mono" title="0x{v.hex}, {v.len} bytes little-endian">{v.exact ?? v.int}{#if label}<span class="label after">= {label}</span>{/if}{#if wide(v)}<span class="dimtext after">0x{v.hex}</span>{/if}</span>
+  <span class="mono" title="0x{v.hex}, {v.len} bytes little-endian">{v.exact ?? v.int}{#if label}<span class="value-label value-after">= {label}</span>{/if}{#if wide(v)}<span class="dimtext value-after">0x{v.hex}</span>{/if}</span>
 {:else if v.kind === "string"}
-  <span class="mono">"{v.text}"</span>{#if label}<span class="label after">= {label}</span>{/if}
+  <span class="mono">"{v.text}"</span>{#if label}<span class="value-label value-after">= {label}</span>{/if}
 {:else if v.kind === "empty"}
   <span class="dimtext">empty</span>
 {:else}
-  {#if label}<span class="label before">{label}</span>{/if}<HexBytes hex={v.hex} />
+  {#if label}<span class="value-label value-before">{label}</span>{/if}<HexBytes hex={v.hex} />
 {/if}
-
-<style>
-  .label { font-family: var(--ui); color: var(--meaning); }
-  .after { margin-left: 0.5ch; }
-  .before { margin-right: 0.5ch; }
-</style>

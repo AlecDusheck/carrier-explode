@@ -4,7 +4,6 @@ import {
 	compareDotted,
 	diffValues,
 	isRecord,
-	lookupAll,
 	summariseDiff,
 	versionSegments,
 } from "../src/index.ts";
@@ -123,17 +122,6 @@ describe("isRecord", () => {
 			false,
 			false,
 			false,
-		]);
-	});
-});
-
-describe("lookupAll", () => {
-	it("rebuilds a container and matches wildcards in path order", () => {
-		const flat = { "apns[0].type": 1, "apns[1].type": 3, "x.y": true };
-		expect(lookupAll(flat, "x")).toEqual([{ path: "x", value: { y: true } }]);
-		expect(lookupAll(flat, "apns[*].type")).toEqual([
-			{ path: "apns[0].type", value: 1 },
-			{ path: "apns[1].type", value: 3 },
 		]);
 	});
 });

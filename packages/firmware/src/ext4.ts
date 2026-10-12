@@ -17,6 +17,8 @@ import {
 } from "./fs.ts";
 import { readPieces, type RangeSource } from "./source.ts";
 
+const utf8 = new TextDecoder();
+
 const SUPERBLOCK_AT = 1024;
 const SUPERBLOCK_SIZE = 1024;
 const MAGIC = 0xef53;
@@ -217,7 +219,7 @@ class Ext4Store implements InodeStore<Inode> {
 			const nameLen = u8(data, p + 6);
 			if (recLen < DIRENT_HEADER + nameLen)
 				throw new FsError(`${this.r.label}: inode ${dir.number}: corrupt dirent at ${p}`);
-			const name = new TextDecoder().decode(slice(data, p + DIRENT_HEADER, nameLen));
+			const name = utf8.decode(slice(data, p + DIRENT_HEADER, nameLen));
 			if (inode !== 0 && name !== "." && name !== "..")
 				out.push({ name, inode, kind: kindOfDirent(u8(data, p + 7)) });
 			p += recLen;

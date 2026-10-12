@@ -6,7 +6,7 @@
 
 import * as v from "valibot";
 
-import { crc32 } from "@carrier-explode/binary";
+import { crc32, u32Hex } from "@carrier-explode/binary";
 import { keys, putJson, readRecord } from "@carrier-explode/storage";
 import { checkIos } from "./apple/check.ts";
 import { checkAppleOta } from "./apple/ota.ts";
@@ -59,9 +59,7 @@ export function iosRun(
 	held: ReadonlySet<string> | undefined,
 ): Extract<Run, { readonly pipeline: "ios-build" }> {
 	if (held === undefined) return { pipeline: "ios-build", params, id: instanceId("ios-build", params.build) };
-	const digest = crc32(new TextEncoder().encode([...held].toSorted().join(" ")))
-		.toString(16)
-		.padStart(8, "0");
+	const digest = u32Hex(crc32(new TextEncoder().encode([...held].toSorted().join(" "))));
 	return { pipeline: "ios-build", params, id: instanceId("ios-build", `${params.build}-${digest}`) };
 }
 

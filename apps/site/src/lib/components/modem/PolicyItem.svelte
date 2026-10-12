@@ -32,7 +32,7 @@
 
 {#snippet name(label: string, cls: string)}
   {#if doc}
-    <button type="button" class="{cls} doc" class:on={showNote} aria-expanded={showNote}
+    <button type="button" class="{cls} doc bare" class:on={showNote} aria-expanded={showNote}
       onclick={() => (showNote = !showNote)}>{label}</button>
   {:else}
     <span class={cls}>{label}</span>
@@ -41,10 +41,10 @@
 
 {#snippet rest(n: PolicyNode)}
   {#each attrs as a (a.k)}
-    <span class="a">{#if a.note}<button type="button" class="an doc" class:on={attrOpen.has(a.k)} aria-expanded={attrOpen.has(a.k)}
-        onclick={() => toggleIn(attrOpen, a.k)}>{a.k}</button>{:else}{a.k}{/if}=<span class="v">{a.v}</span></span>
+    <span class="a">{#if a.note}<button type="button" class="an doc bare" class:on={attrOpen.has(a.k)} aria-expanded={attrOpen.has(a.k)}
+        onclick={() => toggleIn(attrOpen, a.k)}>{a.k}</button>{:else}{a.k}{/if}=<span class="val str">{a.v}</span></span>
   {/each}
-  {#if n.text}<span class="x">{n.text}</span>{/if}
+  {#if n.text}<span class="x val">{n.text}</span>{/if}
 {/snippet}
 
 {#snippet explain()}
@@ -62,16 +62,16 @@
 {#if node.kind === "comment"}
   <div class="row c">{node.text}</div>
 {:else if inline}
-  <div class="row"><span class="w logic">NOT</span> {@render name(inline.tag, "t " + inline.kind)}{@render rest(inline)}</div>
+  <div class="row"><span class="policy-term logic">NOT</span> {@render name(inline.tag, "policy-term " + inline.kind)}{@render rest(inline)}</div>
   {@render explain()}
 {:else if !kids.length && !WORD.has(node.tag)}
-  <div class="row">{@render name(node.tag, "t " + node.kind)}{@render rest(node)}</div>
+  <div class="row">{@render name(node.tag, "policy-term " + node.kind)}{@render rest(node)}</div>
   {@render explain()}
 {:else}
   {@const label = WORD.get(node.tag) ?? node.tag}
-  {@const cls = WORD.has(node.tag) ? "w " + node.kind : "t " + node.kind}
+  {@const cls = "policy-term " + node.kind}
   <div class="row head">
-    <button type="button" class="fold" aria-expanded={open} aria-label={doc ? (open ? "Fold " : "Unfold ") + label : undefined}
+    <button type="button" class="fold bare" aria-expanded={open} aria-label={doc ? (open ? "Fold " : "Unfold ") + label : undefined}
       onclick={() => (flipped = !flipped)}>
       <span class="twist">{open ? "▾" : "▸"}</span>{#if !doc}<span class={cls}>{label}</span>{/if}
     </button>
@@ -89,29 +89,15 @@
 
 <style>
   .row { display: block; padding: 1px 0; }
-  .head:hover { background: #eef2f7; }
-  button.fold {
-    font: inherit; background: none; border: 0; padding: 0; color: inherit;
-    text-align: left; cursor: pointer;
-  }
+  button.fold { text-align: left; }
   .twist { display: inline-block; width: 14px; color: var(--text-dim); }
-  .w { font-weight: bold; }
-  .w.branch { color: var(--policy-branch); }
-  .w.logic { color: var(--policy-logic); }
-  .t { font-weight: bold; }
-  .t.condition { color: var(--policy-condition); }
-  .t.action { color: var(--policy-action); }
-  .t.define { color: var(--policy-define); }
-  .t.policy { color: var(--key); }
   button.an { font-weight: normal; }
   .a, .x, .more { margin-left: 0.7ch; }
   .a { color: var(--text-dim); }
-  .v { color: #7a2f2f; }
-  .x { color: #14442a; }
   .ak { font-style: normal; font-family: var(--mono); }
   .vals { font-style: normal; margin-left: 0.6ch; }
   .c { color: var(--text-dim); font-style: italic; white-space: pre-wrap; font-family: var(--ui); font-size: 10.5px; }
-  .children { padding-left: 12px; border-left: 1px dotted #b9b5ac; margin-left: 6px; }
+  .children { padding-left: 12px; border-left: 1px dotted var(--tree-guide); margin-left: 6px; }
   @media (max-width: 760px) {
     button.fold { min-height: 28px; min-width: 22px; }
   }

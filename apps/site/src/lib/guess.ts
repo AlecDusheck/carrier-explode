@@ -1,12 +1,14 @@
 /**
  * The site's best guess of the visitor: their phone, country and carrier as the strings pickers, lists and searches
- * show, so a page selects each by plain match. The server makes it (`server/visitor.ts`); pages read it (`visitor.ts`).
+ * show, so a page selects each by plain match. The server makes it (`server/visitor.ts`); pages read it (`visitor.svelte.ts`).
  */
 
 import { networkCarrier, tradeWords, type Carrier } from "@carrier-explode/networks";
 import type { PhoneVariant } from "@carrier-explode/schema";
 import type { Platform, SourceKey } from "@carrier-explode/schema/types";
 import type { Device } from "./device";
+import type { FeaturePhone } from "./server/features";
+import type { ListEntry } from "./server/lists";
 import { fold } from "./names";
 import { openingVariant, type ModelChoice } from "./phones";
 import { PLATFORM_ORDER } from "./platforms";
@@ -26,19 +28,10 @@ export interface VisitorGuess {
 }
 
 /** A platform's carrier source as its list shows it. */
-interface Listed {
-	readonly key: SourceKey;
-	readonly name: string;
-	readonly brand: string;
-	readonly carrier: string | null;
-}
+type Listed = Pick<ListEntry, "key" | "name" | "brand" | "carrier">;
 
 /** A phone with feature states. `covered`: as the features pages judge it. */
-interface StatedPhone {
-	readonly code: string;
-	readonly name: string;
-	readonly covered: boolean;
-}
+type StatedPhone = Pick<FeaturePhone, "code" | "name" | "covered">;
 
 /** What a guess is made from: the request, the browser's report, and the guessed platform's lists in the site's order. */
 export interface GuessInput {

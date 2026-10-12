@@ -3,4 +3,4 @@
   let { reason }: { reason: string } = $props();
 </script>
 
-<span class="badge rare" title={reason}>not understood</span>
+<span class="badge warn" title={reason}>not understood</span>

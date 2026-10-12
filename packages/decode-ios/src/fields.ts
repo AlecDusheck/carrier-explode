@@ -7,6 +7,7 @@ import { maskBits } from "@carrier-explode/binary";
 import { describeMessageId } from "./cbs.ts";
 import type { Confidence } from "@carrier-explode/decode-qualcomm";
 import { describeImsSetting, defaultEndReason, TERMINATION_EVENTS, type ImsSetting } from "./ims.ts";
+import type { Building } from "./building.ts";
 
 type FieldType = "string" | "integer" | "real" | "boolean" | "data" | "date" | "array" | "dict";
 
@@ -14,18 +15,18 @@ type FieldType = "string" | "integer" | "real" | "boolean" | "data" | "date" | "
 type FieldFormat = "bitmask" | "enum" | "plmn" | "cbs-message-id";
 
 export interface FieldDoc {
-	note: string;
-	type?: FieldType;
-	format?: FieldFormat;
+	readonly note: string;
+	readonly type?: FieldType;
+	readonly format?: FieldFormat;
 	/** Value used when the key is absent, where the reader's default is known. */
-	default?: string | number | boolean;
+	readonly default?: string | number | boolean;
 	/** Enum value -> label. */
-	values?: Readonly<Record<string, string>>;
+	readonly values?: Readonly<Record<string, string>>;
 	/** Bit index -> label, for bitmasks. */
-	bits?: Readonly<Record<number, string>>;
-	unit?: string;
+	readonly bits?: Readonly<Record<number, string>>;
+	readonly unit?: string;
 	/** Omitted = high. */
-	confidence?: Confidence;
+	readonly confidence?: Confidence;
 }
 
 /** CTDataConnectionServiceType; bit index == enum index.
@@ -3122,7 +3123,7 @@ const IMS_TYPE: Readonly<Record<ImsSetting["type"], FieldType>> = {
 
 /** FieldDoc for an IMS registry entry; `base` supplies a hand-written note when the registry has none. */
 function imsDoc(s: ImsSetting, base?: FieldDoc): FieldDoc {
-	const doc: FieldDoc = {
+	const doc: Building<FieldDoc> = {
 		note:
 			(s.renamedFrom ? `Legacy name of ${s.key}. ` : "") +
 			(s.note ?? base?.note ?? `IMS ${s.section} setting.`),
@@ -3196,10 +3197,10 @@ export function describeField(key: string, parentPath?: string | readonly string
 /** One label of a decoded value. */
 export interface ValueLabel {
 	/** The name, or "bit N" for a set bit the table does not name. */
-	label: string;
-	named: boolean;
+	readonly label: string;
+	readonly named: boolean;
 	/** Bit index, for bitmasks. */
-	bit?: number;
+	readonly bit?: number;
 }
 
 /** One label per set bit for bitmasks, the enum label for enums, the alert label for CBS message IDs. `[]` for an

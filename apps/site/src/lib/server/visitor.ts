@@ -1,6 +1,7 @@
 /** The best guess's inputs from the request and the index. Reading the request keeps the response out of the shared cache. */
 
 import { getRequestEvent } from "$app/server";
+import * as v from "valibot";
 import type { Device } from "#lib/device.ts";
 import { bestGuess, guessPlatform, type VisitorGuess } from "#lib/guess.ts";
 import { featureModels, featurePhones } from "./features";
@@ -9,17 +10,20 @@ import { carriers, getCountryCarriers } from "./lists";
 /** Where the platform has no carriers in the visitor's country, or the country is unknown. */
 const FALLBACK_COUNTRY = "us";
 
+/** An incoming request's cf, which has the visitor's fields; the outgoing kind has no asOrganization. */
+const visitorCf = v.object({
+	asOrganization: v.string(),
+	country: v.fallback(v.nullable(v.pipe(v.string(), v.toLowerCase())), null),
+});
+
 /** What Cloudflare says about the visitor, from the request's `cf`; marks the response as theirs. */
 function visitor(): { country: string | null; organisation: string | null; mobile: boolean } {
 	const { request, locals } = getRequestEvent();
 	locals.perVisitor = true;
-	// An incoming request's cf has the visitor's fields; `in` tells it from the outgoing kind.
-	const cf = request.cf && "asOrganization" in request.cf ? request.cf : undefined;
-	const country: unknown = cf?.country;
-	const organisation: unknown = cf?.asOrganization;
+	const cf = v.safeParse(visitorCf, request.cf);
 	return {
-		country: typeof country === "string" ? country.toLowerCase() : null,
-		organisation: typeof organisation === "string" ? organisation : null,
+		country: cf.success ? cf.output.country : null,
+		organisation: cf.success ? cf.output.asOrganization : null,
 		mobile: /Mobi|Android|iPhone/i.test(request.headers.get("user-agent") ?? ""),
 	};
 }

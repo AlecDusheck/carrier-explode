@@ -5,7 +5,6 @@
   import { rawHref, verArgs, withParams } from "#lib/format.ts";
   import type { IosBundle } from "#lib/server/apple/bundle.ts";
   import { APPLE_DOCS } from "#lib/apple/tree-docs.ts";
-  import { sourceKey } from "@carrier-explode/schema/types";
   import type { At } from "#lib/types.ts";
   import FileBody from "./FileBody.svelte";
 
@@ -38,7 +37,7 @@
   </div>
   <FileBody
     file={await getAppleFile({ ...verArgs(at), path })}
-    ctx={{ platform: at.ref.platform, source: sourceKey(at.ref), file: path, cc: bundle.cc, docs: APPLE_DOCS }}
+    ctx={{ platform: at.ref.platform, file: path, cc: bundle.cc, docs: APPLE_DOCS }}
     raw={rawHref(at, path)}
   />
 {:else}

@@ -91,7 +91,9 @@ export async function getModemPackages(build: string): Promise<BuildModems> {
 }
 
 /** A package file without its content, which stays on the server until asked for. */
-function listed(f: BasebandFile): Omit<BasebandTextFile, "text"> | Omit<BasebandByteFile, "hex"> {
+type ListedFile = Omit<BasebandTextFile, "text"> | Omit<BasebandByteFile, "hex">;
+
+function listed(f: BasebandFile): ListedFile {
 	if (isTextFile(f)) {
 		const { text: _text, ...rest } = f;
 		return rest;
@@ -110,9 +112,7 @@ interface BbfwView {
 	readonly package: BasebandSummary["package"];
 	readonly members: BasebandSummary["members"];
 	readonly containers: ReadonlyArray<Omit<BasebandSummary["containers"][number], "meta">>;
-	readonly files: ReadonlyArray<
-		(Omit<BasebandTextFile, "text"> | Omit<BasebandByteFile, "hex">) & { readonly i: number }
-	>;
+	readonly files: ReadonlyArray<ListedFile & { readonly i: number }>;
 	readonly nv: ReadonlyArray<
 		Omit<BasebandSummary["nv"][number], "records"> & {
 			readonly records: ReadonlyArray<

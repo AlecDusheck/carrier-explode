@@ -1,12 +1,13 @@
 /** The visitor's device as their browser describes it. */
 
 import * as v from "valibot";
-import type { Platform } from "@carrier-explode/schema/types";
+import { platform as platformSchema } from "./api/schemas.ts";
 
-export interface Device {
-	readonly platform: Platform | null;
-	readonly model: string | undefined;
-}
+export const deviceSchema = v.object({
+	platform: v.nullable(platformSchema),
+	model: v.undefinedable(v.pipe(v.string(), v.maxLength(64))),
+});
+export type Device = Readonly<v.InferOutput<typeof deviceSchema>>;
 
 /** The platform and phone model a user agent names; Chrome's says "K" for the model and Apple's never names it, so a hinted model wins. */
 export function deviceOf(userAgent: string, modelHint?: string): Device {

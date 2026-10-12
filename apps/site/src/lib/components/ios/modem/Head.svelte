@@ -7,7 +7,7 @@
   import type { ModemProps } from "../../views.ts";
   import BuildPicker from "../../BuildPicker.svelte";
   import Pane from "../../Pane.svelte";
-  import TabLinks from "../../TabLinks.svelte";
+  import TabLinks, { type TabLink } from "../../TabLinks.svelte";
   import ModemPicker from "../baseband/ModemPicker.svelte";
 
   /** An iOS modem package's head, laid out as a bundle's: the package in place of the name, the iOS version in place of the bundle's. */
@@ -36,11 +36,11 @@
   <nav class="tabs-slot">
     <Pane quiet>
       {@const bb = await getBaseband({ build, family: modem })}
-      {@const items: Array<[string, string]> = [
+      {@const items: TabLink[] = [
         [href(), "Overview"],
         [href("carriers"), "Carriers"],
         [href("policy"), `Policy files (${bb.files.filter(isTextFile).length})`],
-        ...(bb.mdb ? [[href("networks"), "Network databases"] as [string, string]] : []),
+        ...(bb.mdb ? [[href("networks"), "Network databases"] satisfies TabLink] : []),
         [href("configs"), "Configs"],
         [href("changes"), "Changes"],
       ]}

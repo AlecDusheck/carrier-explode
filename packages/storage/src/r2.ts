@@ -1,10 +1,15 @@
-/** The bucket's writes and the reindex listing, through the R2 Workers binding. */
+/** The bucket's writes and listings, through the R2 Workers binding. */
 
 import * as v from "valibot";
 
 import { keys } from "./keys.ts";
 
-const CONTENT_TYPES = ["application/json", "application/zip", "application/octet-stream"] as const;
+const CONTENT_TYPES = [
+	"application/json",
+	"application/xml",
+	"application/zip",
+	"application/octet-stream",
+] as const;
 export type ContentType = (typeof CONTENT_TYPES)[number];
 
 /** obj/ `customMetadata.kind`. */
@@ -85,18 +90,19 @@ export interface HeldArtifact {
 
 /** Every obj/ artifact with its kind, from the listing alone. */
 export async function* heldArtifacts(bucket: R2Bucket): AsyncGenerator<HeldArtifact> {
+	for await (const o of listing(bucket, { prefix: keys.objPrefix(), include: ["customMetadata"] })) {
+		const sha256 = keys.shaOfObj(o.key);
+		if (sha256 === undefined) throw new Error(`${o.key}: not an obj/ key`);
+		yield { sha256, kind: v.parse(v.picklist(ARTIFACT_KINDS), o.customMetadata?.kind) };
+	}
+}
+
+/** Every object a listing names, a page read only once the one before it is consumed. */
+export async function* listing(bucket: R2Bucket, options: R2ListOptions): AsyncGenerator<R2Object> {
 	let cursor: string | undefined;
 	do {
-		const page = await bucket.list({
-			prefix: keys.objPrefix(),
-			include: ["customMetadata"],
-			...(cursor === undefined ? {} : { cursor }),
-		});
-		for (const o of page.objects) {
-			const sha256 = keys.shaOfObj(o.key);
-			if (sha256 === undefined) throw new Error(`${o.key}: not an obj/ key`);
-			yield { sha256, kind: v.parse(v.picklist(ARTIFACT_KINDS), o.customMetadata?.kind) };
-		}
+		const page = await bucket.list({ ...options, ...(cursor === undefined ? {} : { cursor }) });
+		yield* page.objects;
 		cursor = page.truncated ? page.cursor : undefined;
 	} while (cursor !== undefined);
 }

@@ -1,7 +1,7 @@
 <script lang="ts">
   import type { PhoneVariant } from "@carrier-explode/schema";
   import { differsByCountry, openingVariant, type ModelChoice } from "#lib/phones.ts";
-  import { visitorGuess } from "#lib/visitor.ts";
+  import { visitor } from "#lib/visitor.svelte.ts";
   import PhoneImage from "./PhoneImage.svelte";
   import Picker from "./Picker.svelte";
 
@@ -19,28 +19,21 @@
   const phone = $derived(phones.find((p) => p.variants.some((v) => v.code === selected)));
   const variant = $derived(phone?.variants.find((v) => v.code === selected));
 
-  // Read after the page has drawn, so the server's page reads no visitor and the edge can keep it.
-  let country: string | null = $state(null);
-  $effect(() => {
-    if (!differsByCountry(phones)) return;
-    void (async () => {
-      country = (await visitorGuess()).country;
-    })();
-  });
+  const country = $derived(differsByCountry(phones) ? (visitor.guess?.country ?? null) : null);
 
   const opens = (p: ModelChoice): string =>
     p === phone && selected !== undefined ? selected : (openingVariant(p, country)?.code ?? p.key);
 </script>
 
 {#snippet phoneOption(p: ModelChoice)}
-  <span class="picker-opt"><PhoneImage platform={p.platform} id={p.variants[0]?.code || undefined} name={p.name} /><span class="text">{p.label}</span></span>
+  <span class="picker-opt"><PhoneImage platform={p.platform} id={p.variants[0]?.code || undefined} name={p.name} /><span class="ellipsis">{p.label}</span></span>
 {/snippet}
 
 {#snippet variantOption(v: PhoneVariant)}
   {#if v.descriptor === null}
-    <span class="picker-opt"><span class="text mono">{v.code}</span></span>
+    <span class="picker-opt"><span class="ellipsis mono">{v.code}</span></span>
   {:else}
-    <span class="picker-opt"><span class="text">{v.descriptor}</span></span>
+    <span class="picker-opt"><span class="ellipsis">{v.descriptor}</span></span>
     <span class="picker-tag mono">{v.code}</span>
   {/if}
 {/snippet}

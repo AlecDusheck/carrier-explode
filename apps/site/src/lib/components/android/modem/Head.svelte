@@ -14,7 +14,7 @@
 </script>
 
 {#snippet option(m: BuildModem)}
-  <span class="picker-opt"><span class="text">{m.label} · {phoneList(m.devices)}</span></span>
+  <span class="picker-opt"><span class="ellipsis">{m.label} · {phoneList(m.devices)}</span></span>
 {/snippet}
 
 <div class="bundle-head">

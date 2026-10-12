@@ -53,7 +53,7 @@ export const FALLBACK_ISO = "us";
 
 /** A page of the newest changes; a country with none starts the fallback country's instead. */
 export async function getRecentChanges(filter: FeedFilter, after: FeedKey | null): Promise<RecentChanges> {
-	const found = await cached(`recent-changes:v2:${cacheKey(filter, after)}:${await indexVersion()}`, () =>
+	const found = await cached(`recent-changes:v3:${cacheKey(filter, after)}:${await indexVersion()}`, () =>
 		pageOf(filter, after),
 	);
 	return filter.iso !== FALLBACK_ISO && after === null && found.changes.length === 0

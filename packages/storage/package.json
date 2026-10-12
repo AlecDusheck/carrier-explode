@@ -13,6 +13,7 @@
 		"lifecycle": "wrangler r2 bucket lifecycle set carrier-explode-ingest --file lifecycle.json"
 	},
 	"dependencies": {
+		"@carrier-explode/binary": "workspace:*",
 		"@carrier-explode/schema": "workspace:*",
 		"valibot": "^1.5.0"
 	},

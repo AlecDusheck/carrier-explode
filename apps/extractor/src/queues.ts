@@ -70,8 +70,11 @@ export async function queueIndex(
 /** A purge names nothing: the readers tag every response alike, so each purge drops them all. */
 export type PurgeMessage = Readonly<Record<string, never>>;
 
+/** Past the site's bookmark window (BOOKMARK_MS in apps/site/src/lib/server/db.ts), so no isolate renders a purged page from derived values keyed before the write. */
+const PURGE_DELAY_S = 60;
+
 export async function queuePurge(env: Pick<Env, "PURGE_QUEUE">): Promise<void> {
-	await env.PURGE_QUEUE.send({} satisfies PurgeMessage);
+	await env.PURGE_QUEUE.send({} satisfies PurgeMessage, { delaySeconds: PURGE_DELAY_S });
 }
 
 /**
@@ -87,44 +90,18 @@ export async function devicesSynced(
 	if (changed.devices + changed.names > 0) await queuePurge(env);
 }
 
-/** The readers' origins (a var) and the bearer they share (a secret), as the environment holds them, unchecked. */
-export type PurgeVars = Readonly<Record<"PURGE_ORIGINS" | "PURGE_TOKEN", unknown>>;
-
-/** Where purges go: nowhere until both vars are set, or each reader's PURGE_PATH with the bearer. */
-type PurgeTarget =
-	| { readonly purge: "off" }
-	| { readonly purge: "readers"; readonly urls: readonly string[]; readonly token: string };
-
-const originsSchema = v.optional(v.array(v.pipe(v.string(), v.url())), []);
-const tokenSchema = v.optional(v.pipe(v.string(), v.minLength(1)));
-
-/** The environment's purge vars, checked. Half of the pair is a misconfiguration, and throws. */
-export function purgeTarget(env: PurgeVars): PurgeTarget {
-	const origins = v.parse(originsSchema, env.PURGE_ORIGINS);
-	const token = v.parse(tokenSchema, env.PURGE_TOKEN);
-	if (origins.length && token !== undefined)
-		return { purge: "readers", urls: origins.map((o) => new URL(PURGE_PATH, o).href), token };
-	if (origins.length)
-		throw new Error(
-			"PURGE_ORIGINS is set but PURGE_TOKEN is not: `wrangler secret put PURGE_TOKEN`, or remove PURGE_ORIGINS",
-		);
-	if (token !== undefined) throw new Error("PURGE_TOKEN is set but PURGE_ORIGINS is not");
-	return { purge: "off" };
-}
-
 /**
  * One request to each reader, which purges its own cache. Not retried here: each try spends a purge from the account's
  * bucket, so the purge queue retries the batch after a delay.
  */
-async function purgeReaders(env: PurgeVars): Promise<void> {
-	const target = purgeTarget(env);
-	if (target.purge === "off") return;
+async function purgeReaders(env: Pick<Env, "PURGE_ORIGINS" | "PURGE_TOKEN">): Promise<void> {
 	await Promise.all(
-		target.urls.map(async (url) => {
+		env.PURGE_ORIGINS.map(async (origin) => {
+			const url = new URL(PURGE_PATH, origin).href;
 			// SvelteKit refuses a cross-site POST without a content type as a form submission.
 			const res = await fetch(url, {
 				method: "POST",
-				headers: { authorization: `Bearer ${target.token}`, "content-type": "application/json" },
+				headers: { authorization: `Bearer ${env.PURGE_TOKEN}`, "content-type": "application/json" },
 				body: "{}",
 			});
 			await res.body?.cancel();

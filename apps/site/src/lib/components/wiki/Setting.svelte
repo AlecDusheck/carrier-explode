@@ -5,8 +5,9 @@
   import Holders from "./Holders.svelte";
   import Live from "./Live.svelte";
 
-  type Show = "set" | "scanned" | "median" | "max" | "min";
-  let { path, show = "set", file = "carrier.plist", scope = "carriers" }: { path: string; show?: Show; file?: string; scope?: "carriers" | "countries" } = $props();
+  type Args = Parameters<typeof getSettingSummary>[0];
+  type Show = keyof Awaited<ReturnType<typeof getSettingSummary>>;
+  let { path, show = "set", file = "carrier.plist", scope = "carriers" }: Pick<Args, "path"> & Partial<Pick<Args, "file" | "scope">> & { show?: Show } = $props();
 </script>
 
 <Live>

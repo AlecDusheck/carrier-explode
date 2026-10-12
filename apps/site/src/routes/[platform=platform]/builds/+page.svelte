@@ -15,7 +15,7 @@
       <PlatformPicker platforms={RELEASE_PLATFORMS} selected={data.platform} href={(p) => buildsHref(p)} />
     </div>
     <Pane>
-      {@const table = buildTable(data.platform, await getBuilds())}
+      {@const table = await buildTable(data.platform, await getBuilds())}
       <table.View {...table.props} />
     </Pane>
   </div>

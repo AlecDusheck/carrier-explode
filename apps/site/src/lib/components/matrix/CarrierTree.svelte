@@ -12,7 +12,7 @@
   const entry = $derived(scored.row.entry);
 </script>
 
-<div class="panel" role="dialog" aria-label="{entry.brand} features">
+<div class="panel raised" role="dialog" aria-label="{entry.brand} features">
   <div class="titlebar">
     <SourceIcon picture={entry.picture} />
     <span class="grow">{entry.brand}{#if entry.tag}<span class="sub sp">{entry.tag}</span>{/if}</span>
@@ -35,14 +35,7 @@
     width: min(340px, calc(100% - 8px));
     display: flex;
     flex-direction: column;
-    background: var(--face);
-    border: 2px solid;
-    border-color: var(--light) var(--dark) var(--dark) var(--light);
-    box-shadow: 4px 4px 0 rgb(0 0 0 / 0.3);
-  }
-  .grow {
-    flex: 1;
-    min-width: 0;
+    box-shadow: 4px 4px 0 var(--drop);
   }
   .titlebar .btn {
     min-height: 20px;

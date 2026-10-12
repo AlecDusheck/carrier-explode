@@ -1,6 +1,6 @@
 /** Band combinations as the combo table shows them, from Qualcomm's combo strings or the neutral model's components. */
 
-import { bandList, parseCombo, type ComboComponent, type ComboType } from "@carrier-explode/decode-qualcomm";
+import { bandList, parseCombo, type ComboComponent } from "@carrier-explode/decode-qualcomm";
 import type { BandCombination, BandComponent } from "@carrier-explode/schema/types";
 
 /** "n77A", "b66A↑A": one band-combo component, with its uplink class unless `uplink` is off. */
@@ -19,13 +19,6 @@ export interface ComboRow {
 	readonly nr: readonly ComboCell[];
 	/** `NR-DC`, `SWUL`. */
 	readonly tags: readonly string[];
-}
-
-/** EN-DC (LTE + NR), NR only, or LTE only; parseCombo's rule, for rows from either source. */
-export function comboType(r: Pick<ComboRow, "lte" | "nr">): ComboType | undefined {
-	if (r.lte.length && r.nr.length) return "endc";
-	if (r.nr.length) return "nr";
-	return r.lte.length ? "lte" : undefined;
 }
 
 const qualcommCell = (c: ComboComponent): ComboCell => ({ band: c.band, text: comboPart(c) });

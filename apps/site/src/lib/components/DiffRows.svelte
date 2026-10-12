@@ -60,7 +60,6 @@
 
 <style>
   td { min-width: 60px; }
-  details.long > summary { cursor: pointer; }
   details.long[open] > summary { color: var(--text-dim); }
   .row-link { color: inherit; text-decoration: none; }
   .row-link:hover { text-decoration: underline; }
